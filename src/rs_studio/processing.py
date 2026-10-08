@@ -113,9 +113,13 @@ def _publish(result, staging, output_dir):
 
 
 def run(operation_id, function, *args, output_dir=None, **kwargs):
+    tracked = bool(operation_id)
     if not operation_id:
-        with _work_lock:
-            return function(*args, **kwargs)
+        # Even callers that do not expose progress or cancellation must run in a
+        # disposable process. Audio backends cache model weights internally;
+        # ending the worker is the reliable boundary that releases CPU and CUDA
+        # memory instead of retaining it in the long-lived web server.
+        operation_id = os.urandom(16).hex()
     _validate(operation_id)
     with _states_lock:
         if operation_id in _states and operation_id not in _reservations:
@@ -213,6 +217,11 @@ def run(operation_id, function, *args, output_dir=None, **kwargs):
             temporary.cleanup()
         if locked:
             _work_lock.release()
+        if not tracked:
+            with _states_lock:
+                _states.pop(operation_id, None)
+                _cancel_events.pop(operation_id, None)
+                _reservations.discard(operation_id)
 
 
 class SeparationOutput(io.StringIO):

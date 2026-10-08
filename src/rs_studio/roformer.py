@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from . import processing
 
+import gc
 import os
 from pathlib import Path
 
@@ -36,10 +37,6 @@ def _device() -> str:
         return "cuda" if torch.cuda.is_available() else "cpu"
     except Exception:
         return "cpu"
-
-# Cache the loaded model for the process lifetime (it's ~668 MB + slow to build).
-_cache: dict = {}
-
 
 def config_path() -> Path:
     return MODELS_DIR / CONFIG_NAME
@@ -88,9 +85,7 @@ def instruments() -> list[str]:
 
 
 def _load(device: str) -> tuple:
-    """Build + load the model on `device` (cached per-device for the process)."""
-    if _cache.get("device") == device:
-        return _cache["model"], _cache["cfg"], _cache["instruments"]
+    """Build and load the model for one separation operation."""
     import inspect
 
     import torch
@@ -110,7 +105,6 @@ def _load(device: str) -> tuple:
     model.eval()
     model.to(device)
     instruments = list(cfg["training"]["instruments"])
-    _cache.update(model=model, cfg=cfg, instruments=instruments, device=device)
     return model, cfg, instruments
 
 
@@ -206,22 +200,32 @@ def separate(
     device = _device()
     note = None
     try:
-        result = _run(device)  # OOM / kernel errors can come from _load (.to GPU) or _infer
-    except Exception as exc:
-        msg = str(exc).lower()
-        gpu_issue = "out of memory" in msg or "no available kernel" in msg
-        if device.startswith("cuda") and gpu_issue:
+        try:
+            result = _run(device)  # OOM / kernel errors can come from _load (.to GPU) or _infer
+        except Exception as exc:
+            msg = str(exc).lower()
+            gpu_issue = "out of memory" in msg or "no available kernel" in msg
+            if device.startswith("cuda") and gpu_issue:
+                try:
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                try:
+                    result = _run("cpu")
+                    note = "GPU inference failed (busy/OOM); ran RoFormer on CPU instead."
+                except Exception as exc2:
+                    return {}, f"RoFormer separation failed (GPU error, then CPU retry failed): {exc2}"
+            else:
+                return {}, f"RoFormer separation failed: {exc}"
+    finally:
+        # `result` is on CPU. Release model references and cached CUDA blocks
+        # before writing stems or building their spectrograms.
+        gc.collect()
+        if device.startswith("cuda"):
             try:
                 torch.cuda.empty_cache()
             except Exception:
                 pass
-            try:
-                result = _run("cpu")
-                note = "GPU inference failed (busy/OOM); ran RoFormer on CPU instead (slower)."
-            except Exception as exc2:
-                return {}, f"RoFormer separation failed (GPU error, then CPU retry failed): {exc2}"
-        else:
-            return {}, f"RoFormer separation failed: {exc}"
 
     dest = out_dir / "roformer"
     dest.mkdir(parents=True, exist_ok=True)

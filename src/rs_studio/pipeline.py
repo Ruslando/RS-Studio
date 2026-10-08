@@ -9,6 +9,7 @@ from __future__ import annotations
 from . import processing
 
 import contextlib
+import gc
 import io
 import os
 import subprocess
@@ -143,6 +144,17 @@ def _select_device() -> str:
     return "cpu"
 
 
+def _release_torch_memory(device: str) -> None:
+    """Drop unreachable model objects and return unused CUDA blocks promptly."""
+    gc.collect()
+    torch = sys.modules.get("torch")
+    if torch is not None and device.startswith("cuda"):
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+
 def separate_stems(input_path: Path, out_dir: Path) -> tuple[dict[str, Path], str | None]:
     """Run Demucs htdemucs_6s ONCE and return every stem it produced.
 
@@ -181,6 +193,9 @@ def separate_stems(input_path: Path, out_dir: Path) -> tuple[dict[str, Path], st
             return {}, f"Demucs separation failed (exit code {exc.code}){detail}."
     except Exception as exc:
         return {}, f"Demucs separation failed (model download or processing error): {exc}"
+    finally:
+        # The remaining encoding and spectrogram work does not need the model.
+        _release_torch_memory(device)
 
     stem_dir = out_dir / DEMUCS_MODEL / input_path.stem
     stems = {p.stem: p for p in stem_dir.glob("*.wav")}

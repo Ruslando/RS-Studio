@@ -1,3 +1,5 @@
+import multiprocessing
+import os
 import tempfile
 import time
 import unittest
@@ -31,6 +33,10 @@ def broken_job():
     raise ValueError("model failed")
 
 
+def worker_pid():
+    return os.getpid()
+
+
 class ProcessingTests(unittest.TestCase):
     def setUp(self):
         with processing._states_lock:
@@ -50,6 +56,15 @@ class ProcessingTests(unittest.TestCase):
         operation_id = "1" * 32
         self.assertEqual(processing.run(operation_id, successful_job, 42), 42)
         self.assertEqual(processing.cancel(operation_id)["state"], "done")
+
+    def test_untracked_work_uses_a_disposable_worker(self):
+        child_pid = processing.run(None, worker_pid)
+
+        self.assertNotEqual(child_pid, os.getpid())
+        self.assertNotIn(child_pid, {child.pid for child in multiprocessing.active_children()})
+        with processing._states_lock:
+            self.assertEqual(dict(processing._states), {})
+            self.assertEqual(processing._cancel_events, {})
 
     def test_cancel_before_processing_post(self):
         operation_id = "2" * 32

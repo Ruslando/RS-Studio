@@ -51,11 +51,16 @@ class AudioRuntimeTests(unittest.TestCase):
             raise SystemExit(1)
 
         separate.main = fail
-        with patch.dict(sys.modules, {"demucs": demucs, "demucs.separate": separate}), patch.object(pipeline, "_select_device", return_value="cpu"):
+        with (
+            patch.dict(sys.modules, {"demucs": demucs, "demucs.separate": separate}),
+            patch.object(pipeline, "_select_device", return_value="cpu"),
+            patch.object(pipeline, "_release_torch_memory") as release,
+        ):
             stems, warning = pipeline.separate_stems(Path("song.wav"), Path("unused"))
         self.assertEqual(stems, {})
         self.assertIn("FFmpeg is not installed", warning)
         self.assertIn("exit code 1", warning)
+        release.assert_called_once_with("cpu")
 
 
 if __name__ == "__main__":
