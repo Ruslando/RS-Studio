@@ -324,7 +324,7 @@ async function submitRocksmithExport() {
     let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
     downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name);
     closeRocksmithExportModal();
-    toast(warns.length ? `Exported ${name} - ${warns.length} warning(s)` : `Exported ${name}`);
+    toast(warns.length ? `Exported ${name} - ${warns.length} warning(s)` : `Exported ${name}`, 2200, warns.length ? "warn" : "ok");
   } catch (e) {
     setRsStatus(e.message, true);
   } finally {

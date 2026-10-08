@@ -289,7 +289,7 @@ async function startStemEditSeparate() {
     if (S.state !== state) return;
     finishStemEdit(stem, data.stem, data.warning);
   } catch (err) {
-    failStemEdit(stem, err.message);
+    failStemEdit(stem, err.cancelled ? null : err.message);
   }
 }
 
@@ -307,7 +307,7 @@ async function startStemEditReplace(file) {
     if (S.state !== state) return;
     finishStemEdit(stem, data.stem, null, data.duration);
   } catch (err) {
-    failStemEdit(stem, err.message);
+    failStemEdit(stem, err.cancelled ? null : err.message);
   }
 }
 

@@ -665,7 +665,9 @@ def api_project_stem_separate(job: str, payload: dict = Body(...)) -> JSONRespon
     source = _project_input(job_dir, m)
     out_id = f"{part}_{uuid.uuid4().hex[:6]}"
     try:
-        view, warn = processing.run(payload.get("progress_id"), lambda: pipeline.add_stem(job_dir, source, backend, part, out_id))
+        view, warn = processing.run(payload.get("progress_id"), pipeline.add_stem, job_dir, source, backend, part, out_id, output_dir=job_dir)
+    except processing.OperationCancelled:
+        return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Separation failed: {exc}") from exc
 
@@ -696,7 +698,7 @@ def api_project_stem_upload(job: str, file: UploadFile, name: str = Form("")) ->
     _save_upload(file.file, src_path)
     stem_name = name.strip() or Path(file.filename or "").stem or "Stem"
     try:
-        view = processing.run(None, lambda: pipeline.ingest_stem(src_path, job_dir, out_id, stem_name))
+        view = processing.run(None, pipeline.ingest_stem, src_path, job_dir, out_id, stem_name)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not process '{file.filename}': {exc}") from exc
 
@@ -1298,6 +1300,14 @@ async def api_operation_progress(operation_id: str) -> dict:
     return processing.status(operation_id)
 
 
+@app.post("/api/operations/{operation_id}/cancel")
+async def api_operation_cancel(operation_id: str) -> dict:
+    try:
+        return processing.cancel(operation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/detectors")
 def api_detectors() -> JSONResponse:
     """Models available for the editor's per-stem detection dropdown."""
@@ -1330,7 +1340,9 @@ def api_detect(payload: dict = Body(...)) -> JSONResponse:
 
     audio = _project_file_or_404(job, st.get("audio_rel"), "Stem audio")
     try:
-        notes, warn = processing.run(payload.get("progress_id"), lambda: pipeline.detect(audio, model, start=start, end=end))
+        notes, warn = processing.run(payload.get("progress_id"), pipeline.detect, audio, model, start=start, end=end)
+    except processing.OperationCancelled:
+        return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Detection failed: {exc}") from exc
 
@@ -1396,7 +1408,9 @@ def api_stem_add(payload: dict = Body(...)) -> JSONResponse:
     source = _project_input(job_dir, m)
     try:
         out_id = stem_id if not any(s["id"] == stem_id for s in m.get("stems", [])) else f"{stem_id}_{uuid.uuid4().hex[:6]}"
-        view, warn = processing.run(payload.get("progress_id"), lambda: pipeline.add_stem(job_dir, source, separator, stem_id, out_id))
+        view, warn = processing.run(payload.get("progress_id"), pipeline.add_stem, job_dir, source, separator, stem_id, out_id, output_dir=job_dir)
+    except processing.OperationCancelled:
+        return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not add stem: {exc}") from exc
 
@@ -1494,7 +1508,9 @@ def api_stem_recreate(job: str, stem_id: str, payload: dict = Body(...)) -> JSON
     job_dir = _job_dir(job)
     source = _project_input(job_dir, m, "Full song audio isn't available to separate from")
     try:
-        view, warn = processing.run(payload.get("progress_id"), lambda: pipeline.add_stem(job_dir, source, backend, part, stem_id))
+        view, warn = processing.run(payload.get("progress_id"), pipeline.add_stem, job_dir, source, backend, part, stem_id, output_dir=job_dir)
+    except processing.OperationCancelled:
+        return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Separation failed: {exc}") from exc
 

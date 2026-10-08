@@ -325,9 +325,9 @@ function createStemCard() {
       setReadyAudio(data.stem.audio_url);
       card.dataset.state = "ready";
       render();
-      if (data.warning) toast(data.warning);
+      if (data.warning) toast(data.warning, 6000, "warn");
     } catch (err) {
-      card._error = err.message;
+      card._error = err.cancelled ? null : err.message;
       card.dataset.state = "choosing";
       render();
     }

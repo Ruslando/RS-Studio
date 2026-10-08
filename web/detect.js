@@ -229,7 +229,7 @@ async function runDetect() {
     completedDetections++;
   } catch (e) {
     if (epoch === detectionEpoch && S.state === state)
-      detectStatus.textContent = "detection failed: " + e.message;
+      detectStatus.textContent = e.cancelled ? "detection cancelled" : "detection failed: " + e.message;
   } finally {
     if (epoch === detectionEpoch) {
       detecting = false;

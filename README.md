@@ -9,8 +9,8 @@ arrangements, import and export Guitar Pro files, and build Rocksmith packages.
 Install Python 3.10, 3.11, or 3.12 and [uv 0.11 or newer](https://docs.astral.sh/uv/).
 Install shared FFmpeg 4-8 libraries and put FFmpeg on PATH for source runs.
 On Windows, the staging script below fetches compatible FFmpeg 8.1 libraries.
-To use those staged files from PowerShell, run
-`$env:PATH = "$PWD\vendor\ffmpeg;$env:PATH"` before starting the app.
+The app automatically uses those staged files for source runs, including
+`serve`, without changing your terminal’s PATH.
 From this directory:
 
 ```text

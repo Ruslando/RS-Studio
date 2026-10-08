@@ -27,7 +27,7 @@ import { metadataPayload, normalizeMetadata } from "./metadata.js";
 import { applyPreservePitch, disposeSynths, ensureStemMixer, isMasterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, toggleStemSolo, warmSynths } from "./playback.js";
 import { initNewProject, openNewProject, refreshChoosingCards, setMainFile } from "./new-project.js";
 import { hideWelcome, initProjectLibrary, showWelcome } from "./project-library.js";
-import { loadSeparators, separators } from "./separators.js";
+import { backendLabel, loadSeparators, separators } from "./separators.js";
 import { closeStemSettings, initStemSettings, openStemSettings } from "./stem-settings.js";
 import { downloadProjectBlob, toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
@@ -873,7 +873,7 @@ async function uploadStem(file) {
     if (S.state === state) {
       stopPendingStem();
       renderStemTabs();
-      toast("Couldn't add stem: " + e.message, 2200, "error");
+      if (!e.cancelled) toast("Couldn't add stem: " + e.message, 2200, "error");
     }
   }
 }
@@ -905,13 +905,13 @@ export async function addStem(stemId, label, backend) {
     stopPendingStem();
     renderStemTabs();
     selectStem(s.id);
-    if (data.warning) toast(`⚠ ${data.warning}`);
+    if (data.warning) toast(data.warning, 6000, "warn");
     return true;
   } catch (e) {
     if (S.state === state) {
       stopPendingStem();
       renderStemTabs();
-      toast("Couldn't add stem: " + e.message, 2200, "error");
+      if (!e.cancelled) toast("Couldn't add stem: " + e.message, 2200, "error");
     }
     return false;
   }
@@ -998,7 +998,7 @@ function applyStemReplacement(stem, s, warn, duration) {
   // The master's file can change length on replace — resize the canvas to match
   // (separated stems are assumed to match the full song's existing length).
   if (duration != null && isMasterStem(stem)) { S.state.duration = duration; layout(); draw(); }
-  if (warn) toast(warn);
+  if (warn) toast(warn, 6000, "warn");
 }
 
 export async function loadCached(job) {

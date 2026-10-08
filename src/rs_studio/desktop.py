@@ -15,9 +15,7 @@ import time
 import webbrowser
 from pathlib import Path
 
-
-# Keep DLL-directory handles alive; closing one removes its loader search path.
-_DLL_DIRECTORIES: list = []
+from .audio_runtime import prepare_ffmpeg
 
 
 def _prep_runtime() -> None:
@@ -28,20 +26,7 @@ def _prep_runtime() -> None:
         sys.stdout = sink
     if sys.stderr is None:
         sys.stderr = sink
-    # Point at the bundled ffmpeg: prepend to PATH (so the ffmpeg CLI in _to_playback
-    # is found) and register it as a DLL directory (so torchcodec/torchaudio can
-    # load ffmpeg's shared libs — avcodec/avutil/… — for Demucs audio decoding).
-    if getattr(sys, "frozen", False):
-        for d in (Path(sys.executable).resolve().parent / "ffmpeg",
-                  Path(getattr(sys, "_MEIPASS", "")) / "ffmpeg"):
-            if d.is_dir():
-                os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
-                if hasattr(os, "add_dll_directory"):
-                    try:
-                        _DLL_DIRECTORIES.append(os.add_dll_directory(str(d)))
-                    except OSError:
-                        pass
-                break
+    prepare_ffmpeg()
 
 
 def _free_port(preferred: int = 8000) -> int:

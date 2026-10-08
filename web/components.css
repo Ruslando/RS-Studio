@@ -208,13 +208,20 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 
 .toast {
-  height: var(--h-list); padding: 0 var(--s-row); border-radius: var(--r-control);
+  min-height: var(--h-list); height: auto; padding: var(--s-sibling) var(--s-row); border-radius: var(--r-control);
   display: inline-flex; align-items: center; gap: var(--s-sibling);
   background: var(--panel); color: var(--text); border: 1px solid var(--line);
   box-shadow: var(--e1); font: 400 var(--text-control)/1 var(--font-ui);
+  max-width: 100%; box-sizing: border-box; pointer-events: auto;
+  user-select: text; -webkit-user-select: text;
   visibility: hidden; transform: translateY(8px);
   transition: transform var(--dur-overlay) var(--ease);
 }
+
+.toast-text { max-height: 40vh; overflow-y: auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; user-select: text; -webkit-user-select: text; }
+.toast-copy { flex: none; user-select: none; -webkit-user-select: none; }
+.processing-text { display: flex; flex-direction: column; gap: 6px; }
+.processing-toast .toast-cancel { align-self: flex-end; }
 
 .toast.show { visibility: visible; transform: translateY(0); }
 

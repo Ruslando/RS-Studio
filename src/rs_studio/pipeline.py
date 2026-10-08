@@ -16,6 +16,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .audio_runtime import prepare_ffmpeg
+
+# Source runs and frozen builds must resolve the same audio dependencies.
+prepare_ffmpeg()
+
 # --- Display / analysis constants -------------------------------------------
 # One CQT bin per semitone. The range covers most guitar/bass material so the
 # spectrogram rows line up exactly with MIDI pitches for note overlay. The floor
@@ -171,8 +176,8 @@ def separate_stems(input_path: Path, out_dir: Path) -> tuple[dict[str, Path], st
         return {}, "Demucs is not installed."
     except SystemExit as exc:  # argparse/CLI error path raises SystemExit
         if exc.code:
-            lines = sink.getvalue().strip().splitlines()
-            detail = f": {lines[-1]}" if lines else ""
+            output = sink.getvalue().strip()
+            detail = f":\n{output}" if output else ""
             return {}, f"Demucs separation failed (exit code {exc.code}){detail}."
     except Exception as exc:
         return {}, f"Demucs separation failed (model download or processing error): {exc}"
@@ -752,7 +757,8 @@ def _separated_wav(job_dir: Path, separator: str, input_path: Path, stem_id: str
 
 
 def add_stem(
-    job_dir: Path, input_path: Path, separator: str, stem_id: str, out_id: str | None = None
+    job_dir: Path, input_path: Path, separator: str, stem_id: str, out_id: str | None = None,
+    work_dir: Path | None = None,
 ) -> tuple[StemView, str | None]:
     """Render one extra separable stem on demand (transcode + CQT → a StemView).
 
@@ -767,21 +773,22 @@ def add_stem(
     so the results don't collide.
     """
     job_dir = Path(job_dir)
+    destination = Path(work_dir) if work_dir is not None else job_dir
     out_id = out_id or stem_id
     warn: str | None = None
     src = _separated_wav(job_dir, separator, input_path, stem_id)
     if src is None:
-        produced, warn = _run_separator(separator, input_path, job_dir / "stems", [stem_id])
+        produced, warn = _run_separator(separator, input_path, destination / "stems", [stem_id])
         src = produced.get(stem_id)
         if src is None:
             raise ValueError(warn or f"Could not produce stem '{stem_id}'.")
     processing.report("Encoding separated audio")
-    playback = job_dir / f"playback_{out_id}.opus"
+    playback = destination / f"playback_{out_id}.opus"
     audio_path = playback if _to_playback(src, playback) else src
     # Spectrogram is computed from the lossless separated wav, not the lossy
     # playback, so the CQT stays accurate even though playback is compressed.
     processing.report("Building spectrogram")
-    spec = compute_spectrogram(src, job_dir / f"spectrogram_{out_id}.png")
+    spec = compute_spectrogram(src, destination / f"spectrogram_{out_id}.png")
     name = STEM_LABELS.get(stem_id, stem_id.title())
     return StemView(id=out_id, name=name, audio_path=audio_path, spectrogram=spec), warn
 
