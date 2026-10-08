@@ -24,59 +24,16 @@ function rectangle(ctx, x, y, width, height, radius) {
   else ctx.rect(x, y, width, height);
 }
 
-const noteGlass = new WeakMap();
-export function beginNoteGlassFrame(ctx) {
-  const current = noteGlass.get(ctx);
-  if (current) current.ready = false;
-}
-
-function noteBackdrop(ctx, blur) {
-  let cached = noteGlass.get(ctx);
-  if (!cached) {
-    const canvas = document.createElement("canvas");
-    const painter = canvas.getContext("2d");
-    if (!painter) return ctx.canvas;
-    cached = {canvas, painter, ready: false};
-    noteGlass.set(ctx, cached);
-  }
-  if (!cached.ready) {
-    const {canvas, painter} = cached;
-    if (canvas.width !== ctx.canvas.width) canvas.width = ctx.canvas.width;
-    if (canvas.height !== ctx.canvas.height) canvas.height = ctx.canvas.height;
-    painter.clearRect(0, 0, canvas.width, canvas.height);
-    painter.filter = `blur(${blur}px)`;
-    painter.drawImage(ctx.canvas, 0, 0);
-    cached.ready = true;
-  }
-  return cached.canvas;
-}
-
 export function paintNoteBar(ctx, x, y, width, height, color, selected = false, hovered = false, emphasis = 0) {
   const radius = Math.min(2, width / 2, height / 2);
   ctx.save();
   rectangle(ctx, x, y, width, height, radius);
-  // Frost the actual backdrop inside the note silhouette, preserving layer tint.
-  ctx.save();
-  ctx.clip();
-  const transform = ctx.getTransform();
-  const blur = 2.5 * Math.abs(transform.a), padding = blur * 2;
-  const backdrop = noteBackdrop(ctx, blur);
-  const sx = Math.max(0, Math.floor(x * transform.a + transform.e - padding));
-  const sy = Math.max(0, Math.floor(y * transform.d + transform.f - padding));
-  const sw = Math.min(ctx.canvas.width - sx, Math.ceil(width * Math.abs(transform.a) + padding * 2));
-  const sh = Math.min(ctx.canvas.height - sy, Math.ceil(height * Math.abs(transform.d) + padding * 2));
-  if (sw > 0 && sh > 0) {
-    ctx.resetTransform();
-    if (backdrop === ctx.canvas) ctx.filter = `blur(${blur}px)`;
-    ctx.drawImage(backdrop, sx, sy, sw, sh, sx, sy, sw, sh);
-  }
-  ctx.restore();
-  ctx.fillStyle = hexA(PAINT.chrome, .42); ctx.fill();
-  ctx.fillStyle = hexA(color, selected ? .50 : hovered ? .40 : .28); ctx.fill();
-  const sheen = ctx.createLinearGradient(x, y, x, y + height);
-  sheen.addColorStop(0, hexA(PAINT.text, .18));
-  sheen.addColorStop(1, hexA(PAINT.text, .015));
-  ctx.fillStyle = sheen; ctx.fill();
+  // Glass-like tint without sampling or blurring the stage behind every note.
+  // These flat layers are cheap enough to redraw during playback and dragging.
+  ctx.fillStyle = hexA(PAINT.chrome, .72); ctx.fill();
+  ctx.fillStyle = hexA(color, selected ? .72 : hovered ? .62 : .50); ctx.fill();
+  ctx.strokeStyle = hexA(PAINT.text, .20); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x + 1, y + 1); ctx.lineTo(x + Math.max(1, width - 1), y + 1); ctx.stroke();
   rectangle(ctx, x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1), radius);
   // A dark outer keyline survives bright spectral peaks; the inner edge keeps
   // layer identity readable even when labels are too small to render.

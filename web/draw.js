@@ -1,4 +1,4 @@
-import { beginNoteGlassFrame, paintNoteBar, paintNoteGlow } from "./canvas-components.js";
+import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
 import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGhosts, notePlaybackGlow } from "./note-motion.js";
 // Canvas rendering: the main spectrogram + notes draw loop, the overview minimap
 // (whole-song strip with a viewport window), and the hover highlight / cursor line.
@@ -359,7 +359,6 @@ function paintFrame() {
   // budget as the skip test above: a few narrow notes lose their name. Worth it
   // for octave digits that line up down a column.
   sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
-  beginNoteGlassFrame(sctx);
   const actLane = activeLane();
   const omittedCrosses = [];
   const outOfRange = [];
