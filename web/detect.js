@@ -52,6 +52,7 @@ function updateDetectButton() {
   document.getElementById("detectButtonLabel").textContent = "Detect";
   detectBtn?.setAttribute("aria-busy", String(detecting));
   if (detectBtn) detectBtn.disabled = detecting ||
+    !!detectModelSel?.selectedOptions[0]?.disabled ||
     (!!requiredModel && detectModelSel?.value !== requiredModel);
 }
 
@@ -78,7 +79,7 @@ async function loadDetectors() {
   try {
     const items = await (await fetch("/api/detectors")).json();
     detectModelSel.innerHTML = items
-      .map((d) => `<option value="${d.id}">${d.label}</option>`).join("");
+      .map((d) => `<option value="${d.id}" ${d.available ? "" : "disabled"}>${d.label}${d.available ? "" : " — unavailable"}</option>`).join("");
     if (requiredModel && [...detectModelSel.options].some((option) => option.value === requiredModel))
       detectModelSel.value = requiredModel;
     updateDetectButton();
@@ -141,6 +142,7 @@ export const inFrame = (n, r) => n.start < r.t1 && n.end > r.t0;
 
 async function runDetect() {
   if (!S.state || !detectModelSel.value ||
+      detectModelSel.selectedOptions[0]?.disabled ||
       (requiredModel && detectModelSel.value !== requiredModel)) return;
   const epoch = ++detectionEpoch;
   // Detection can take a while; the user may open a different project — or delete

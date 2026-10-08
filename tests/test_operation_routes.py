@@ -23,6 +23,13 @@ class OperationRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertTrue(json.loads(response.body)["cancelled"])
 
+    def test_unavailable_detector_is_listed_but_cannot_run(self):
+        with patch.object(server, "_read_manifest", return_value={}), patch.object(server, "_find_stem", return_value={"audio_rel": "mix.wav"}), patch.object(server.pipeline, "list_detectors", return_value=[{"id": "mt3", "label": "MR-MT3", "available": False}]):
+            with self.assertRaises(HTTPException) as error:
+                server.api_detect({"job": "job", "stem": "mix", "model": "mt3"})
+        self.assertEqual(error.exception.status_code, 400)
+        self.assertIn("unavailable", error.exception.detail)
+
     def test_separation_cancellation_does_not_append_stem(self):
         with patch.object(server, "_draft_manifest", return_value={"stems": [{"id": "mix"}]}), patch.object(server, "_job_dir", return_value=Path("job")), patch.object(server, "_project_input", return_value=Path("mix.wav")), patch.object(server.pipeline, "list_separators", return_value=[{"id": "demucs"}]), patch.object(processing, "run", side_effect=processing.OperationCancelled("Operation cancelled")), patch.object(server, "_append_processed_stem") as append:
             response = server.api_project_stem_separate("job", {"backend": "demucs", "part": "guitar"})

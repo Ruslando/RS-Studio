@@ -325,7 +325,7 @@ os.environ["MT3_CHECKPOINT_DIR"] = str(MT3_CHECKPOINT_DIR)
 
 
 def mt3_checkpoint_path() -> Path:
-    """The one file MR-MT3 needs. Absent means the detector is not offered."""
+    """The one file MR-MT3 needs. Absent means the detector is unavailable."""
     return MT3_CHECKPOINT_DIR / MT3_MODEL / "mt3.pth"
 
 
@@ -359,7 +359,7 @@ def detect_notes_mt3(audio_path: Path) -> tuple[list[dict], str | None]:
             # arrives. Detect is not a download button, and a 175 MB fetch
             # starting because someone picked an entry in a dropdown is exactly
             # the surprise that pane exists to remove. list_detectors() already
-            # withholds this model when the file is missing, so this is the
+            # marks this model unavailable when the file is missing, so this is the
             # backstop for the file disappearing between the two calls.
             midi = transcribe(audio, model=MT3_MODEL, sr=16000, auto_download=False)
     except Exception as exc:
@@ -546,7 +546,7 @@ def detect_notes_torchcrepe(audio_path: Path) -> tuple[list[dict], str | None]:
 # ~172 MB CRNN checkpoint itself on first use — by shelling out to `wget`
 # (os.system), which a stock Windows desktop build does not have. The Models
 # pane fetches the exact file to the exact path the package checks, so that
-# branch is never reached: the detector is not offered until the file is there.
+# branch is never reached: the detector cannot be selected until the file is there.
 PIANO_CKPT_URL = (
     "https://zenodo.org/record/4034264/files/"
     "CRNN_note_F1%3D0.9677_pedal_F1%3D0.9186.pth?download=1"
@@ -630,37 +630,34 @@ def detect_notes_piano(audio_path: Path) -> tuple[list[dict], str | None]:
 # On-demand note detectors, selectable per stem in the editor. Each takes an
 # audio path and returns (notes, warning). All return the same note shape, so a
 # result drops straight into the selected edit lane. Add more here (pYIN, CREPE, ...).
-# `ready` is what stands between a dropdown entry and a surprise download: a
-# detector whose weights are not on disk is not offered at all. Omit it and the
+# `ready` prevents a selectable entry from triggering a surprise download. A
+# detector with missing weights remains visible but disabled. Omit it when the
 # model ships inside its own package, so there is nothing to be ready for.
 DETECTORS: dict[str, dict] = {
-    "basic_pitch": {"label": "Basic Pitch", "fn": detect_notes},
-    "mt3": {"label": "MR-MT3 (fast, multi-instrument)", "fn": detect_notes_mt3,
+    "basic_pitch": {"label": "Basic Pitch (polyphonic model)", "fn": detect_notes},
+    "mt3": {"label": "MR-MT3 (multi-instrument model)", "fn": detect_notes_mt3,
             "ready": lambda: mt3_checkpoint_path().exists()},
-    "torchcrepe": {"label": "torchcrepe (mono pitch — bass/melody)", "fn": detect_notes_torchcrepe},
-    "piano": {"label": "Piano transcription (Kong — polyphonic)", "fn": detect_notes_piano,
+    "torchcrepe": {"label": "torchcrepe (bass / melody model)", "fn": detect_notes_torchcrepe},
+    "piano": {"label": "Piano Transcription (piano model)", "fn": detect_notes_piano,
               "ready": lambda: piano_checkpoint_path().exists()},
 }
 
 
 def list_detectors() -> list[dict]:
-    """[{id, label}] for the editor's per-stem model dropdown.
+    """Every detector for the editor's per-stem model dropdown.
 
-    A detector whose weights are not on disk is not offered. MR-MT3 and the Kong
-    piano model would each fetch a couple of hundred megabytes the moment they
-    were picked — the dropdown has to mean "these run now", the same promise the
-    separator list makes about BS-RoFormer. Get them from Settings -> Models.
+    Missing weights make a detector unavailable instead of hiding it, matching
+    the separator picker. Detection never downloads weights implicitly; users
+    install them explicitly from Settings > Models.
     """
-    items = [{"id": k, "label": v["label"]} for k, v in DETECTORS.items()
-             if v.get("ready", _always_ready)()]
-    for item in items:
-        if item["id"] == "torchcrepe":
-            import torch
-            cuda = torch.cuda.is_available()
-            item["label"] = "torchcrepe (CUDA · mono bass/melody)" if cuda else "torchcrepe (CPU · slow, mono bass/melody)"
-            item["device"] = "cuda" if cuda else "cpu"
-            item["description"] = "Monophonic pitch tracking. CPU processing can take several minutes for a full song; select a time range for a shorter run." if not cuda else "Monophonic pitch tracking using CUDA."
-    return items
+    return [
+        {
+            "id": detector_id,
+            "label": entry["label"],
+            "available": bool(entry.get("ready", _always_ready)()),
+        }
+        for detector_id, entry in DETECTORS.items()
+    ]
 
 
 def _always_ready() -> bool:
@@ -730,9 +727,9 @@ def list_separators() -> list[dict]:
         for sid in roformer.instruments()
     ]
     return [
-        {"id": "demucs", "label": "Demucs (htdemucs_6s)", "available": True,
+        {"id": "demucs", "label": "Demucs (6-stem model)", "available": True,
          "stems": demucs_stems},
-        {"id": "roformer", "label": "BS-RoFormer (SW)", "available": roformer.available(),
+        {"id": "roformer", "label": "BS-RoFormer (6-stem model)", "available": roformer.available(),
          "stems": rofo_stems},
     ]
 

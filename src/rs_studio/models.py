@@ -18,12 +18,9 @@ checksum are verified before installation; corrupt partial files are discarded.
 """
 from __future__ import annotations
 
-import ctypes
 import hashlib
 import os
-import sys
 import threading
-from functools import lru_cache
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -76,56 +73,15 @@ def _torch_checkpoints() -> Path:
     return Path(cache).expanduser() / "torch" / "hub" / "checkpoints"
 
 
-@lru_cache(maxsize=1)
-def has_cuda() -> bool:
-    """Is a CUDA GPU usable here? Answered without importing torch.
-
-    torch costs 6.6s to import cold and the pane has to open now, so this asks
-    the driver instead: nvcuda.dll loads in a millisecond and its absence is
-    conclusive — no driver, no CUDA, whatever torch was built against. When
-    something else has already imported torch, torch is asked directly, since
-    by then it is free and it also knows whether the build has CUDA at all.
-
-    Limitation: a machine with the driver installed but a CPU-only torch wheel
-    reads as GPU-capable here and gets no warning. It is the quiet direction of
-    the two — the user sees it run slowly rather than being told a GPU it has
-    is missing — and torch.__version__ would cost the 6.6s this exists to skip.
-    """
-    torch = sys.modules.get("torch")
-    if torch is not None:
-        try:
-            return bool(torch.cuda.is_available())
-        except Exception:  # noqa: BLE001 - a broken torch is not a GPU
-            return False
-    try:
-        ctypes.CDLL("nvcuda.dll" if os.name == "nt" else "libcuda.so.1")
-        return True
-    except OSError:
-        return False
-
-
-# What each model needs to run, which is not what it needs to be installed —
-# every row states it, because "installed" and "usable at a sane speed" are
-# different questions and the pane was only answering the first. `cuda` marks
-# the ones where the answer changes on a machine without a GPU; the UI draws
-# that as a warning triangle carrying `slow` in its tooltip.
-# Facts, not advice. A tooltip is read once while the pointer is already moving
-# somewhere else, so each of these is the measurement and nothing around it:
-# no recommendation of another model, no sentence explaining the sentence.
-# ASCII only, like the piano warning — this text reaches a cp1252 Windows
-# console, where a stray dash has already killed one download in this codebase.
+# Hardware support shown in the model pane. Keep this factual and avoid rating
+# model performance; the labels describe what each model is intended to handle.
 _RUNS = {
-    "demucs": {"needs": "GPU or CPU. A few minutes per song on CPU."},
-    "roformer": {
-        "needs": "GPU (CUDA) recommended. 174.7M params, 44.1 kHz.",
-        "cuda": True,
-        "slow": "No CUDA GPU. CPU only, ~30x slower than realtime "
-                "(4 min of audio: over 1 hour).",
-    },
+    "demucs": {"needs": "GPU or CPU."},
+    "roformer": {"needs": "CUDA GPU or CPU. 174.7M parameters, 44.1 kHz."},
     "piano": {"needs": "CPU. No GPU needed."},
     "mt3": {"needs": "CPU. No GPU needed."},
     "basic_pitch": {"needs": "CPU. No GPU needed."},
-    "torchcrepe": {"needs": "GPU or CPU. Slower on long takes."},
+    "torchcrepe": {"needs": "GPU or CPU."},
 }
 
 
@@ -137,31 +93,31 @@ def _catalog() -> list[dict]:
     per file. Sizes are the servers' own Content-Length.
     """
     return [
-        {"id": "demucs", "label": "Demucs (htdemucs_6s)", "kind": "Stem separation",
+        {"id": "demucs", "label": "Demucs (6-stem model)", "kind": "Stem separation",
          "url": DEMUCS_URL, "size": 54996327,
          "files": [_torch_checkpoints() / DEMUCS_FILE]},
         # Two files, because loading needs the config as well as the weights,
         # and both are pinned by hash — see the mirror note above.
-        {"id": "roformer", "label": "BS-RoFormer (SW)", "kind": "Stem separation",
+        {"id": "roformer", "label": "BS-RoFormer (6-stem model)", "kind": "Stem separation",
          "size": 699416765,
          "urls": [ROFORMER_CKPT_URLS, ROFORMER_YAML_URLS],
          "sha256": [ROFORMER_CKPT_SHA, ROFORMER_YAML_SHA],
          "files": [roformer.checkpoint_path(), roformer.config_path()]},
-        {"id": "piano", "label": "Piano transcription (Kong)", "kind": "Note detection",
+        {"id": "piano", "label": "Piano Transcription (piano model)", "kind": "Note detection",
          "url": PIANO_CKPT_URL, "size": 171966578,
          "files": [piano_checkpoint_path()]},
         # mt3-infer would fetch this itself the first time the detector ran.
         # It is listed here with a URL instead, and pipeline.list_detectors()
-        # withholds MR-MT3 until the file exists — download it or don't have it,
-        # the same deal BS-RoFormer gets. The URL is the one mt3-infer's own
+        # marks MR-MT3 unavailable until the file exists, just like BS-RoFormer.
+        # The URL is the one mt3-infer's own
         # registry names, so a checkpoint already fetched by the old path is
         # found here rather than downloaded twice.
-        {"id": "mt3", "label": "MR-MT3", "kind": "Note detection",
+        {"id": "mt3", "label": "MR-MT3 (multi-instrument model)", "kind": "Note detection",
          "url": "https://huggingface.co/gudgud1014/MR-MT3/resolve/main/mt3.pth",
          "size": 183672643, "files": [mt3_checkpoint_path()]},
-        {"id": "basic_pitch", "label": "Basic Pitch", "kind": "Note detection",
+        {"id": "basic_pitch", "label": "Basic Pitch (polyphonic model)", "kind": "Note detection",
          "bundled": True},
-        {"id": "torchcrepe", "label": "torchcrepe", "kind": "Note detection",
+        {"id": "torchcrepe", "label": "torchcrepe (bass / melody model)", "kind": "Note detection",
          "bundled": True},
     ]
 
@@ -203,10 +159,7 @@ def status() -> list[dict]:
         row = {"id": m["id"], "label": m["label"], "kind": m["kind"],
                "size": m.get("size"), "done": 0,
                "downloadable": bool(_sources(m)), "detail": "",
-               "needs": runs.get("needs", ""),
-               # Only when the requirement is actually unmet: a triangle on
-               # every GPU-preferring row would mark the machine, not the model.
-               "warning": runs.get("slow", "") if runs.get("cuda") and not has_cuda() else ""}
+                "needs": runs.get("needs", ""), "warning": ""}
         if m.get("bundled"):
             row["state"] = "bundled"
         else:

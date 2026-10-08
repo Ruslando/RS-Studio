@@ -1330,9 +1330,15 @@ def api_detect(payload: dict = Body(...)) -> JSONResponse:
     end = payload.get("end")
     m = _read_manifest(job)            # validates job id
     st = _find_stem(m, stem_id)        # validates stem id
-    label = next((d["label"] for d in pipeline.list_detectors() if d["id"] == model), None)
-    if label is None:
+    detector = next((d for d in pipeline.list_detectors() if d["id"] == model), None)
+    if detector is None:
         raise HTTPException(status_code=400, detail=f"Unknown detector: {model}")
+    if not detector.get("available", True):
+        raise HTTPException(
+            status_code=400,
+            detail="Detection model is unavailable; download it in Settings > Models",
+        )
+    label = detector["label"]
 
     if m.get("tutorial") and stem_id == "bass" and model == "torchcrepe":
         return JSONResponse({"stem": stem_id, "source": label,
