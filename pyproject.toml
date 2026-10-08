@@ -1,0 +1,101 @@
+[project]
+name = "rs-studio"
+version = "0.1.0"
+description = "Transcription and charting tool for Rocksmith 2014"
+requires-python = ">=3.10,<3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "web/fonts/*-LICENSE.txt"]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "python-multipart>=0.0.9",
+    "librosa>=0.10",
+    "numpy>=1.26,<2",
+    "soundfile>=0.12",
+    "pillow>=12.3.0",
+    "demucs>=4.0",
+    "basic-pitch==0.4.0",
+    # ONNX is the only Basic Pitch backend used here. The uv configuration
+    # below excludes its unused platform-selected inference backends.
+    "onnxruntime>=1.20",
+    # Tested PyTorch stack; TorchAudio 2.11 supports newer PyTorch releases.
+    "torch==2.14.1",
+    "torchaudio==2.11.0",
+    "torchvision==0.29.1",
+    "torchcodec>=0.17.0,<0.18",
+    "pyyaml>=6.0.2",
+    "rotary-embedding-torch>=0.8.9",
+    "einops>=0.8.2",
+    "beartype>=0.22.9",
+    "pyguitarpro>=0.9",
+    "mt3-infer>=0.2.0",
+    # torchcrepe: pure-PyTorch CREPE port for monophonic pitch tracking (bass /
+    # single-line stems). Weights ship inside the package, so no download. Runs
+    # on the torch we already have via demucs — no TensorFlow (unlike upstream
+    # CREPE).
+    "torchcrepe>=0.0.24",
+    # piano_transcription_inference: Kong/ByteDance high-resolution piano
+    # transcription (TASLP 2021), the only polyphonic onset/offset model with
+    # ready PyTorch weights. Drives the piano-stem detector and the guitar
+    # zero-shot experiment. ~170 MB CRNN checkpoint auto-fetched from Zenodo on
+    # first use (we pre-download it ourselves — the package shells out to wget,
+    # which isn't portable). Pure PyTorch, no TensorFlow.
+    "piano_transcription_inference>=0.0.5",
+    # mt3-infer 0.2 supports Transformers 5.10; newer releases remove
+    # attention-mask methods still used by its custom T5 model.
+    "transformers>=5.10.0,<5.11",
+    # AES for the CDLC container: the psarc archive and the SNG arrangements are
+    # both encrypted, and the format gives no unencrypted option. Imported
+    # lazily, inside the export path.
+    "cryptography>=50.0.0",
+    # Native desktop window. Windows resolves to the OS-provided WebView2;
+    # Linux needs system WebKitGTK bindings (python3-gi, gir1.2-webkit2-*) that
+    # pip can't supply — desktop.launch() falls back to a browser without them.
+    "pywebview>=5",
+]
+
+[project.scripts]
+rs-studio = "rs_studio.cli:main"
+
+[build-system]
+requires = ["setuptools>=83.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# Rocksmith export: flat-model files, Wwise project templates, default tones.
+"rs_studio.rocksmith" = ["res/*"]
+
+# Build-time tooling for the standalone desktop build (PyInstaller .spec). Kept
+# in a dev group so it's tracked and survives `uv sync` (which exact-syncs and
+# would otherwise prune anything not declared here), without weighing down the
+# runtime dependency set.
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.0",
+]
+
+# Install this source checkout with uv; pip does not apply these exclusions.
+# basic-pitch 0.4.0 declares alternate inference backends as required packages
+# based on platform/Python version. RS Studio explicitly selects ONNX instead.
+[tool.uv]
+required-version = ">=0.11.0"
+# Minimum patched versions for indirect runtime dependencies.
+constraint-dependencies = [
+    "anyio>=4.14.2",
+    "fsspec>=2026.6.0",
+    "msgpack>=1.2.1",
+    "protobuf>=5.29.6",
+    "setuptools>=83.0.0",
+    "starlette>=1.3.1",
+    "urllib3>=2.8.0",
+]
+# resampy 0.4.3 replaces removed pkg_resources APIs. Basic Pitch 0.4.0
+# still declares an older upper bound; its ONNX inference works with 0.4.3.
+override-dependencies = ["resampy>=0.4.3"]
+exclude-dependencies = ["tensorflow", "tensorflow-macos", "tflite-runtime", "coremltools"]

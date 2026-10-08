@@ -1,0 +1,282 @@
+{
+  "repository": "https://github.com/nbrosowsky/tonejs-instruments",
+  "commit": "622c2f1c32c8cfce4158ddc3eb26e518ddef37e5",
+  "files": [
+    {
+      "file": "bass-electric/As1.mp3",
+      "sha256": "45bdecf48711f9f0455b2256d1b1b3bfa41a1950d70eab64ef2a28da6c2e605b"
+    },
+    {
+      "file": "bass-electric/As2.mp3",
+      "sha256": "c6f79e3e05bad4e41e2858b3acbd3edbee4e399529a7a97b9ade411080eac4b4"
+    },
+    {
+      "file": "bass-electric/As3.mp3",
+      "sha256": "72bf18ddd24a9d52663ada69249880946fb6d62cae5e14158750f438db2a176d"
+    },
+    {
+      "file": "bass-electric/As4.mp3",
+      "sha256": "b9dac9a326747e0a7be7659aed435c3de2f23d62b15d3e80bb58193126482105"
+    },
+    {
+      "file": "bass-electric/Cs1.mp3",
+      "sha256": "3c7dc5f53979a45faa710133cda695f3d68fa7b79b80f42b6a15c8bb3f6526b8"
+    },
+    {
+      "file": "bass-electric/Cs2.mp3",
+      "sha256": "7558885c23cf0a313c9651b7b2e11fd297902bb063db6b003748156ca9c07e9f"
+    },
+    {
+      "file": "bass-electric/Cs3.mp3",
+      "sha256": "5bd48a1633be2aae2d1032e7c304afa98568d947dc0bc0efa630bc2569a4dc7d"
+    },
+    {
+      "file": "bass-electric/Cs4.mp3",
+      "sha256": "2d72028b1af2ed42783f9cb905c5f5ec8b211032350c1c27c771bd4beaf04d16"
+    },
+    {
+      "file": "bass-electric/E1.mp3",
+      "sha256": "41fd91721398a47c6afa030feb324a1cd981ffac7da9bd313b775ad4f7b1a24c"
+    },
+    {
+      "file": "bass-electric/E2.mp3",
+      "sha256": "6a3c12185068beb22fc3225e1f2216f1f7440f4ba32a97dc8476c068df8307e8"
+    },
+    {
+      "file": "bass-electric/E3.mp3",
+      "sha256": "489482662d6fe265fb306f0acbad35ad775c699c7d7ae5485c3b3f583234d4a7"
+    },
+    {
+      "file": "bass-electric/E4.mp3",
+      "sha256": "59cdf868d2707b91946996e505b7311c6091c22b97aa170f316aa4156280d19d"
+    },
+    {
+      "file": "bass-electric/G1.mp3",
+      "sha256": "fd14e6e099056b6f0ff4433ef1d86358bffe7916f90c7ed2c6a7e2b0b4186cc6"
+    },
+    {
+      "file": "bass-electric/G2.mp3",
+      "sha256": "b5990f64a7094c946b0e88a47280649bab1ea0bff8f1ae1c420a97c1c2996cd2"
+    },
+    {
+      "file": "bass-electric/G3.mp3",
+      "sha256": "4c2f27ab0836f56e239fe30cca70e5c182157a5ff7b658bc19eb1169aeaf0a2e"
+    },
+    {
+      "file": "bass-electric/G4.mp3",
+      "sha256": "24c0d0ec8411e62e090c3e37b90e30d213e42897f728c810841cd2ede6d31a62"
+    },
+    {
+      "file": "guitar-acoustic/A2.mp3",
+      "sha256": "43e339bcd75f5f26336be8e1e59b131a0bf06dbf66f588f1c59a8d9faf53613f"
+    },
+    {
+      "file": "guitar-acoustic/A3.mp3",
+      "sha256": "025dbfd0aa2be101518bbf4587bbf0d81b96f6f9d01880287af749dc28201551"
+    },
+    {
+      "file": "guitar-acoustic/A4.mp3",
+      "sha256": "1f8263f10e24509d8d0bb82c7dd873bfe7da5354ba0333f23ebfc0f02076361a"
+    },
+    {
+      "file": "guitar-acoustic/As2.mp3",
+      "sha256": "c18a73a24012b54144ce69e1671a2bae927b20c5f5f6963802b718f3b15fd7d4"
+    },
+    {
+      "file": "guitar-acoustic/As3.mp3",
+      "sha256": "fa417b5b5d84d7808dded5922dbd5222b67f6724a2a35b4b05cb1990a500c6c6"
+    },
+    {
+      "file": "guitar-acoustic/As4.mp3",
+      "sha256": "ccd50d5271ac5b47b3bb422d10386d60a6ddaac6972085414eb2f1ab98137e23"
+    },
+    {
+      "file": "guitar-acoustic/B2.mp3",
+      "sha256": "b3bfb6e236d6b4680971eccad3be0042f1b3f7fb86fd1593b3817d92c461391a"
+    },
+    {
+      "file": "guitar-acoustic/B3.mp3",
+      "sha256": "2ab73ca750ca539a76c7ddaf7a3be2aac1436cd59ffc65525bf4adbb47c56488"
+    },
+    {
+      "file": "guitar-acoustic/B4.mp3",
+      "sha256": "7b523e73ba05e35f630ea756f33ae9c7497f64510c4b06544d43bcd37acadf0d"
+    },
+    {
+      "file": "guitar-acoustic/C3.mp3",
+      "sha256": "b9533ea5477879ddb9e1742c29f9084488ef70beee50a6fb44429d5b9a994e99"
+    },
+    {
+      "file": "guitar-acoustic/C4.mp3",
+      "sha256": "594c98aa8f9d1a426078e91899525f143e0bc82218b7b2c3f4cea2c54c181925"
+    },
+    {
+      "file": "guitar-acoustic/C5.mp3",
+      "sha256": "bed99fde143232c3a33847b82cf3e07c5d5e47b56d584d3d829d01deb9defbab"
+    },
+    {
+      "file": "guitar-acoustic/Cs3.mp3",
+      "sha256": "fa6ba9fe6a9671166a6e64464c1697a567145aecc0c9e5dea4f0dbb07cc8bb50"
+    },
+    {
+      "file": "guitar-acoustic/Cs4.mp3",
+      "sha256": "220a4f2b31b1e5bd12cbbbc8d4e91d6e95d24ea62a5c3eabbd323c059c2aff7d"
+    },
+    {
+      "file": "guitar-acoustic/Cs5.mp3",
+      "sha256": "43cf3fff34e85cf21ada6f9f93fc2841a5b2e0cb716fcc1ddc013a762d6981a9"
+    },
+    {
+      "file": "guitar-acoustic/D2.mp3",
+      "sha256": "d005117a278f3b3ac5f6b7048f7d6d94315b85afa281140cc1a4264dd2f62483"
+    },
+    {
+      "file": "guitar-acoustic/D3.mp3",
+      "sha256": "861b74a32a9159eea675ebd6ba0e5d3fa331b2c744dddd9ca1151073a3974fc0"
+    },
+    {
+      "file": "guitar-acoustic/D4.mp3",
+      "sha256": "3572050294e58aae62d7fcaaf2d9a66a4f880bf2fb74e89160a1f6d069d516f2"
+    },
+    {
+      "file": "guitar-acoustic/D5.mp3",
+      "sha256": "c9d74d19e672780b7b6e9eb4468b31b5fee6642f20df724198b232f7c78af4f1"
+    },
+    {
+      "file": "guitar-acoustic/Ds2.mp3",
+      "sha256": "18f6ac5cb150aa737573adb761b77e2078d02f6cd8592dee746cba508ec88577"
+    },
+    {
+      "file": "guitar-acoustic/Ds3.mp3",
+      "sha256": "87580a3fad8132d7f3e202af2b5f26277c7ef8f46ac7ac2de4e661b1c8959e15"
+    },
+    {
+      "file": "guitar-acoustic/E2.mp3",
+      "sha256": "917820984d1bb0b7712b4f2c42a9694efbb2479ccede45aa78af73811fc6818d"
+    },
+    {
+      "file": "guitar-acoustic/E3.mp3",
+      "sha256": "ffd6add4d02e0c9e45af59db231af77274b83602762878a9b1945210ae04bef5"
+    },
+    {
+      "file": "guitar-acoustic/E4.mp3",
+      "sha256": "3b02f5448695ac92f257ea9e36ba77be1b1b4a08f62a549b95c7ea9f5303ce14"
+    },
+    {
+      "file": "guitar-acoustic/F2.mp3",
+      "sha256": "eb7d6ccb9163aca6b70a0788de96ea20dd0bdca15db9015c5453c261e3982223"
+    },
+    {
+      "file": "guitar-acoustic/F3.mp3",
+      "sha256": "98b1a5e1e442752aba163e5fc4410fc8fdddafac4c920a0dd22991387b46e66e"
+    },
+    {
+      "file": "guitar-acoustic/F4.mp3",
+      "sha256": "f1d2f58575ac5cc666942c6f084d0328c2ceb28f485d315f41f66d9eafd33a05"
+    },
+    {
+      "file": "guitar-acoustic/Fs2.mp3",
+      "sha256": "13f9060f1e0ae773ca49b9b90e622417275e29e3fb11a103cb3dd759ccdad12e"
+    },
+    {
+      "file": "guitar-acoustic/Fs3.mp3",
+      "sha256": "fbead0c33ab6e7ad2345be84c286f185f8a760149e848b711758606c6f55a12c"
+    },
+    {
+      "file": "guitar-acoustic/Fs4.mp3",
+      "sha256": "51a5d7eab58e82579f9ae23daa73bae57561af96498eb39f73662e578d00fd9b"
+    },
+    {
+      "file": "guitar-acoustic/G2.mp3",
+      "sha256": "9be6ff1387ec947afedb80244ae9321ca9606ce57c2671c3f50a07f6bdcd4f73"
+    },
+    {
+      "file": "guitar-acoustic/G3.mp3",
+      "sha256": "8a8ddf06e2d4824f5086e6ad0cf32371da6afc594bf2efd9bb5ec9a2dfe9c040"
+    },
+    {
+      "file": "guitar-acoustic/G4.mp3",
+      "sha256": "f26371971ba4e34431a709985b3d09ef74be441a6c49612e085f7f8eaf825ef4"
+    },
+    {
+      "file": "guitar-acoustic/Gs2.mp3",
+      "sha256": "ec5fb51c6829a900c5f4073fd97ad617dd53a821e505143cea8c6f45253b3a37"
+    },
+    {
+      "file": "guitar-acoustic/Gs3.mp3",
+      "sha256": "b010d4622fefd06fc21063deece0b8f7141605a23331b10fa4385c3179a8d0ea"
+    },
+    {
+      "file": "guitar-acoustic/Gs4.mp3",
+      "sha256": "811da762dcd6caa70f1b8e60a92a406bd9665ffa5e7c42e52861526c1b6f9078"
+    },
+    {
+      "file": "guitar-electric/A2.mp3",
+      "sha256": "cef8d3fe2cb17c36e4e9a96a002613aac15fe6224ef3d09e91ba23cc3555b910"
+    },
+    {
+      "file": "guitar-electric/A3.mp3",
+      "sha256": "b840f271794efc3efcce886d71d1ee57cf6d524b6da1be15b1429f6bc8fe2f45"
+    },
+    {
+      "file": "guitar-electric/A4.mp3",
+      "sha256": "a817ca1ebdbdc32d0011044c41d906438cc1b0358a0adb6373f2f26d140e5cb2"
+    },
+    {
+      "file": "guitar-electric/A5.mp3",
+      "sha256": "19756be9ea1b21ced2d519886a4d812665855b4f0a56509535ecc3bedebeb2c8"
+    },
+    {
+      "file": "guitar-electric/C3.mp3",
+      "sha256": "4859bcaf12f9bf953bdcdbfbbbac18c86516b3f0566b8ea0a2b195ba7beb09a9"
+    },
+    {
+      "file": "guitar-electric/C4.mp3",
+      "sha256": "b2252b95bbea34faba9d7800c1ab1c819d548d18d0cbada7882395fdc34e2617"
+    },
+    {
+      "file": "guitar-electric/C5.mp3",
+      "sha256": "6b0671195f6d82b2fdf8afab8d1883554d2c0fb7d99cc935adc609c2816397f3"
+    },
+    {
+      "file": "guitar-electric/C6.mp3",
+      "sha256": "0d170c00a32045de1a7e71ea6c14cfb78cb16cebe7706066b0cf5c4f45797415"
+    },
+    {
+      "file": "guitar-electric/Cs2.mp3",
+      "sha256": "2c1117ca8e5ac7d2b10df5363978326d86cd79ec70f99b652fdbcc48fcf65d4c"
+    },
+    {
+      "file": "guitar-electric/Ds3.mp3",
+      "sha256": "0b6e69576b898eb61460a4b2b32ba4bcd4943a95035ba5794c19abdffc0208a0"
+    },
+    {
+      "file": "guitar-electric/Ds4.mp3",
+      "sha256": "0d9d732faa3ec958c9e537a8bcc4421077150362617266636407ee7a93ca11eb"
+    },
+    {
+      "file": "guitar-electric/Ds5.mp3",
+      "sha256": "f8c690e0fa3fd235196673e6ef32a5929534c70bc9eaaa5a7632e39cca263cf4"
+    },
+    {
+      "file": "guitar-electric/E2.mp3",
+      "sha256": "7dd2be5de9d91dcd7f525ef8e1bfc8d77ffc27ac98faeb61e5eea0357ce42b75"
+    },
+    {
+      "file": "guitar-electric/Fs2.mp3",
+      "sha256": "217477bb8e08f0f8e6f8d4fc8d660cf22e0538425ae0172b6d023e3bd853d869"
+    },
+    {
+      "file": "guitar-electric/Fs3.mp3",
+      "sha256": "c8ac921a460d64d162a79e0c7174ddabec7b7d501ddcf875efe81c84ae160b8e"
+    },
+    {
+      "file": "guitar-electric/Fs4.mp3",
+      "sha256": "ff8045e8c863e3cad7a6094f32b672893ddc98a00de88460ef114d99f3e7c016"
+    },
+    {
+      "file": "guitar-electric/Fs5.mp3",
+      "sha256": "ded100a22902ef51c6ef634dfcefdedd278b96322f5d7b31dd8d2f400b78d0ba"
+    }
+  ]
+}

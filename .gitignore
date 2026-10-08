@@ -1,0 +1,46 @@
+# Python and local development environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.python-version
+.local-tools/
+
+# Local credentials and settings
+.env
+.env.*
+!.env.example
+!.env.sample
+.codex/
+.agents/
+.claude/
+.walkthrough-critique.json
+.DS_Store
+
+# Build output and binaries staged for packaging
+dist/
+build/
+vendor/ffmpeg/
+
+# User audio, project bundles, transcriptions and generated analysis
+audio/
+stems/
+outputs/
+.runs/
+*.chart
+*.gp
+*.gpx
+*.gp3
+*.gp4
+*.gp5
+
+# Model downloads and checkpoints
+models/*
+!models/README.md
+!models/htdemucs_6s.yaml
+.mt3_checkpoints/
+
+# JavaScript tooling and local screenshots
+node_modules/
+design-shots/

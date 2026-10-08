@@ -1,0 +1,78 @@
+RS Studio
+Copyright 2026 Ruslan Novikov
+
+This product includes software developed by third parties. License texts
+are included in licenses/ and alongside the bundled and vendored assets.
+
+Attribution notices that must travel with a distribution under the terms of
+their own licenses:
+
+  basic-pitch (Apache-2.0)
+  Copyright 2022 Spotify AB
+  Carried per Apache-2.0 section 4(d). basic-pitch ships its own NOTICE file;
+  a binary distribution of this project must include it.
+
+  alphaTab (MPL-2.0)
+  Copyright (c) 2026, Daniel Kuschny and Contributors
+  MPL-2.0 is file-level copyleft. The banner at the top of
+  web/vendor/alphatab/alphaTab.min.js lists its own integrated libraries and
+  must never be stripped by a minification step. Their full MIT and BSD texts
+  are in licenses/alphaTab-integrated-LICENSES.txt. Source for the vendored
+  version (1.8.3) is at https://github.com/CoderLine/alphaTab/tree/v1.8.3.
+
+  Atkinson Hyperlegible Next (SIL OFL 1.1)
+  Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)
+  https://www.brailleinstitute.org/freefont/
+  See web/fonts/AtkinsonHyperlegibleNext-LICENSE.txt.
+
+  IBM Plex Mono (SIL OFL 1.1)
+  Copyright 2017 IBM Corp., with Reserved Font Name "Plex".
+  https://github.com/IBM/plex
+  Used for aligned numeric and musical data. See web/fonts/IBMPlexMono-LICENSE.txt.
+
+  Bravura (SIL OFL 1.1)
+  Copyright (c) 2026, Steinberg Media Technologies GmbH,
+  with Reserved Font Name "Bravura".
+  See web/vendor/alphatab/font/OFL.txt. The OFL requires the license to travel
+  with the font files.
+
+  BS-RoFormer (MIT)
+  Copyright (c) 2023 Phil Wang
+  Vendored under src/rs_studio/vendor/bs_roformer/, with local
+  modifications marked in-file. See the LICENSE in that directory.
+
+  Rocksmith2014.NET (MIT)
+  Copyright (c) 2020 Tapio Malmberg
+  The Rocksmith CDLC exporter's binary format handling was transcribed from it:
+  src/rs_studio/rocksmith/bnk.py is a direct port of SoundBank.fs,
+  and psarc.py, sng.py, wem.py, dds.py and manifest.py follow its reading of the
+  container, the SNG structures, the audio wrapper, the texture header and the
+  manifest schema. res/ carries its flat-model files, Wwise project templates
+  and default tones. MIT asks for the licence text itself, not a mention of it:
+  see licenses/Rocksmith2014.NET-LICENSE.txt.
+  https://github.com/iminashi/Rocksmith2014.NET
+
+  Tone.js (MIT)
+  Copyright (c) 2014-2025 Yotam Mann
+  See web/vendor/Tone.js.LICENSE.txt, which also covers the libraries webpack
+  bundled into it.
+
+  FFmpeg (LGPL-3.0)
+  Shipped only in the desktop build, under vendor/ffmpeg/, with its own
+  LICENSE.txt alongside.
+
+  Instrument samples (CC-BY 3.0)
+  A 69-file subset of tonejs-instruments by Nicholas Brosowsky, under
+  web/vendor/samples/.
+  Source: https://github.com/nbrosowsky/tonejs-instruments
+  License: https://creativecommons.org/licenses/by/3.0/
+  Detailed attribution and checksums: web/vendor/samples/README.md.
+  Upstream releases its samples under the Creative Commons Attribution 3.0
+  licence and names their origins: the 36 guitar-acoustic files were recorded by
+  the University of Iowa Electronic Music Studios (Lawrence Fritts), and the 33
+  bass-electric and guitar-electric files come from Karoryfer Samples.
+  Karoryfer states that its free sample libraries are now CC0, including older
+  downloads with more restrictive license notices:
+  https://shop.karoryfer.com/pages/free-samples
+  The exact original Karoryfer library is not identified by tonejs-instruments.
+  These files retain the direct distributor's CC BY 3.0 attribution.

@@ -1,0 +1,4 @@
+# res/ is packed verbatim into psarc files — no line-ending conversion, ever.
+# The .wwu work units are Wwise's own XML and it is fussy about them; the .flat
+# models and tone presets go into the archive byte for byte.
+src/rs_studio/rocksmith/res/** -text
