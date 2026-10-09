@@ -16,6 +16,8 @@ if _ffmpeg_dir.is_dir():
         _ffmpeg_dll_directories.append(os.add_dll_directory(str(_ffmpeg_dir)))
 
 datas = [("web", "web"), ("assets", "assets"), ("assets", "source/assets")]          # bundle the static UI alongside the app
+# Package data from pyproject.toml: Rocksmith export templates read through importlib.resources.
+datas += [("src/rs_studio/rocksmith/res", "rs_studio/rocksmith/res")]
 # The one-folder build carries visible license notices and the source needed to
 # rebuild with a modified LGPL PyGuitarPro library.
 datas += [

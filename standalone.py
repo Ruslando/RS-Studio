@@ -22,7 +22,7 @@ def _bootstrap_check(destination: Path) -> int:
     modules = ("torch", "torchaudio", "torchcodec", "torchvision", "llvmlite.binding", "onnxruntime",
                "scipy", "librosa", "soundfile", "demucs", "basic_pitch", "torchcrepe",
                "piano_transcription_inference", "transformers", "mt3_infer", "webview")
-    steps = 4 + len(modules)
+    steps = 5 + len(modules)
     done = [0]
 
     def step(name):
@@ -50,6 +50,12 @@ def _bootstrap_check(destination: Path) -> int:
         step("PyTorch computation")
         import torch
         assert torch.ones(2).sum().item() == 2
+        step("RS Studio export templates")
+        from importlib import resources
+        templates = resources.files("rs_studio.rocksmith").joinpath("res")
+        for name in ("music-hierarchy.wwu", "soundbanks.wwu", "rsenumerable_song.flat", "default_lead.json"):
+            if not templates.joinpath(name).is_file():
+                raise RuntimeError("Rocksmith export template missing: " + name)
         step("RS Studio audio worker")
         from rs_studio import processing, paths, server, __version__
         if processing.run(None, paths.resource_root) != paths.resource_root():
