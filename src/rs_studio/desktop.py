@@ -16,6 +16,7 @@ import webbrowser
 from pathlib import Path
 
 from .audio_runtime import prepare_ffmpeg
+from .paths import resource_root
 
 
 def _prep_runtime() -> None:
@@ -96,8 +97,7 @@ _ASK_PAGE = """(function () {
 
 
 def _app_icon() -> Path:
-    root = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
-    return root / "assets" / "icon.ico"
+    return resource_root() / "assets" / "icon.ico"
 
 
 def _open_window(url: str) -> bool:

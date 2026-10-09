@@ -14,12 +14,13 @@ can take several minutes — so it's best on short excerpts for A/B-ing guitar.
 from __future__ import annotations
 
 from . import processing
+from .paths import data_root
 
 import gc
 import os
 from pathlib import Path
 
-MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
+MODELS_DIR = data_root() / "models"
 CONFIG_NAME = "BS-Rofo-SW-Fixed.yaml"
 CHECKPOINT_NAME = "BS-Rofo-SW-Fixed.ckpt"
 

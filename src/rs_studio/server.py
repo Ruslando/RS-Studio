@@ -65,6 +65,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from . import __version__, models, pipeline, processing, tab, tutorial
 from .local_security import LocalRequestMiddleware
+from .paths import data_root, resource_root
 
 # ---------------------------------------------------------------------------
 # Shared guards for routes that read or write client-supplied project data.
@@ -103,11 +104,11 @@ from .local_security import LocalRequestMiddleware
 
 ROOT = Path(__file__).resolve().parent
 # When frozen (PyInstaller) bundled resources live under sys._MEIPASS and the
-# writable cache sits next to the executable (portable); in dev both resolve to
-# the project root.
+# writable cache sits next to the executable (portable). Bootstrap installs
+# provide separate app resources and stable data directories; dev uses the checkout.
 _FROZEN = getattr(sys, "frozen", False)
-_RES_ROOT = Path(getattr(sys, "_MEIPASS", ROOT.parent.parent))
-_DATA_ROOT = Path(sys.executable).resolve().parent if _FROZEN else ROOT.parent.parent
+_RES_ROOT = resource_root()
+_DATA_ROOT = data_root()
 WEB_DIR = _RES_ROOT / "web"
 RUNS_DIR = _DATA_ROOT / ".runs"
 _CONFIG_ROOT = (Path(os.environ["APPDATA"]) if os.name == "nt" and os.environ.get("APPDATA")

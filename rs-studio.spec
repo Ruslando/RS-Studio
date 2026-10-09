@@ -113,6 +113,8 @@ a = Analysis(
     hiddenimports=hiddenimports,
     excludes=["tkinter", "tensorflow", "tensorflow_intel"],
     noarchive=False,
+    # Keep app code outside the runtime archive so small app packages can update it.
+    module_collection_mode={"rs_studio": "py"},
 )
 pyz = PYZ(a.pure)
 exe = EXE(

@@ -11,7 +11,9 @@ _DLL_DIRECTORIES: dict[Path, object] = {}
 
 def prepare_ffmpeg() -> Path | None:
     """Expose local FFmpeg executables and shared libraries; never download them."""
-    if getattr(sys, "frozen", False):
+    if os.environ.get("RS_STUDIO_FFMPEG"):  # set by the bootstrap installer
+        candidates = [Path(os.environ["RS_STUDIO_FFMPEG"])]
+    elif getattr(sys, "frozen", False):
         candidates = [
             Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "ffmpeg",
             Path(sys.executable).resolve().parent / "ffmpeg",

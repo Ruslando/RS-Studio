@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .audio_runtime import prepare_ffmpeg
+from .paths import data_root
 
 # Source runs and frozen builds must resolve the same audio dependencies.
 prepare_ffmpeg()
@@ -335,7 +336,7 @@ MT3_MODEL = "mr_mt3"
 # setdefault would have left mt3-infer loading their file while the pane
 # reported on ours. One value, both readers.
 MT3_CHECKPOINT_DIR = Path(os.environ.get("MT3_CHECKPOINT_DIR")
-                          or Path(__file__).resolve().parents[2] / ".mt3_checkpoints")
+                          or data_root() / ".mt3_checkpoints")
 os.environ["MT3_CHECKPOINT_DIR"] = str(MT3_CHECKPOINT_DIR)
 
 
