@@ -68,7 +68,8 @@ def check(args) -> None:
         if not shutil.which("gh"):
             raise SystemExit("GitHub CLI missing: winget install GitHub.cli, then gh auth login")
         run("gh", "auth", "status", capture=True)
-    run(sys.executable, "-m", "unittest", "discover", "-s", "tests", capture=True)
+    print("Running the tests (about 30 s)…", flush=True)
+    run(sys.executable, "-m", "unittest", "discover", "-s", "tests")
 
 
 def build(version: str, notes: Path | None) -> list[Path]:
