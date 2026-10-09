@@ -51,6 +51,8 @@ class WwiseNotFoundError(AudioConverterNotFoundError):
 
 
 _YEAR_RE = r"20(?:19|2\d)"  # 2019 or newer
+# WwiseConsole is a console program; from the windowed app each call would flash a window.
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
 def find_linux_encoders() -> tuple[str, str]:
@@ -167,7 +169,7 @@ def convert_to_wem(wav_path: Path, console: str | None = None) -> bytes:
         project = workdir / "Template" / "Template.wproj"
         made = subprocess.run(
             [console, "create-new-project", str(project), "--quiet"],
-            capture_output=True, text=True, timeout=600)
+            capture_output=True, text=True, timeout=600, creationflags=_NO_WINDOW)
         if made.returncode != 0 or not project.exists():
             raise RuntimeError(
                 f"Wwise {year} could not create a template project "
@@ -188,14 +190,14 @@ def convert_to_wem(wav_path: Path, console: str | None = None) -> bytes:
         # not a verdict — it returns non-zero having migrated successfully — so the
         # only check that means anything is whether a wem comes out below.
         subprocess.run([console, "migrate", str(project), "--quiet"],
-                       capture_output=True, text=True, timeout=600)
+                       capture_output=True, text=True, timeout=600, creationflags=_NO_WINDOW)
 
         cmd = [
             console, "generate-soundbank", str(project),
             "--platform", "Windows", "--language", "English(US)",
             "--no-decode", "--quiet",
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, creationflags=_NO_WINDOW)
         # 2019-2023 write .cache/Windows/SFX/*.wem; 2024+ use hashed .cache
         # subfolders — recurse to cover both layouts.
         cache = project.parent / ".cache"
