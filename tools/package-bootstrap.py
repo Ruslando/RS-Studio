@@ -153,6 +153,7 @@ def main():
     parser.add_argument("--ffmpeg", type=Path, default=ROOT / "vendor/ffmpeg", help="LGPL FFmpeg staged by tools/fetch-ffmpeg.py")
     parser.add_argument("--cuda-venv", type=Path, default=ROOT / ".venv", help="Environment with the +cu126 torch, used to read its GPU architectures")
     parser.add_argument("--no-cuda", action="store_true")
+    parser.add_argument("--cuda-archs", help="Comma-separated sm_ numbers of the CUDA torch, e.g. 50,60,61,70,75,80,86,90 (instead of probing --cuda-venv)")
     parser.add_argument("--notes", type=Path, help="Release notes (plain text) shown in the app's update dialog")
     parser.add_argument("--manifest-url", help="Where the setup looks for releases (default: the GitHub 'latest' release)")
     parser.add_argument("--allow-local", action="store_true", help="Development-only localhost HTTP release")
@@ -195,13 +196,16 @@ def main():
     runtimes = {"core": {"requirements": "requirements/core.txt", "wheels": core_wheels}}
     if not args.no_cuda:
         cuda, cuda_wheels = cuda_variant(core, core_wheels, python_tag)
-        venv_python = args.cuda_venv / "Scripts/python.exe"
         # The launcher's CUDA check compares the GPU against the architectures compiled into this torch.
-        probe = subprocess.run([str(venv_python), "-c", "import torch; print(torch.__version__); print(torch._C._cuda_getArchFlags())"],
-                               capture_output=True, text=True, check=True).stdout.split()
-        if probe[0] != requirement_blocks(core)["torch"][1] + "+cu126":
-            parser.error(f"--cuda-venv has torch {probe[0]}, expected the locked version +cu126")
-        archs = sorted(int(flag.removeprefix("sm_")) for flag in probe[1:] if flag.startswith("sm_"))
+        if args.cuda_archs:
+            archs = sorted(int(arch) for arch in args.cuda_archs.split(","))
+        else:
+            venv_python = args.cuda_venv / "Scripts/python.exe"
+            probe = subprocess.run([str(venv_python), "-c", "import torch; print(torch.__version__); print(torch._C._cuda_getArchFlags())"],
+                                   capture_output=True, text=True, check=True).stdout.split()
+            if probe[0] != requirement_blocks(core)["torch"][1] + "+cu126":
+                parser.error(f"--cuda-venv has torch {probe[0]}, expected the locked version +cu126 (or pass --cuda-archs)")
+            archs = sorted(int(flag.removeprefix("sm_")) for flag in probe[1:] if flag.startswith("sm_"))
         requirements["requirements/cuda.txt"] = cuda
         runtimes["cuda"] = {"requirements": "requirements/cuda.txt", "wheels": cuda_wheels, "cuda_archs": archs}
     for runtime in runtimes.values():
