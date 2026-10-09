@@ -174,11 +174,8 @@ function renderRsArrangements(lanes) {
     const trackName = track.name || `Layer ${i + 1}`;
     row.querySelector(".rs-arr-on").setAttribute("aria-label", `Export ${trackName}`);
     row.querySelector(".rs-arr-name").textContent = trackName;
-    // Rule 25: the count is written the way the edit lanes write it — the app's
-    // glyph plus a tabular number — so counts line up down the list.
-    const count = row.querySelector(".count");
-    count.textContent = String(notes.length);
-    count.title = `${notes.length} note${notes.length === 1 ? "" : "s"}`;
+    // Written the way the layer list writes it ("12 notes").
+    row.querySelector(".count").textContent = `${notes.length.toLocaleString()} note${notes.length === 1 ? "" : "s"}`;
     row.querySelector(".rs-arr-kind").addEventListener("change", () =>
       updateRsTuningSelect(row, rsTuningFromSelect(row.querySelector(".rs-arr-tuning"))));
     updateRsTuningSelect(row, row._trackTuning);

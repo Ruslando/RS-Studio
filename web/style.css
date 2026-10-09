@@ -933,7 +933,6 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
   text-align: right; color: var(--hint);
   font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums;
 }
-.rs-arr-row .count::before { content: "¶9"; margin-right: 1px; }
 
 .rs-arr-warn { display: inline-flex; align-items: center; justify-content: center; color: var(--warn); }
 
