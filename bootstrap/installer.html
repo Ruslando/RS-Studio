@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'unsafe-eval'; font-src data:; connect-src 'none'; img-src data:">
+<title>RS Studio Setup</title>
+<style>
+/*fonts*/
+/* Values from web/tokens.css so setup looks like the app. */
+:root {
+  --page: #101722; --panel: #171f2b; --control: #202c3b; --control-hover: #2a394b;
+  --button: #243449; --button-hover: #30435a; --inset: #131b27;
+  --text: #f2f3f5; --label: #c0c4cc; --hint: #a5abb7;
+  --accent: #355f8d; --accent-hover: #2b5079; --bar: #74a9ff;
+  --ok: #63c398; --warn: #dda65c; --error: #ef95a6;
+  --line: rgba(255,255,255,.09); --ring: color-mix(in srgb, #74a9ff 45%, transparent);
+  --font-ui: "Atkinson Hyperlegible Next", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--panel); color: var(--text); font: 400 14px/1.5 var(--font-ui); display: flex; flex-direction: column; user-select: none; }
+
+header { display: flex; align-items: baseline; gap: 8px; padding: 18px 28px; border-bottom: 1px solid var(--line); background: var(--page); }
+header .name { font: 600 15px/1.2 var(--font-ui); letter-spacing: -.01em; }
+header .sub { color: var(--hint); font-size: 13px; }
+header .version { margin-left: auto; color: var(--hint); font: 400 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+
+main { flex: 1; min-height: 0; overflow: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+.intro h1 { margin: 0; display: flex; align-items: center; gap: 8px; font: 600 18px/1.25 var(--font-ui); letter-spacing: -.01em; }
+.intro h1 svg { color: var(--ok); }
+.intro p { margin: 6px 0 0; color: var(--label); font-size: 13px; overflow-wrap: anywhere; min-height: 20px; }
+.intro p.error { color: var(--error); }
+.intro p.warn { color: var(--warn); }
+.section { margin: 0 0 8px; color: var(--hint); font: 600 11px/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; }
+
+/* Bordered lists; every row uses the same padding so checkboxes and text line up. */
+.list { border: 1px solid var(--line); border-radius: 8px; background: var(--inset); overflow: hidden; }
+.row { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 14px; align-items: start; padding: 14px 16px; }
+.row + .row { border-top: 1px solid var(--line); }
+.row:has(input:not(:disabled)) { cursor: pointer; }
+.row:has(input:not(:disabled)):hover { background: var(--control); }
+.row input { margin: 1px 0 0; width: 18px; height: 18px; accent-color: var(--accent); cursor: inherit; }
+.row.simple { align-items: center; font-size: 14px; }
+.row.simple input { margin: 0; }
+.title { display: flex; align-items: center; gap: 8px; font: 600 14px/20px var(--font-ui); }
+.desc { display: block; color: var(--label); font-size: 13px; line-height: 1.45; margin-top: 2px; }
+.size { display: block; color: var(--hint); font: 400 11px/1.6 var(--font-mono); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.tag { padding: 0 8px; border-radius: 999px; background: var(--control); color: var(--label); font: 500 11px/20px var(--font-ui); }
+.tag.ok { color: var(--ok); }
+.notice { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; line-height: 1.4; color: var(--ok); }
+.notice.warn { color: var(--warn); }
+.notice svg { flex: none; }
+
+.location { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; }
+.location .path { flex: 1; min-width: 0; color: var(--text); font: 400 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.location button { flex: none; min-width: 0; }
+.hint { margin: 8px 0 0; color: var(--hint); font-size: 12px; line-height: 1.4; }
+
+.progress { border: 1px solid var(--line); border-radius: 8px; background: var(--inset); overflow: hidden; }
+.steps { list-style: none; margin: 0; padding: 6px 0; }
+.steps li { display: flex; align-items: center; gap: 12px; padding: 6px 16px; color: var(--hint); font-size: 13px; }
+.steps li .mark { flex: none; width: 18px; height: 18px; display: grid; place-items: center; }
+.steps li .mark::before { content: ""; width: 10px; height: 10px; border-radius: 999px; border: 1.5px solid var(--hint); opacity: .6; }
+.steps li.active { color: var(--text); font-weight: 600; }
+.steps li.active .mark::before { width: 12px; height: 12px; border: 2px solid var(--control-hover); border-top-color: var(--bar); opacity: 1; animation: spin .8s linear infinite; }
+.steps li.done { color: var(--label); }
+.steps li.done .mark::before { content: none; }
+.steps li.done .mark { color: var(--ok); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.current { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid var(--line); }
+.current .file { color: var(--label); font: 400 12px/1.4 var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 17px; }
+.bar { height: 6px; border-radius: 999px; background: var(--control); overflow: hidden; }
+.bar > span { display: block; height: 100%; width: 0; background: var(--bar); border-radius: inherit; transition: width .2s linear; }
+.bar.busy > span { width: 30%; animation: busy 1.2s ease-in-out infinite; }
+@keyframes busy { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.numbers { display: flex; justify-content: space-between; gap: 12px; color: var(--hint); font: 400 11px/1.4 var(--font-mono); font-variant-numeric: tabular-nums; min-height: 15px; }
+
+footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 28px; border-top: 1px solid var(--line); background: var(--page); }
+footer .spacer { flex: 1; }
+button { min-width: 96px; height: 34px; padding: 0 18px; border: 1px solid transparent; border-radius: 6px; background: var(--button); color: var(--text); font: 500 13px/1 var(--font-ui); cursor: default; }
+button:hover:not(:disabled) { background: var(--button-hover); }
+button.primary { background: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+button:disabled, button.primary:disabled { background: var(--control); border-color: var(--line); color: var(--hint); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<header><span class="name">RS Studio</span><span class="sub">Setup</span><span class="version" id="version"></span></header>
+<main>
+  <div class="intro">
+    <h1 id="heading">Preparing setup</h1>
+    <p id="status" role="status" aria-live="polite">Checking your installation…</p>
+  </div>
+  <div id="choose" hidden>
+    <p class="section">Components</p>
+    <div class="list">
+      <label class="row">
+        <input type="checkbox" checked disabled>
+        <span><span class="title">Core <span class="tag">Required</span></span>
+          <span class="desc">Required core application data.</span>
+          <span class="size" id="core-size"></span></span>
+      </label>
+      <label class="row" id="cuda-item">
+        <input type="checkbox" id="cuda">
+        <span><span class="title">NVIDIA CUDA <span class="tag" id="cuda-tag">Optional</span></span>
+          <span class="desc">Optional CUDA acceleration modules.</span>
+          <span class="size" id="cuda-size"></span>
+          <span class="notice" id="cuda-notice"></span></span>
+      </label>
+    </div>
+  </div>
+  <div id="where" hidden>
+    <p class="section">Installation folder</p>
+    <div class="list"><div class="location"><span class="path" id="folder"></span><button id="browse">Browse…</button></div></div>
+  </div>
+  <div class="progress" id="progress" hidden>
+    <ol class="steps" id="steps">
+      <li><span class="mark"></span>Download files</li>
+      <li><span class="mark"></span>Unpack application</li>
+      <li><span class="mark"></span>Set up Python</li>
+      <li><span class="mark"></span>Install libraries</li>
+      <li><span class="mark"></span>Verify installation</li>
+    </ol>
+    <div class="current">
+      <div class="file" id="file"></div>
+      <div class="bar" id="bar"><span id="fill"></span></div>
+      <div class="numbers"><span id="amount"></span><span id="rate"></span></div>
+    </div>
+  </div>
+  <div class="list" id="finish" hidden>
+    <label class="row simple shortcut"><input type="checkbox" id="start-menu" checked><span>Add to the Start menu</span></label>
+    <label class="row simple shortcut"><input type="checkbox" id="desktop" checked><span>Create a desktop shortcut</span></label>
+    <label class="row simple"><input type="checkbox" id="open" checked><span>Open RS Studio now</span></label>
+  </div>
+</main>
+<footer><button id="close">Close</button><span class="spacer"></span><button id="repair" hidden>Repair</button><button class="primary" id="install" disabled>Install</button></footer>
+<script>
+const $ = id => document.getElementById(id);
+const WARN = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5 15.2 14H.8L8 1.5Zm-.75 4.75v4h1.5v-4h-1.5Zm0 5.25v1.5h1.5v-1.5h-1.5Z"/></svg>';
+const CHECK = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.3 11.6 2.7 8l1.1-1.1 2.5 2.5 5.9-5.9 1.1 1.1-7 7Z"/></svg>';
+const DONE = '<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path fill="currentColor" d="m8.6 13.4-3.3-3.3 1.1-1.1 2.2 2.2 4.9-4.9 1.1 1.1-6 6Z"/></svg>';
+// Heading, text and main button for each situation the chosen folder can be in.
+const VIEWS = {
+  install:   ['Install RS Studio', '', 'Install'],
+  continue:  ['Continue installation', '', 'Continue'],
+  installed: ['RS Studio is installed', '', 'Open'],
+  occupied:  ['Folder is not empty', '', 'Install'],
+};
+const HEADINGS = { checking: 'Preparing setup', installing: 'Installing', error: 'Setup stopped', stopping: 'Stopping',
+                   launching: 'Opening RS Studio', done: 'Installation complete', finishing: 'Finishing' };
+const STAGES = ['Downloading', 'Unpacking', 'Preparing Python', 'Installing libraries', 'Checking installation'];
+const STEP_OF = { 'Checking downloaded files': 0 };
+function size(bytes) { return bytes >= 1073741824 ? (bytes / 1073741824).toFixed(2) + ' GB' : (bytes / 1048576).toFixed(0) + ' MB'; }
+function duration(seconds) {
+  if (seconds < 60) return Math.max(1, Math.round(seconds)) + ' s left';
+  if (seconds < 3600) return Math.round(seconds / 60) + ' min left';
+  return Math.floor(seconds / 3600) + ' h ' + Math.round(seconds % 3600 / 60) + ' min left';
+}
+function heading(text, icon) { $('heading').innerHTML = (icon || '') + '<span></span>'; $('heading').lastChild.textContent = text; }
+function status(text, tone) { $('status').className = tone || ''; $('status').textContent = text; }
+let state = '', kind = '', shown = null, hasComponents = false;
+
+function showComponents(data) {
+  hasComponents = !!data.core;
+  if (!data.core) return;
+  $('version').textContent = data.version ? 'v' + data.version : '';
+  $('core-size').textContent = size(data.core.download_bytes);
+  $('cuda-item').hidden = !data.cuda;
+  if (!data.cuda) return;
+  // Preselect what is installed; otherwise follow the GPU check.
+  $('cuda').checked = data.installed_runtime ? data.installed_runtime === 'cuda' : data.cuda.useful;
+  $('cuda-tag').textContent = data.cuda.useful ? 'Recommended' : 'Optional';
+  $('cuda-tag').classList.toggle('ok', data.cuda.useful);
+  $('cuda-size').textContent = '+' + size(data.cuda.download_bytes - data.core.download_bytes);
+  $('cuda-notice').className = 'notice' + (data.cuda.useful ? '' : ' warn');
+  $('cuda-notice').innerHTML = (data.cuda.useful ? CHECK : WARN) + '<span></span>';
+  $('cuda-notice').lastChild.textContent = data.cuda.reason;
+}
+
+function render(data) {
+  state = data.state;
+  const finished = state === 'done' || state === 'finishing';
+  const working = ['installing', 'stopping', 'launching'].includes(state);
+  const choosing = state === 'ready';
+  $('choose').hidden = !(choosing && kind !== 'occupied' && hasComponents);
+  $('where').hidden = !(choosing || state === 'error') || !data.folder;
+  $('progress').hidden = !(state === 'installing' || state === 'stopping');
+  $('finish').hidden = !finished;
+  if (data.folder) $('folder').textContent = data.folder;
+  $('browse').hidden = !!data.fixed;
+  $('browse').disabled = !(choosing || state === 'error');
+
+  if (choosing) {
+    kind = data.kind;
+    if (shown !== data.folder + kind) { shown = data.folder + kind; showComponents(data); }
+    $('choose').hidden = kind === 'occupied' || !hasComponents;
+    $('repair').hidden = !(kind === 'installed' && hasComponents);
+    const [title, text, action] = VIEWS[kind];
+    heading(title, kind === 'installed' ? DONE : '');
+    status(kind === 'installed' ? 'Version ' + data.installed_version + (data.installed_runtime === 'cuda' ? ' · CUDA' : '') : text);
+    $('install').textContent = action;
+    $('install').disabled = kind === 'occupied' || (kind !== 'installed' && !hasComponents);
+    $('cuda').disabled = false;
+    $('close').textContent = 'Close';
+    $('close').disabled = false;
+    return;
+  }
+  $('repair').hidden = true;
+  if (finished) {
+    const repaired = data.message === 'RS Studio is repaired.';
+    const ok = repaired || data.message === 'RS Studio is installed.';
+    heading(repaired ? 'Repair complete' : HEADINGS.done, ok ? DONE : '');
+    status(ok ? '' : data.message, ok ? '' : 'error');
+    for (const row of document.querySelectorAll('.shortcut')) row.hidden = !data.shortcuts;
+    for (const box of document.querySelectorAll('#finish input')) box.disabled = state === 'finishing';
+    $('install').textContent = 'Finish';
+    $('install').disabled = state === 'finishing';
+    $('close').disabled = state === 'finishing';
+    $('close').textContent = 'Close';
+    return;
+  }
+  heading(HEADINGS[state] || 'Setup');
+  status(state === 'installing' ? '' : data.message, state === 'error' ? 'error' : '');
+  if (state === 'error') $('install').textContent = 'Retry';
+  $('install').disabled = state !== 'error';
+  $('cuda').disabled = true;
+  $('close').disabled = state === 'stopping';
+  $('close').textContent = state === 'installing' ? 'Cancel' : 'Close';
+  if (!working || state === 'launching') return;
+  const current = data.message in STEP_OF ? STEP_OF[data.message] : STAGES.indexOf(data.message);
+  [...$('steps').children].forEach((item, index) => {
+    item.className = current < 0 ? '' : index < current ? 'done' : index === current ? 'active' : '';
+    item.querySelector('.mark').innerHTML = index < current ? CHECK : '';
+  });
+  const measured = data.total > 0;
+  const bytes = current === 0 || data.message === 'Unpacking';
+  $('bar').classList.toggle('busy', !measured);
+  $('fill').style.width = measured ? Math.min(100, data.done / data.total * 100) + '%' : '';
+  $('file').textContent = data.file || data.message;
+  $('amount').textContent = !measured ? '' : bytes ? size(data.done) + ' of ' + size(data.total)
+                          : data.message === 'Checking installation' ? 'Check ' + Math.min(data.done + 1, data.total) + ' of ' + data.total
+                          : Math.floor(data.done / data.total * 100) + ' %';
+  $('rate').textContent = data.speed > 0 ? (data.speed / 1048576).toFixed(1) + ' MB/s' + (data.eta != null ? ' · ' + duration(data.eta) : '') : '';
+}
+async function poll() {
+  try { render(await window.pywebview.api.status()); }
+  catch (error) { status('Could not communicate with setup. Close this window and start it again.', 'error'); }
+  setTimeout(poll, 250);
+}
+window.addEventListener('pywebviewready', () => {
+  const api = window.pywebview.api;
+  $('install').addEventListener('click', async () => {
+    $('install').disabled = true;
+    if (state === 'done') await api.finish($('start-menu').checked, $('desktop').checked, $('open').checked);
+    else if (state === 'ready' && kind === 'installed') await api.open();
+    else await api.install($('cuda').checked);
+  });
+  $('repair').addEventListener('click', () => api.repair($('cuda').checked));
+  $('browse').addEventListener('click', () => api.browse());
+  $('close').addEventListener('click', () => api.quit());
+  poll();
+});
+</script>
+</body>
+</html>

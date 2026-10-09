@@ -46,6 +46,14 @@ uv run python -m PyInstaller rs-studio.spec --noconfirm
 The runnable build is written to `dist/RS Studio/`. On Linux, install FFmpeg
 through the system package manager and run the same PyInstaller command.
 
+## Small first-run installer
+
+`RS Studio Setup.exe` is a single small file. It installs RS Studio into one
+portable folder and downloads the pinned Python libraries from PyPI (or
+CUDA-enabled PyTorch from download.pytorch.org) during setup. See
+[the bootstrap build and release guide](docs/bootstrap-installer.md) for
+packaging, signing and local testing. The existing portable build remains available.
+
 ## Rocksmith export
 
 Windows export requires a local Wwise installation. Linux export requires
