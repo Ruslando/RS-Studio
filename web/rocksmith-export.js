@@ -320,7 +320,9 @@ async function submitRocksmithExport() {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "CDLC build failed");
     const buf = await res.arrayBuffer();
     const cd = res.headers.get("Content-Disposition") || "";
-    const name = (cd.match(/filename="([^"]+)"/) || [])[1] || "song_p.psarc";
+    // filename* carries the real (UTF-8) name; filename="" is only its ASCII fallback.
+    const encoded = cd.match(/filename\*=UTF-8''([^;]+)/i);
+    const name = (encoded ? decodeURIComponent(encoded[1]) : (cd.match(/filename="([^"]+)"/) || [])[1]) || "song_p.psarc";
     let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
     downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name);
     closeRocksmithExportModal();

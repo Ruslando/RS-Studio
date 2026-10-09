@@ -365,6 +365,13 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
     return m
 
 
+def _attachment(filename: str) -> str:
+    """Content-Disposition for any file name. Header values are Latin-1, so a
+    title like トーテム goes in filename* (RFC 6266) with an ASCII fallback."""
+    fallback = re.sub(r'[^ -~]+', "_", filename).replace('"', "").strip() or "download"
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{urllib.parse.quote(filename, safe='')}"
+
+
 def _safe_filename(name: str) -> str:
     """Sanitize a project name into a download-safe base filename."""
     base = re.sub(r"[^A-Za-z0-9._ -]+", "_", (name or "").strip()).strip(" .")
@@ -1635,7 +1642,7 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
         content=data,
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": _attachment(filename),
             "X-Tab-Warnings": json.dumps(warnings),
         },
     )
