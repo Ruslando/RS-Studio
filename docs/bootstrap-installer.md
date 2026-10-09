@@ -86,6 +86,18 @@ migrate data from an existing portable installation.
 
 ## Build and release
 
+**In one step:** `tools/release.py` sets the version, tags, packages, builds
+the setup EXE and publishes the GitHub release with its four assets
+(RS-Studio-Setup.exe, bootstrap-manifest.json, the app and FFmpeg ZIPs). It
+refuses to run outside a clean main checkout and publishes nothing until all
+builds succeeded. Requires the GitHub CLI (winget install GitHub.cli, then
+gh auth login).
+
+    build/cpu-venv/Scripts/python tools/release.py 0.2.2-alpha --notes notes.txt
+    build/cpu-venv/Scripts/python tools/release.py 0.2.2-alpha --dry-run
+
+The steps it runs are described below.
+
 Generate a release signing identity **once** and keep it private, backed up and
 outside version control. Later releases must retain the same public key.
 
