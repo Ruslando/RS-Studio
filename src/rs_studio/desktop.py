@@ -112,6 +112,9 @@ def _open_window(url: str) -> bool:
     except ImportError:
         return False
     try:
+        # pywebview cancels downloads by default; exports (.psarc, project
+        # archives) are page downloads and would silently go nowhere.
+        webview.settings["ALLOW_DOWNLOADS"] = True
         shell = _Shell()
         window = webview.create_window("RS Studio", url,
                                        width=1500, height=950, min_size=(1000, 640),
