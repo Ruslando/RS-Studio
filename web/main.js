@@ -24,6 +24,7 @@ import { init_guitar_pro_import } from "./guitar-pro-import.js";
 import { init_rocksmith_export } from "./rocksmith-export.js";
 import { init_tour } from "./tour.js";
 import { init_setup } from "./setup.js";
+import { init_updates } from "./updates.js";
 import { initModalFocus } from "./modal-focus.js";
 import { initSelectPickers } from "./select-pickers.js";
 
@@ -50,5 +51,6 @@ init_guitar_pro_import();
 init_rocksmith_export();
 init_tour();
 init_setup();
+init_updates();
 initModalFocus();
 initSelectPickers();

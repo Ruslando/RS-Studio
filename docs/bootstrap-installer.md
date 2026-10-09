@@ -150,9 +150,22 @@ This starts the loopback asset server and opens the setup window. It installs
 into build/bootstrap-preview-install, leaving user installations untouched.
 Libraries are still downloaded from PyPI / download.pytorch.org.
 
-## Next step: updates
+## Updates
 
-An app update is now just a new app package: if its requirements are unchanged,
-the existing environment is reused (same hash); otherwise uv syncs only the
-changed libraries from its cache. Add the start-page update UI, release
-selection, patch notes, restart handling and rollback on top of this.
+The installation keeps the setup's public configuration
+(bootstrap-release.json). On the start page the app checks the latest
+release's signed manifest once per start and via **Check for updates**
+(rs_studio/updates.py, GET /api/update). A newer version marks that button;
+its dialog lists the release notes (package with --notes FILE).
+
+**Update now** (POST /api/update/install) starts RS Studio.exe --update and
+exits. The launcher waits for the app to close, installs only what changed
+(new app package, changed libraries), verifies it, switches current.json and
+reopens RS Studio. The previous version stays untouched until the switch.
+
+To try the UI from a source run, point it at the bootstrap-release.json of a
+signed test release (served on loopback) whose manifest names a newer version:
+
+    $env:RS_STUDIO_UPDATE_CONFIG = "dist\bootstrap-test-release\bootstrap-release.json"
+    $env:RS_STUDIO_ALLOW_LOCAL = "1"
+    uv run rs-studio serve

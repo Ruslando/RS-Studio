@@ -63,7 +63,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
-from . import __version__, models, pipeline, processing, tab, tutorial
+from . import __version__, models, pipeline, processing, tab, tutorial, updates
 from .local_security import LocalRequestMiddleware
 from .paths import data_root, resource_root
 
@@ -1058,6 +1058,23 @@ def api_projects() -> JSONResponse:
 @app.get("/api/version")
 def api_version() -> JSONResponse:
     return JSONResponse({"version": __version__})
+
+
+@app.get("/api/update")
+def api_update_check() -> JSONResponse:
+    try:
+        return JSONResponse(updates.check())
+    except Exception as exc:  # offline, GitHub unreachable or a bad signature
+        raise HTTPException(status_code=502, detail=f"Could not check for updates: {exc}") from exc
+
+
+@app.post("/api/update/install")
+def api_update_install() -> JSONResponse:
+    try:
+        updates.start_install()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return JSONResponse({"ok": True})
 
 
 @app.post("/api/projects/import")

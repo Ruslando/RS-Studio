@@ -120,6 +120,8 @@ def validate_manifest(envelope: dict, config: dict, *, allow_local: bool = False
             raise InstallError("This release requires a newer RS Studio installer.")
         if not PYTHON.fullmatch(payload["python"]):
             raise InstallError("Invalid Python version in release.")
+        if not isinstance(payload.get("notes", ""), str) or len(payload.get("notes", "")) > 20000:
+            raise InstallError("Invalid release notes.")
         for kind in PACKAGES:
             package = payload[kind]
             if not ID.fullmatch(package["id"]) or not SHA256.fullmatch(package["sha256"]):
@@ -581,6 +583,7 @@ def application_environment(root: Path, app: Path, ffmpeg: Path) -> dict:
     env["RS_STUDIO_APP_ROOT"] = str(app)
     env["RS_STUDIO_DATA_ROOT"] = str(root / "data")
     env["RS_STUDIO_FFMPEG"] = str(ffmpeg)
+    env["RS_STUDIO_INSTALL_ROOT"] = str(root)  # lets the app check for updates
     # The launcher itself is a PyInstaller program; do not leak its state.
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     for name in ("PYTHONHOME", "PYTHONPATH", "TCL_LIBRARY", "TK_LIBRARY"):
@@ -704,12 +707,18 @@ def install(root: Path, envelope: dict, config: dict, cancel: threading.Event, p
         check_cancel(cancel)
         atomic_json(environment / "rs-studio-environment.json", {"runtime": runtime, "wheels": wheels_digest(payload, runtime)})
         atomic_json(root / "current.json", {**envelope, "runtime": runtime})
+        # Public setup configuration (manifest URL + key) for the app's update check.
+        atomic_json(root / "bootstrap-release.json", config)
         # Installed and verified; partial installs keep their downloads for resuming.
         shutil.rmtree(downloads, ignore_errors=True)
         return active
 
 
-def launch(root: Path, active: dict) -> subprocess.Popen:
+def launch(root: Path, active: dict, launcher: list[str] | None = None) -> subprocess.Popen:
+    """Start the installed app; launcher is the command the app runs to update itself."""
     app = Path(active["app_dir"])
+    env = application_environment(root, app, Path(active["ffmpeg_dir"]))
+    if launcher:
+        env["RS_STUDIO_LAUNCHER"] = json.dumps(launcher)
     return subprocess.Popen([str(environment_python(Path(active["environment"]), windowed=True)), str(app / "standalone.py")],
-                            cwd=app, env=application_environment(root, app, Path(active["ffmpeg_dir"])), creationflags=NO_WINDOW)
+                            cwd=app, env=env, creationflags=NO_WINDOW)

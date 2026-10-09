@@ -177,7 +177,34 @@ class InstallerTests(unittest.TestCase):
         window = InstallerWindow(self.config, self.destination, fixed=True, allow_local=True)
         with patch('launcher.fetch_manifest', side_effect=AssertionError('offline')), patch('launcher.launch') as open_app:
             window._perform()
-            open_app.assert_called_once_with(self.destination, active)
+            open_app.assert_called_once()
+            self.assertEqual(open_app.call_args.args[:2], (self.destination, active))
+            self.assertEqual(open_app.call_args.args[2][-1], "--launch")  # the app can start its own update
+
+    def test_update_mode_installs_newer_release_and_reopens(self):
+        self.install()
+        newer = dict(self.payload, version="1.1")
+        (self.server_root / "manifest.json").write_text(json.dumps(self.sign(newer)), encoding="utf-8")
+        window = InstallerWindow(self.config, self.destination, fixed=True, update=True, allow_local=True)
+        with patch("launcher.launch") as opened, patch.object(window, "_start") as start:
+            window._inspect()
+            start.assert_called_once_with(False, repair=False)  # core stays core; an update, not a repair
+            with patch("launcher.install_release", return_value=dict(newer, runtime="core")) as install:
+                window._perform(False)
+        self.assertEqual(install.call_args.args[1]["payload"]["version"], "1.1")
+        opened.assert_called_once()
+
+    def test_update_mode_without_newer_release_just_reopens(self):
+        self.install()
+        window = InstallerWindow(self.config, self.destination, fixed=True, update=True, allow_local=True)
+        with patch("launcher.launch") as opened, patch("launcher.install_release") as install:
+            window._inspect()
+        install.assert_not_called()
+        opened.assert_called_once()
+
+    def test_installation_keeps_setup_configuration_for_update_checks(self):
+        self.install()
+        self.assertEqual(json.loads((self.destination / "bootstrap-release.json").read_text()), self.config)
 
     def test_window_offers_cuda_with_check_result(self):
         window = InstallerWindow(self.config, self.destination, allow_local=True)

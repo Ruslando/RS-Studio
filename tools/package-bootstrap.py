@@ -153,6 +153,7 @@ def main():
     parser.add_argument("--ffmpeg", type=Path, default=ROOT / "vendor/ffmpeg", help="LGPL FFmpeg staged by tools/fetch-ffmpeg.py")
     parser.add_argument("--cuda-venv", type=Path, default=ROOT / ".venv", help="Environment with the +cu126 torch, used to read its GPU architectures")
     parser.add_argument("--no-cuda", action="store_true")
+    parser.add_argument("--notes", type=Path, help="Release notes (plain text) shown in the app's update dialog")
     parser.add_argument("--manifest-url", help="Where the setup looks for releases (default: the GitHub 'latest' release)")
     parser.add_argument("--allow-local", action="store_true", help="Development-only localhost HTTP release")
     args = parser.parse_args()
@@ -225,6 +226,8 @@ def main():
     ffmpeg.update(id="ffmpeg", url=base_url + ffmpeg_name)
     payload = {"schema": 2, "launcher_min": 2, "version": args.version, "platform": platform_id(), "python": python,
                "app": app, "ffmpeg": ffmpeg, "runtimes": runtimes}
+    if args.notes:
+        payload["notes"] = args.notes.read_text(encoding="utf-8").strip()
     signature = key.sign(canonical(payload), padding.PKCS1v15(), hashes.SHA256())
     envelope = {"payload": payload, "signature": base64.b64encode(signature).decode("ascii")}
     # The setup asks the newest release for its manifest, so one setup EXE keeps working for later

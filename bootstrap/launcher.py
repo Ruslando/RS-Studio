@@ -57,11 +57,23 @@ def create_shortcut(folder: str, command: list[str], icon: Path) -> None:
                    capture_output=True, creationflags=NO_WINDOW)
 
 
+def wait_for_exit(pid: int, timeout: float = 30) -> None:
+    """Files of a running app cannot be replaced on Windows; wait until it has quit."""
+    if os.name != "nt":
+        return
+    import ctypes
+    handle = ctypes.windll.kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+    if handle:
+        ctypes.windll.kernel32.WaitForSingleObject(handle, int(timeout * 1000))
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+
 class InstallerWindow:
     """Only a few small methods are exposed through pywebview's JS bridge."""
-    def __init__(self, config: dict, destination: Path, *, fixed: bool = False, allow_local: bool = False,
-                 relaunch: list[str] = ()):
+    def __init__(self, config: dict, destination: Path, *, fixed: bool = False, update: bool = False,
+                 allow_local: bool = False, relaunch: list[str] = ()):
         self._config = config
+        self._update = update  # started by the app's Update button
         self._destination = destination
         self._fixed = fixed  # started from an installation: open it, or repair it
         self._allow_local = allow_local
@@ -141,7 +153,7 @@ class InstallerWindow:
                     if chosen:
                         create_shortcut(folder, command, icon)
             if open_app:
-                launch(self._destination, self._active)
+                launch(self._destination, self._active, command)
             self._destroy()
         except Exception as exc:
             self._set("done", "RS Studio is installed, but finishing failed: " + (str(exc) or type(exc).__name__),
@@ -187,7 +199,7 @@ class InstallerWindow:
         if self._closing:
             return
         self._set("launching", "Opening RS Studio…")
-        launch(self._destination, payload)
+        launch(self._destination, payload, installed_launcher(self._destination, self._relaunch))
         self._destroy()
 
     def _inspect(self):
@@ -196,7 +208,7 @@ class InstallerWindow:
             root = self._destination
             self._set("checking", "Checking " + str(root) + "…")
             self._installed = installed_release(root, self._config, allow_local=self._allow_local)
-            if self._installed and self._fixed:
+            if self._installed and self._fixed and not self._update:
                 self._open_app(self._installed)
                 return
             kind = "installed" if self._installed else "continue" if is_installation(root) else "install"
@@ -222,6 +234,11 @@ class InstallerWindow:
                 details.update(version=payload["version"], core=sizes("core"),
                                cuda=dict(sizes("cuda"), **cuda_check(cuda)) if cuda else None)
             self._set("ready", "", **details)
+            if self._update and self._installed:
+                if self._envelope and self._envelope["payload"]["version"] != self._installed["version"]:
+                    self._start(self._installed["runtime"] == "cuda", repair=False)
+                else:
+                    self._open_app(self._installed)  # nothing newer: just reopen
         except Exception as exc:
             self._set("error", str(exc) or type(exc).__name__, folder=str(self._destination))
 
@@ -237,6 +254,9 @@ class InstallerWindow:
             self._active = install_release(self._destination, self._envelope, self._config, self._cancel, progress,
                                            runtime=self._runtime, repair=repair, allow_local=self._allow_local)
             self._installed = self._active
+            if self._update:
+                self._open_app(self._active)
+                return
             self._set("done", "RS Studio is repaired." if repair else "RS Studio is installed.",
                       shortcuts=os.name == "nt", folder=str(self._destination))
         except Cancelled as exc:
@@ -284,6 +304,8 @@ def main() -> None:
         sys.stderr = sink
     frozen = getattr(sys, "frozen", False)
     parser = argparse.ArgumentParser(description="RS Studio setup and launcher")
+    parser.add_argument("--update", action="store_true", help="Install the newest release, then reopen RS Studio")
+    parser.add_argument("--wait-pid", type=int, help="Wait until this process (the running app) has exited")
     if not frozen:  # development only: local test releases and test folders
         parser.add_argument("--install-root", type=Path, help="Suggested installation folder")
         parser.add_argument("--launch", action="store_true", help="Act as the installed RS Studio.exe of --install-root")
@@ -293,8 +315,12 @@ def main() -> None:
     relaunch = []
     try:
         here = Path(sys.executable).resolve().parent
+        if args.wait_pid:
+            wait_for_exit(args.wait_pid)
+        if getattr(args, "allow_local", False):
+            os.environ["RS_STUDIO_ALLOW_LOCAL"] = "1"  # the app's update check uses the same test release
         if not frozen:
-            root, fixed = (args.install_root or Path.cwd() / "RS Studio").resolve(), args.launch
+            root, fixed = (args.install_root or Path.cwd() / "RS Studio").resolve(), args.launch or args.update
             relaunch = (["--config", str(args.config.resolve())] if args.config else []) + (["--allow-local"] if args.allow_local else [])
         elif is_installation(here):
             root, fixed = here, True  # this is the installed "RS Studio.exe"
@@ -304,7 +330,8 @@ def main() -> None:
         config = json.loads(config_path.read_text(encoding="utf-8"))
         if config["launcher_version"] != LAUNCHER_VERSION or not isinstance(config["public_key"], dict):
             raise ValueError("Invalid launcher configuration")
-        InstallerWindow(config, root, fixed=fixed, allow_local=getattr(args, "allow_local", False), relaunch=relaunch)._run()
+        InstallerWindow(config, root, fixed=fixed, update=args.update and fixed,
+                        allow_local=getattr(args, "allow_local", False), relaunch=relaunch)._run()
     except Exception as exc:
         if os.name == "nt":
             import ctypes

@@ -128,6 +128,10 @@ body {
 .welcome-settings { margin-top: var(--s-pair); padding-top: var(--s-sibling); border-top: 1px solid var(--line); }
 .welcome-settings button { width: 100%; background: transparent; color: var(--label); }
 .welcome-settings button:hover:not(:disabled) { background: var(--control-hover); color: var(--text); }
+/* An available update is shown on the button itself. */
+.welcome-settings button.has-update { border-color: var(--ok); color: var(--text); }
+.welcome-opt.has-update .wo-icon { position: relative; color: var(--ok); }
+.welcome-opt.has-update .wo-icon::after { content: ""; position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 999px; background: var(--ok); box-shadow: 0 0 0 2px var(--panel); }
 .welcome-main { display: grid; grid-template-columns: 250px minmax(0, 1fr); flex: 1; min-height: 0; gap: var(--s-sibling); padding: var(--s-row); }
 .welcome-actions { display: flex; flex-direction: column; gap: var(--s-pair); }
 
