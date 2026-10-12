@@ -347,6 +347,18 @@ function ensureVoice(alphaTab, bar, index) {
   return bar.voices[index];
 }
 
+// alphaTab chains every voice into the SAME voice of the next bar when it
+// finishes a score (`nextBar.voices[index].beats`), so a second voice that exists
+// in one bar only is a crash, not a layout. Padded the way a Guitar Pro file
+// itself is: one empty beat per missing voice.
+function evenVoiceCounts(alphaTab, staff) {
+  const count = Math.max(1, ...staff.bars.map((bar) => bar.voices.length));
+  for (const bar of staff.bars) while (bar.voices.length < count) {
+    const voice = new alphaTab.model.Voice(), beat = new alphaTab.model.Beat();
+    beat.isEmpty = true; voice.addBeat(beat); bar.addVoice(voice);
+  }
+}
+
 function rebuildVoice(alphaTab, staff, barIndex, voiceIndex, items, tuning, sourceById) {
   const bar = staff.bars[barIndex], voice = ensureVoice(alphaTab, bar, voiceIndex), master = bar.masterBar;
   const barStart = master.start, barEnd = barStart + masterBarDuration(master);
@@ -497,6 +509,7 @@ export function applyImportedProjection(alphaTab, score, lanes, selectedTrackInd
         && item.startTick < bounds[barIndex].end && item.endTick > bounds[barIndex].start);
       rebuildVoice(alphaTab, staff, barIndex, voiceIndex, active, tuning, plan.byId);
     }
+    evenVoiceCounts(alphaTab, staff);
     connectedSlidePlans.push({ staff, plan });
   }
   if (didRebuild) score.finish(new alphaTab.Settings());
@@ -634,6 +647,7 @@ export function appendCreatedLanes(alphaTab, score, lanes, bars = []) {
         && item.startTick < bounds[barIndex].end && item.endTick > bounds[barIndex].start);
       rebuildVoice(alphaTab, staff, barIndex, voiceIndex, active, tuning, plan.byId);
     }
+    evenVoiceCounts(alphaTab, staff);
     connectedSlidePlans.push({ staff, plan });
   }
   score.finish(new alphaTab.Settings());
@@ -670,6 +684,7 @@ export function applyScoreStructure(alphaTab, score, bars) {
     if (!Number.isInteger(bars[index].sourceIndex))
       rebuildVoice(alphaTab, staff, index, 0, [], staff.stringTuning.tunings || [], new Map());
   });
+  for (const [staff] of oldStaffBars) evenVoiceCounts(alphaTab, staff);   // inserted bars have one voice
   score.finish(new alphaTab.Settings());
   // The time signature is set twice on purpose. finish() recomputes bar timing
   // from the whole score and normalizes the master bars while doing it, so
