@@ -3,6 +3,7 @@
 // the model is importable headless — tests/voicing.test.mjs runs it under node.
 
 import { noteName } from "./util.js";
+import { OVERLAP_EPS } from "./constants.js";
 import { fretboardFor } from "./fretboard-core.js";
 
 // One source of truth for string/fret choice, shared by the chord preview and
@@ -324,8 +325,35 @@ const seatOffsetUnits = (fret, seat, profile) =>
 export const CHORD_GAP = 0.06;   // s; onset spread that still counts as one chord
 
 
+// STACKED NOTES ARE ONE NOTE. Two notes of one pitch sounding over each other — a
+// doubled detection, a paste onto itself — are one string struck once, and nothing
+// that plays the lane can do anything else with them: they would need a string each.
+// The editor keeps them and badges the stack (collectStacks, same test); everything
+// downstream sees the longest of each stack and nothing of the rest. It lives in
+// chordColumns because every reader of a lane comes through here — the voicer, the
+// neck, the tab and both exports — so none of them can forget.
+export function unstacked(notes) {
+  const byPitch = new Map();
+  for (const n of notes) (byPitch.get(n.pitch) || byPitch.set(n.pitch, []).get(n.pitch)).push(n);
+  let lost = null;
+  for (const same of byPitch.values()) {
+    if (same.length < 2) continue;
+    same.sort((a, b) => a.start - b.start);
+    for (let i = 0; i < same.length;) {
+      let j = i + 1, end = same[i].end, keep = same[i];
+      while (j < same.length && same[j].start < end - OVERLAP_EPS) {
+        if (same[j].end - same[j].start > keep.end - keep.start) keep = same[j];
+        end = Math.max(end, same[j].end); j++;
+      }
+      for (let k = i; k < j; k++) if (same[k] !== keep) (lost ||= new Set()).add(same[k]);
+      i = j;
+    }
+  }
+  return lost ? notes.filter((n) => !lost.has(n)) : notes;
+}
+
 export function chordColumns(notes, cap = Infinity) {
-  const sorted = [...notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+  const sorted = [...unstacked(notes)].sort((a, b) => a.start - b.start || a.pitch - b.pitch);
   const cols = [];
   for (const n of sorted) {
     const last = cols[cols.length - 1];

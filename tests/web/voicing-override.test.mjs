@@ -97,4 +97,15 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   assert.ok(placementFault(pinned, 55, 3, tuning));
   assert.equal(placementFault(pinned, 55, 4, tuning), null);
 }
+
+// ---- stacked notes -------------------------------------------------------
+// Two A4 over each other are one note downstream: the longest of them.
+{
+  const short = note(0, 57), long = { start: 0.1, end: 2, pitch: 57 }, apart = note(3, 57);
+  const lane = [short, long, apart];
+  const columns = chordColumns(lane);
+  assert.deepEqual(columns.map((c) => c.notes), [[long], [apart]]);
+  const voiced = voiceNotes(lane, tuning);
+  assert.ok(voiced.get(long) && voiced.get(apart) && !voiced.has(short));
+}
 console.log("ok");

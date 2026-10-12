@@ -9,7 +9,7 @@
 import { bendCurve, bendPeak, bendShape } from "./bend.js";
 import { MAX_RHYTHM_PIECES, MAX_TIE_CHAIN } from "./constants.js";
 import { parseTuning } from "./util.js";
-import { arrangedNotes, representPickedOpenSlides, voiceNotes } from "./voicing-core.js";
+import { arrangedNotes, representPickedOpenSlides, unstacked, voiceNotes } from "./voicing-core.js";
 
 const QUARTER_TICKS = 960;
 const TICK_QUANTUM = 15; // a 1/256 note; finer than the editor's normal grid
@@ -467,7 +467,7 @@ export function applyImportedProjection(alphaTab, score, lanes, selectedTrackInd
     // without marking it dirty and without bumping voicingRevision — so the
     // change rode along invisibly with whatever save came next.
     // appendCreatedLanes below does the same job on copies already.
-    const laneNotes = (lane.notes || []).map((note) => (note.pos ? note : {
+    const laneNotes = unstacked(lane.notes || []).map((note) => (note.pos ? note : {
       ...note,
       pos: { ...resolvedPosition(note, tuning, Number(lane.transpositionPitch) || 0), scope: "local" },
     }));
