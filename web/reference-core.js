@@ -55,6 +55,7 @@ export function effectSig(note, { includePos = false } = {}) {
       scope: value.scope || "local",
       influencePrevious: value.influencePrevious,
       influenceNext: value.influenceNext,
+      adapt: value.adapt,
     });
     else if (key === "arrangement") value = arrangementSignature(value);
     signature += key + ":" + value + ";";

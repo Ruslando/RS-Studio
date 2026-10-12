@@ -650,7 +650,7 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null) {
     // here. Defaulting to "forward" made an unchanged column compare as changed,
     // so re-applying the same shape rewrote it and cost an undo step.
     (a && b && a.string === b.string && a.fret === b.fret && (a.scope || "local") === scope &&
-      a.influencePrevious === flow.previous && a.influenceNext === flow.next);
+      a.influencePrevious === flow.previous && a.influenceNext === flow.next && a.adapt === flow.adapt);
   if (colNotes.every((n) => same(n.pos || null, want(n)))) return;
   const prev = snapshotEdit();
   for (const id of new Set(colNotes.map((n) => n.shapeId).filter(Boolean))) {
@@ -661,7 +661,7 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null) {
     const p = want(n);
     if (p) n.pos = {
       string: p.string, fret: p.fret, scope,
-      influencePrevious: flow.previous, influenceNext: flow.next,
+      influencePrevious: flow.previous, influenceNext: flow.next, adapt: flow.adapt,
     };
     else delete n.pos;
   }
@@ -669,14 +669,15 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null) {
   refreshTabIfOpen();
 }
 
-// Turn one side of an override's reach on or off, in place on the pin that carries
+// Turn one of an override's three switches on or off (`previous`, `next`, `adapt` —
+// see normalizeOverrideInfluence), in place on the pin that carries
 // it. Nothing else about the override changes, so this is not a re-application: the
 // shape stays exactly as chosen and only its blast radius moves.
 //
 // Written as a new object rather than mutated, because the undo snapshot shares the
 // note's own `pos` reference and editing it in place would rewrite history too.
 export function setColumnInfluence(colNotes, direction, on) {
-  const key = direction === "previous" ? "influencePrevious" : "influenceNext";
+  const key = { previous: "influencePrevious", next: "influenceNext", adapt: "adapt" }[direction];
   const prev = snapshotEdit();
   let touched = false;
   for (const n of colNotes) for (const field of ["pos", "arrangement"]) {

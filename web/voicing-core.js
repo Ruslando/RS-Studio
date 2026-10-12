@@ -1279,12 +1279,23 @@ export function contextualCandidateSets(columns, tuning, cap = DP_SHAPES_PER_COL
 }
 
 
+// An override answers three separate questions, and they are stored apart:
+//
+//   previous / next   is this grip also used for the SAME note or chord wherever it
+//                     comes up before / after (spreadPins)
+//   adapt             do the OTHER notes around it re-finger to suit it — the hand
+//                     goes where the override is and what follows is played from
+//                     there — or carry on as if it were not there
+//
 // The rule when nothing says otherwise: what was already played stays as it is,
-// and what comes after follows.
+// what comes after follows, and the hand goes with the override. `adapt` is left
+// undefined on a pin saved before it existed, which keeps that pin's old behaviour
+// (see registerColumns) instead of re-fingering a finished project on load.
 export function normalizeOverrideInfluence(value = null) {
   return {
     previous: (value?.previous ?? value?.influencePrevious) === true,
     next: (value?.next ?? value?.influenceNext) !== false,
+    adapt: value ? value.adapt : true,
   };
 }
 
@@ -1409,7 +1420,7 @@ export function chordArrangementChoices(pcs, root, count, tuning, sourcePitches 
 function columnRewritePlan(columnNotes, choice, flow) {
   const pin = (p) => ({
     string: p.string, fret: p.fret, scope: "local",
-    influencePrevious: flow.previous, influenceNext: flow.next,
+    influencePrevious: flow.previous, influenceNext: flow.next, adapt: flow.adapt,
   });
   const spare = new Map();
   for (const note of columnNotes) {
@@ -1901,11 +1912,9 @@ function registerColumns(columns, tuning, options = {}) {
       // wins even when it contradicts the note's own technique. The user asked.
       fixed: locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
       soft: !!handed,
-      // A pin that reaches nothing after it is not where the hand "just was" either:
-      // left in, the continuity term drags the next notes up to it, which is the pin
-      // re-fingering what follows with its reach switched off.
-      // A handed-on grip answers for the pin it came from.
-      aside: !!locked && !overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes).next,
+      // Whether the notes around the override suit themselves to it. A handed-on
+      // grip answers for the pin it came from. See `aside` and the implied hold below.
+      adapt: locked ? overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes).adapt : undefined,
       rules,
     };
   });
@@ -1944,8 +1953,47 @@ function registerColumns(columns, tuning, options = {}) {
     })),
   } : null;
 
+  // AN OVERRIDE THE OTHERS IGNORE is not where the hand "just was": left in, the
+  // continuity term drags the next notes toward it, which is the override
+  // re-fingering its neighbours with that switched off.
+  for (const c of input) c.aside = c.adapt === false;
+
+  // AN OVERRIDE THE OTHERS ADAPT TO TAKES THE HAND WITH IT, when it is out of the
+  // hand's reach from where the hand was. That is exactly what a hold says — "the
+  // hand is on this fret from here" — so it is said with one: the notes after it in
+  // the bar are played from there, and the bars after that are solved knowing it.
+  // Inside the reach nothing is implied; the note is simply taken where the hand is.
+  //
+  // Whether it is out of reach is read off a first solve, against the nearest fretted
+  // column beside it: one more pass, and only for a lane that has such an override.
   const seats = [];
-  const voiced = voiceRegister(low, input, undefined, seats, options.bars, frets, price);
+  let voiced = null;
+  if (input.some((c) => c.fixed && c.adapt === true && !c.hold)) {
+    const first = voiceRegister(low, input, undefined, seats, options.bars, frets);
+    const span = (i) => {
+      let lo = Infinity, hi = -Infinity;
+      (first[i] || []).forEach((p, k) => {
+        if (p.fret <= 0 || (input[i].rules[k] && input[i].rules[k].free)) return;
+        lo = Math.min(lo, p.fret); hi = Math.max(hi, p.fret);
+      });
+      return Number.isFinite(lo) ? { lo, hi } : null;
+    };
+    const beside = (i) => {
+      for (let j = i - 1; j >= 0; j--) { const got = span(j); if (got) return got; }
+      for (let j = i + 1; j < input.length; j++) { const got = span(j); if (got) return got; }
+      return null;
+    };
+    let moved = false;
+    input.forEach((c, i) => {
+      if (!c.fixed || c.adapt !== true || c.hold) return;
+      const own = span(i), near = own && beside(i);
+      if (!near || Math.max(own.hi, near.hi) - Math.min(own.lo, near.lo) < SPAN) return;
+      c.hold = { fret: own.lo }; moved = true;
+    });
+    if (!moved && !price) voiced = first;
+    else seats.length = 0;
+  }
+  voiced ||= voiceRegister(low, input, undefined, seats, options.bars, frets, price);
   // One entry per offered shape, in order: that is the contract scoreShapesAsDecided
   // reads back. `fingers` is empty because the engine has none to give — the board falls
   // back to assignFingers, which is the same function the exported tab asks.
@@ -2511,7 +2559,10 @@ function hasFrettedPlacement(pitch, tuning, maxFret, reach = 0) {
 function blockCost(tuning, cols, T, maxFret) {
   let cost = 0;
   for (const c of cols) {
-    if (c.fixed) continue;                    // already decided; it pays nothing
+    // Already decided, so it pays nothing — unless the others are to carry on as if
+    // the override were not there, in which case the bar's register is still chosen
+    // with this note in it: dropping it moved the register, and that moved them.
+    if (c.fixed && !c.aside) continue;
     const used = new Array(tuning.length).fill(false);
     for (let i = 0; i < c.pitches.length; i++) {
       let best = Infinity, bs = -1;
@@ -2892,18 +2943,30 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
         for (const i of blocks[b]) seats[i] = stood[i] ?? grip;
         continue;
       }
-      let lo = Infinity;
-      for (const i of blocks[b]) {
+      // An override is left out of the reading, and reports a hand of its own when
+      // it lies outside the one the rest of the bar is played from. Read in with the
+      // others, a note pinned at the 17th in a bar played at the 5th either dragged
+      // the anchor to itself or — the usual case — sat under an anchor at 5 with a
+      // fourth finger on it, twelve frets from the hand that was drawn.
+      const lowest = (i) => {
         const c = sorted[i];
+        let lo = Infinity, hi = -Infinity;
         for (let k = 0; k < c.pitches.length; k++) {
           const s = strings[i][k];
           if (s < 0) continue;
           const f = c.pitches[k] - tuning[s];
-          if (f > 0 && f < lo) lo = f;
+          if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); }
         }
-      }
+        return { lo, hi };
+      };
+      const free = blocks[b].filter((i) => !sorted[i].fixed);
+      let lo = Infinity;
+      for (const i of free.length ? free : blocks[b]) lo = Math.min(lo, lowest(i).lo);
       const seat = Number.isFinite(lo) ? lo : Math.max(1, registers[b]);
-      for (const i of blocks[b]) seats[i] = seat;
+      for (const i of blocks[b]) {
+        const own = sorted[i].fixed ? lowest(i) : null;
+        seats[i] = own && Number.isFinite(own.lo) && (own.lo < seat || own.hi >= seat + span) ? own.lo : seat;
+      }
     }
   }
 
