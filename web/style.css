@@ -1197,7 +1197,8 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: 300; }
 /* Room for the strips: the lists stop short of the sidebar's, and the neck and the
    stage start below theirs. */
 #stemsSection, #layersSection { padding-right: var(--w-edge); }
-#fretboardPanel { padding-top: var(--w-edge); }
+/* The board's own ground, or the strip's band reads as a solid bar above it. */
+#fretboardPanel { padding-top: var(--w-edge); background: var(--stage); }
 #fretboardPanel[data-collapsed] { padding-top: 0; }
 #viewer { padding-top: var(--w-edge); }
 /* The editing stage; the overview above it is its own panel. */

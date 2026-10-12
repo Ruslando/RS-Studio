@@ -511,8 +511,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 }
 /* A panel folds from a strip along its whole edge, not from a button in the middle
    of it: the full width or height is the target, --w-edge deep. It is drawn as a
-   fade off the panel's edge — faint at rest, full under the pointer — and the
-   chevron only appears with the pointer, so an edge nobody is aiming at stays quiet.
+   fade off the panel's edge, and both the fade and the chevron appear only under
+   the pointer, so an edge nobody is aiming at stays quiet.
    The panel's contents are inset by the same --w-edge (see each panel), so nothing
    clickable ever sits under the strip. */
 .edge-toggle {
@@ -526,8 +526,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .edge-toggle::before {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(var(--edge-from), var(--edge-tint), transparent);
-  opacity: .3; transition: opacity var(--dur-state) var(--ease);
+  opacity: 0; transition: opacity var(--dur-state) var(--ease);
 }
+/* The generic button hover is a solid fill, and under the fade it made the strip
+   a solid bar: the fade is the only paint here. */
+.edge-toggle:is(:hover, :active):not(:disabled) { background: transparent; }
 .edge-toggle svg { position: relative; opacity: 0; }
 .edge-toggle:is(:hover, :focus-visible)::before { opacity: 1; }
 .edge-toggle:is(:hover, :focus-visible) svg { opacity: 1; }
