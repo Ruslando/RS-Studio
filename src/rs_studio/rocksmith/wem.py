@@ -1,7 +1,7 @@
 """WAV -> .wem conversion for Rocksmith export.
 
-Windows uses a local Wwise installation. Linux uses native oggenc to make
-Vorbis audio, then wav2wem's OGG input to wrap it as Wwise Vorbis. The latter
+Windows uses a local Wwise installation. Linux uses the wwise-wem library, which encodes
+WAV to Wwise 2013.2 Vorbis itself. That
 path is experimental until its output has been checked in Rocksmith 2014.
 
 Rocksmith2014.NET's Wwise.fs extracts a template project it ships. This asks the
@@ -37,7 +37,6 @@ import struct
 import subprocess
 import sys
 import tempfile
-import wave
 from importlib import resources
 from pathlib import Path
 
@@ -55,26 +54,23 @@ _YEAR_RE = r"20(?:19|2\d)"  # 2019 or newer
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
-def find_linux_encoders() -> tuple[str, str]:
-    """Return native oggenc and wav2wem executables from PATH."""
-    oggenc = shutil.which("oggenc")
-    wav2wem = shutil.which("wav2wem")
-    missing = [name for name, path in (("oggenc", oggenc), ("wav2wem", wav2wem))
-               if path is None]
-    if missing:
+def _wwise_wem():
+    """The pure-library WAV -> Wwise 2013.2 Vorbis encoder, or a setup error."""
+    try:
+        import wwise_wem
+    except ImportError as exc:
         raise AudioConverterNotFoundError(
-            "Linux Rocksmith export needs " + " and ".join(missing) +
-            " on PATH. Install vorbis-tools for oggenc and build wav2wem "
-            "(github.com/pas2k/wav2wem) with Go."
-        )
-    return oggenc, wav2wem
+            "Linux Rocksmith export needs the wwise-wem Python package "
+            "(github.com/rabbit-smith/wem), which is missing from this install."
+        ) from exc
+    return wwise_wem
 
 
 def audio_converter_status() -> dict:
     """Availability and setup details for the export dialog."""
     if sys.platform.startswith("linux"):
         try:
-            find_linux_encoders()
+            _wwise_wem()
         except AudioConverterNotFoundError as exc:
             return {"found": False, "platform": "linux", "detail": str(exc)}
         return {"found": True, "platform": "linux", "detail": ""}
@@ -86,39 +82,70 @@ def audio_converter_status() -> dict:
             "path": console, "detail": ""}
 
 
+_SEEK_INTERVAL = 16384  # frames between seek points, as Wwise writes them
+
+
+def add_seek_table(data: bytes) -> bytes:
+    """Give a seek-table-less Wwise Vorbis file one; Rocksmith cannot rewind without it.
+
+    wwise-wem reproduces a Wwise build that wrote no seek table. The table sits
+    at the head of the data chunk: (frames, bytes) u16 pairs, each the distance
+    from the previous seek point. Layout follows pas2k/wav2wem's wem.go, which
+    was matched against real Wwise output.
+    ponytail: assumes the two-mode setup (1 mode bit: short/long block) every
+    stock Vorbis encoder writes; the frame-count check below rejects anything else.
+    """
+    chunks, pos = [], 12
+    while pos + 8 <= len(data):
+        size = struct.unpack_from("<I", data, pos + 4)[0]
+        chunks.append((data[pos:pos + 4], bytearray(data[pos + 8:pos + 8 + size])))
+        pos += 8 + size + (size & 1)
+    fmt = next(body for tag, body in chunks if tag == b"fmt ")
+    payload = next(body for tag, body in chunks if tag == b"data")
+    if len(fmt) != 0x42 or struct.unpack_from("<I", fmt, 0x28)[0] != 0:
+        raise RuntimeError("Unexpected WEM layout; cannot add a seek table")
+    total_frames, = struct.unpack_from("<I", fmt, 0x18)
+    extra, = struct.unpack_from("<H", fmt, 0x32)
+    blocks = (1 << fmt[0x40], 1 << fmt[0x41])
+
+    table = bytearray()
+    frames = last_frames = last_offset = 0
+    previous = None
+    offset = 2 + struct.unpack_from("<H", payload, 0)[0]  # skip the setup packet
+    while offset + 2 <= len(payload):
+        size, = struct.unpack_from("<H", payload, offset)
+        block = blocks[payload[offset + 2] & 1] if size else blocks[0]
+        if previous is not None:
+            frames += (previous + block) // 4
+        previous = block
+        if frames - last_frames >= _SEEK_INTERVAL:
+            table += struct.pack("<HH", frames - last_frames, offset - last_offset)
+            last_frames, last_offset = frames, offset
+        offset += 2 + size
+    if offset != len(payload) or frames - extra != total_frames:
+        raise RuntimeError("WEM packets do not add up to the declared length; no seek table added")
+
+    struct.pack_into("<I", fmt, 0x28, len(table))
+    struct.pack_into("<I", fmt, 0x2C, struct.unpack_from("<I", fmt, 0x2C)[0] + len(table))
+    payload[:0] = table
+    body = b"WAVE" + b"".join(
+        tag + struct.pack("<I", len(chunk)) + chunk + b"\0" * (len(chunk) & 1) for tag, chunk in chunks)
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+
+
 def convert_to_wem_linux(wav_path: Path) -> bytes:
-    """Encode via native oggenc, then pack the OGG with wav2wem."""
-    oggenc, wav2wem = find_linux_encoders()
-    with wave.open(str(wav_path), "rb") as source:
-        channels = source.getnchannels()
-    if channels not in (1, 2):
-        raise ValueError("Linux Rocksmith export needs mono or stereo audio")
+    """Encode via wwise-wem, which only takes 16-bit stereo at 48 kHz, so FFmpeg normalises first."""
+    wwise_wem = _wwise_wem()
     with tempfile.TemporaryDirectory(prefix="rs-wem-") as tmp:
-        ogg = Path(tmp) / "audio.ogg"
-        output = Path(tmp) / "audio.wem"
-        encode = [oggenc, "--quiet"]
-        if channels == 2:
-            encode.append("--downmix")
-        encode.extend(["--resample", "48000", "-q", "4", "-o", str(ogg),
-                       str(wav_path)])
-        for command, name in (
-            (encode, "oggenc"),
-            ([wav2wem, "-o", str(output), str(ogg)], "wav2wem"),
-        ):
-            proc = subprocess.run(command, capture_output=True, text=True, timeout=600)
-            if proc.returncode != 0:
-                raise RuntimeError(
-                    f"{name} failed (exit {proc.returncode}): "
-                    f"{proc.stderr or proc.stdout or 'no output'}")
-        if not output.is_file():
-            raise RuntimeError("wav2wem ran but produced no .wem file")
-        data = bytearray(output.read_bytes())
-        if len(data) < 44 or data[:4] != b"RIFF" or data[8:12] != b"WAVE" \
-                or data[12:16] != b"fmt ":
-            raise RuntimeError("wav2wem produced an invalid WEM header")
-        # Match the Rocksmith header adjustment used for Wwise output below.
-        data[40:44] = struct.pack("<I", 3)
-        return bytes(data)
+        source = Path(tmp) / "audio.wav"
+        proc = subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(wav_path),
+             "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", str(source)],
+            capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg failed (exit {proc.returncode}): "
+                               f"{proc.stderr or 'no output'}")
+        return add_seek_table(bytes(wwise_wem.encode(str(source)).data))
 
 
 def find_wwise_console() -> tuple[str, str]:
@@ -151,7 +178,7 @@ def find_wwise_console() -> tuple[str, str]:
 def convert_to_wem(wav_path: Path, console: str | None = None) -> bytes:
     """Encode a WAV into the WEM bytes a Rocksmith psarc holds.
 
-    Linux uses oggenc + wav2wem. Windows needs an installed WwiseConsole;
+    Linux uses wwise-wem. Windows needs an installed WwiseConsole;
     `console` overrides discovery and provides the Wwise version year.
     """
     if sys.platform.startswith("linux"):

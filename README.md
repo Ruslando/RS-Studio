@@ -56,8 +56,10 @@ packaging, signing and local testing. The existing portable build remains availa
 
 ## Rocksmith export
 
-Windows export requires a local Wwise installation. Linux export requires
-`oggenc` and [`wav2wem`](https://github.com/pas2k/wav2wem) on `PATH`.
+Windows export requires a local Wwise installation. Linux export uses the
+[`wwise-wem`](https://github.com/rabbit-smith/wem) library (Wwise 2013.2 Vorbis,
+16-bit stereo at 48 kHz) and FFmpeg. The wheel is vendored; install it with
+`uv pip install vendor/wheels/wwise_wem-*.whl`.
 
 ## License
 

@@ -10,7 +10,7 @@ let step = 1;
 
 function audioLink(linux) {
   return linux
-    ? { href: "https://github.com/pas2k/wav2wem", label: "Get wav2wem" }
+    ? { href: "https://github.com/rabbit-smith/wem", label: "Get wwise-wem" }
     : { href: "https://www.audiokinetic.com/download/", label: "Get Wwise" };
 }
 
@@ -19,7 +19,7 @@ function showAudioStatus(status) {
   const link = audioLink(linux);
   const ready = status.found === true;
   const missingText = linux
-    ? `Rocksmith export is unavailable. ${status.detail || "Install oggenc and wav2wem."}`
+    ? `Rocksmith export is unavailable. ${status.detail || "Install wwise-wem."}`
     : "Wwise is missing. Rocksmith export is unavailable.";
 
   $("welcomeRocksmithWarning").hidden = ready;
@@ -30,7 +30,7 @@ function showAudioStatus(status) {
   }
 
   $("setupAudioIntro").textContent = linux
-    ? "Linux uses oggenc and wav2wem to create Rocksmith audio."
+    ? "Linux uses the bundled wwise-wem library to create Rocksmith audio."
     : "Windows requires a local Wwise installation for Rocksmith export.";
   $("setupAudioStatus").textContent = ready
     ? (linux ? "Linux audio tools found" : `Wwise ${status.version || ""} found`)
@@ -38,7 +38,7 @@ function showAudioStatus(status) {
   $("setupAudioDot").className = `dot dot--${ready ? "ok" : "warn"}`;
   $("setupAudioDetail").textContent = linux
     ? (ready ? "This Linux export path is experimental. Check playback and seeking in Rocksmith 2014."
-      : "Install oggenc from vorbis-tools and wav2wem from its project page. Both must be on PATH.")
+      : "Reinstall RS Studio so the wwise-wem package is included.")
     : (ready ? "Rocksmith audio export is available."
       : "Install Wwise, then return to RS Studio. You can continue setting up models now.");
   $("setupAudioLink").hidden = ready;
