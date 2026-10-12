@@ -1054,7 +1054,7 @@ export function lockedShape(notes, tuning) {
 // judgement, not the model's to veto.
 //
 // Returns null when the shape is sound, or the sentence saying what is wrong with it.
-export function shapeFault(notes, tuning, shape) {
+export function shapeFault(notes, tuning, shape, limits = null, maxFret = MAX_FRET) {
   const used = new Set();
   for (const n of notes) {
     const p = shape.get(n);
@@ -1065,6 +1065,10 @@ export function shapeFault(notes, tuning, shape) {
     used.add(p.string);
     if (tuning[p.string] + p.fret !== n.pitch)
       return `${noteName(n.pitch)} does not sound at fret ${p.fret} on that string`;
+    // Not playability, which stays the player's call: what the note's own
+    // technique makes impossible, the same test every offer on the neck passes.
+    const wrong = placementFault(limits?.get(n), n.pitch, p.string, tuning, maxFret);
+    if (wrong) return wrong;
   }
   return null;
 }
@@ -1247,10 +1251,12 @@ export function contextualCandidateSets(columns, tuning, cap = DP_SHAPES_PER_COL
 }
 
 
+// The rule when nothing says otherwise: what was already played stays as it is,
+// and what comes after follows.
 export function normalizeOverrideInfluence(value = null) {
   return {
-    previous: value?.previous !== false && value?.influencePrevious !== false,
-    next: value?.next !== false && value?.influenceNext !== false,
+    previous: (value?.previous ?? value?.influencePrevious) === true,
+    next: (value?.next ?? value?.influenceNext) !== false,
   };
 }
 
@@ -1264,13 +1270,45 @@ export function overrideInfluence(notes) {
   if (typeof source?.influencePrevious === "boolean" || typeof source?.influenceNext === "boolean")
     return normalizeOverrideInfluence(source);
   if (position?.scope === "forward") return { previous: false, next: true };
-  // AN OVERRIDE IS LOCAL UNTIL IT IS TOLD NOT TO BE. It used to reach both ways by
-  // default, which made pinning one chord quietly re-finger the bars either side of
-  // it — the two most common complaints about a pin were both that, and neither
-  // reported it as reach, because nothing on screen said the pin had any. Reaching is
-  // the useful-but-surprising half, so it is the half that gets asked for: the note
-  // menu carries a toggle per side on any column that has an override.
-  return { previous: false, next: false };
+  // A pin saved before the flags existed (and every position of an exact import) is
+  // one column's and stays one column's. A column with no override yet answers with
+  // the rule a new one is written under.
+  return position || arrangement ? { previous: false, next: false } : normalizeOverrideInfluence();
+}
+
+// AN OVERRIDE IS A DECISION ABOUT A GRIP, NOT ABOUT ONE BEAT. Pinning a note or a
+// chord answers "how do I play this", and the same pitches a bar later are the same
+// question — so the pin is handed to every identical column after it (`next`), or
+// before it (`previous`), that carries no pin of its own. Read at solve time and never
+// written onto the other columns: returning the one pin to automatic returns them all,
+// and a note drawn later joins without anybody re-applying anything.
+//
+// The nearest pin wins, and a later one takes over from where it stands. A pin that
+// reaches nowhere is an exception at its own beat and interrupts nothing.
+// Limitation: "identical" is the same pitches at one onset. The same chord with a
+// note left out is another column and is voiced on its own.
+function spreadPins(columns, pins) {
+  const out = new Array(columns.length).fill(null);
+  out.from = new Array(columns.length).fill(-1);    // whose pin each one is
+  if (!pins.some(Boolean)) return out;
+  const low = (notes) => [...notes].sort((a, b) => a.pitch - b.pitch);
+  const keys = columns.map((c) => low(c.notes).map((n) => n.pitch).join(","));
+  const walk = (indexes, side) => {
+    const live = new Map();
+    for (const i of indexes) {
+      if (pins[i]) {
+        if (overrideInfluence(columns[i].notes)[side]) live.set(keys[i], i);
+      } else if (!out[i] && live.has(keys[i])) {
+        const from = live.get(keys[i]), source = low(columns[from].notes);
+        out[i] = new Map(low(columns[i].notes).map((n, k) => [n, pins[from].get(source[k])]));
+        out.from[i] = from;
+      }
+    }
+  };
+  const forward = columns.map((_, i) => i);
+  walk(forward, "next");                 // after wins where both reach a column
+  walk(forward.reverse(), "previous");
+  return out;
 }
 
 
@@ -1708,6 +1746,73 @@ function effectRule(note, next) {
   return Object.keys(rule).length ? rule : null;
 }
 
+// WHERE A NOTE'S TECHNIQUE LETS IT BE PUT BY HAND. The voicer has always kept these
+// rules for itself (fitColumn, the carry in voiceRegister); the neck's offers did
+// not, so a slid note was offered its open string and a slide's target a string the
+// slide does not run along. Every offer the board makes — a ring, a box, a step of
+// the shape walk — asks here first, off the same effectRule the voicer reads, so a
+// technique added there is kept here without a second list.
+//
+//   fretted  not on an open string
+//   reach    this many frets above it are still on the neck (a trill's upper note)
+//   onto     the note it slides or hammers INTO must be able to follow on the string:
+//            reachable there, fretted for a legato slide, and where that column is
+//            already pinned, actually pinned to it
+//   from     the string the note before it slides or hammers in on. A target has one
+//            place; move the note it comes from and it follows.
+//
+// `positionOf(note)` is where the lane is voiced now, which is what says which
+// string an incoming slide is on.
+export function placementLimits(columns, index, tuning, positionOf, maxFret = MAX_FRET) {
+  const limits = new Map();
+  const col = columns[index], prev = columns[index - 1], next = columns[index + 1];
+  if (!col) return limits;
+  const after = next ? next.notes : [];
+  const held = next && lockedShape(next.notes, tuning);
+  for (const note of col.notes) {
+    const rule = effectRule(note, after) || {};
+    limits.set(note, {
+      fretted: !!rule.fretted, reach: rule.reach || 0, from: null,
+      onto: rule.link && after.length ? {
+        fretted: rule.link === "fretted", pitches: after.map((n) => n.pitch),
+        strings: held ? new Set([...held.values()].map((p) => p.string)) : null,
+      } : null,
+    });
+  }
+  // The same hand-off voiceRegister makes: lowest note first, each linked note
+  // claiming the first note of this column its string can sound.
+  const low = (notes) => [...notes].sort((a, b) => a.pitch - b.pitch);
+  const claimed = new Set();
+  for (const source of prev ? low(prev.notes) : []) {
+    const link = effectRule(source, col.notes)?.link;
+    const at = link ? positionOf(source) : null;
+    if (!at) continue;
+    for (const target of low(col.notes)) {
+      const fret = target.pitch - tuning[at.string];
+      if (claimed.has(target) || fret < 0 || fret > maxFret || (link === "fretted" && fret === 0)) continue;
+      claimed.add(target); limits.get(target).from = at.string;
+      break;
+    }
+  }
+  return limits;
+}
+
+// null when `string` is somewhere the note may go, or the sentence saying why not.
+export function placementFault(limit, pitch, string, tuning, maxFret = MAX_FRET) {
+  if (!limit) return null;
+  const fret = pitch - tuning[string], name = noteName(pitch);
+  if (limit.fretted && fret === 0) return `${name} carries a technique an open string cannot play`;
+  if (fret + limit.reach > maxFret) return `${name} trills past the last fret there`;
+  if (limit.from != null && limit.from !== string)
+    return `${name} is slid or hammered onto, so it stays on the string it comes from`;
+  const onto = limit.onto;
+  if (onto && (onto.strings ? !onto.strings.has(string) : !onto.pitches.some((p) => {
+    const f = p - tuning[string];
+    return f >= (onto.fretted ? 1 : 0) && f <= maxFret;
+  }))) return `${name} slides or hammers into a note that cannot follow on that string`;
+  return null;
+}
+
 const hammerOrigin = (n) => n.fx && (n.fx.hammer === "origin" || n.fx.hammer === "both" || n.fx.hammer === true);
 const hammerDest = (n) => n.fx && (n.fx.hammer === "dest" || n.fx.hammer === "both" || n.fx.hammer === true);
 
@@ -1741,8 +1846,20 @@ function registerColumns(columns, tuning, options = {}) {
   const seat = new Map(order.map((appIndex, leanIndex) => [appIndex, leanIndex]));
 
   const holds = holdsByColumn(columns, options.holds);
+  const frets = fretboardFor(options.instrument).frets;
+  const pins = columns.map(({ notes }) => lockedShape(notes, tuning));
+  const spread = spreadPins(columns, pins);
   const input = columns.map(({ notes, t0 }, i) => {
-    const locked = lockedShape(notes, tuning);
+    const rules = notes.map((n) => effectRule(n, columns[i + 1] ? columns[i + 1].notes : []));
+    // A pin handed on from an identical column is an offer the column can refuse:
+    // the pitches match but the technique may not, and a grip with an open string
+    // under a note that slides here is not the same grip. (An incoming slide's string
+    // is the other refusal, and only the walk knows it — see `soft` in voiceRegister.)
+    const handed = !pins[i] && spread[i] && !notes.some((n, k) => {
+      const fret = spread[i].get(n).fret;
+      return fret > frets || (fret === 0 && rules[k] && rules[k].fretted);
+    }) ? spread[i] : null;
+    const locked = pins[i] || handed;
     return {
       hold: holds[i],
       pitches: notes.map((n) => n.pitch),
@@ -1755,7 +1872,13 @@ function registerColumns(columns, tuning, options = {}) {
       // which is the behaviour the full engine already documents: an explicit pin
       // wins even when it contradicts the note's own technique. The user asked.
       fixed: locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
-      rules: notes.map((n) => effectRule(n, columns[i + 1] ? columns[i + 1].notes : [])),
+      soft: !!handed,
+      // A pin that reaches nothing after it is not where the hand "just was" either:
+      // left in, the continuity term drags the next notes up to it, which is the pin
+      // re-fingering what follows with its reach switched off.
+      // A handed-on grip answers for the pin it came from.
+      aside: !!locked && !overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes).next,
+      rules,
     };
   });
 
@@ -1794,8 +1917,7 @@ function registerColumns(columns, tuning, options = {}) {
   } : null;
 
   const seats = [];
-  const voiced = voiceRegister(low, input, undefined, seats, options.bars,
-    fretboardFor(options.instrument).frets, price);
+  const voiced = voiceRegister(low, input, undefined, seats, options.bars, frets, price);
   // One entry per offered shape, in order: that is the contract scoreShapesAsDecided
   // reads back. `fingers` is empty because the engine has none to give — the board falls
   // back to assignFingers, which is the same function the exported tab asks.
@@ -2574,7 +2696,9 @@ function medianOfFlat(tuning, columns, blocks, bar, maxFret) {
  *                seconds — without them every column falls in one block and the
  *                lane gets a single register. `fixed` is an optional string
  *                index per pitch for a column the caller has already decided —
- *                an authored pin — and it is obeyed exactly. `hold` is a fret the
+ *                an authored pin — and it is obeyed exactly, unless `soft` marks
+ *                it as handed on from an identical column, in which case a slide
+ *                or hammer arriving on another string wins. `hold` is a fret the
  *                player has put the hand on at this column; it starts a block and
  *                fixes its register, and the blocks after it are still solved.
  * @param span    how many frets one grip covers. The register says where the
@@ -2606,7 +2730,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
   const sorted = columns.map((c) => {
     const idx = c.pitches.map((_, i) => i).sort((a, b) => c.pitches[a] - c.pitches[b]);
     return {
-      idx, t0: c.t0, end: c.end, hold: c.hold,
+      idx, t0: c.t0, end: c.end, hold: c.hold, soft: !!c.soft, aside: !!c.aside,
       pitches: idx.map((i) => c.pitches[i]),
       fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
       rules: c.rules ? idx.map((i) => c.rules[i]) : null,
@@ -2664,7 +2788,10 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
         next: after ? after.pitches : null, prev: grip != null ? null : prevFret,
       };
       let got;
-      if (c.fixed) got = c.fixed.slice();
+      // A grip handed on from an override elsewhere gives way to a slide or hammer
+      // arriving on a named string; one the player put on this very column does not.
+      const yields = c.soft && carry && carry.some((s, k) => s != null && s !== c.fixed[k]);
+      if (c.fixed && !yields) got = c.fixed.slice();
       else if (stand != null) {
         const run = gripRun(tuning, c.pitches, T, opts, stand, span, maxFret);
         // Null means no grip on the neck can hold this column at all — a chord no hand
@@ -2689,7 +2816,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
           const fr = c.pitches[k] - tuning[got[k]];
           if (fr > 0 && fr < lo) lo = fr;
         }
-        if (Number.isFinite(lo)) prevFret = lo;
+        if (Number.isFinite(lo) && !c.aside) prevFret = lo;
       }
       // Which strings the next column has to keep, and for which of its notes.
       carry = null;
