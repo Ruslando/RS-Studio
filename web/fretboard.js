@@ -597,11 +597,24 @@ export function drawFretboard() {
   // the click landed. That signal now lives where it belongs — the mark at the top of
   // the spectrogram, which says the same thing at every scroll position and without
   // drawing a hard edge round a wash whose whole point is to be soft.
-  const seat = anchorFret(lane);
+  // TWO HANDS WHEN ONE IS BEING OFFERED, told apart the way the grips are: the hand
+  // as it stands is the filled band, fading while something else is considered, and
+  // the hand as it WOULD stand — under a hovered shape, or with the override reset —
+  // is an outline. Swapping one for the other left nothing to compare against.
+  const seat = anchorFret(lane), offered = offeredSeat(lane);
+  const hue = lane?.color || PAINT.accent;
+  const moves = offered > 0 && offered !== seat;
   if (seat > 0 && seat <= s.frets) {
-    ctx.fillStyle = hexA(lane?.color || PAINT.accent, WASH);
+    ctx.fillStyle = hexA(hue, moves ? WASH * FADED : WASH);
     fretSpace(ctx, seat, s, X, Y);
     ctx.fill();
+  }
+  if (moves && offered <= s.frets) {
+    ctx.save();
+    ctx.strokeStyle = hue; ctx.lineWidth = 1.8; ctx.setLineDash([3, 2]);
+    fretSpace(ctx, offered, s, X, Y);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // Frets: nickel, and the brightest thing after the nut because they are what
@@ -1195,23 +1208,25 @@ function drawOnion(ctx, s, scale, X, Y, columns, i, hue) {
 // the band and the grip can never disagree about which moment they are showing.
 function anchorFret(lane) {
   if (!lane?.notes?.length) return 0;
-  // A box under the pointer is a question about where the hand WOULD go, so the band
-  // goes with it: the offer is drawn as the hand would hold it, and the anchor is part
-  // of holding it. The boxes are last frame's, which is the frame the pointer was
-  // resolved against, and a moved pointer redraws anyway.
-  if (altsOn && alts?.boxes?.length) {
-    const box = alts.boxes[alts.hover];
-    if (box?.choice?.seat != null) return Number(box.choice.seat) || 0;
-  }
   const found = gripsFor(lane);
   if (!found) return 0;
-  const t = frozenAt(lane) ?? playbackTime();
-  // The reset preview is the same kind of question — what the hand WOULD do without
-  // the override — so the band goes back with the grip: an override that moved the
-  // hand is not undone by showing only the note returning.
-  const columns = resetPeeking && resetPreview?.columns ? resetPreview.columns : found.columns;
-  const i = gripIndex(columns, t);
-  return i >= 0 ? Number(columns[i].seat) || 0 : 0;
+  const i = gripIndex(found.columns, frozenAt(lane) ?? playbackTime());
+  return i >= 0 ? Number(found.columns[i].seat) || 0 : 0;
+}
+
+// Where the hand WOULD stand for what is under the pointer, or 0 when nothing is: the
+// shape in a hovered box, or the lane with the override reset. The boxes are last
+// frame's, which is the frame the pointer was resolved against, and a moved pointer
+// redraws anyway.
+function offeredSeat(lane) {
+  if (!lane?.notes?.length) return 0;
+  if (resetPeeking) {
+    const columns = resetPreview?.columns;
+    const i = columns ? gripIndex(columns, frozenAt(lane) ?? playbackTime()) : -1;
+    return i >= 0 ? Number(columns[i].seat) || 0 : 0;
+  }
+  if (altsOn && alts?.boxes?.length) return Number(alts.boxes[alts.hover]?.choice?.seat) || 0;
+  return 0;
 }
 
 const FADED = 0.4;   // the grip in the hand while another one is being considered
