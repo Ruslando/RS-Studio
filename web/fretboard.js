@@ -1225,7 +1225,11 @@ function drawHand(ctx, s, scale, X, Y, lane, quiet) {
   const t = frozen ?? playbackTime();
   const hue = lane.color || PAINT.accent;
   if (editing && $("fretboardOnionEnabled").checked) drawOnion(ctx, s, scale, X, Y, found.columns, gripIndex(found.columns, t), hue);
-  const at = handAt(found.columns, t, frozen == null ? travelSeconds() : 0, s);
+  // THE HAND ONLY TRAVELS WHILE THE SONG DOES. Stopped, the board answers "what is
+  // held here", and a finger drawn part-way to the next grip — which is where the
+  // end of every note is — is a position nobody plays.
+  const moving = frozen == null && transportPlaying();
+  const at = handAt(found.columns, t, moving ? travelSeconds() : 0, s);
   if (!at) return;
   if (quiet === "ghost") {
     drawGrip(ctx, s, scale, X, Y, at.marks, PAINT.hint, false, { digits: false });
@@ -1244,7 +1248,7 @@ function drawHand(ctx, s, scale, X, Y, lane, quiet) {
   // size. Per note even inside a barre — the sweep *is* the stroke — and before the
   // grip, so it grows out from behind the body. Only where there is a body: an open
   // string's ring is the string, and a ring blooming off the nut marks nothing.
-  if (at.pressed) {
+  if (at.pressed && moving) {
     const decay = glowSeconds();
     ctx.lineWidth = 1.8;
     for (const m of at.marks) {
