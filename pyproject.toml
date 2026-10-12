@@ -48,10 +48,12 @@ dependencies = [
     # both encrypted, and the format gives no unencrypted option. Imported
     # lazily, inside the export path.
     "cryptography>=50.0.0",
-    # Native desktop window. Windows resolves to the OS-provided WebView2;
-    # Linux needs system WebKitGTK bindings (python3-gi, gir1.2-webkit2-*) that
-    # pip can't supply — desktop.launch() falls back to a browser without them.
+    # Native desktop window. Windows resolves to the OS-provided WebView2.
+    # Linux has no system web view a Python package can count on, so it brings
+    # Qt WebEngine along (pywebview's qt extra); without a working backend
+    # desktop.launch() falls back to a browser.
     "pywebview>=5",
+    "pywebview[qt]>=5; sys_platform == 'linux'",
 ]
 
 [project.scripts]
@@ -79,6 +81,14 @@ where = ["src"]
 dev = [
     "pyinstaller>=6.0",
 ]
+# Which PyTorch build to install; exactly one of the two. `cpu` is the default
+# (see default-groups), `uv sync --no-group cpu --group cuda` installs NVIDIA
+# CUDA instead.
+cpu = ["torch==2.14.1", "torchaudio==2.11.0", "torchvision==0.29.1", "torchcodec>=0.17.0,<0.18"]
+cuda = ["torch==2.14.1", "torchaudio==2.11.0", "torchvision==0.29.1", "torchcodec>=0.17.0,<0.18"]
+# Linux Rocksmith export: the audio encoder, built from source on the user's
+# machine (needs Rust). Installed by default; `--no-group encoder` skips it.
+encoder = ["wwise-wem; sys_platform == 'linux'"]
 
 # Install this source checkout with uv; pip does not apply these exclusions.
 # basic-pitch 0.4.0 declares alternate inference backends as required packages
@@ -99,3 +109,27 @@ constraint-dependencies = [
 # still declares an older upper bound; its ONNX inference works with 0.4.3.
 override-dependencies = ["resampy>=0.4.3"]
 exclude-dependencies = ["tensorflow", "tensorflow-macos", "tflite-runtime", "coremltools"]
+default-groups = ["dev", "cpu", "encoder"]
+conflicts = [[{ group = "cpu" }, { group = "cuda" }]]
+
+# PyPI ships CPU-only PyTorch for Windows but the CUDA build for Linux, so the
+# `cpu` group takes Linux wheels from PyTorch's own CPU index. TorchCodec is
+# built against one PyTorch flavour and has to follow it.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", group = "cpu", marker = "sys_platform == 'linux'" }, { index = "pytorch-cuda", group = "cuda" }]
+torchaudio = [{ index = "pytorch-cpu", group = "cpu", marker = "sys_platform == 'linux'" }, { index = "pytorch-cuda", group = "cuda" }]
+torchvision = [{ index = "pytorch-cpu", group = "cpu", marker = "sys_platform == 'linux'" }, { index = "pytorch-cuda", group = "cuda" }]
+torchcodec = [{ index = "pytorch-cpu", group = "cpu", marker = "sys_platform == 'linux'" }, { index = "pytorch-cuda", group = "cuda" }]
+# No releases upstream; this is the commit RS Studio's Linux export was tested with.
+wwise-wem = { git = "https://github.com/rabbit-smith/wem", rev = "c757fe4d2354cbd4d66960179c7715d79b13bae0" }
+
+# The same CUDA build RS Studio Setup installs on Windows (tools/package-bootstrap.py).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true

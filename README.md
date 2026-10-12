@@ -2,64 +2,97 @@
 
 RS Studio is a local editor for audio transcription, and Rocksmith 2014 CDLC export.
 
-## Development
+## Windows: installer
 
-Requirements:
+Download `RS Studio Setup.exe` from the
+[Releases page](https://github.com/Ruslando/RS-Studio/releases) and run it. It
+installs everything into one folder and keeps RS Studio up to date.
 
-- Python 3.10–3.12
-- [uv 0.11+](https://docs.astral.sh/uv/)
-- FFmpeg 4–8
+Rocksmith export on Windows needs [Wwise](https://www.audiokinetic.com/download/).
 
-Install the project and start the development server:
+## Run from source
+
+### 1. Install the tools
+
+| | Windows | Linux |
+| --- | --- | --- |
+| [git](https://git-scm.com/) and [uv](https://docs.astral.sh/uv/) | yes | yes |
+| FFmpeg 4–9 | step 3 fetches it | from your package manager |
+| Rust | no | yes, for Rocksmith export |
+
+On Arch-based systems: `sudo pacman -S git uv ffmpeg rust`
+
+### 2. Get the source
 
 ```text
-uv sync --locked
-uv run rs-studio serve --reload
+git clone https://github.com/Ruslando/RS-Studio
+cd RS-Studio
 ```
 
-Use `uv run rs-studio app` to open the native desktop window instead. The UI in
-`web/` has no JavaScript build step.
-
-On Windows, compatible FFmpeg files can be downloaded with:
+### 3. Windows only: fetch FFmpeg
 
 ```text
-uv run python tools/fetch-ffmpeg.py
+uv run --no-project tools/fetch-ffmpeg.py
 ```
 
-Optional model weights are managed under **Settings > Models** and are not
-stored in this repository.
-
-## Releases
-
-Ready-to-run builds are available on the
-[GitHub Releases page](https://github.com/Ruslando/RS-Studio/releases).
-
-## Build from source
-
-On Windows, download FFmpeg first, then build the desktop app:
+### 4. Start
 
 ```text
-uv run python tools/fetch-ffmpeg.py
+uv run rs-studio app
+```
+
+The first start downloads the libraries (about 2 GB) and, on Linux, builds the
+Rocksmith audio encoder. `uv run rs-studio serve` starts only the server; open
+the printed address in a browser.
+
+### Update
+
+```text
+git pull
+```
+
+The next start installs whatever changed. RS Studio tells you on its start page
+when a new release is out.
+
+## NVIDIA graphics card (optional)
+
+RS Studio uses the CPU by default. To use an NVIDIA card instead (about 7.5 GB):
+
+```text
+uv sync --no-group cpu --group cuda
+```
+
+Then start RS Studio from the environment, because `uv run` would switch back
+to the CPU libraries:
+
+```text
+.venv/bin/rs-studio app          Linux
+.venv\Scripts\rs-studio app      Windows
+```
+
+After `git pull`, run the `uv sync` line again.
+
+## Build a standalone folder
+
+```text
 uv run python -m PyInstaller rs-studio.spec --noconfirm
 ```
 
-The runnable build is written to `dist/RS Studio/`. On Linux, install FFmpeg
-through the system package manager and run the same PyInstaller command.
+The result is `dist/RS Studio/`, about 2 GB, and runs without uv or the source.
+On Linux it uses the system's FFmpeg. With the NVIDIA libraries installed, run
+`.venv/bin/python` (Windows: `.venv\Scripts\python`) in place of `uv run python`.
 
-## Small first-run installer
+## Good to know
 
-`RS Studio Setup.exe` is a single small file. It installs RS Studio into one
-portable folder and downloads the pinned Python libraries from PyPI (or
-CUDA-enabled PyTorch from download.pytorch.org) during setup. See
-[the bootstrap build and release guide](docs/bootstrap-installer.md) for
-packaging, signing and local testing. The existing portable build remains available.
-
-## Rocksmith export
-
-Windows export requires a local Wwise installation. Linux export uses the
-[`wwise-wem`](https://github.com/rabbit-smith/wem) library (Wwise 2013.2 Vorbis,
-16-bit stereo at 48 kHz) and FFmpeg. The wheel is vendored; install it with
-`uv pip install vendor/wheels/wwise_wem-*.whl`.
+- Models are optional downloads: **Settings > Models**.
+- Linux without Rust: `uv sync --no-group encoder`, then start from `.venv` as
+  above. Everything works except Rocksmith export.
+- Linux export uses the [`wwise-wem`](https://github.com/rabbit-smith/wem)
+  encoder. RS Studio does not ship it; uv builds it on your machine from a
+  pinned commit.
+- Tests: `uv run python -m unittest discover -s tests`
+- Packaging the Windows installer:
+  [docs/bootstrap-installer.md](docs/bootstrap-installer.md)
 
 ## License
 

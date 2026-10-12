@@ -103,9 +103,10 @@ def _app_icon() -> Path:
 def _open_window(url: str) -> bool:
     """Show the UI in a native window. False if no webview backend is usable.
 
-    Windows resolves to WebView2 (bundled with the OS). Linux needs the system
-    WebKitGTK bindings (python3-gi + gir1.2-webkit2-*), which cannot be bundled
-    — without them we fall back to the browser rather than failing to start.
+    Windows resolves to WebView2 (bundled with the OS). Linux has no such
+    system component, so the project depends on Qt WebEngine there
+    (pywebview[qt]); if no backend loads we fall back to the browser rather
+    than failing to start.
     """
     try:
         import webview

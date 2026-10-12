@@ -60,8 +60,8 @@ def _wwise_wem():
         import wwise_wem
     except ImportError as exc:
         raise AudioConverterNotFoundError(
-            "Linux Rocksmith export needs the wwise-wem Python package "
-            "(github.com/rabbit-smith/wem), which is missing from this install."
+            "Linux Rocksmith export needs the wwise-wem encoder. Install Rust, then "
+            "run: uv sync"
         ) from exc
     return wwise_wem
 
