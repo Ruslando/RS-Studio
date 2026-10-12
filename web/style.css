@@ -254,7 +254,7 @@ main { flex: 1; min-height: 0; overflow: hidden; background: var(--workspace-gro
 }
 
 #appshell { font-size: var(--text-body); display: flex; flex-direction: column; height: 100%; min-height: 0; padding: var(--s-panel); gap: var(--s-panel); background: var(--workspace-ground); }
-#mainArea { flex: 1; display: flex; min-height: 0; overflow: hidden; gap: var(--s-panel); }
+#mainArea { flex: 1; display: flex; min-height: 0; overflow: hidden; }   /* the splitters are the gaps */
 
 .bar {
   display: flex; gap: var(--s-sibling); align-items: center; flex-wrap: wrap;
@@ -322,28 +322,24 @@ main { flex: 1; min-height: 0; overflow: hidden; background: var(--workspace-gro
 #appshell.side-collapsed #sidebar:is(:hover, :has(:focus-visible), .is-peeking) :is(#stemsSection, #layersSection) {
   opacity: .85; transform: translateX(calc(var(--w-sidebar-peek) - var(--sidebar-w)));
 }
-#appshell.side-collapsed :is(#sepDrag, #sidebarResize) { display: none; }
+#appshell.side-collapsed #sepDrag { display: none; }
 #sidebarToggle { flex: none; }
 #sidebarToggle:hover { color: var(--text); background: var(--control-hover); }
 #sidebarToggle svg { transition: transform var(--dur-state) var(--ease); }
 
-body.col-resizing #sidebar { transition: none; }
-
-.sidebar-resize {
-  position: absolute; top: 0; right: calc(-1 * var(--s-sibling)); bottom: 0; z-index: 12;
-  width: var(--s-row); cursor: col-resize;
-  display: flex; align-items: center; justify-content: center; color: transparent;
-  transition: color var(--dur-state) var(--ease);
-}
-.sidebar-resize svg { transform: translateX(-4px); }
-.sidebar-resize::after {
-  content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 1px; background: transparent;
-}
-.sidebar-resize:hover,
-body.col-resizing .sidebar-resize { color: var(--hint); }
-.sidebar-resize:hover::after,
-body.col-resizing .sidebar-resize::after { background: var(--line); }
+/* Dragging follows the pointer with no easing; crossing a collapse threshold is a
+   state change and animates like the chevron (snapPanels in splitters.js). */
+body.col-resizing:not(.panel-snapping) #sidebar { transition: none; }
 body.col-resizing { cursor: col-resize; user-select: none; }
+
+/* A handle that IS the gap between two panels. The dots sit where the pointer is. */
+.splitter { position: relative; flex: none; z-index: 12; color: transparent; transition: color var(--dur-state) var(--ease); }
+.splitter--x { width: var(--s-panel); cursor: col-resize; }
+.splitter--y { height: var(--s-panel); cursor: row-resize; }
+.splitter:hover, .splitter.is-dragging { color: var(--hint); }
+.splitter-dots { position: absolute; pointer-events: none; }
+.splitter--x .splitter-dots { left: 50%; top: var(--at, 50%); transform: translate(-50%, -50%); }
+.splitter--y .splitter-dots { top: 50%; left: var(--at, 50%); transform: translate(-50%, -50%); }
 
 .side-section { display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
 .side-section.grow { flex: 1; min-height: 0; }
@@ -371,13 +367,10 @@ body.col-resizing { cursor: col-resize; user-select: none; }
 #stemTabs { flex: 1; min-height: 0; }
 #lanes { flex: 1; min-height: 0; padding-bottom: var(--s-row); }
 
-.drag-sep {
-  height: var(--s-sibling); flex-shrink: 0; cursor: row-resize; color: transparent;
-  display: flex; align-items: center; justify-content: center;
-  background: transparent; border-top: 1px solid var(--line);
-  transition: color var(--dur-state) var(--ease);
-}
-.drag-sep:hover { color: var(--hint); }
+/* The Audio/Notes divide: a splitter inside the sidebar, with its rule. */
+.drag-sep { height: var(--s-sibling); border-top: 1px solid var(--line); }
+/* Whatever height was stored, the notes below always keep a header and a row. */
+#stemsSection { max-height: calc(100% - 96px); }
 body.row-resizing { cursor: row-resize; user-select: none; }
 
 .stem-row, .lane-row { padding-left: var(--s-row); }
@@ -465,11 +458,17 @@ body.row-resizing { cursor: row-resize; user-select: none; }
 
 #editor {
   flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
-  position: relative; overflow: hidden; gap: var(--s-panel); background: var(--workspace-ground);
+  position: relative; overflow: hidden; background: var(--workspace-ground);
   border-radius: 0;
 }
 #editingPanel { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border-radius: 0; background: var(--spectral-ground); }
-#playbackPanel { display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0; overflow: hidden; margin: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: var(--s-sibling) var(--w-pitch-scale); background: var(--surface-toolbar); }
+#playbackPanel { display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0; overflow: hidden; margin: 0; border: 1px solid var(--line); border-radius: var(--r-container); padding: var(--s-sibling) var(--w-pitch-scale); background: var(--surface-toolbar); }
+/* The minimap folds away under the time ruler; its canvas keeps its size and is
+   only clipped, so the ruler above it never has to be re-laid-out mid-fold. */
+#minimapClip { height: var(--h-overview-mini); overflow: hidden; transition: height var(--dur-panel) var(--ease-panel); }
+#playbackPanel[data-collapsed] #minimapClip { height: 0; }
+body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
+@media (prefers-reduced-motion: reduce) { #minimapClip { transition: none; } }
 #miniStrip { display: flex; position: relative; flex-shrink: 0; min-width: 0; overflow: hidden; }
 .marker-tap-row { display: flex; gap: var(--s-sibling); align-items: center; }
 .mini-spacer { width: 44px; flex-shrink: 0; background: var(--piano-bg); border-right: 1px solid var(--stage-line); }
@@ -492,7 +491,7 @@ body.row-resizing { cursor: row-resize; user-select: none; }
 }
 
 #fretboardPanel {
-  display: flex; flex: none; min-height: 0; max-height: 50%; overflow: hidden;
+  display: flex; flex: none; min-height: 0; max-height: 70%; overflow: hidden;
   position: relative;
   background: var(--panel); border-radius: var(--r-container); margin-top: 0;
 
@@ -1194,7 +1193,7 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: 300; }
 #appshell.side-collapsed .edge-toggle--sidebar { right: 0; width: var(--w-sidebar-mini); }
 .edge-toggle--markers { position: absolute; top: var(--s-pair); left: 50%; transform: translateX(-50%); z-index: 15; }
 .edge-toggle--fretboard { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 15; }
-/* Compact overview and editor share one musical workspace. */
+/* The editing stage; the overview above it is its own panel. */
 #editingWorkspace {
   display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
   overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-container);

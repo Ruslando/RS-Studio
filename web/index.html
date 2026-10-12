@@ -293,9 +293,7 @@
             <div class="side-items" id="stemTabs" title="Audio layers"><div id="audioLayerActions" class="layer-actions"></div></div>
           </section>
 
-          <div id="sepDrag" class="drag-sep" aria-hidden="true">
-            <svg width="24" height="5" viewBox="0 0 24 5" fill="none"><circle cx="6" cy="2.5" r="1.5" fill="currentColor"/><circle cx="12" cy="2.5" r="1.5" fill="currentColor"/><circle cx="18" cy="2.5" r="1.5" fill="currentColor"/></svg>
-          </div>
+          <div id="sepDrag" class="drag-sep splitter splitter--y" aria-hidden="true"><svg class="splitter-dots" width="26" height="5" viewBox="0 0 26 5" fill="none"><circle cx="5" cy="2.5" r="1.4" fill="currentColor"/><circle cx="13" cy="2.5" r="1.4" fill="currentColor"/><circle cx="21" cy="2.5" r="1.4" fill="currentColor"/></svg></div>
 
           <section id="layersSection" class="side-section grow">
             <div class="side-header">
@@ -306,28 +304,26 @@
             </div>
             <div class="side-items" id="lanes"><div id="noteLayerActions" class="layer-actions"></div></div>
           </section>
-          <div id="sidebarResize" class="sidebar-resize" aria-hidden="true">
-            <svg width="5" height="26" viewBox="0 0 5 26" fill="none">
-              <circle cx="2.5" cy="5" r="1.4" fill="currentColor"/>
-              <circle cx="2.5" cy="13" r="1.4" fill="currentColor"/>
-              <circle cx="2.5" cy="21" r="1.4" fill="currentColor"/>
-            </svg>
-          </div>
         </aside>
+        <!-- The gap between the sidebar and the editor IS the handle (web/splitters.js). -->
+        <div id="sidebarResize" class="splitter splitter--x" aria-hidden="true"><svg class="splitter-dots" width="5" height="26" viewBox="0 0 5 26" fill="none"><circle cx="2.5" cy="5" r="1.4" fill="currentColor"/><circle cx="2.5" cy="13" r="1.4" fill="currentColor"/><circle cx="2.5" cy="21" r="1.4" fill="currentColor"/></svg></div>
 
         <!-- Canvas area: mini-map strip over the [piano keys · spectrogram] body. -->
         <div id="editor">
 
-<div id="editingWorkspace">
+<!-- The overview is a panel of its own: the time ruler, and under it the
+     minimap, which the handle below grows or folds away. -->
 <div id="playbackPanel" role="group" aria-label="Timeline overview">
 <div id="miniStrip">
             <div id="overviewWrap" title="Overview">
               <canvas id="overviewRuler" tabindex="0" role="slider" aria-label="Overview playhead, seconds" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" title="Click or drag to set the playhead; arrow keys adjust by 0.1 seconds"></canvas>
-              <canvas id="minimap"></canvas>
+              <div id="minimapClip"><canvas id="minimap"></canvas></div>
             </div>
           </div>
 
           </div><!-- playbackPanel -->
+          <div id="timelineResize" class="splitter splitter--y" aria-hidden="true"><svg class="splitter-dots" width="26" height="5" viewBox="0 0 26 5" fill="none"><circle cx="5" cy="2.5" r="1.4" fill="currentColor"/><circle cx="13" cy="2.5" r="1.4" fill="currentColor"/><circle cx="21" cy="2.5" r="1.4" fill="currentColor"/></svg></div>
+<div id="editingWorkspace">
           <div id="editingPanel"><div id="viewer">
             <button type="button" id="markerLanesChevron" class="edge-toggle edge-toggle--markers" data-panel-toggle="markers" aria-expanded="true" aria-label="Hide markers" title="Hide markers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
             <canvas id="ruler"></canvas>
@@ -350,6 +346,7 @@
 
           </div><!-- editingPanel -->
           </div><!-- editingWorkspace -->
+          <div id="fretboardResize" class="splitter splitter--y" aria-hidden="true"><svg class="splitter-dots" width="26" height="5" viewBox="0 0 26 5" fill="none"><circle cx="5" cy="2.5" r="1.4" fill="currentColor"/><circle cx="13" cy="2.5" r="1.4" fill="currentColor"/><circle cx="21" cy="2.5" r="1.4" fill="currentColor"/></svg></div>
           <!-- Fretboard: the neck the song is played on, under the stage. Its
                chevron stays on the partial panel; hovering reveals more of the neck — the
                sidebar's idiom, so the way back is where the way out was. -->

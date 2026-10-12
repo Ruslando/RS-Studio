@@ -11,6 +11,7 @@ import { init_settings } from "./settings.js";
 import { init_tracing } from "./tracing.js";
 import { init_interaction } from "./interaction.js";
 import { init_sidebar } from "./sidebar.js";
+import { init_splitters } from "./splitters.js";
 import { init_fretboard } from "./fretboard.js";
 import { init_geometry } from "./geometry.js";
 import { init_tablature } from "./tablature.js";
@@ -38,6 +39,7 @@ init_settings();   // restore persisted prefs before features read their inputs
 init_tracing();
 init_interaction();
 init_sidebar();
+init_splitters();
 init_fretboard();   // before init_geometry: the stage measures the height this leaves it
 init_geometry();
 init_tablature();

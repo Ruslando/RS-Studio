@@ -19,7 +19,9 @@ import { boardHalfWidthAt, boardLength, boardWidth, dotCentre, fretCentre, fretD
 import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardAdaptNext, fretboardAdaptPrev, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardStage } from "./dom.js";
 import { HALO, UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
-import { dpr, hexA, noteName } from "./util.js";
+import { dpr, hexA, noteName, rememberPref } from "./util.js";
+import { panelMotion } from "./panel-motion.js";
+import { splitter } from "./splitters.js";
 import { draw } from "./repaint.js";
 import { editLanes } from "./lanes.js";
 import { songBarStarts } from "./song-bars.js";
@@ -43,6 +45,12 @@ const PAD = 16;
 // Off at launch: the neck is a second view of the song, and the editor opens on the
 // song. A session toggle either way — like the marker lanes, and like zoom.
 let visible = false;
+// A height the player dragged the panel to (the handle above it), or 0 for "as tall
+// as the neck wants". The neck scales into whatever it is given — both axes share one
+// scale — so smaller is a smaller neck and taller is the same neck with air round it.
+const LS_HEIGHT = "cw.fretboardH", HEIGHT_MIN = 90, COLLAPSE_AT = 60;
+let userHeight = Math.max(0, parseInt(localStorage.getItem(LS_HEIGHT), 10) || 0);
+let settling = 0;     // until when an open/close tween is running; see layoutFretboard
 
 // Which neck. The lane's instrument decides it — an acoustic lane gets a
 // dreadnought, a bass lane a Jazz Bass — and the lane's *tuning* still decides
@@ -422,6 +430,7 @@ const preferredHeight = (w, s) => boardHeight(w, s);
 // The collapsed panel retains a read-only neck preview and its reopen chevron.
 export function setFretboardVisible(on) {
   fretboardPanel.style.transition = "";
+  settling = performance.now() + panelMotion().duration;
   // Freeze the currently rendered height before removing the collapsed rule.
   // Measuring width below flushes layout; without this, it first expands to
   // auto height and leaves the subsequent transition with nothing to animate.
@@ -464,10 +473,14 @@ function layoutFretboard(slide = false) {
   const cssW = fretboardStage.clientWidth;
   if (cssW < 2 * PAD) return;
   const spec = laneSpec(currentLane());
-  const height = Math.min(preferredHeight(cssW, spec), editorEl.clientHeight / 2);
+  const height = userHeight
+    ? Math.min(Math.max(userHeight, HEIGHT_MIN), editorEl.clientHeight * 0.7)
+    : Math.min(preferredHeight(cssW, spec), editorEl.clientHeight / 2);
   // Resize observers also fire while adjacent panels move. Repainting the same
-  // destination must not cancel a reveal that is already running.
-  const snap = visible && !slide && fretboardPanel.style.height !== height + "px";
+  // destination must not cancel a reveal that is already running — and neither must
+  // the drag that started it: a panel pulled open off its handle keeps tweening
+  // toward the pointer instead of jumping to it.
+  const snap = visible && !slide && performance.now() > settling && fretboardPanel.style.height !== height + "px";
   if (snap) fretboardPanel.style.transition = "none";
   laidOut = spec;
   fretboardPanel.style.height = visible ? height + "px" : "";
@@ -1400,6 +1413,20 @@ export function init_fretboard() {
       setFretboardVisible(true);
   });
   wireMenu("menuFretboard", () => setFretboardVisible(!visible));
+  // The handle between the stage and the neck: drag for height, past the threshold to
+  // fold the panel away, back out to open it — the same gesture as the sidebar's.
+  splitter($("fretboardResize"), {
+    axis: "y",
+    start: () => fretboardPanel.getBoundingClientRect().height,
+    move: (dy, startH) => {
+      const raw = startH - dy;
+      if (raw < COLLAPSE_AT) { if (visible) setFretboardVisible(false); return; }
+      userHeight = Math.round(Math.max(HEIGHT_MIN, raw));
+      if (visible) layoutFretboard(); else setFretboardVisible(true);
+    },
+    end: () => { if (visible && userHeight) rememberPref(LS_HEIGHT, userHeight); },
+    toggle: () => setFretboardVisible(!visible),
+  });
   for (const button of panelControls("fretboard")) button.addEventListener("click", () => setFretboardVisible(!visible));
   // Both reach toggles act on the column the strip is already naming, and both leave
   // the shape exactly as it is — only the blast radius moves.
