@@ -2848,6 +2848,11 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
     // working, then shift" is one shift, and a hand that returned to 3 the moment it
     // could would be a hand hopping back and forth mid-phrase.
     let stand = grip;
+    // LEAVING A HELD BLOCK IS A SHIFT TOO, and the register has already decided where
+    // to. Carrying the held fret in as "where the hand just was" let the continuity
+    // term veto that decision a note at a time: after a hold at the 17th the next bar
+    // came down 17, 15, 12, 10 — four positions for one hand in one bar.
+    if (grip == null && b > 0 && holdOf(sorted, blocks[b - 1])?.grip != null) prevFret = null;
     for (const i of blocks[b]) {
       const c = sorted[i];
       const after = sorted[i + 1];
