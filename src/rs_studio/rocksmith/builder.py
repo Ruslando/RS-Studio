@@ -292,7 +292,10 @@ _TONE_PRESETS = {"lead", "clean", "crunch", "bass"}
 def _arrangement_tones(track: dict, is_bass: bool, key: str, tag: str,
                        song_length: float, warnings: list[str]) -> tuple[dict, list[dict], list[tuple[float, int]]]:
     """Resolve one lane's authored switches to a base tone, slots, and SNG events."""
-    default = "bass" if is_bass else "lead"
+    # What a lane plays through when nothing says otherwise. The editor writes the
+    # same choice as a marker at the start of every lane (web/tone-marker-core.js),
+    # so this only decides for a spec that arrives without one.
+    default = "clean" if is_bass else "crunch"
     markers = []
     for index, raw in enumerate(track.get("toneMarkers") or []):
         try:

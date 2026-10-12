@@ -34,6 +34,7 @@ import { loadWithScreen } from "./project-loading.js";
 import { S } from "./store.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
+import { withStartTone } from "./tone-marker-core.js";
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars } from "./section-marker-core.js";
 import { inferTablatureEnabled } from "./layer-role.js";
 import { cleanupShapeMembership } from "./shapes.js";
@@ -290,6 +291,7 @@ export function mapLane(l) {
     displayTranspositionPitch: Number.isFinite(l.displayTranspositionPitch) ? l.displayTranspositionPitch : 0,
     notes,
     ...normalizedLaneFields(l),
+    toneMarkers: withStartTone(normalizedLaneFields(l).toneMarkers, { instrument, rocksmithArrangement: l.rocksmithArrangement }),
     refBoxes: l.refBoxes && typeof l.refBoxes === "object" ? l.refBoxes : {},
   };
 }

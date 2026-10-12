@@ -14,6 +14,7 @@ import { S, setSelection } from "./store.js";
 import { TUNINGS, addCustomTuning, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, removeCustomTuning, tuningToNames, updateCustomTuning } from "./tablature.js";
 import { closeLayerSettings, layerArrangement, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName, tuningAddBtn, tuningListEl } from "./ui.js";
 import { clamp, layerVolumePercent, normLayerVolume, noteName, volumeToDb } from "./util.js";
+import { withStartTone } from "./tone-marker-core.js";
 
 // ---- lane / stem helpers ----
 // Edit lanes are the only lanes and are GLOBAL (shared across every stem view).
@@ -523,6 +524,8 @@ function addEditLane() {
 }
 
 function commitNewLane(lane) {
+  // Now, not when the draft was made: the instrument is chosen in the dialog.
+  lane.toneMarkers = withStartTone(lane.toneMarkers, lane);
   S.state.editLanes.push(lane);
   rebuildLanes();
   S.state.lanes.forEach((l) => (l.active = l === lane));
