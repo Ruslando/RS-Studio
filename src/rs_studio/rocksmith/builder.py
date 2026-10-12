@@ -8,6 +8,7 @@ arrangements from the editor lanes.
 """
 from __future__ import annotations
 
+import copy
 import re
 import tempfile
 import unicodedata
@@ -150,9 +151,80 @@ def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[
     return offsets + [0] * (6 - len(offsets)), is_bass
 
 
+MAX_LEAD_IN = 30.0
+
+
+def _lead_in_seconds(spec: dict) -> float:
+    """The leading silence the export asked for, in seconds (0 when it did not)."""
+    try:
+        value = float((spec.get("rocksmith") or {}).get("leadingSilence") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(MAX_LEAD_IN, max(0.0, value))
+
+
+def _with_lead_in(spec: dict, lead: float) -> dict:
+    """A copy of the spec with everything timed moved `lead` seconds later.
+
+    The audio gets the same amount of silence in front (_prepare_audio), so the
+    chart and the song stay in step: Rocksmith starts the track the moment the
+    song loads, and a first note in the first second leaves no time to see it
+    coming.
+
+    Two things do not simply move. A tone marker at the very start names the
+    arrangement's base tone, not a switch, so it stays at 0. And the beat grid is
+    extended BACKWARDS by whole measures into the silence instead of starting
+    after it, so the lead-in has bar lines to count along and every downbeat is
+    still where the music puts it.
+    """
+    if lead <= 0:
+        return spec
+    out = copy.deepcopy(spec)
+
+    def moved(item):
+        if isinstance(item, dict):
+            for name in ("t", "seconds"):
+                if isinstance(item.get(name), (int, float)):
+                    item[name] += lead
+            return item
+        return item + lead if isinstance(item, (int, float)) else item
+
+    for track in out.get("tracks") or []:
+        for note in track.get("notes") or []:
+            for name in ("start", "end"):
+                if isinstance(note.get(name), (int, float)):
+                    note[name] += lead
+        for marker in track.get("toneMarkers") or []:
+            at = marker.get("t", marker.get("seconds")) if isinstance(marker, dict) else None
+            if isinstance(at, (int, float)) and at > 1e-6:
+                moved(marker)
+        for name in ("phraseBoundaries", "practiceBoundaries"):
+            if track.get(name):
+                track[name] = [moved(item) for item in track[name]]
+    for section in out.get("sections") or []:
+        moved(section)
+
+    grid = out.get("grid")
+    if isinstance(grid, dict):
+        for marker in grid.get("tempoMap") or []:
+            moved(marker)
+        try:
+            bpm = float(grid.get("bpm") or 120.0) or 120.0
+            measure = 60.0 / bpm * max(1, int(grid.get("tsNum") or 4))
+            start = max(0.0, float(grid.get("offset") or 0.0)) + lead
+        except (TypeError, ValueError):
+            return out
+        grid["offset"] = start - int(start / measure) * measure
+    return out
+
+
 def _prepare_audio(audio_path: Path, first_note: float, workdir: Path,
-                   warnings: list[str]) -> tuple[Path, Path, float, float]:
-    """Returns (main wav, preview wav, song length, bank volume dB)."""
+                   warnings: list[str], lead: float = 0.0) -> tuple[Path, Path, float, float]:
+    """Returns (main wav, preview wav, song length, bank volume dB).
+
+    `first_note` is in the audio's own time; `lead` seconds of silence go in front
+    of the main track only, and the returned length includes them.
+    """
     try:
         data, sr = sf.read(str(audio_path), always_2d=True)
     except Exception:
@@ -166,7 +238,8 @@ def _prepare_audio(audio_path: Path, first_note: float, workdir: Path,
     volume = float(np.clip(-16.0 - rms_db, -15.0, 3.0))
 
     main = workdir / "main.wav"
-    sf.write(str(main), data, sr, subtype="PCM_16")
+    padded = np.concatenate([np.zeros((int(round(lead * sr)), data.shape[1]), dtype=data.dtype), data]) if lead > 0 else data
+    sf.write(str(main), padded, sr, subtype="PCM_16")
 
     start = max(0.0, min(first_note - 1.0, max(0.0, length - PREVIEW_SECONDS)))
     seg = data[int(start * sr):int((start + PREVIEW_SECONDS) * sr)].copy()
@@ -176,7 +249,7 @@ def _prepare_audio(audio_path: Path, first_note: float, workdir: Path,
     seg[len(seg) - fade_out:] *= np.linspace(1, 0, fade_out)[:, None]
     preview = workdir / "preview.wav"
     sf.write(str(preview), seg, sr, subtype="PCM_16")
-    return main, preview, length, volume
+    return main, preview, len(padded) / sr, volume
 
 
 def _arrangement_specs(spec: dict, tracks: list[dict], warnings: list[str]) -> list[dict]:
@@ -286,6 +359,9 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
     _wems/_song_length bypass the WEM conversion + audio steps for the self-check.
     """
     warnings: list[str] = []
+    lead = _lead_in_seconds(spec)
+    source_tracks = spec.get("tracks") or []      # still in the audio's own time
+    spec = _with_lead_in(spec, lead)
     tracks = spec.get("tracks") or []
     if not tracks:
         raise ValueError("No lanes with notes to export")
@@ -300,18 +376,18 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         starts = [
             float(n["start"])
             for req in arr_requests
-            for n in tracks[req["track"]].get("notes") or []
+            for n in source_tracks[req["track"]].get("notes") or []
             if n.get("start") is not None
         ]
         first_note = min(starts) if starts else 0.0
 
         if _wems is not None:
             main_wem, preview_wem = _wems
-            song_length = _song_length or 60.0
+            song_length = (_song_length or 60.0) + lead
             volume = -8.0
         else:
             main_wav, preview_wav, song_length, volume = _prepare_audio(
-                Path(audio_path), first_note, workdir, warnings)
+                Path(audio_path), first_note, workdir, warnings, lead)
             main_wem = wem.convert_to_wem(main_wav, wwise_console)
             preview_wem = wem.convert_to_wem(preview_wav, wwise_console)
 

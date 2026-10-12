@@ -8,6 +8,7 @@ import { isTablatureLane } from "./layer-role.js";
 import { applyCoverChange, clearProjectCover, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { downloadProjectBlob, toast } from "./notify.js";
 import { S } from "./store.js";
+import { rememberPref } from "./util.js";
 import { TUNINGS, buildSpecForLanesAsync, customTunings, laneTuning, parseTuning, tuningToNames } from "./tablature.js";
 
 const RS_KIND_OPTIONS = [
@@ -230,6 +231,7 @@ function openRocksmithExportModal() {
   rsLatin.fill(meta);
   renderRsCover(meta);
   renderRsArrangements(lanes);
+  $("rsLeadIn").value = String(leadIn(localStorage.getItem(LS_LEAD_IN)));
   setRsStatus("");
   converterOk = false;
   $("rsExportGo").disabled = true;
@@ -261,6 +263,15 @@ const uploadRsCoverFromDrop = (dataTransfer) =>
   applyRsCover("Uploading cover art...", "Cover art uploaded", (job) => uploadDroppedProjectCover(job, dataTransfer));
 const clearRsCover = () =>
   applyRsCover("Removing cover art...", "Cover art removed", (job) => clearProjectCover(job));
+
+// Silence in front of the song, in seconds. Rocksmith starts the track the moment the
+// song loads, so a first note in the first second cannot be seen coming; five seconds
+// is the room the note highway needs. Remembered across exports, 0 to 30.
+const LS_LEAD_IN = "cw.rsLeadIn", LEAD_IN_DEFAULT = 5;
+function leadIn(raw) {
+  const value = raw === null || raw === "" ? NaN : Number(raw);
+  return Number.isFinite(value) ? Math.min(30, Math.max(0, value)) : LEAD_IN_DEFAULT;
+}
 
 export function exportRocksmith() {
   openRocksmithExportModal();
@@ -318,7 +329,9 @@ async function submitRocksmithExport() {
   S.state.metadata = { ...normalizeMetadata(S.state.metadata || {}), ...meta };
   spec.name = exportSongName(meta, S.state.name || S.state.filename || "song");
   spec.metadata = metadataPayload(S.state.metadata);
-  spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning })) };
+  const leadingSilence = leadIn($("rsLeadIn").value);
+  rememberPref(LS_LEAD_IN, leadingSilence);
+  spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning })), leadingSilence };
 
   $("rsExportGo").disabled = true;
   setRsStatus("Building CDLC…");
