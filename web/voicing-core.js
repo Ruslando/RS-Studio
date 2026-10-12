@@ -2966,53 +2966,31 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
   }
 
   // The hand the board draws. The register is a centroid, not a finger — an
-  // asymmetric cost that treated it as the index measured ten points worse — so
-  // the anchor is read back off what was actually played: the lowest fretted
-  // fret in the bar. Per bar and not per column, because a lone note taken on
-  // its own reports itself as the index, which is how every note in a bass line
-  // came back fingered 1.
+  // asymmetric cost that treated it as the index measured ten points worse — so the
+  // anchor is read back off what was actually played. See planHand.
   if (seats) {
+    const named = new Array(n).fill(null);
     for (let b = 0; b < blocks.length; b++) {
       // A HELD BLOCK REPORTS THE HAND IT WAS GIVEN and never reads it back off the
-      // notes. The read-back is the lowest fretted fret, and a hand gripping 9 to 12
-      // whose lowest note is at 10 reports 10 — true of the notes, and one fret away
-      // from the band the player just pointed at.
-      //
-      // Per column, because inside a held block the hand can shift: it stands where it
-      // was put until a column cannot be held there. That is what gripRun walks, and
-      // this is the grip it actually took, so the per-column reading does NOT inherit
-      // the read-back's problem below — a lone note cannot report itself as the index
-      // when nobody is reading the note.
+      // notes: a hand gripping 9 to 12 whose lowest note is at 10 would report 10 —
+      // true of the notes, and one fret from the band the player just pointed at.
+      // Per column, because inside a held block the hand can shift (gripRun).
       const grip = holdOf(sorted, blocks[b])?.grip ?? null;
-      if (grip != null) {
-        for (const i of blocks[b]) seats[i] = stood[i] ?? grip;
-        continue;
-      }
-      // An override is left out of the reading, and reports a hand of its own when
-      // it lies outside the one the rest of the bar is played from. Read in with the
-      // others, a note pinned at the 17th in a bar played at the 5th either dragged
-      // the anchor to itself or — the usual case — sat under an anchor at 5 with a
-      // fourth finger on it, twelve frets from the hand that was drawn.
-      const lowest = (i) => {
-        const c = sorted[i];
-        let lo = Infinity, hi = -Infinity;
-        for (let k = 0; k < c.pitches.length; k++) {
-          const s = strings[i][k];
-          if (s < 0) continue;
-          const f = c.pitches[k] - tuning[s];
-          if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); }
-        }
-        return { lo, hi };
-      };
-      const free = blocks[b].filter((i) => !sorted[i].fixed);
-      let lo = Infinity;
-      for (const i of free.length ? free : blocks[b]) lo = Math.min(lo, lowest(i).lo);
-      const seat = Number.isFinite(lo) ? lo : Math.max(1, registers[b]);
-      for (const i of blocks[b]) {
-        const own = sorted[i].fixed ? lowest(i) : null;
-        seats[i] = own && Number.isFinite(own.lo) && (own.lo < seat || own.hi >= seat + span) ? own.lo : seat;
-      }
+      if (grip != null) for (const i of blocks[b]) named[i] = stood[i] ?? grip;
     }
+    const reach = sorted.map((c, i) => {
+      let lo = Infinity, hi = -Infinity;
+      for (let k = 0; k < c.pitches.length; k++) {
+        const s = strings[i][k];
+        // A tapped note is the other hand's, and an open string is nobody's.
+        if (s < 0 || (c.rules && c.rules[k] && c.rules[k].free)) continue;
+        const f = c.pitches[k] - tuning[s];
+        if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); }
+      }
+      return Number.isFinite(lo) ? { lo, hi } : null;
+    });
+    const planned = planHand(reach, named, span);
+    for (let i = 0; i < n; i++) seats[i] = planned[i] ?? Math.max(1, registers[blocks.findIndex((idx) => idx.includes(i))] || 1);
   }
 
   return sorted.map((c, i) => {
@@ -3025,6 +3003,66 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
     }
     return out;
   });
+}
+
+// WHERE THE HAND IS, COLUMN BY COLUMN, once the notes are placed. It used to be one
+// answer per bar — the lowest fretted fret in it — which is right while a bar fits in
+// a hand and nonsense when it does not: a run coming down from the 13th fret to the
+// 2nd in one bar reported the hand at 2 throughout, with a fourth finger eleven frets
+// away. One note at a time is a chord spread over time, and it has to fit a hand too.
+//
+// So the hand is walked. On each column the index stands at or below the lowest
+// fretted note and reaches up to the highest; a shift moves it. Both are priced and
+// the cheapest walk wins (a Viterbi over the index fret):
+//
+//   reaching   free up to four frets, then steeper with every fret — 5 is a stretch
+//              (1), 6 a real one (3), 7 costs more than moving twice (9), and on up.
+//              A soft edge, not a cutoff: one note a fret outside the hand is played
+//              with a stretch, not with two shifts.
+//   shifting   4 (and a hair per fret travelled), so a stretch of six still beats
+//              a shift and one of seven does not.
+//   the index  a hair for every fret the index stands below the lowest note, which
+//              only breaks ties: the hand sits ON the phrase, not under it.
+//
+// `named[i]` is a hand the player put there (a hold) and is taken as given. Columns
+// with nothing fretted take the hand that is already there. This reads the hand off
+// the notes; it does not move them — where each note goes is still the register's.
+const HAND_SHIFT = 4;
+const stretchCost = (frets, span) => (frets <= span ? 0 : 3 ** (frets - span - 1));
+
+function planHand(reach, named, span = SPAN) {
+  const n = reach.length, out = new Array(n).fill(null);
+  let prev = null;                         // [{ g, cost, from }] of the last fretted column
+  const trail = [];
+  for (let i = 0; i < n; i++) {
+    const r = reach[i];
+    if (named[i] == null && !r) continue;
+    const frets = named[i] != null ? [named[i]]
+      : Array.from({ length: r.lo - Math.max(1, r.hi - span - 3) + 1 }, (_, k) => r.lo - k);
+    const states = frets.map((g) => {
+      const own = named[i] != null ? 0 : stretchCost(r.hi - g + 1, span) + 0.01 * (r.lo - g);
+      let best = 0, from = -1;
+      if (prev) {
+        best = Infinity;
+        prev.forEach((p, k) => {
+          const c = p.cost + (p.g === g ? 0 : HAND_SHIFT + 0.002 * Math.abs(p.g - g));
+          if (c < best) { best = c; from = k; }
+        });
+      }
+      return { g, cost: best + own, from };
+    });
+    trail.push({ i, states });
+    prev = states;
+  }
+  let k = prev ? prev.reduce((b, st, j) => (st.cost < prev[b].cost ? j : b), 0) : -1;
+  for (let t = trail.length - 1; t >= 0; t--) {
+    const st = trail[t].states[k];
+    out[trail[t].i] = st.g; k = st.from;
+  }
+  // Nothing fretted here: the hand is wherever it already was, or is about to be.
+  for (let i = 1; i < n; i++) if (out[i] == null) out[i] = out[i - 1];
+  for (let i = n - 2; i >= 0; i--) if (out[i] == null) out[i] = out[i + 1];
+  return out;
 }
 
 // Last resort for the notes a register could not seat. Works down from the top

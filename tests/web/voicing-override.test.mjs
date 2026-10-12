@@ -135,6 +135,27 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   assert.equal(placementFault(pinned, 55, 4, tuning), null);
 }
 
+// ---- the hand, read off the notes ------------------------------------------
+// A bass run coming down from the 13th fret to the 2nd inside one bar. One hand
+// cannot be "at 2" for all of it: it is at 13, then 8, then 2.
+{
+  const bass = [43, 38, 33, 28];
+  const off = { influencePrevious: false, influenceNext: false, adaptPrevious: false, adaptNext: false };
+  const run = [[0, 13], [1, 13], [2, 10], [2, 9], [3, 9], [3, 8], [3, 2]].map(([string, fret], i) =>
+    note(i * 0.2, bass[string] + fret, { pos: pin(string, fret, off) }));
+  const { seats, fingers } = voiceNotesFingered(run, bass, Infinity, { bars: [0, 4], instrument: "bass" });
+  assert.deepEqual(run.map((n) => seats.get(n)), [13, 13, 8, 8, 8, 8, 2]);
+  assert.deepEqual(run.map((n) => fingers.get(n)), [1, 1, 3, 2, 2, 1, 1]);
+  // One fret outside the hand is a stretch, not two shifts: 5 5 9 5 stays at 5.
+  const reachy = [5, 5, 9, 5].map((fret, i) => note(i * 0.5, bass[2] + fret, { pos: pin(2, fret, off) }));
+  const got = voiceNotesFingered(reachy, bass, Infinity, { bars: [0, 4], instrument: "bass" });
+  assert.deepEqual(reachy.map((n) => got.seats.get(n)), [5, 5, 5, 5]);
+  // Three outside is not: 5 5 12 5 moves there and back.
+  reachy[2].pitch = bass[2] + 12; reachy[2].pos = pin(2, 12, off);
+  const moved = voiceNotesFingered(reachy, bass, Infinity, { bars: [0, 4], instrument: "bass" });
+  assert.deepEqual(reachy.map((n) => moved.seats.get(n)), [5, 5, 12, 5]);
+}
+
 // ---- stacked notes -------------------------------------------------------
 // Two A4 over each other are one note downstream: the longest of them.
 {
