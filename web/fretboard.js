@@ -1205,8 +1205,13 @@ function anchorFret(lane) {
   }
   const found = gripsFor(lane);
   if (!found) return 0;
-  const i = gripIndex(found.columns, frozenAt(lane) ?? playbackTime());
-  return i >= 0 ? Number(found.columns[i].seat) || 0 : 0;
+  const t = frozenAt(lane) ?? playbackTime();
+  // The reset preview is the same kind of question — what the hand WOULD do without
+  // the override — so the band goes back with the grip: an override that moved the
+  // hand is not undone by showing only the note returning.
+  const columns = resetPeeking && resetPreview?.columns ? resetPreview.columns : found.columns;
+  const i = gripIndex(columns, t);
+  return i >= 0 ? Number(columns[i].seat) || 0 : 0;
 }
 
 const FADED = 0.4;   // the grip in the hand while another one is being considered
