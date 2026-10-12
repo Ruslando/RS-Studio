@@ -762,13 +762,15 @@ export function setHandHold(lane, t, fret) {
 // pin that fails them lapses silently: every note placed, no two notes on one string,
 // and each placement actually sounding its note. Playability is deliberately NOT
 // among them — "a shape that isn't there" is the whole point, and a hand that can hold
-// it is the player's problem to judge, not the engine's to veto.
+// it is the player's problem to judge, not the engine's to veto. What a note's own
+// technique rules out is (`limits`, from placementLimits): a slide on an open string
+// is not a hard shape, it is not a shape.
 //
 // Returns null when it wrote, or the sentence saying what is wrong.
-export function setColumnShape(colNotes, shape) {
+export function setColumnShape(colNotes, shape, limits = null, maxFret = undefined) {
   const lane = laneOf(colNotes?.[0]);
   if (!lane) return "These notes are not in an editable note layer";
-  const wrong = shapeFault(colNotes, laneTuning(lane), shape);
+  const wrong = shapeFault(colNotes, laneTuning(lane), shape, limits, maxFret);
   if (wrong) return wrong;
   applyColumnPos(colNotes, shape, "local", overrideInfluence(colNotes));
   return null;

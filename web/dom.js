@@ -47,8 +47,7 @@ export const tabWarnEl = $("tabWarn"), tabRenderEl = $("tabRender"), tabScrollEl
 export const fretboardPanel = $("fretboardPanel"), fretboardEl = $("fretboard"), fretboardToggle = $("fretboardToggle");
 export const fretboardBusy = $("fretboardBusy"), fretboardBusyLabel = $("fretboardBusyLabel");
 export const fretboardStage = $("fretboardStage"), fretboardName = $("fretboardName");
-export const fretboardPin = $("fretboardPin"), fretboardAuto = $("fretboardAuto"), fretboardReach = $("fretboardReach");
-export const fretboardContext = $("fretboardContext");
+export const fretboardPin = $("fretboardPin"), fretboardAuto = $("fretboardAuto");
 export const fretboardEdit = $("fretboardEdit");
 export const fretboardSide = $("fretboardSide"), fretboardShape = $("fretboardShape"), fretboardApply = $("fretboardApply");
 export const fretboardReachPrev = $("fretboardReachPrev"), fretboardReachNext = $("fretboardReachNext");

@@ -16,7 +16,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // Both mm → px scales are the same one, always.
 
 import { boardHalfWidthAt, boardLength, boardWidth, chordLabel, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
-import { $, editorEl, fretboardContext, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardPin, fretboardReach, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardSide, fretboardStage } from "./dom.js";
+import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardSide, fretboardStage } from "./dom.js";
 import { HALO, UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
 import { dpr, hexA, noteName } from "./util.js";
@@ -29,7 +29,7 @@ import { selectedTablatureLane } from "./layer-role.js";
 import { S } from "./store.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneTuning } from "./tablature.js";
-import { assignFingers, chordColumns, handProfileForTuning, overrideInfluence } from "./voicing-core.js";
+import { assignFingers, chordColumns, handProfileForTuning, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
 import { columnAlternatives } from "./voicing.js";
 import { applyColumnAlternative, clearOverrideAt, columnOf, setColumnInfluence, setColumnShape, setHandHold, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
@@ -129,7 +129,7 @@ function gripsFor(lane) {
     handJob = key;
     laneFingering(lane).then((fingering) => {
       if (handJob !== key) return;    // a later edit already asked for a newer one
-      hand = { key, strings: fingering.tuning.length, columns: gripsFrom(fingering) };
+      hand = { key, strings: fingering.tuning.length, columns: gripsFrom(fingering), voiced: fingering.voiced };
       draw();
     // A failure is an *answer*, and it is stored as one: an empty timeline under the
     // same key. Leaving `hand` alone would re-ask sixty times a second, and leaving it
@@ -141,6 +141,24 @@ function gripsFor(lane) {
   }
   return hand && hand.key === key ? hand : null;
 }
+
+// What the techniques on `note`'s column allow, per note — see placementLimits. Every
+// offer below asks this before it is drawn, so the neck never proposes a place a
+// slide, bend, trill or hammer-on rules out. Kept per fingering, because the pointer
+// redraws the board far more often than the lane changes.
+let limitsMemo = null;   // { key, limits }
+function limitsFor(lane, note) {
+  const found = lane && note && gripsFor(lane);
+  if (!found) return null;
+  if (limitsMemo?.key === found.key && limitsMemo.limits.has(note)) return limitsMemo.limits;
+  const columns = chordColumns(lane.notes);
+  const limits = placementLimits(columns, columns.findIndex((c) => c.notes.includes(note)),
+    laneTuning(lane), (n) => found.voiced?.get(n) || null, laneSpec(lane).frets);
+  limitsMemo = { key: found.key, limits };
+  return limits;
+}
+const allowedAt = (lane, tuning, s) => (p) =>
+  !placementFault(limitsFor(lane, p.note)?.get(p.note), p.note.pitch, p.string, tuning, s.frets);
 
 // How long a shift takes: one beat. A hand moves in musical time, not in the
 // interface's 90ms — and taking it from the grid means a slow song shows the
@@ -271,13 +289,12 @@ export function setFretboardEdit(on) {
   fretboardEdit.setAttribute("aria-pressed", String(editing));
   fretboardPanel.toggleAttribute("data-editing", editing);
   drawFretboard();
-  fretboardContext.hidden = !editing;
   setFretboardAlts(editing);
   if (!editing) { setFretboardShape(false); }
   fretboardEl.style.cursor = "";
   hoverFret = 0;
-  if (!editing) { endResetPreview(); fretboardAuto.hidden = true; }
-  // Context controls can wrap the toolbar and change the remaining canvas height.
+  if (!editing) { endResetPreview(); fretboardPin.hidden = true; }
+  // The strip's own buttons come and go with the mode, and the panel is as tall as it.
   layoutFretboard();
 }
 
@@ -331,6 +348,7 @@ function drawShaping(ctx, s, scale, X, Y, lane) {
   const asking = cur ? [{ note: cur, pitch: cur.pitch, string: -1 }] : [];
   const opts = cur
     ? notePlacements([...placed, ...asking], tuning, s.frets, asking)
+      .filter(allowedAt(lane, tuning, s))
       .map((p) => spotBox({ ...p, mm: fretCentre(p.fret, s) }, scale, s, X, Y))
     : [];
   spots = [...opts, ...placed.map((m) => spotBox(m, scale, s, X, Y))];
@@ -426,11 +444,10 @@ export function setFretboardVisible(on) {
   if (!visible) {
     fretboardBusy.hidden = true;
     endResetPreview();
-    fretboardAuto.hidden = true;
+    fretboardPin.hidden = true;
     editing = false;
     fretboardPanel.removeAttribute("data-editing");
     fretboardEdit.setAttribute("aria-pressed", "false");
-    fretboardContext.hidden = true;
     altsOn = false; alts = null; altsJob = null;
     spots = null; spotHover = -1; hoverFret = 0; shaping = null;
     fretboardShape.hidden = true;
@@ -707,9 +724,7 @@ export function drawFretboard() {
   // Chords only: a lone note has every position on the board already.
   fretboardShape.hidden = !editing || (!chord && !shaping);
   fretboardApply.hidden = !shaping || !!placing;
-  refreshPinControls(lane, held);
-  fretboardContext.hidden = !editing || !visible ||
-    (fretboardShape.hidden && fretboardApply.hidden && fretboardPin.hidden);
+  refreshPinControls(lane);
   // THE STRIP IS CONTENT AND THE PANEL IS AS TALL AS THE STRIP, so anything appearing
   // or going in it — the mode's toggles, the chord name, an override's controls — is a
   // re-layout and not only a repaint. Measured rather than enumerated, so a group
@@ -722,24 +737,15 @@ export function drawFretboard() {
   }
 }
 
-// The override's own controls, on the column the board is showing. Absent unless that
-// column has an override — a control that never varies states nothing (rule 24), and
-// on an automatic column there is neither a reach to set nor anything to return from.
-function refreshPinControls(lane, held) {
-  // Inside the mode, like the toggles above it and for the same reason: how far an
-  // override reaches and how to take it back are questions you have while editing,
-  // and outside one they are two rows of controls sitting on the song.
+// The override's two reach toggles, on the column the board is showing. Whether the
+// bundle they sit in is up at all is drawPinBundle's call; this only says what they
+// read. A reach lives ON a pin, and a column can be overridden without one — a hand
+// put on the beat, or an override that dropped notes and left `written` behind — so
+// there the bundle is the way back alone.
+function refreshPinControls(lane) {
   const col = editing ? pinnedColumn(lane) : null;
-  // A hand put on this beat is an override too, and the way back off it is the same
-  // button: the panel has one Automatic and it undoes whatever the player put here.
-  fretboardPin.hidden = !!shaping || !(!!col || (editing && !!held));
-  if (!col) { fretboardReach.hidden = true; return; }
-  // A reach lives ON a pin, and a column can be overridden without one: an override
-  // that dropped or added notes leaves `written` behind so Automatic can put the
-  // original chord back, and the survivors may all be automatic again. There is
-  // still a way back to offer there, and nothing to set a reach on.
-  const pinned = col.notes.some((n) => n.pos || n.arrangement);
-  fretboardReach.hidden = !pinned;
+  const pinned = !!col?.notes.some((n) => n.pos || n.arrangement);
+  fretboardReachPrev.hidden = fretboardReachNext.hidden = !pinned;
   if (!pinned) return;
   const reach = overrideInfluence(col.notes);
   fretboardReachPrev.setAttribute("aria-pressed", String(!!reach.previous));
@@ -765,20 +771,30 @@ function endResetPreview() {
   $("fretboardResetStatus").hidden = true;
 }
 
+// THE OVERRIDE'S BUNDLE, HUNG UNDER THE GRIP IT BELONGS TO: reach before, reach after,
+// and the way back. Centred under the note or chord and just clear of its lowest
+// mark, so it reads as part of that grip and never as a property of the panel; above
+// it instead when the grip sits on the bottom string and there is no room below.
 function drawResetControl(ctx, s, scale, X, Y, lane, held, width, height) {
   const column = editing && !shaping ? pinnedColumn(lane) : null;
   const enabled = editing && !shaping && !transportPlaying() && (!!column || !!held);
-  fretboardAuto.hidden = !enabled;
+  fretboardPin.hidden = !enabled;
   if (!enabled) { endResetPreview(); return; }
+  refreshPinControls(lane);            // before measuring: the toggles change its width
   const grip = focusGrip(lane, s);
   const focus = focusNote(lane);
-  const mark = grip?.marks.find(m => m.pitch === focus?.pitch) || grip?.marks[0];
-  const mx = mark ? X(mark.x) : X(fretCentre(held?.fret || 1, s));
-  const my = mark ? Y(stringOffsetAt(mark.string, Math.max(0, mark.x), s)) : height / 2;
-  const left = Math.max(4, Math.min(width - 28, mx + 12));
-  const top = Math.max(4, Math.min(height - 28, my - 12));
-  fretboardAuto.style.left = `${left}px`;
-  fretboardAuto.style.top = `${top}px`;
+  const marks = (grip?.marks || []).map((m) => ({
+    x: X(m.x), y: Y(stringOffsetAt(m.string, Math.max(0, m.x), s)), r: markRadius(m.x, scale, s),
+  }));
+  const bw = fretboardPin.offsetWidth, bh = fretboardPin.offsetHeight, gap = 6;
+  const cx = marks.length
+    ? (Math.min(...marks.map((m) => m.x)) + Math.max(...marks.map((m) => m.x))) / 2
+    : X(fretCentre(held?.fret || 1, s));
+  const below = marks.length ? Math.max(...marks.map((m) => m.y + m.r)) + gap : height / 2;
+  const above = marks.length ? Math.min(...marks.map((m) => m.y - m.r)) - gap - bh : below;
+  const top = below + bh <= height - 4 ? below : Math.max(4, above);
+  fretboardPin.style.left = `${Math.max(4, Math.min(width - bw - 4, cx - bw / 2))}px`;
+  fretboardPin.style.top = `${top}px`;
   if (!resetPeeking) return;
 
   const time = beatUnderBoard();
@@ -983,9 +999,16 @@ function drawAlternatives(ctx, s, scale, X, Y, lane, held) {
   const boxes = [];
   let hovered = null;
   ctx.lineWidth = 1.8;
+  const limits = limitsFor(lane, found.notes?.[0]);
   for (const choice of found.ranked) {
     const positions = [...choice.shape.values()];
     if (placeKey(positions) === heldKey) continue;   // the hand is not another position
+    // A candidate's notes are this column's, in order (see columnAlternatives), so
+    // each one answers to the technique of the note it would move.
+    if (choice.notes.some((voice, k) => {
+      const p = choice.shape.get(voice), note = found.notes[k];
+      return p && note && placementFault(limits?.get(note), note.pitch, p.string, found.tuning, s.frets);
+    })) continue;
     const mm = shapeBox(positions, s);
     if (!mm) continue;
     // Padded by a marker, so the border holds the shape instead of cutting it, and
@@ -1088,13 +1111,17 @@ function spotBox(p, scale, s, X, Y) {
 //
 // Strings a SIBLING is already holding are left out, because two notes cannot share
 // one, and so is the note's own current place, which the hand is already drawing
-// filled. What is left is exactly the set of legal single-note moves, so a ring is
-// never an offer that lapses.
+// filled, and so is anywhere the note's technique rules out (allowedAt) — no open
+// string under a slide, no string a slide's target cannot follow onto. What is left
+// is exactly the set of legal single-note moves, so a ring is never an offer that
+// lapses. A note that is slid or hammered ONTO has no rings at all: it goes where the
+// note before it goes, so that is the one to move.
 // Limitation: a swap (two notes trading strings) is two clicks, not one gesture.
 function notePlaces(lane, s, at) {
   const tuning = lane && laneTuning(lane);
   if (!at || !tuning || tuning.length !== s.strings) return null;
   return { at, out: notePlacements(at.marks, tuning, s.frets)
+    .filter(allowedAt(lane, tuning, s))
     .map((p) => ({ ...p, mm: fretCentre(p.fret, s) })) };
 }
 
@@ -1343,6 +1370,7 @@ export function init_fretboard() {
     button.addEventListener("click", () => {
       const col = pinnedColumn(currentLane());
       if (!col) return;
+      button.blur();                   // or it eats the arrow keys that walk the song
       setColumnInfluence(col.notes, side, !overrideInfluence(col.notes)[side]);
       drawFretboard();
     });
@@ -1430,7 +1458,8 @@ export function init_fretboard() {
     fretboardApply.blur();
     const col = shaping && columnOf(shaping.notes[0])?.col;
     if (!col) return;
-    const wrong = setColumnShape(col.notes, shaping.picked);
+    const lane = currentLane();
+    const wrong = setColumnShape(col.notes, shaping.picked, limitsFor(lane, col.notes[0]), laneSpec(lane).frets);
     if (wrong) { toast(wrong); return; }
     setFretboardShape(false);
   });

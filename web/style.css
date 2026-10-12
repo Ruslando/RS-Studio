@@ -268,7 +268,6 @@ main { flex: 1; min-height: 0; overflow: hidden; background: var(--workspace-gro
 }
 .group { display: flex; gap: var(--s-sibling); align-items: center; }
 .sep-v { width: 1px; height: var(--h-compact); flex-shrink: 0; background: var(--line); }
-.fretboard-context { flex-wrap: wrap; max-width: 100%; order: 10; flex-basis: 100%; }
 
 .transport-cluster { gap: var(--s-sibling); }
 
@@ -502,8 +501,12 @@ body.row-resizing { cursor: row-resize; user-select: none; }
 @media (prefers-reduced-motion: reduce) { #fretboardPanel { transition: none; } }
 
 #fretboardStage { flex: 1; min-width: 0; align-self: flex-start; position: relative; background: var(--stage); border-radius: var(--r-control); overflow: hidden; }
-#fretboardAuto { position: absolute; z-index: 2; background: var(--stage-chrome); color: var(--stage-text); border-color: var(--stage-line); }
-#fretboardAuto:hover:not(:disabled), #fretboardAuto:active:not(:disabled) { background: var(--stage-chrome-hover); border-color: var(--stage-hint); }
+#fretboardPin { position: absolute; z-index: 2; display: flex; gap: var(--s-pair); padding: var(--s-pair); background: var(--stage-chrome); border: 1px solid var(--stage-line); border-radius: var(--r-control); }
+#fretboardPin[hidden] { display: none; }
+#fretboardPin .icon-btn { color: var(--stage-hint); }
+#fretboardPin .icon-btn:hover:not(:disabled), #fretboardPin .icon-btn:active:not(:disabled) { background: var(--stage-chrome-hover); color: var(--stage-text); }
+#fretboardPin .icon-btn[aria-pressed="true"], #fretboardAuto { color: var(--stage-text); }
+#fretboardPin .icon-btn[aria-pressed="true"] { background: var(--stage-chrome-hover); box-shadow: inset 0 0 0 1px var(--stage-hint); }
 #fretboardResetStatus { position: absolute; bottom: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--label); font-size: var(--text-data); text-align: center; pointer-events: none; }
 
 #fretboardSide {
