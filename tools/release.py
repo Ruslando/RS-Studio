@@ -92,7 +92,7 @@ def build(version: str, notes: Path | None) -> list[Path]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("version", help="e.g. 0.2.2-alpha (tag v0.2.2-alpha)")
-    parser.add_argument("--notes", type=Path, help="Release notes (plain text): shown in the app's update dialog and on GitHub")
+    parser.add_argument("--notes", type=Path, help="Optional release notes (plain text): shown in the app's update dialog and above GitHub's generated changelog")
     parser.add_argument("--dry-run", action="store_true", help="Build everything, publish nothing")
     args = parser.parse_args()
     check(args)
@@ -118,7 +118,8 @@ def main() -> None:
     run("git", "push", "origin", "main", tag)
     notes = args.notes.read_text(encoding="utf-8").strip() if args.notes else ""
     body = SETUP_HINT + ("\n\n" + notes if notes else "")
-    run("gh", "release", "create", tag, *assets, "--title", tag, "--notes", body, "--latest", "--verify-tag")
+    # GitHub appends its generated changelog to the body.
+    run("gh", "release", "create", tag, *assets, "--title", tag, "--notes", body, "--generate-notes", "--latest", "--verify-tag")
     print(f"\nPublished {REPO_URL}/releases/tag/{tag}")
 
 
