@@ -509,17 +509,33 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   position: fixed; inset: 0; background: var(--scrim);
   display: grid; place-items: center; padding: var(--s-section);
 }
+/* A panel folds from a strip along its whole edge, not from a button in the middle
+   of it: the full width or height is the target, --w-edge deep. It is drawn as a
+   fade off the panel's edge — faint at rest, full under the pointer — and the
+   chevron only appears with the pointer, so an edge nobody is aiming at stays quiet.
+   The panel's contents are inset by the same --w-edge (see each panel), so nothing
+   clickable ever sits under the strip. */
 .edge-toggle {
-  width: 20px; height: 36px; padding: 0; flex: none;
-  background: transparent; border: 0; border-radius: var(--r-control);
-  color: var(--label); box-shadow: none;
+  display: flex; align-items: center; justify-content: center;
+  width: auto; height: auto; min-width: 0; min-height: 0;
+  padding: 0; flex: none; overflow: hidden;
+  background: transparent; border: 0; border-radius: 0;
+  color: var(--text); box-shadow: none; cursor: pointer;
+  --edge-tint: var(--control-hover); --edge-from: to left;
 }
-.edge-toggle--markers, .edge-toggle--fretboard { width: 36px; height: 20px; }
-.edge-toggle--markers { color: var(--spectral-label); background: var(--spectral-ground); }
-.edge-toggle:hover:not(:disabled), .edge-toggle:active:not(:disabled) { background: var(--control-hover); color: var(--text); }
+.edge-toggle::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--edge-from), var(--edge-tint), transparent);
+  opacity: .3; transition: opacity var(--dur-state) var(--ease);
+}
+.edge-toggle svg { position: relative; opacity: 0; }
+.edge-toggle:is(:hover, :focus-visible)::before { opacity: 1; }
+.edge-toggle:is(:hover, :focus-visible) svg { opacity: 1; }
+.edge-toggle--markers, .edge-toggle--fretboard { --edge-from: to bottom; }
+.edge-toggle--markers { color: var(--spectral-label); --edge-tint: color-mix(in srgb, var(--spectral-label) 45%, transparent); }
 .edge-toggle[aria-expanded="false"] svg { transform: rotate(180deg); }
 .edge-toggle svg, .side-chevron { stroke-width: 1.8; }
-.edge-toggle svg { transition: transform var(--dur-panel) var(--ease-panel); }
+.edge-toggle svg { transition: transform var(--dur-panel) var(--ease-panel), opacity var(--dur-state) var(--ease); }
 .metro-toggle:has(input:checked), .metro-toggle:has(input:checked):hover {
   background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
 }

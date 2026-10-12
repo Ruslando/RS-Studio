@@ -39,6 +39,15 @@ export function pitchAt(y) {
   return Math.max(S.state.spec.midi_low, Math.min(S.state.spec.midi_high, p));
 }
 
+// How tall the stage may be: #viewer less the band its marker-lane strip sits in
+// (the viewer's top padding, --w-edge). One reading, because layout() sizes the
+// canvas from it and draw() checks the canvas against it every frame.
+let viewerInset = -1;
+export function stageRoom() {
+  if (viewerInset < 0 && viewer.clientHeight > 0) viewerInset = parseFloat(getComputedStyle(viewer).paddingTop) || 0;
+  return viewer.clientHeight - Math.max(0, viewerInset);
+}
+
 export function layout() {
   // A hidden spectrogram reports a zero-sized viewport while tablature is open.
   // Never turn that transient measurement into a 1px canvas that has to recover
@@ -49,7 +58,7 @@ export function layout() {
   const scaleWidth = parseFloat(getComputedStyle($("appshell")).getPropertyValue("--w-pitch-scale"));
   ruler.style.width = scaleWidth + "px";
   rulerRight.style.width = scaleWidth + "px";
-  const measuredW = scroll.clientWidth, availableH = viewer.clientHeight;
+  const measuredW = scroll.clientWidth, availableH = stageRoom();
   if (measuredW < 1 || availableH < 1) return;
   const songW = songWidth();
   const viewW = measuredW;

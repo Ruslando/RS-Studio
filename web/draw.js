@@ -12,7 +12,7 @@ import { hideNoteMenu } from "./edit.js";
 import { drawFretboard } from "./fretboard.js";
 import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
 import { markerRails, overviewMarkerRails, railScale, railsBottom, railsHidden } from "./marker-rails.js";
-import { contentH, layout, pitchAt, songWidth, timeAt, xOf, yOf } from "./geometry.js";
+import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
 import { edgeOf, localXY, pickNote } from "./interaction.js";
 import { activeLane } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
@@ -306,7 +306,7 @@ function paintFrame() {
   // mismatch branch is cheap and layout() only rewrites canvas backing stores
   // when their dimensions actually changed.
   const dp = dpr();
-  const liveH = Math.max(STAGE_HEIGHT_MIN, viewer.clientHeight);
+  const liveH = Math.max(STAGE_HEIGHT_MIN, stageRoom());
   if (stage.width !== Math.round(scroll.clientWidth * dp) ||
       stage.height !== Math.round(liveH * dp) || S.stageHeight !== liveH) layout();
   const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth; // visible range (world px)

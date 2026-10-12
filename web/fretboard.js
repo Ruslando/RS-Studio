@@ -473,9 +473,11 @@ function layoutFretboard(slide = false) {
   const cssW = fretboardStage.clientWidth;
   if (cssW < 2 * PAD) return;
   const spec = laneSpec(currentLane());
+  // The strip that folds the panel sits above the board, in the panel's own padding.
+  const edge = parseFloat(getComputedStyle(fretboardPanel).getPropertyValue("--w-edge")) || 0;
   const height = userHeight
     ? Math.min(Math.max(userHeight, HEIGHT_MIN), editorEl.clientHeight * 0.7)
-    : Math.min(preferredHeight(cssW, spec), editorEl.clientHeight / 2);
+    : Math.min(preferredHeight(cssW, spec) + edge, editorEl.clientHeight / 2);
   // Resize observers also fire while adjacent panels move. Repainting the same
   // destination must not cancel a reveal that is already running — and neither must
   // the drag that started it: a panel pulled open off its handle keeps tweening
@@ -487,7 +489,7 @@ function layoutFretboard(slide = false) {
   // The board's box is pinned to the height the panel has *open*, so that closing the
   // panel slides it out of view instead of squashing it: the flex row would otherwise
   // stretch a neck into the collapsed bar while closing.
-  fretboardStage.style.height = Math.max(0, height - parseFloat(getComputedStyle(fretboardPanel).borderTopWidth)) + "px";
+  fretboardStage.style.height = Math.max(0, height - edge - parseFloat(getComputedStyle(fretboardPanel).borderTopWidth)) + "px";
   // Restored on the next frame, not on this one: put back in the same task and the
   // style recalc that re-enables it has not happened yet, so the browser can still
   // animate from the old height. One frame later the new height is settled and the

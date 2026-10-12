@@ -1189,10 +1189,17 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: 300; }
 
 .ri-facts { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--s-row); row-gap: var(--s-pair); }
 .side-label { letter-spacing: 0; }
-.edge-toggle--sidebar { position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 15; }
-#appshell.side-collapsed .edge-toggle--sidebar { right: 0; width: var(--w-sidebar-mini); }
-.edge-toggle--markers { position: absolute; top: var(--s-pair); left: 50%; transform: translateX(-50%); z-index: 15; }
-.edge-toggle--fretboard { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 15; }
+.edge-toggle--sidebar { position: absolute; top: 0; bottom: 0; right: 0; width: var(--w-edge); z-index: 15; border-radius: 0 var(--r-container) var(--r-container) 0; }
+#appshell.side-collapsed .edge-toggle--sidebar { width: 100%; border-radius: var(--r-container); }
+.edge-toggle--markers { position: absolute; top: 0; left: 0; right: 0; height: var(--w-edge); z-index: 15; }
+.edge-toggle--fretboard { position: absolute; top: 0; left: 0; right: 0; height: var(--w-edge); z-index: 15; border-radius: var(--r-container) var(--r-container) 0 0; }
+#fretboardPanel[data-collapsed] .edge-toggle--fretboard { height: 100%; border-radius: var(--r-container); }
+/* Room for the strips: the lists stop short of the sidebar's, and the neck and the
+   stage start below theirs. */
+#stemsSection, #layersSection { padding-right: var(--w-edge); }
+#fretboardPanel { padding-top: var(--w-edge); }
+#fretboardPanel[data-collapsed] { padding-top: 0; }
+#viewer { padding-top: var(--w-edge); }
 /* The editing stage; the overview above it is its own panel. */
 #editingWorkspace {
   display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
