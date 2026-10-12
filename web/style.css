@@ -501,36 +501,25 @@ body.row-resizing { cursor: row-resize; user-select: none; }
 @media (prefers-reduced-motion: reduce) { #fretboardPanel { transition: none; } }
 
 #fretboardStage { flex: 1; min-width: 0; align-self: flex-start; position: relative; background: var(--stage); border-radius: var(--r-control); overflow: hidden; }
-#fretboardPin { position: absolute; z-index: 2; display: flex; gap: var(--s-pair); padding: var(--s-pair); background: var(--stage-chrome); border: 1px solid var(--stage-line); border-radius: var(--r-control); }
+#fretboardPin { position: absolute; z-index: 2; display: flex; align-items: center; gap: var(--s-pair); padding: var(--s-pair); background: var(--stage-chrome); border: 1px solid var(--stage-line); border-radius: var(--r-control); white-space: nowrap; }
 #fretboardPin[hidden] { display: none; }
-#fretboardPin .icon-btn { color: var(--stage-hint); }
-#fretboardPin .icon-btn:hover:not(:disabled), #fretboardPin .icon-btn:active:not(:disabled) { background: var(--stage-chrome-hover); color: var(--stage-text); }
-#fretboardPin .icon-btn[aria-pressed="true"], #fretboardAuto { color: var(--stage-text); }
-#fretboardPin .icon-btn[aria-pressed="true"] { background: var(--stage-chrome-hover); box-shadow: inset 0 0 0 1px var(--stage-hint); }
-#fretboardResetStatus { position: absolute; bottom: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--label); font-size: var(--text-data); text-align: center; pointer-events: none; }
+/* The board is dark in both themes, so its controls take the stage's ladder and
+   not the panel's. */
+#fretboardPin .icon-btn, #fretboardPin .btn:not(.btn--primary) { background: transparent; border-color: transparent; color: var(--stage-hint); }
+#fretboardPin :is(.icon-btn, .btn:not(.btn--primary)):hover:not(:disabled) { background: var(--stage-chrome-hover); color: var(--stage-text); }
+#fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"], #fretboardAuto, #fretboardEdit { color: var(--stage-text); }
+#fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"] { background: var(--stage-chrome-hover); box-shadow: inset 0 0 0 1px var(--stage-hint); }
+#fretboardName { padding: 0 var(--s-pair); font: 600 var(--text-body)/1 var(--font-mono); color: var(--stage-text); }
+#fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
 
-#fretboardSide {
-  position: relative;
-  flex: none; width: 112px; display: flex; flex-direction: column;
-  align-items: center; justify-content: safe center; gap: var(--s-sibling);
-  padding: var(--s-row); background: var(--panel);
-}
-
-#fretboardName {
-  font: 600 var(--text-heading)/1.3 var(--font-ui); color: var(--text); text-align: left;
-  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-#fretboardStage, #fretboardSide { opacity: 1; transform: translateY(0); transition: opacity var(--dur-panel) var(--ease-panel), transform var(--dur-panel) var(--ease-panel); }
-#fretboardPanel[data-collapsed] #fretboardStage,
-#fretboardPanel[data-collapsed] #fretboardSide {
+#fretboardStage { opacity: 1; transform: translateY(0); transition: opacity var(--dur-panel) var(--ease-panel), transform var(--dur-panel) var(--ease-panel); }
+#fretboardPanel[data-collapsed] #fretboardStage {
   opacity: .2; pointer-events: none; transform: translateY(-35%);
 }
-#fretboardPanel[data-collapsed]:is(:hover, :has(:focus-visible), .is-peeking) :is(#fretboardStage, #fretboardSide) { opacity: .85; transform: translateY(-32%); }
-#fretboardPanel[data-collapsed] #fretboardEdit { visibility: hidden; }
+#fretboardPanel[data-collapsed]:is(:hover, :has(:focus-visible), .is-peeking) #fretboardStage { opacity: .85; transform: translateY(-32%); }
 @media (prefers-reduced-motion: reduce) {
   #fretboardPanel[data-collapsed] #fretboardStage,
-  #fretboardPanel[data-collapsed] #fretboardSide,
-  #fretboardStage, #fretboardSide { transition: none; }
+  #fretboardStage { transition: none; }
 }
 #fretboardPanel[data-collapsed] { height: var(--h-fretboard-mini); min-height: 0; }
 #fretboardPanel[data-collapsed]:is(:hover, :has(:focus-visible), .is-peeking) { height: var(--h-fretboard-peek); }

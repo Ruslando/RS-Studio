@@ -625,13 +625,13 @@ export const TOURS = {
       },
       {
         do: ACT.focusAlternative,
-        target: "fretboardEdit",
+        target: "fretboardStage",
         title: "Edit",
-        body: "The numbers on the fretted strings indicate the fingers, and the highlighted fret shows the hand placement. Use the pencil button to enter Edit mode and change the current note, chord, or hand placement. Its controls appear on the fretboard itself.",
+        body: "The numbers on the fretted strings indicate the fingers, and the highlighted fret shows the hand placement. Double-click the note, the chord or the highlighted fret to change it — or click it once and choose Edit under it. Done, or Escape, leaves Edit mode again.",
         until: UNTIL.fretboardEdit,
         task: "Open fretboard Edit mode",
         optional: true,
-        allow: "#fretboardEdit",
+        allow: "#fretboardStage",
       },
       {
         do: ACT.fbEdit,
@@ -656,7 +656,7 @@ export const TOURS = {
       {
         target: "fretboardStage",
         title: "How overrides affect fingering",
-        body: "An override is also used for the same note or chord wherever it comes up later; what was played before stays as it was. The two arrows under the overridden note switch each direction on or off. A hand placement may also affect earlier notes as the app works out how to reach that position.",
+        body: "An override is also used for the same note or chord wherever it comes up later; what was played before stays as it was. The two arrows under the overridden note switch each direction on or off, and the button beside them decides whether the other notes adapt to the override — the hand moves to it and what follows is played from there — or carry on as if it were not there. A hand placement may also affect earlier notes as the app works out how to reach that position.",
       },
       {
         target: "fretboardStage",

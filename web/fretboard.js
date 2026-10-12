@@ -15,8 +15,8 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // editor, and past that cap the board shrinks and centres instead of stretching.
 // Both mm → px scales are the same one, always.
 
-import { boardHalfWidthAt, boardLength, boardWidth, chordLabel, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
-import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardSide, fretboardStage } from "./dom.js";
+import { boardHalfWidthAt, boardLength, boardWidth, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
+import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardAdapt, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardStage } from "./dom.js";
 import { HALO, UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
 import { dpr, hexA, noteName } from "./util.js";
@@ -53,7 +53,6 @@ let visible = false;
 const laneSpec = (lane) => fretboardFor(instrKey(lane?.instrument));
 const currentLane = () => (S.state ? selectedTablatureLane(editLanes()) : null);
 let laidOut = null;
-let laidOutStrip = 0;
 
 // The selected tablature lane's fingering, as a timeline of grips. Voicing a whole
 // lane runs in a worker, so this is filled in asynchronously and the board draws
@@ -190,6 +189,12 @@ let alts = null;      // { note, rev, t0, notes, influence, ranked, boxes, hover
 // this be, and what would it do to its neighbours") and none of them is worth the
 // panel's width while you are only watching the song go past.
 let editing = false;
+// THE WAY IN IS THE GRIP ITSELF. Outside the mode the board is a picture, and the one
+// thing on it you can point at is what the hand is holding: double-click the note,
+// the chord or the hand's fret to edit it, or click it once and the bundle under it
+// offers Edit. It replaced a pencil in a side strip, which was a control about the
+// grip placed as far from the grip as the panel allowed.
+let armed = false;
 let altsJob = null;   // the note a request is out for, so one column is asked once
 
 // EVERY PLACE EACH NOTE COULD GO, one note at a time, drawn by the SAME toggle. It
@@ -286,7 +291,9 @@ function altsFor(note) {
 // away, so leaving edit mode cannot leave a stray ghost or a field of boxes behind.
 export function setFretboardEdit(on) {
   editing = !!on && visible;
+  armed = false;
   fretboardEdit.setAttribute("aria-pressed", String(editing));
+  fretboardEdit.textContent = editing ? "Done" : "Edit";
   fretboardPanel.toggleAttribute("data-editing", editing);
   drawFretboard();
   setFretboardAlts(editing);
@@ -294,7 +301,6 @@ export function setFretboardEdit(on) {
   fretboardEl.style.cursor = "";
   hoverFret = 0;
   if (!editing) { endResetPreview(); fretboardPin.hidden = true; }
-  // The strip's own buttons come and go with the mode, and the panel is as tall as it.
   layoutFretboard();
 }
 
@@ -319,7 +325,6 @@ function setFretboardShape(on) {
     ? { notes: notes.slice().sort((a, b) => a.pitch - b.pitch), picked: new Map() } : null;
   spots = null; spotHover = -1;
   fretboardShape.setAttribute("aria-pressed", String(!!shaping));
-  // Context controls change width when shape-building replaces the toggles.
   layoutFretboard();
 }
 
@@ -403,22 +408,7 @@ const boardHeight = (w, s) =>
 //
 // The board does not stretch into the extra room: both mm to px scales are bound by
 // whichever axis is tighter, so a height-rich panel simply centres the neck in it.
-const preferredHeight = (w, s) => Math.max(boardHeight(w, s), stripHeight());
-
-// = --s-group, the strip's own padding. A second name for 16 because it is a second
-// reason for it: PAD above is the canvas's inset.
-const STRIP_PAD = 16;
-
-// How tall the strip's content is, measured off the children rather than read from
-// scrollHeight — which drops the bottom padding often enough that the panel would come
-// out one inset short exactly when the strip is what is binding.
-function stripHeight() {
-  const kids = [...fretboardSide.children].filter((el) => !el.hidden && getComputedStyle(el).position !== "absolute");
-  if (!kids.length) return 0;
-  const top = kids[0].getBoundingClientRect().top;
-  const bottom = kids[kids.length - 1].getBoundingClientRect().bottom;
-  return Math.round(bottom - top) + 2 * STRIP_PAD;
-}
+const preferredHeight = (w, s) => boardHeight(w, s);
 
 // Two ways in — the View menu item and the panel's own chevron — so both go
 // through here and the check, the chevron and the panel cannot disagree.
@@ -445,9 +435,10 @@ export function setFretboardVisible(on) {
     fretboardBusy.hidden = true;
     endResetPreview();
     fretboardPin.hidden = true;
-    editing = false;
+    editing = false; armed = false;
     fretboardPanel.removeAttribute("data-editing");
     fretboardEdit.setAttribute("aria-pressed", "false");
+    fretboardEdit.textContent = "Edit";
     altsOn = false; alts = null; altsJob = null;
     spots = null; spotHover = -1; hoverFret = 0; shaping = null;
     fretboardShape.hidden = true;
@@ -679,8 +670,9 @@ export function drawFretboard() {
   const hovered = offering && chord ? drawAlternatives(ctx, s, scale, X, Y, lane, at) : null;
   const spot = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
   const placing = shaping ? drawShaping(ctx, s, scale, X, Y, lane) : null;
-  const label = drawHand(ctx, s, scale, X, Y, lane, !!hovered || !!spot || !!shaping || resetPeeking);
-  drawResetControl(ctx, s, scale, X, Y, lane, held, w, h);
+  // Something else is on offer: the grip in the hand steps back. See drawHand.
+  drawHand(ctx, s, scale, X, Y, lane, shaping ? "ghost" : hovered || spot || resetPeeking ? "fade" : null);
+  drawBundle(ctx, s, scale, X, Y, lane, held, w, h, chord, placing);
   if (hovered) drawOffer(ctx, s, scale, X, Y, hovered, lane);
   if (spot) drawNoteOffer(ctx, s, scale, X, Y, lane, spot);
   // An empty board is two different answers and it has to say which. The wait that
@@ -705,51 +697,22 @@ export function drawFretboard() {
     : "";
   fretboardBusy.hidden = !waiting;
   if (waiting && fretboardBusyLabel.textContent !== waiting) fretboardBusyLabel.textContent = waiting;
-  // What is being held goes in the strip, not on the wood. Over the nut it was mono
-  // 11 in the board's own top-left corner — the size of a fret number, in the room the
-  // instrument needs, read at an angle nothing else on the panel is read at. In the
-  // strip it is the panel's heading and the stylesheet gives it the heading tier.
-  // While a shape is being built the heading names the note being placed, which is the
-  // one thing you need to know and the reason there is no sentence anywhere saying what
-  // to do (rule 24). Complete, it goes back to naming the chord — which is now the
-  // shape you built, and the last thing to check before Apply.
-  const shown = placing ? noteName(placing.pitch) : label;
-  if (fretboardName.textContent !== shown) fretboardName.textContent = shown;
-  // WHAT IS BEING HELD IS FOR READING, NOT FOR WORKING ON. Editing, the panel is about
-  // where the notes could go instead, and a 24px chord name is the loudest thing in a
-  // strip whose other rows are the controls you came for. The walk keeps the slot,
-  // because the note it is asking for is not the chord name — it is the one thing you
-  // need to know while placing it.
-  fretboardName.hidden = false;
-  // Chords only: a lone note has every position on the board already.
-  fretboardShape.hidden = !editing || (!chord && !shaping);
-  fretboardApply.hidden = !shaping || !!placing;
-  refreshPinControls(lane);
-  // THE STRIP IS CONTENT AND THE PANEL IS AS TALL AS THE STRIP, so anything appearing
-  // or going in it — the mode's toggles, the chord name, an override's controls — is a
-  // re-layout and not only a repaint. Measured rather than enumerated, so a group
-  // added to the strip later needs no second place to remember it exists. Next frame,
-  // because this runs inside the draw a layout would call.
-  const strip = stripHeight();
-  if (strip !== laidOutStrip) {
-    laidOutStrip = strip;
-    requestAnimationFrame(() => layoutFretboard());
-  }
 }
 
-// The override's two reach toggles, on the column the board is showing. Whether the
-// bundle they sit in is up at all is drawPinBundle's call; this only says what they
-// read. A reach lives ON a pin, and a column can be overridden without one — a hand
-// put on the beat, or an override that dropped notes and left `written` behind — so
-// there the bundle is the way back alone.
-function refreshPinControls(lane) {
-  const col = editing ? pinnedColumn(lane) : null;
+// The override's three switches, on the column the board is showing: used again
+// before, used again after, and whether the other notes adapt (see
+// normalizeOverrideInfluence). They live ON a pin, and a column can be overridden
+// without one — a hand put on the beat, or an override that dropped notes and left
+// `written` behind — so there the bundle offers the way back alone.
+function refreshPinControls(lane, show) {
+  const col = show ? pinnedColumn(lane) : null;
   const pinned = !!col?.notes.some((n) => n.pos || n.arrangement);
-  fretboardReachPrev.hidden = fretboardReachNext.hidden = !pinned;
+  fretboardReachPrev.hidden = fretboardReachNext.hidden = fretboardAdapt.hidden = !pinned;
   if (!pinned) return;
   const reach = overrideInfluence(col.notes);
   fretboardReachPrev.setAttribute("aria-pressed", String(!!reach.previous));
   fretboardReachNext.setAttribute("aria-pressed", String(!!reach.next));
+  fretboardAdapt.setAttribute("aria-pressed", String(reach.adapt === true));
 }
 
 // The column under the hand, when it carries an override of any kind. Same focus the
@@ -771,31 +734,48 @@ function endResetPreview() {
   $("fretboardResetStatus").hidden = true;
 }
 
-// THE OVERRIDE'S BUNDLE, HUNG UNDER THE GRIP IT BELONGS TO: reach before, reach after,
-// and the way back. Centred under the note or chord and just clear of its lowest
-// mark, so it reads as part of that grip and never as a property of the panel; above
-// it instead when the grip sits on the bottom string and there is no room below.
-function drawResetControl(ctx, s, scale, X, Y, lane, held, width, height) {
-  const column = editing && !shaping ? pinnedColumn(lane) : null;
-  const enabled = editing && !shaping && !transportPlaying() && (!!column || !!held);
-  fretboardPin.hidden = !enabled;
-  if (!enabled) { endResetPreview(); return; }
-  refreshPinControls(lane);            // before measuring: the toggles change its width
-  const grip = focusGrip(lane, s);
+// THE BUNDLE, HUNG UNDER THE GRIP IT BELONGS TO. One floating group, and what is in
+// it is the state: Edit on a grip you clicked; in the mode, Done, the shape walk on
+// a chord, and — on a column that carries an override — its three switches and the
+// way back. Centred under the note or chord and just clear of its lowest mark, so it
+// reads as part of that grip; above it when the grip sits on the bottom string.
+//
+// While the song plays it parks at the foot of the board with Done alone: the grip
+// is moving, and a control that chases it cannot be clicked.
+function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placing) {
+  const playing = transportPlaying();
+  const shown = editing || (armed && !playing);
+  fretboardPin.hidden = !shown;
+  if (!shown) { endResetPreview(); return; }
+  const column = editing && !shaping && !playing ? pinnedColumn(lane) : null;
+  const overridden = editing && !shaping && !playing && (!!column || !!held);
+  // While a shape is being built the bundle names the note being placed, which is
+  // the one thing you need to know and the reason no sentence says what to do.
+  fretboardName.hidden = !placing;
+  if (placing) fretboardName.textContent = noteName(placing.pitch);
+  fretboardEdit.hidden = !!shaping;
+  // Chords only: a lone note has every position on the board already.
+  fretboardShape.hidden = !editing || playing || (!chord && !shaping);
+  fretboardApply.hidden = !shaping || !!placing;
+  fretboardAuto.hidden = !overridden;
+  refreshPinControls(lane, overridden);   // before measuring: they change its width
+  if (!overridden) endResetPreview();
+
+  const grip = playing ? null : focusGrip(lane, s);
   const focus = focusNote(lane);
   const marks = (grip?.marks || []).map((m) => ({
     x: X(m.x), y: Y(stringOffsetAt(m.string, Math.max(0, m.x), s)), r: markRadius(m.x, scale, s),
   }));
   const bw = fretboardPin.offsetWidth, bh = fretboardPin.offsetHeight, gap = 6;
+  const foot = height - bh - 4;
   const cx = marks.length
     ? (Math.min(...marks.map((m) => m.x)) + Math.max(...marks.map((m) => m.x))) / 2
-    : X(fretCentre(held?.fret || 1, s));
-  const below = marks.length ? Math.max(...marks.map((m) => m.y + m.r)) + gap : height / 2;
-  const above = marks.length ? Math.min(...marks.map((m) => m.y - m.r)) - gap - bh : below;
-  const top = below + bh <= height - 4 ? below : Math.max(4, above);
+    : held && !playing ? X(fretCentre(held.fret || 1, s)) : width / 2;
+  const below = marks.length ? Math.max(...marks.map((m) => m.y + m.r)) + gap : foot;
+  const above = marks.length ? Math.min(...marks.map((m) => m.y - m.r)) - gap - bh : foot;
   fretboardPin.style.left = `${Math.max(4, Math.min(width - bw - 4, cx - bw / 2))}px`;
-  fretboardPin.style.top = `${top}px`;
-  if (!resetPeeking) return;
+  fretboardPin.style.top = `${below <= foot ? below : Math.max(4, above)}px`;
+  if (!resetPeeking || !overridden) return;
 
   const time = beatUnderBoard();
   const key = `${handKey(lane)}:${column?.t0 ?? focus?.start}:${time}:${songBarStarts().join(',')}`;
@@ -1199,13 +1179,18 @@ function drawOnion(ctx, s, scale, X, Y, columns, i, hue) {
   }
 }
 
-// Draws the hand and returns the name of what it is holding, for the readout.
+// Draws the hand.
 //
-// `quiet` is the hand while a position is being considered: an offer is on the board
-// in the layer's colour, and two grips in one colour on one neck is a picture of a
-// hand with six fingers. So the current shape drops to the candidates' tier and
-// becomes another outline — still there to compare against, no longer the loudest
-// thing on the board. It is the same swap the offer makes in reverse.
+// `quiet` is the hand while something else is on offer, and it never changes what the
+// hand LOOKS like — only how firmly it is there:
+//
+//   "fade"   an offer or the reset preview is under the pointer. The grip stays the
+//            filled marks it was and drops in opacity, which says "this stops
+//            applying if you click". It used to become a plain outline, and a plain
+//            outline is exactly what every OTHER position on the neck is drawn as —
+//            so where you are and what you were being offered were the same picture.
+//   "ghost"  a shape is being built by hand. There the filled marks are the notes
+//            already placed, so the old grip steps right back to an outline.
 // Which fret the hand is anchored on right now — the same column drawHand draws, so
 // the band and the grip can never disagree about which moment they are showing.
 function anchorFret(lane) {
@@ -1224,12 +1209,14 @@ function anchorFret(lane) {
   return i >= 0 ? Number(found.columns[i].seat) || 0 : 0;
 }
 
+const FADED = 0.4;   // the grip in the hand while another one is being considered
+
 function drawHand(ctx, s, scale, X, Y, lane, quiet) {
   // A 6-string board cannot honestly show a bass. Until the bass neck exists,
   // a lane with another string count gets the instrument and no fingers.
-  if (!lane || !lane.notes?.length) return "";
+  if (!lane || !lane.notes?.length) return;
   const found = gripsFor(lane);
-  if (!found || found.strings !== s.strings) return "";
+  if (!found || found.strings !== s.strings) return;
   // While the positions are on screen the hand holds the column being decided instead
   // of following the playhead: the boxes are a comparison, and a comparison against a
   // moving target is not one. A grip's own onset asks for it pressed and still — the
@@ -1239,10 +1226,17 @@ function drawHand(ctx, s, scale, X, Y, lane, quiet) {
   const hue = lane.color || PAINT.accent;
   if (editing && $("fretboardOnionEnabled").checked) drawOnion(ctx, s, scale, X, Y, found.columns, gripIndex(found.columns, t), hue);
   const at = handAt(found.columns, t, frozen == null ? travelSeconds() : 0, s);
-  if (!at) return "";
-  if (quiet) {
+  if (!at) return;
+  if (quiet === "ghost") {
     drawGrip(ctx, s, scale, X, Y, at.marks, PAINT.hint, false, { digits: false });
-    return chordLabel(at.marks.filter((m) => !m.dead).map((m) => m.pitch));
+    return;
+  }
+  if (quiet) {
+    ctx.save();
+    ctx.globalAlpha = FADED;
+    drawGrip(ctx, s, scale, X, Y, at.marks, hue, true);
+    ctx.restore();
+    return;
   }
 
   // The strike: a ring blooming out of the marker and fading, so a rhythm and the
@@ -1264,9 +1258,6 @@ function drawHand(ctx, s, scale, X, Y, lane, quiet) {
     }
   }
   drawGrip(ctx, s, scale, X, Y, at.marks, hue, at.pressed);
-  // A muted string has no pitch, so it names nothing — a grip that is all mutes has
-  // no name, which is the honest answer and not a gap.
-  return chordLabel(at.marks.filter((m) => !m.dead).map((m) => m.pitch));
 }
 
 // ---- putting the hand somewhere ----
@@ -1345,6 +1336,21 @@ function spotUnder(e) {
   return i >= 0 ? spots[i] : null;
 }
 
+// Whether the pointer is on what the hand is holding: one of the grip's marks (with a
+// little slack — a mark on the top strings is a small target) or the fret the hand is
+// anchored on. This is the whole clickable surface of the board outside edit mode.
+function gripUnder(e) {
+  const lane = currentLane();
+  if (!lane || !view) return false;
+  const r = fretboardEl.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+  const X = (mm) => view.originX + mm * view.scale, Y = (off) => view.mid + off * view.scale;
+  const onMark = (focusGrip(lane, view.s)?.marks || []).some((m) => Math.hypot(
+    px - X(m.x), py - Y(stringOffsetAt(m.string, Math.max(0, m.x), view.s))) <= markRadius(m.x, view.scale, view.s) + 4);
+  const seat = anchorFret(lane);
+  return onMark || (seat > 0 && fretUnder(e) === seat);
+}
+
 function boxUnder(e) {
   if (!altsOn || !alts?.boxes?.length) return -1;
   // clientX against the canvas's own rect, not offsetX: the same reading
@@ -1366,7 +1372,7 @@ export function init_fretboard() {
   for (const button of panelControls("fretboard")) button.addEventListener("click", () => setFretboardVisible(!visible));
   // Both reach toggles act on the column the strip is already naming, and both leave
   // the shape exactly as it is — only the blast radius moves.
-  for (const [button, side] of [[fretboardReachPrev, "previous"], [fretboardReachNext, "next"]]) {
+  for (const [button, side] of [[fretboardReachPrev, "previous"], [fretboardReachNext, "next"], [fretboardAdapt, "adapt"]]) {
     button.addEventListener("click", () => {
       const col = pinnedColumn(currentLane());
       if (!col) return;
@@ -1383,7 +1389,7 @@ export function init_fretboard() {
     if (!lane) return;
     endResetPreview();
     clearOverrideAt(lane, pinnedColumn(lane)?.notes || null, beatUnderBoard());
-    fretboardEdit.focus({ preventScroll: true });
+    fretboardAuto.blur();
     drawFretboard();
   });
   fretboardEl.addEventListener("mousemove", (e) => {
@@ -1392,7 +1398,7 @@ export function init_fretboard() {
     const spot = spots ? spots.indexOf(spotUnder(e)) : -1;
     const i = spot >= 0 || shaping ? -1 : boxUnder(e);
     const fret = editing && !shaping && spot < 0 ? Math.max(0, fretUnder(e)) : 0;
-    fretboardEl.style.cursor = editing && (spot >= 0 || i >= 0 || fret > 0) ? "pointer" : "";
+    fretboardEl.style.cursor = (editing ? spot >= 0 || i >= 0 || fret > 0 : !transportPlaying() && gripUnder(e)) ? "pointer" : "";
     const moved = spot !== spotHover || fret !== hoverFret;
     spotHover = spot;
     hoverFret = fret;
@@ -1412,8 +1418,17 @@ export function init_fretboard() {
   // The board is a control only while the mode says so. Anywhere on the wood, not
   // only off a candidate box: a box is a drawing of a place the notes could go, and
   // wanting the hand there is the commonest reason to be pointing at one.
+  fretboardEl.addEventListener("dblclick", (e) => {
+    if (!editing && gripUnder(e)) setFretboardEdit(true);
+  });
   fretboardEl.addEventListener("click", (e) => {
-    if (!editing) return;
+    if (!editing) {
+      // The second click of a double-click lands here too and changes nothing: the
+      // grip is already armed, and dblclick takes it from there.
+      const on = !transportPlaying() && gripUnder(e);
+      if (on !== armed) { armed = on; drawFretboard(); }
+      return;
+    }
     const lane = currentLane();
     if (!lane) return;
     // While a shape is being built the board is only that: a circle places the note
@@ -1465,9 +1480,12 @@ export function init_fretboard() {
   });
   // Escape leaves the walk with nothing written, which is what the staging promised.
   // Transient depth: it is canvas state, above the selection and below every window.
+  // And then the mode itself, which no longer has a button of its own to leave by
+  // when nothing is under the hand.
   registerEscapeLayer(ESC_DEPTH.transient, () => {
-    if (!shaping) return false;
-    setFretboardShape(false);
+    if (shaping) setFretboardShape(false);
+    else if (editing) setFretboardEdit(false);
+    else return false;
     return true;
   });
   $("fretboardOnionEnabled").addEventListener("change", () =>
