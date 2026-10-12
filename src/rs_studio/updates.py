@@ -53,11 +53,29 @@ def _launcher() -> list[str] | None:
         return None
 
 
+RELEASES = "https://api.github.com/repos/Ruslando/RS-Studio/releases/latest"
+
+
+def _latest_release() -> dict:
+    """The newest published release, for copies that run from source and update themselves."""
+    import urllib.request
+    request = urllib.request.Request(RELEASES, headers={"User-Agent": "RS-Studio", "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(request, timeout=15) as response:
+        release = json.loads(response.read(1024 * 1024))
+    return {"latest": str(release["tag_name"]).removeprefix("v"), "notes": str(release.get("body") or "")[:20000]}
+
+
 def check() -> dict:
-    """{supported, current, latest, available, notes, can_install}; raises on network/signature errors."""
+    """{supported, current, latest, available, notes, can_install}; raises on network/signature errors.
+
+    supported is whether this copy can install the update itself. A copy that
+    runs from source cannot, but is still told that a newer release exists.
+    """
     config = _config()
     if config is None:
-        return {"supported": False, "current": __version__}
+        release = _latest_release()
+        return {"supported": False, "current": __version__, "can_install": False, **release,
+                "available": _newer(release["latest"], __version__)}
     allow_local = os.environ.get("RS_STUDIO_ALLOW_LOCAL") == "1"
     payload = _installer().fetch_manifest(config, allow_local=allow_local)["payload"]
     return {"supported": True, "current": __version__, "latest": payload["version"],
@@ -65,12 +83,42 @@ def check() -> dict:
             "can_install": _launcher() is not None}
 
 
+def runtime() -> dict:
+    """What Settings > Acceleration shows: the installed PyTorch build and whether CUDA can be added.
+
+    {supported, runtime, cuda: {useful, reason, extra_bytes} | None, can_install}
+    """
+    root = os.environ.get("RS_STUDIO_INSTALL_ROOT")
+    try:
+        envelope = json.loads((Path(root) / "current.json").read_text(encoding="utf-8")) if root else None
+        runtimes = envelope["payload"]["runtimes"] if envelope else None
+    except (OSError, ValueError, KeyError, TypeError):
+        runtimes = None
+    if not runtimes:
+        return {"supported": False}
+    cuda = runtimes.get("cuda")
+    # --runtime exists from launcher 3 on; an older "RS Studio.exe" would exit on the unknown argument.
+    can_install = _launcher() is not None and (_config() or {}).get("launcher_version", 0) >= 3
+    return {"supported": True, "runtime": envelope.get("runtime", "core"), "can_install": can_install,
+            "cuda": {**_installer().cuda_check(cuda),
+                     "extra_bytes": max(0, cuda["download_bytes"] - runtimes["core"]["download_bytes"])} if cuda else None}
+
+
 def start_install() -> None:
     """Hand over to the launcher, which waits for this process to exit, updates and reopens RS Studio."""
+    _hand_over("--update")
+
+
+def start_runtime(name: str) -> None:
+    """Hand over to the launcher to add a runtime (CUDA) to this installation and reopen RS Studio."""
+    _hand_over("--runtime", name)
+
+
+def _hand_over(*arguments: str) -> None:
     command = _launcher()
     if command is None:
         raise RuntimeError("This copy of RS Studio was not started by its launcher.")
     flags = (subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP) if os.name == "nt" else 0
-    subprocess.Popen([*command, "--update", "--wait-pid", str(os.getpid())], creationflags=flags, close_fds=True)
+    subprocess.Popen([*command, *arguments, "--wait-pid", str(os.getpid())], creationflags=flags, close_fds=True)
     # Let the HTTP response reach the page before the whole app (window included) exits.
     threading.Timer(1.0, os._exit, args=(0,)).start()

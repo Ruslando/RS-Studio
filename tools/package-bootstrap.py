@@ -69,6 +69,10 @@ def requirement_blocks(text: str) -> dict[str, tuple[str, str, str | None]]:
     for block in re.split(r"\n(?=\S)", text.strip()):
         match = re.match(r"([A-Za-z0-9._-]+)==([^\s;\\]+)\s*(?:;\s*([^\\\n]+?))?\s*\\?\n", block + "\n")
         if match:
+            # One package can be locked at two versions for different Pythons or
+            # systems; of those, keep the block that applies to this interpreter.
+            if match[1].lower() in blocks and match[3] and not Marker(match[3]).evaluate():
+                continue
             blocks[match[1].lower()] = (block, match[2], match[3])
     return blocks
 
@@ -188,7 +192,7 @@ def main():
     python = platform.python_version()
     python_tag = f"cp{sys.version_info.major}{sys.version_info.minor}"
     lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
-    core = subprocess.run(["uv", "export", "--frozen", "--no-dev", "--no-emit-project", "--no-header", "--format", "requirements.txt"],
+    core = subprocess.run(["uv", "export", "--frozen", "--no-default-groups", "--no-emit-project", "--no-header", "--format", "requirements.txt"],
                           cwd=ROOT, capture_output=True, text=True, check=True).stdout
     built = Path(tempfile.mkdtemp(prefix="rs-wheels-"))
     core, core_wheels, shipped = platform_wheels(core, lock, built)
@@ -232,6 +236,10 @@ def main():
                "app": app, "ffmpeg": ffmpeg, "runtimes": runtimes}
     if args.notes:
         payload["notes"] = args.notes.read_text(encoding="utf-8").strip()
+    # The optional model downloads setup offers; the app itself owns their URLs and hashes.
+    sys.path.insert(0, str(ROOT / "src"))
+    from rs_studio import models
+    payload["models"] = models.installable()
     signature = key.sign(canonical(payload), padding.PKCS1v15(), hashes.SHA256())
     envelope = {"payload": payload, "signature": base64.b64encode(signature).decode("ascii")}
     # The setup asks the newest release for its manifest, so one setup EXE keeps working for later

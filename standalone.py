@@ -71,9 +71,43 @@ def _bootstrap_check(destination: Path) -> int:
         return 1
 
 
+def _download_models(model_ids: list[str], destination: Path) -> int:
+    """Fetch the models chosen in setup, one after another, with the app's own downloader.
+
+    Prints "model <done> <total> <label>" for the installer's progress bar and
+    reports the ones that did not arrive; a part-file stays and resumes in
+    Settings > Models.
+    """
+    import time
+    failed = []
+    try:
+        from rs_studio import models
+        for model_id in model_ids:
+            row = next((r for r in models.status() if r["id"] == model_id), None)
+            if row is None or row["state"] == "bundled":
+                continue
+            if row["state"] != "ready":
+                models.start_download(model_id)
+                while True:
+                    row = next(r for r in models.status() if r["id"] == model_id)
+                    if row["state"] != "downloading":
+                        break
+                    print(f"model {row['done']} {row['size'] or 0} {row['label']}", flush=True)
+                    time.sleep(0.5)
+            if row["state"] != "ready":
+                failed.append(row["label"])
+        destination.write_text(json.dumps({"ok": True, "failed": failed}), encoding="utf-8")
+        return 0
+    except BaseException as exc:
+        destination.write_text(json.dumps({"ok": False, "error": str(exc) or type(exc).__name__}), encoding="utf-8")
+        return 1
+
+
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     if len(sys.argv) == 3 and sys.argv[1] == "--bootstrap-check":
         raise SystemExit(_bootstrap_check(Path(sys.argv[2])))
+    if len(sys.argv) == 4 and sys.argv[1] == "--download-models":
+        raise SystemExit(_download_models(sys.argv[2].split(","), Path(sys.argv[3])))
     from rs_studio.desktop import launch
     launch()

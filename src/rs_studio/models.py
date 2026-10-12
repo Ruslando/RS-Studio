@@ -230,6 +230,33 @@ def pause_download(model_id: str) -> None:
         job["stop"].set()
 
 
+def installable() -> list[dict]:
+    """The optional downloads RS Studio Setup offers, for the signed release manifest."""
+    return [{"id": m["id"], "label": m["label"], "kind": m["kind"], "size": m["size"]}
+            for m in _catalog() if not m.get("bundled") and _sources(m) and m.get("size")]
+
+
+def remove(model_id: str) -> None:
+    """Delete a model's files and any partial download, so it reads as missing again.
+
+    Raises KeyError for a model that cannot be removed (unknown, or bundled
+    with a library) and RuntimeError while it is downloading or loaded.
+    """
+    m = _entry(model_id)
+    if not m or m.get("bundled"):
+        raise KeyError(model_id)
+    with _lock:
+        if (_jobs.get(model_id) or {}).get("state") == "running":
+            raise RuntimeError("Pause the download before removing the model.")
+        _jobs.pop(model_id, None)
+    try:
+        for file in m["files"]:
+            for path in (file, file.with_name(file.name + ".part")):
+                path.unlink(missing_ok=True)
+    except OSError as exc:  # Windows refuses to delete weights that are loaded
+        raise RuntimeError("The model is in use. Restart RS Studio, then remove it.") from exc
+
+
 class Paused(Exception):
     """The user pressed pause. Not an error: the .part stays and resumes."""
 

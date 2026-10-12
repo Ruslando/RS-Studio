@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
 SCHEMA = 2
-LAUNCHER_VERSION = 2  # must match "launcher_version" in bootstrap-release.json
+LAUNCHER_VERSION = 3  # must match "launcher_version" in bootstrap-release.json; 3 added --runtime
 MAX_MANIFEST = 1024 * 1024
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -148,6 +148,15 @@ def validate_manifest(envelope: dict, config: dict, *, allow_local: bool = False
                 raise InstallError("Invalid runtime size.")
         if "cuda" in payload["runtimes"] and not all(type(arch) is int for arch in payload["runtimes"]["cuda"]["cuda_archs"]):
             raise InstallError("Invalid CUDA runtime description.")
+        # Optional model downloads setup may offer; the app fetches them from its own pinned URLs.
+        models = payload.get("models", [])
+        if type(models) is not list or len(models) > 50:
+            raise InstallError("Invalid model list in release.")
+        for model in models:
+            if not ID.fullmatch(model["id"]) or type(model["size"]) is not int or model["size"] <= 0:
+                raise InstallError("Invalid model in release.")
+            if any(type(model[field]) is not str or not 0 < len(model[field]) <= 100 for field in ("label", "kind")):
+                raise InstallError("Invalid model description in release.")
         return payload
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise InstallError("The release manifest is invalid.") from exc
@@ -156,8 +165,8 @@ def validate_manifest(envelope: dict, config: dict, *, allow_local: bool = False
 def cuda_check(runtime: dict | None, query=None) -> dict:
     """Ask the NVIDIA driver whether the CUDA runtime would speed things up.
 
-    Advisory only: anyone may still install CUDA. Uses nvidia-smi, which ships
-    with every NVIDIA driver, so the launcher needs no GPU library.
+    Setup offers CUDA only when this says it is useful. Uses nvidia-smi, which
+    ships with every NVIDIA driver, so the launcher needs no GPU library.
     """
     if runtime is None:
         return {"useful": False, "reason": "This release has no CUDA runtime."}
@@ -626,6 +635,43 @@ def health_check(root: Path, environment: Path, app: Path, ffmpeg: Path, cancel:
             raise InstallError("The installed libraries could not complete their startup check.") from exc
         if process.returncode != 0 or report.get("ok") is not True:
             raise InstallError("Verification failed: " + str(report.get("error", "Unknown error")))
+    finally:
+        result.unlink(missing_ok=True)
+
+
+def download_models(root: Path, active: dict, model_ids: list[str], cancel: threading.Event, progress) -> list[str]:
+    """Fetch optional models with the installed app's own downloader; returns the labels that failed.
+
+    Runs after the installation is active, so a failure here never undoes it:
+    what did not arrive can be downloaded in Settings > Models.
+    """
+    app, python = Path(active["app_dir"]), environment_python(Path(active["environment"]))
+    fd, result_name = tempfile.mkstemp(suffix=".json", prefix="models-", dir=root)
+    os.close(fd)
+    result = Path(result_name)
+    try:
+        process = subprocess.Popen([str(python), str(app / "standalone.py"), "--download-models", ",".join(model_ids), str(result)],
+                                   cwd=app, env=application_environment(root, app, Path(active["ffmpeg_dir"])),
+                                   creationflags=NO_WINDOW, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                   stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
+        def follow():
+            with process.stdout:
+                for line in process.stdout:
+                    if match := re.fullmatch(r"model (\d+) (\d+) (.+)", line.strip()):
+                        progress("Downloading models", int(match[1]), int(match[2]), file=match[3])
+        reader = threading.Thread(target=follow, daemon=True)
+        reader.start()
+        while process.poll() is None:
+            if cancel.wait(0.1):
+                process.kill()
+                process.wait()
+                check_cancel(cancel)
+        reader.join(5)
+        try:
+            report = json.loads(result.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            report = {}
+        return list(report["failed"]) if report.get("ok") is True else ["the selected models"]
     finally:
         result.unlink(missing_ok=True)
 

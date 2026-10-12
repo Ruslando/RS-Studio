@@ -43,6 +43,7 @@ main { flex: 1; min-height: 0; overflow: auto; padding: 24px 28px; display: flex
 .row:has(input:not(:disabled)) { cursor: pointer; }
 .row:has(input:not(:disabled)):hover { background: var(--control); }
 .row input { margin: 1px 0 0; width: 18px; height: 18px; accent-color: var(--accent); cursor: inherit; }
+.row.off .title, .row.off .desc, .row.off .size { color: var(--hint); }
 .row.simple { align-items: center; font-size: 14px; }
 .row.simple input { margin: 0; }
 .title { display: flex; align-items: center; gap: 8px; font: 600 14px/20px var(--font-ui); }
@@ -113,6 +114,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outl
       </label>
     </div>
   </div>
+  <div id="models" hidden>
+    <p class="section">Models</p>
+    <div class="list" id="model-list"></div>
+  </div>
   <div id="where" hidden>
     <p class="section">Installation folder</p>
     <div class="list"><div class="location"><span class="path" id="folder"></span><button id="browse">Browse…</button></div></div>
@@ -124,6 +129,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outl
       <li><span class="mark"></span>Set up Python</li>
       <li><span class="mark"></span>Install libraries</li>
       <li><span class="mark"></span>Verify installation</li>
+      <li id="models-step" hidden><span class="mark"></span>Download models</li>
     </ol>
     <div class="current">
       <div class="file" id="file"></div>
@@ -152,7 +158,7 @@ const VIEWS = {
 };
 const HEADINGS = { checking: 'Preparing setup', installing: 'Installing', error: 'Setup stopped', stopping: 'Stopping',
                    launching: 'Opening RS Studio', done: 'Installation complete', finishing: 'Finishing' };
-const STAGES = ['Downloading', 'Unpacking', 'Preparing Python', 'Installing libraries', 'Checking installation'];
+const STAGES = ['Downloading', 'Unpacking', 'Preparing Python', 'Installing libraries', 'Checking installation', 'Downloading models'];
 const STEP_OF = { 'Checking downloaded files': 0 };
 function size(bytes) { return bytes >= 1073741824 ? (bytes / 1073741824).toFixed(2) + ' GB' : (bytes / 1048576).toFixed(0) + ' MB'; }
 function duration(seconds) {
@@ -162,18 +168,37 @@ function duration(seconds) {
 }
 function heading(text, icon) { $('heading').innerHTML = (icon || '') + '<span></span>'; $('heading').lastChild.textContent = text; }
 function status(text, tone) { $('status').className = tone || ''; $('status').textContent = text; }
-let state = '', kind = '', shown = null, hasComponents = false;
+let state = '', kind = '', shown = null, hasComponents = false, cudaUsable = false;
+
+// Optional, and none preselected: RS Studio works without them and every one
+// can be added or removed later in Settings > Models.
+function showModels(models) {
+  $('model-list').replaceChildren(...models.map(model => {
+    const row = document.createElement('label');
+    row.className = 'row';
+    row.innerHTML = '<input type="checkbox"><span><span class="title"></span><span class="size"></span></span>';
+    row.querySelector('input').value = model.id;
+    row.querySelector('.title').textContent = model.label;
+    row.querySelector('.size').textContent = model.kind + ' · ' + size(model.size);
+    return row;
+  }));
+}
+function chosenModels() { return [...document.querySelectorAll('#model-list input:checked')].map(box => box.value); }
 
 function showComponents(data) {
   hasComponents = !!data.core;
+  showModels(data.models || []);
   if (!data.core) return;
   $('version').textContent = data.version ? 'v' + data.version : '';
   $('core-size').textContent = size(data.core.download_bytes);
   $('cuda-item').hidden = !data.cuda;
   if (!data.cuda) return;
-  // Preselect what is installed; otherwise follow the GPU check.
-  $('cuda').checked = data.installed_runtime ? data.installed_runtime === 'cuda' : data.cuda.useful;
-  $('cuda-tag').textContent = data.cuda.useful ? 'Recommended' : 'Optional';
+  // Offered only where it can run: without a usable GPU the row stays, greyed
+  // out, with the reason. Otherwise preselect what is installed, else CUDA.
+  cudaUsable = data.cuda.useful;
+  $('cuda').checked = cudaUsable && (data.installed_runtime ? data.installed_runtime === 'cuda' : true);
+  $('cuda-item').classList.toggle('off', !cudaUsable);
+  $('cuda-tag').textContent = cudaUsable ? 'Recommended' : 'Unavailable';
   $('cuda-tag').classList.toggle('ok', data.cuda.useful);
   $('cuda-size').textContent = '+' + size(data.cuda.download_bytes - data.core.download_bytes);
   $('cuda-notice').className = 'notice' + (data.cuda.useful ? '' : ' warn');
@@ -187,6 +212,7 @@ function render(data) {
   const working = ['installing', 'stopping', 'launching'].includes(state);
   const choosing = state === 'ready';
   $('choose').hidden = !(choosing && kind !== 'occupied' && hasComponents);
+  if (!choosing) $('models').hidden = true;
   $('where').hidden = !(choosing || state === 'error') || !data.folder;
   $('progress').hidden = !(state === 'installing' || state === 'stopping');
   $('finish').hidden = !finished;
@@ -198,13 +224,15 @@ function render(data) {
     kind = data.kind;
     if (shown !== data.folder + kind) { shown = data.folder + kind; showComponents(data); }
     $('choose').hidden = kind === 'occupied' || !hasComponents;
+    // A new installation only; an existing one manages its models in the app.
+    $('models').hidden = !(kind === 'install' || kind === 'continue') || !hasComponents || !$('model-list').children.length;
     $('repair').hidden = !(kind === 'installed' && hasComponents);
     const [title, text, action] = VIEWS[kind];
     heading(title, kind === 'installed' ? DONE : '');
     status(kind === 'installed' ? 'Version ' + data.installed_version + (data.installed_runtime === 'cuda' ? ' · CUDA' : '') : text);
     $('install').textContent = action;
     $('install').disabled = kind === 'occupied' || (kind !== 'installed' && !hasComponents);
-    $('cuda').disabled = false;
+    $('cuda').disabled = !cudaUsable;
     $('close').textContent = 'Close';
     $('close').disabled = false;
     return;
@@ -214,7 +242,8 @@ function render(data) {
     const repaired = data.message === 'RS Studio is repaired.';
     const ok = repaired || data.message === 'RS Studio is installed.';
     heading(repaired ? 'Repair complete' : HEADINGS.done, ok ? DONE : '');
-    status(ok ? '' : data.message, ok ? '' : 'error');
+    const missed = (data.models_failed || []).join(', ');
+    status(!ok ? data.message : missed ? 'Not downloaded: ' + missed + '. Get them in Settings > Models.' : '', ok ? '' : 'error');
     for (const row of document.querySelectorAll('.shortcut')) row.hidden = !data.shortcuts;
     for (const box of document.querySelectorAll('#finish input')) box.disabled = state === 'finishing';
     $('install').textContent = 'Finish';
@@ -237,7 +266,7 @@ function render(data) {
     item.querySelector('.mark').innerHTML = index < current ? CHECK : '';
   });
   const measured = data.total > 0;
-  const bytes = current === 0 || data.message === 'Unpacking';
+  const bytes = current === 0 || data.message === 'Unpacking' || data.message === 'Downloading models';
   $('bar').classList.toggle('busy', !measured);
   $('fill').style.width = measured ? Math.min(100, data.done / data.total * 100) + '%' : '';
   $('file').textContent = data.file || data.message;
@@ -257,7 +286,11 @@ window.addEventListener('pywebviewready', () => {
     $('install').disabled = true;
     if (state === 'done') await api.finish($('start-menu').checked, $('desktop').checked, $('open').checked);
     else if (state === 'ready' && kind === 'installed') await api.open();
-    else await api.install($('cuda').checked);
+    else {
+      const models = kind === 'install' || kind === 'continue' ? chosenModels() : [];
+      $('models-step').hidden = !models.length;
+      await api.install($('cuda').checked, models);
+    }
   });
   $('repair').addEventListener('click', () => api.repair($('cuda').checked));
   $('browse').addEventListener('click', () => api.browse());

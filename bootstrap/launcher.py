@@ -18,7 +18,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from installer import (LAUNCHER_VERSION, Cancelled, cuda_check, fetch_manifest, install as install_release,
+from installer import (LAUNCHER_VERSION, Cancelled, cuda_check, download_models, fetch_manifest, install as install_release,
                        installed_release, installed_runtime, is_installation, launch)
 
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -36,9 +36,10 @@ def installed_launcher(root: Path, relaunch: list[str]) -> list[str]:
     """Command that opens this installation. A frozen setup copies itself into it
     as "RS Studio.exe", so the downloaded setup can be deleted; a source run relaunches itself."""
     if not getattr(sys, "frozen", False):
-        return [str(Path(sys.executable).with_name("pythonw.exe")), str(Path(__file__).resolve()), *relaunch,
+        python = Path(sys.executable).with_name("pythonw.exe") if os.name == "nt" else Path(sys.executable)
+        return [str(python), str(Path(__file__).resolve()), *relaunch,
                 "--install-root", str(root), "--launch"]
-    target = root / "RS Studio.exe"
+    target = root / ("RS Studio.exe" if os.name == "nt" else "RS Studio")
     if Path(sys.executable).resolve() != target.resolve():
         shutil.copy2(sys.executable, target)
     return [str(target)]
@@ -71,9 +72,11 @@ def wait_for_exit(pid: int, timeout: float = 30) -> None:
 class InstallerWindow:
     """Only a few small methods are exposed through pywebview's JS bridge."""
     def __init__(self, config: dict, destination: Path, *, fixed: bool = False, update: bool = False,
-                 allow_local: bool = False, relaunch: list[str] = ()):
+                 switch: str | None = None, allow_local: bool = False, relaunch: list[str] = ()):
         self._config = config
         self._update = update  # started by the app's Update button
+        self._switch = switch  # started by Settings > Acceleration: add this runtime, then reopen
+        self._models = []      # optional models chosen in setup, fetched after installing
         self._destination = destination
         self._fixed = fixed  # started from an installation: open it, or repair it
         self._allow_local = allow_local
@@ -84,6 +87,7 @@ class InstallerWindow:
         self._closed = False
         self._envelope = None
         self._runtime = "core"
+        self._cuda_usable = False  # the page greys CUDA out; this is what enforces it
         self._installed = None
         self._relaunch = list(relaunch)
         self._active = None
@@ -114,11 +118,13 @@ class InstallerWindow:
             self._destination = install_target(folder.resolve())
         self._inspect()
 
-    def install(self, cuda: bool = False) -> None:
-        self._start(cuda, repair=False)
+    def install(self, cuda: bool = False, models: list[str] = ()) -> None:
+        offered = {model["id"] for model in (self._envelope or {}).get("payload", {}).get("models", [])}
+        self._models = [model for model in models or () if model in offered]
+        self._start(cuda and self._cuda_usable, repair=False)
 
     def repair(self, cuda: bool = False) -> None:
-        self._start(cuda, repair=True)
+        self._start(cuda and self._cuda_usable, repair=True)
 
     def open(self) -> None:
         if self._installed and not self._busy:
@@ -208,7 +214,13 @@ class InstallerWindow:
             root = self._destination
             self._set("checking", "Checking " + str(root) + "…")
             self._installed = installed_release(root, self._config, allow_local=self._allow_local)
-            if self._installed and self._fixed and not self._update:
+            if self._switch and self._envelope is None:
+                # Adding a runtime changes this installation, not its version: stay on the installed release.
+                try:
+                    self._envelope = json.loads((root / "current.json").read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    pass
+            if self._installed and self._fixed and not (self._update or self._switch):
                 self._open_app(self._installed)
                 return
             kind = "installed" if self._installed else "continue" if is_installation(root) else "install"
@@ -231,9 +243,17 @@ class InstallerWindow:
                 def sizes(runtime):
                     return {"download_bytes": runtimes[runtime]["download_bytes"] + payload["app"]["bytes"] + payload["ffmpeg"]["bytes"]}
                 cuda = runtimes.get("cuda")
+                checked = cuda_check(cuda) if cuda else None
+                self._cuda_usable = bool(checked and checked["useful"])
                 details.update(version=payload["version"], core=sizes("core"),
-                               cuda=dict(sizes("cuda"), **cuda_check(cuda)) if cuda else None)
+                               cuda=dict(sizes("cuda"), **checked) if cuda else None, models=payload.get("models", []))
             self._set("ready", "", **details)
+            if self._switch and self._installed:
+                if self._installed["runtime"] != self._switch and self._cuda_usable:
+                    self._start(True, repair=False)
+                else:
+                    self._open_app(self._installed)  # already there, or no GPU for it: just reopen
+                return
             if self._update and self._installed:
                 if self._envelope and self._envelope["payload"]["version"] != self._installed["version"]:
                     self._start(self._installed["runtime"] == "cuda", repair=False)
@@ -254,11 +274,13 @@ class InstallerWindow:
             self._active = install_release(self._destination, self._envelope, self._config, self._cancel, progress,
                                            runtime=self._runtime, repair=repair, allow_local=self._allow_local)
             self._installed = self._active
-            if self._update:
+            if self._update or self._switch:
                 self._open_app(self._active)
                 return
+            # The installation is complete and active here; models are extra and may fail on their own.
+            failed = download_models(self._destination, self._active, self._models, self._cancel, progress) if self._models and not repair else []
             self._set("done", "RS Studio is repaired." if repair else "RS Studio is installed.",
-                      shortcuts=os.name == "nt", folder=str(self._destination))
+                      shortcuts=os.name == "nt", folder=str(self._destination), models_failed=failed)
         except Cancelled as exc:
             self._set("error", str(exc), folder=str(self._destination))
         except Exception as exc:
@@ -305,6 +327,7 @@ def main() -> None:
     frozen = getattr(sys, "frozen", False)
     parser = argparse.ArgumentParser(description="RS Studio setup and launcher")
     parser.add_argument("--update", action="store_true", help="Install the newest release, then reopen RS Studio")
+    parser.add_argument("--runtime", choices=["cuda"], help="Add this runtime to the installation, then reopen RS Studio")
     parser.add_argument("--wait-pid", type=int, help="Wait until this process (the running app) has exited")
     if not frozen:  # development only: local test releases and test folders
         parser.add_argument("--install-root", type=Path, help="Suggested installation folder")
@@ -320,7 +343,7 @@ def main() -> None:
         if getattr(args, "allow_local", False):
             os.environ["RS_STUDIO_ALLOW_LOCAL"] = "1"  # the app's update check uses the same test release
         if not frozen:
-            root, fixed = (args.install_root or Path.cwd() / "RS Studio").resolve(), args.launch or args.update
+            root, fixed = (args.install_root or Path.cwd() / "RS Studio").resolve(), args.launch or args.update or bool(args.runtime)
             relaunch = (["--config", str(args.config.resolve())] if args.config else []) + (["--allow-local"] if args.allow_local else [])
         elif is_installation(here):
             root, fixed = here, True  # this is the installed "RS Studio.exe"
@@ -330,7 +353,7 @@ def main() -> None:
         config = json.loads(config_path.read_text(encoding="utf-8"))
         if config["launcher_version"] != LAUNCHER_VERSION or not isinstance(config["public_key"], dict):
             raise ValueError("Invalid launcher configuration")
-        InstallerWindow(config, root, fixed=fixed, update=args.update and fixed,
+        InstallerWindow(config, root, fixed=fixed, update=args.update and fixed, switch=args.runtime if fixed else None,
                         allow_local=getattr(args, "allow_local", False), relaunch=relaunch)._run()
     except Exception as exc:
         if os.name == "nt":

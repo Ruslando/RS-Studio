@@ -7,6 +7,8 @@ import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { renderModels, stopModelPolling } from "./models.js";
 
 let step = 1;
+// False when RS Studio Setup installed this copy: it already offered the models.
+let modelsStep = true;
 
 function audioLink(linux) {
   return linux
@@ -30,7 +32,7 @@ function showAudioStatus(status) {
   }
 
   $("setupAudioIntro").textContent = linux
-    ? "Linux uses the bundled wwise-wem library to create Rocksmith audio."
+    ? "Rocksmith export on Linux needs the optional wwise-wem encoder."
     : "Windows requires a local Wwise installation for Rocksmith export.";
   $("setupAudioStatus").textContent = ready
     ? (linux ? "Linux audio tools found" : `Wwise ${status.version || ""} found`)
@@ -38,7 +40,7 @@ function showAudioStatus(status) {
   $("setupAudioDot").className = `dot dot--${ready ? "ok" : "warn"}`;
   $("setupAudioDetail").textContent = linux
     ? (ready ? "This Linux export path is experimental. Check playback and seeking in Rocksmith 2014."
-      : "Reinstall RS Studio so the wwise-wem package is included.")
+      : "Install Rust, then run uv sync: it builds the encoder.")
     : (ready ? "Rocksmith audio export is available."
       : "Install Wwise, then return to RS Studio. You can continue setting up models now.");
   $("setupAudioLink").hidden = ready;
@@ -72,9 +74,9 @@ function showStep(next) {
     $("setupProgressAudio").removeAttribute("aria-current");
     $("setupProgressModels").setAttribute("aria-current", "step");
   }
-  $("setupSkip").hidden = step !== 1;
+  $("setupSkip").hidden = step !== 1 || !modelsStep;
   $("setupBack").hidden = step !== 2;
-  $("setupNext").textContent = step === 1 ? "Choose models" : "Go to projects";
+  $("setupNext").textContent = step === 1 && modelsStep ? "Choose models" : "Go to projects";
   if (step === 2) renderModels($("setupModels"));
   else stopModelPolling();
   $("setupNext").focus();
@@ -97,7 +99,7 @@ async function finishSetup() {
 
 export async function init_setup() {
   $("setupNext").addEventListener("click", () => {
-    if (step === 1) showStep(2);
+    if (step === 1 && modelsStep) showStep(2);
     else finishSetup();
   });
   $("setupBack").addEventListener("click", () => showStep(1));
@@ -121,6 +123,8 @@ export async function init_setup() {
     if (!response.ok) return;
     const state = await response.json();
     if (state.complete) return;
+    modelsStep = state.models_step !== false;
+    $("setupProgressModels").hidden = !modelsStep;
     $("setupSaveStatus").hidden = true;
     $("setupBackdrop").hidden = false;
     showStep(1);

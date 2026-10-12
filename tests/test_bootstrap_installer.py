@@ -2,6 +2,7 @@ import base64
 import hashlib
 import http.server
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -30,13 +31,17 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
 
+# Where a virtual environment keeps its libraries; the installer reads the same layout.
+SITE = "Lib/site-packages" if os.name == "nt" else "lib/python3.12/site-packages"
+
+
 def fake_environment(root, runtime, environment, app, wheels, payload, cancel, progress):
     """Stands in for uv: installs the downloaded wheels as .dist-info folders."""
     python = installer.environment_python(environment)
     python.parent.mkdir(parents=True, exist_ok=True)
     python.write_bytes(b"python")
     (environment / "pyvenv.cfg").write_text(f"version_info = {payload['python']}")
-    site = environment / "Lib/site-packages"
+    site = environment / SITE
     for wheel in payload["runtimes"][runtime]["wheels"]:
         name, version = installer.distribution_key(wheel["name"])
         if (site / f"{name}-{version}.dist-info").is_dir():
@@ -117,6 +122,7 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(window.status()['state'], 'done')
             open_app.assert_not_called()
 
+    @unittest.skipUnless(os.name == "nt", "Start menu and desktop shortcuts are Windows-only")
     def test_finish_creates_chosen_shortcuts_and_opens_only_on_request(self):
         window = InstallerWindow(self.config, self.destination, allow_local=True, relaunch=["--allow-local"])
         window._active = {"app_dir": "app", "version": "1.0"}
@@ -221,6 +227,68 @@ class InstallerTests(unittest.TestCase):
             window._perform()
         self.assertEqual(install.call_args.kwargs["runtime"], "cuda")
 
+    def test_window_refuses_cuda_without_a_usable_gpu(self):
+        window = InstallerWindow(self.config, self.destination, allow_local=True)
+        with patch("launcher.cuda_check", return_value={"useful": False, "reason": "No NVIDIA graphics card found."}):
+            window._perform()
+        self.assertFalse(window.status()["cuda"]["useful"])
+        with patch("launcher.install_release", return_value=self.payload) as install, patch("launcher.launch"), \
+                patch("threading.Thread"):
+            window.install(cuda=True)  # the page greys the box out; a stale page must not get past that
+            window._perform()
+        self.assertEqual(install.call_args.kwargs["runtime"], "core")
+
+    def offer_models(self):
+        self.payload["models"] = [{"id": "demucs", "label": "Demucs", "kind": "Stem separation", "size": 5},
+                                  {"id": "mt3", "label": "MR-MT3", "kind": "Note detection", "size": 7}]
+        self.envelope = self.sign(self.payload)
+        (self.server_root / "manifest.json").write_text(json.dumps(self.envelope), encoding="utf-8")
+
+    def test_manifest_model_list_is_validated(self):
+        self.offer_models()
+        self.assertEqual(len(installer.validate_manifest(self.envelope, self.config, allow_local=True)["models"]), 2)
+        for bad in ({"id": "../x", "label": "X", "kind": "K", "size": 1}, {"id": "x", "label": "", "kind": "K", "size": 1},
+                    {"id": "x", "label": "X", "kind": "K", "size": 0}):
+            with self.subTest(bad=bad), self.assertRaises(installer.InstallError):
+                installer.validate_manifest(self.sign({**self.payload, "models": [bad]}), self.config, allow_local=True)
+
+    def test_chosen_models_are_fetched_after_the_installation_is_active(self):
+        self.offer_models()
+        window = InstallerWindow(self.config, self.destination, allow_local=True)
+        with patch("launcher.cuda_check", return_value={"useful": False, "reason": "none"}):
+            window._perform()
+        self.assertEqual([model["id"] for model in window.status()["models"]], ["demucs", "mt3"])
+        order = []
+        with patch("launcher.install_release", side_effect=lambda *a, **k: order.append("install") or self.payload), \
+                patch("launcher.download_models", side_effect=lambda *a: order.append(a[2]) or ["MR-MT3"]) as fetch, \
+                patch("threading.Thread"):
+            window.install(models=["mt3", "not-in-this-release"])
+            window._perform()
+        self.assertEqual(order, ["install", ["mt3"]])  # only what the release offers, and only afterwards
+        fetch.assert_called_once()
+        status = window.status()
+        self.assertEqual((status["state"], status["models_failed"]), ("done", ["MR-MT3"]))  # a failed model is not a failed install
+
+    def test_settings_can_add_cuda_to_the_installed_release(self):
+        self.install()
+        newer = dict(self.payload, version="2.0")  # what the network would offer: adding CUDA must not update
+        (self.server_root / "manifest.json").write_text(json.dumps(self.sign(newer)), encoding="utf-8")
+        for useful, expected in ((True, "cuda"), (False, None)):
+            with self.subTest(useful=useful):
+                window = InstallerWindow(self.config, self.destination, fixed=True, switch="cuda", allow_local=True)
+                with patch("launcher.cuda_check", return_value={"useful": useful, "reason": "GPU"}), \
+                        patch("launcher.install_release", return_value=self.payload) as install, \
+                        patch("launcher.launch") as opened, patch.object(window, "_destroy"), patch("threading.Thread"):
+                    window._inspect()
+                    if window._busy:  # _inspect started the installation; its thread is patched out
+                        window._perform()
+                if expected:
+                    self.assertEqual(install.call_args.kwargs["runtime"], expected)
+                    self.assertEqual(install.call_args.args[1]["payload"]["version"], "1.0")
+                else:
+                    install.assert_not_called()  # no usable GPU: nothing to install
+                opened.assert_called()           # either way RS Studio comes back
+
     def test_cuda_environment_is_separate_and_remembered(self):
         core = self.install()
         cuda = self.install(runtime="cuda")
@@ -308,7 +376,7 @@ class InstallerTests(unittest.TestCase):
     def test_only_missing_libraries_are_downloaded(self):
         active = self.install()
         environment = Path(active["environment"])
-        shutil.rmtree(next((environment / "Lib/site-packages").glob("torch-*.dist-info")))
+        shutil.rmtree(next((environment / SITE).glob("torch-*.dist-info")))
         (environment / "rs-studio-environment.json").unlink()
         QuietHandler.ranges.clear()
         fetched = []

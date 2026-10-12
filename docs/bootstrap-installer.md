@@ -18,15 +18,36 @@ tested set. Optional model weights remain managed by Settings > Models.
 
 The setup window lists **Core** (required) and **NVIDIA CUDA acceleration**
 (optional). Choosing CUDA installs the +cu126 PyTorch wheels instead of the CPU
-ones (requirements/cuda.txt); it also runs without a GPU.
+ones (requirements/cuda.txt).
 
 Before offering it, the launcher asks nvidia-smi (shipped with every NVIDIA
 driver) for each GPU's compute capability, driver version and memory. CUDA is
 pre-selected only when a GPU can run the architectures compiled into the CUDA
 torch (stored in the manifest as cuda_archs) with a CUDA 12 driver (528.33+).
-Otherwise the option stays available with the reason it would not help, for
+Otherwise the option is shown greyed out with the reason it cannot be used, for
 example no NVIDIA GPU, an outdated driver, or a GPU newer than the build
-(RTX 50-series needs sm_120, which cu126 torch does not include).
+(RTX 50-series needs sm_120, which cu126 torch does not include). The launcher
+enforces this as well: it installs Core when asked for CUDA without a usable GPU.
+
+CUDA can be added later in **Settings > Acceleration** (rs_studio/updates.py,
+GET /api/runtime, POST /api/runtime/cuda). The app starts
+`RS Studio.exe --runtime cuda` and exits; the launcher installs the CUDA build
+of the *installed* release (it does not update), switches current.json and
+reopens RS Studio. This needs launcher version 3: an installation made by an
+older setup shows the entry as unavailable until the current setup has been run
+on it once.
+
+## Models
+
+The setup window lists the optional model downloads below the components, none
+preselected. The list (id, label, kind, size) is part of the signed manifest,
+written by tools/package-bootstrap.py from rs_studio/models.py. After the
+installation is verified and active, the launcher runs
+`standalone.py --download-models <ids>` in the new environment, so the app's
+own downloader fetches them from its pinned URLs. A model that fails does not
+fail the installation; the finish page names it and it can be fetched in
+Settings > Models, where installed models can also be removed. The app's
+first-run dialog skips its model step in an installation made by setup.
 
 ## Portable installation folder
 

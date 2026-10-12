@@ -17,6 +17,7 @@ import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-r
 import { panelMotion } from "./panel-motion.js";
 import { applyCoverChange, clearProjectCover, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { refreshSaveState } from "./project.js";
+import { renderAcceleration } from "./acceleration.js";
 import { renderModels, stopModelPolling } from "./models.js";
 import { S } from "./store.js";
 import { exportRocksmith } from "./rocksmith-export.js";
@@ -148,6 +149,7 @@ function showSettingsPane(section) {
   $("spKeys").hidden = section !== "keys";
   $("spAppearance").hidden = section !== "appearance";
   $("spModels").hidden = section !== "models";
+  $("spAcceleration").hidden = section !== "acceleration";
   $("settingsModalTitle").textContent = section === "project" ? SP_TITLES.project : "Settings";
   $("settingsApply").textContent = SP_PRIMARY[section] || "Apply";
   $("settingsApply").disabled = false;   // renderProjectSettings disables it with no project open
@@ -163,6 +165,7 @@ function showSettingsPane(section) {
   });
   if (section === "project") renderProjectSettings();
   if (section === "models") renderModels();
+  if (section === "acceleration") renderAcceleration();
   if (section === "keys") { setKeyTab("edit"); renderKeymap(); }
 }
 

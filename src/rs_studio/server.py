@@ -1331,6 +1331,37 @@ def api_model_pause(model_id: str) -> JSONResponse:
     return JSONResponse(models.status())
 
 
+@app.get("/api/runtime")
+def api_runtime() -> JSONResponse:
+    """The installed PyTorch build and whether NVIDIA CUDA can be added to it."""
+    return JSONResponse(updates.runtime())
+
+
+@app.post("/api/runtime/cuda")
+def api_runtime_cuda() -> JSONResponse:
+    """Close RS Studio, let setup add the CUDA build, and reopen."""
+    state = updates.runtime()
+    if not state.get("supported") or not (state.get("cuda") or {}).get("useful"):
+        raise HTTPException(status_code=409, detail="CUDA acceleration is not available on this computer.")
+    try:
+        updates.start_runtime("cuda")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/models/{model_id}")
+def api_model_remove(model_id: str) -> JSONResponse:
+    """Delete one downloaded model's files. It can be downloaded again."""
+    try:
+        models.remove(model_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="This model cannot be removed") from None
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return JSONResponse(models.status())
+
+
 @app.get("/api/separators")
 def api_separators() -> JSONResponse:
     """Stem-separation backends for the analyze form (with availability)."""
@@ -1618,7 +1649,9 @@ def api_rocksmith_audio_converter() -> dict:
 @app.get("/api/setup")
 def api_setup_status() -> dict:
     """A durable first-run marker, independent of the desktop server's port."""
-    return {"complete": _SETUP_MARKER.is_file() or _LEGACY_SETUP_MARKER.is_file()}
+    # RS Studio Setup already offered the models; the first-run dialog then skips that step.
+    return {"complete": _SETUP_MARKER.is_file() or _LEGACY_SETUP_MARKER.is_file(),
+            "models_step": not os.environ.get("RS_STUDIO_INSTALL_ROOT")}
 
 
 @app.post("/api/setup/complete")

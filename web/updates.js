@@ -15,6 +15,10 @@ async function fetchUpdate() {
   return data;
 }
 
+// A copy that runs from source has no launcher to install an update with. It
+// is still told about a new release, and how to get it; the notice can be ignored.
+const MANUAL = "This copy runs from source. Update it with:\ngit pull";
+
 function showUpdate(data) {
   latest = data.available ? data : null;
   $("welcomeUpdateBtn").classList.toggle("has-update", !!latest);
@@ -26,6 +30,10 @@ function showUpdate(data) {
 async function openUpdate() {
   if (!latest) return;
   const message = latest.notes || `Installed: ${latest.current}`;
+  if (!latest.supported) {
+    await confirmChoice({ title: `RS Studio ${latest.latest}`, message: `${message}\n\n${MANUAL}`, confirmLabel: "OK", cancelLabel: "Later" });
+    return;
+  }
   const choice = await confirmChoice({ title: `RS Studio ${latest.latest}`, message, confirmLabel: "Update now", cancelLabel: "Later" });
   if (choice !== "confirm") return;
   if (!latest.can_install) {
@@ -46,8 +54,7 @@ async function checkNow(button) {
   button.disabled = true;
   try {
     const data = await fetchUpdate();
-    if (!data.supported) toast("Updates require the installed RS Studio.", 5000);
-    else if (data.available) { showUpdate(data); openUpdate(); }
+    if (data.available) { showUpdate(data); openUpdate(); }
     else toast(`RS Studio ${data.current} is up to date`);
   } catch (error) {
     toast(error.message, 6000, "warn");

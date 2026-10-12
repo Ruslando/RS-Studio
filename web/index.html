@@ -719,7 +719,7 @@
           <span id="settingsModalTitle">Trace options</span></span>
         <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
-<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button></nav>      <div class="sp-body">
+<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="sp-body">
         <!-- Marker timing state: feature wiring still binds these ids, but BPM,
              meter, division, and offset are edited through the marker popover. -->
         <div class="sp-pane" id="spTempo" hidden>
@@ -838,6 +838,13 @@
             <div id="modelListDetection" class="model-list model-list-detection"></div>
           </div>
           <p id="modelStatus" class="sp-note model-status" hidden></p>
+        </div>
+        <div class="sp-pane" id="spAcceleration" hidden><div class="pane-intro"><h2>Acceleration</h2><p>Run audio separation and note detection on an NVIDIA graphics card.</p></div>
+          <div class="field-group block">
+            <span class="field-label">Graphics card</span>
+            <div id="accelList" class="model-list"></div>
+          </div>
+          <p id="accelStatus" class="sp-note model-status" hidden></p>
         </div>
         <div class="sp-pane" id="spProject" hidden>
           <!-- Rule 27: title and artist are read together, and so are album and

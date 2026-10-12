@@ -6,6 +6,7 @@
 // is a job with its own progress — it runs when pressed and does not wait for
 // Apply.
 
+import { confirmAction } from "./dialog.js";
 import { $ } from "./dom.js";
 
 const POLL_MS = 1000;
@@ -71,16 +72,15 @@ function modelValue(model) {
 // disabled rather than by going missing — an empty slot reads as "still
 // loading", which is the one thing none of these are.
 //
-// "Installed", not "Downloaded": the row answers whether the model is here, and
-// where it came from is not the question. It also stops the disabled label from
-// being the enabled one plus two letters, which at --hint contrast is a button
-// that looks broken rather than a state that reads.
+// A model that is here says so with its dot; its button is what can still be
+// done about it, which is taking it off the disk again. One that ships inside a
+// library cannot be removed on its own, so that row keeps a disabled label.
 // `act` is what pressing it does, so a running download is not a dead label any
 // more: it is the one row state whose button stops the work rather than starting
 // it. Resume and Retry are the same job — continue from the bytes on disk — and
 // they are named apart only because one of them was the user's own decision.
 const ACTIONS = {
-  ready:       { label: "Installed", act: null },
+  ready:       { label: "Remove", act: "remove" },
   bundled:     { label: "Included", act: null },
   downloading: { label: "Pause", act: "pause" },
   paused:      { label: "Resume", act: "download" },
@@ -156,10 +156,10 @@ export function modelRow(model, root) {
   go.className = "model-get";
   // A model with no URL can't be fetched however missing it is, so its button
   // states what it wants instead of offering something that would fail.
-  const usable = action.act && (model.downloadable || action.act === "pause");
+  const usable = action.act && (model.downloadable || action.act !== "download");
   go.textContent = usable || model.state !== "missing" ? action.label : "Not installed";
   go.disabled = !usable;
-  if (usable) go.addEventListener("click", () => post(model.id, action.act, root));
+  if (usable) go.addEventListener("click", () => (action.act === "remove" ? remove(model, root) : post(model.id, action.act, root)));
 
   row.append(dot, name, value, go);
 
@@ -199,6 +199,23 @@ export async function renderModels(root = $("spModels")) {
 export function stopModelPolling() {
   clearTimeout(pollTimer);
   pollTimer = null;
+}
+
+// The one destructive action here, so the one that asks first: a model is
+// hundreds of megabytes to fetch again.
+async function remove(model, root) {
+  const size = model.size ? ` (${mb(model.size)})` : "";
+  if (!await confirmAction({ title: `Remove ${model.label}?`,
+    message: `Its files${size} are deleted from this computer. You can download it again later.`,
+    confirmLabel: "Remove", danger: true })) return;
+  setModelStatus(root, "");
+  try {
+    const res = await fetch(`/api/models/${model.id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "remove failed");
+    render(await res.json(), root);
+  } catch (error) {
+    setModelStatus(root, error.message, true);
+  }
 }
 
 async function post(id, verb, root) {
