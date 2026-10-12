@@ -126,7 +126,9 @@ export function drawRuler() {
       const y = yOf(p) + S.state.rowH - vy0;
       if (y < -2 || y > S.stageHeight + 2) continue;
       rctx.fillStyle = isC ? PAINT.label : PAINT.hint;
-      if (hoverY == null || Math.abs(y - 6 - hoverY) > labelH) rctx.fillText(noteName(p), width / 2, y - 2);
+      // Hidden only where the hover box would cut through the text: half the box
+      // plus half the glyph height. A full labelH also swallowed the row above.
+      if (hoverY == null || Math.abs(y - 6 - hoverY) > labelH / 2 + 5) rctx.fillText(noteName(p), width / 2, y - 2);
       rctx.strokeStyle = PAINT.line;
       rctx.beginPath(); rctx.moveTo(0, y); rctx.lineTo(width, y); rctx.stroke();
     }
