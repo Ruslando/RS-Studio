@@ -48,8 +48,12 @@ ROCKSMITH_SECTION_NAMES = {
     "tapping",
 }
 
-# Limitation: legato slides are exported as shift slides (no parent/child note
-# linking); add pendingLinkNext handling if linked slides ever matter.
+# A legato slide is a linked pair, as in XmlToSngNote.fs's pendingLinkNexts: the
+# source is the Parent, held exactly until the target, and the target is its
+# Child, which the game draws as the same note carrying on — no second pick. A
+# shift slide stays two picked notes, which is what "shift" means.
+# Limitation: only a single-note target becomes a Child (the reference converter
+# links nothing into a chord either), so a legato slide into a chord is re-picked.
 
 
 @dataclass
@@ -789,11 +793,15 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
     prev_note: S.Note | None = None
     dropped_connected_slides = 0
 
-    def next_fret_on_string(idx: int, string: int) -> int | None:
+    # string -> index of a legato Parent still waiting for its Child. The index
+    # is the note's own: one SNG note per entity, so it equals `idx`.
+    link_parents: dict[int, int] = {}
+
+    def next_on_string(idx: int, string: int) -> tuple[int, float] | None:
         for e2 in entities[idx + 1:]:
             for s, f, _ in e2.notes:
                 if s == string:
-                    return f
+                    return f, e2.time
         return None
 
     def techniques(n: dict, string: int, fret: int, sustain: float, time: float, idx: int) -> tuple:
@@ -816,12 +824,19 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             arr_props["hopo"] = True
         slide = n.get("slide")
         if slide in ("shift", "legato"):
-            target = next_fret_on_string(idx, string)
-            if target is not None and target != fret and target > 0:
+            target = next_on_string(idx, string)
+            if target is not None and target[0] != fret and target[0] > 0:
                 sustain = max(sustain, SUSTAIN_MIN)
                 mask |= S.SLIDE | S.SUSTAIN
-                slide_to = target
+                slide_to = target[0]
                 arr_props["slides"] = True
+                if slide == "legato":
+                    # Held right up to the target, gap or overlap in the editor
+                    # notwithstanding: the game only links a Child that starts
+                    # where its Parent's sustain ends.
+                    sustain = target[1] - time
+                    mask |= S.PARENT
+                    link_parents[string] = idx
             else:
                 dropped_connected_slides += 1
         elif slide in ("outDown", "outUp"):
@@ -864,8 +879,11 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         if e.chord_id == -1:
             string, fret, n = e.notes[0]
             sustain = e.sustain
+            parent = link_parents.pop(string, -1)
             mask, vibrato = _base_note_mask(n, fret, sustain)
             mask |= S.SINGLE
+            if parent != -1:
+                mask |= S.CHILD
             extra, sustain, slide_to, unpitch_to, bends, max_bend, tap, slap, pluck = techniques(
                 n, string, fret, sustain, e.time, idx)
             mask |= extra
@@ -878,6 +896,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 mask=mask, time=e.time, string=string, fret=fret,
                 anchor_fret=anchor_fret, anchor_width=anchor_width,
                 phrase_id=arr.phrase_iterations[pi_id].phrase_id, phrase_iteration_id=pi_id,
+                parent_prev_note=parent,
                 slide_to=slide_to, slide_unpitch_to=unpitch_to,
                 tap=tap, slap=slap, pluck=pluck, vibrato=vibrato,
                 sustain=sustain, max_bend=max_bend, bend_values=bends,
@@ -888,6 +907,8 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         else:
             # chord: template-level mask + optional per-string chord notes
             sustain = e.sustain
+            for s, _, _ in e.notes:
+                link_parents.pop(s, None)      # a chord is never a Child
             template = chord_templates[e.chord_id]
             cn_id = -1
             include_chord_notes = e.first_in_shape or e.arpeggio_print != -1
@@ -929,6 +950,8 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 mask |= S.SUSTAIN
             if cn_id != -1:
                 mask |= S.CHORDNOTES
+                if any(m & S.PARENT for m in chord_notes_list[cn_id].mask):
+                    mask |= S.PARENT
             if e.arpeggio_print != -1:
                 mask |= S.ARPEGGIO
             elif e.first_in_shape:
