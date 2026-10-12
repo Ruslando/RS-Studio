@@ -22,7 +22,7 @@ import { playbackTime } from "./playback.js";
 import { S, setSelection } from "./store.js";
 import { setPlaybackCursor } from "./tracing.js";
 import { clamp } from "./util.js";
-import { chordColumns, columnShapeChoices, lockedShape, overrideInfluence, shapeKey } from "./voicing-core.js";
+import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey } from "./voicing-core.js";
 
 export * from "./voicing-core.js";
 export { analyzeChord, detectChord, PC_NAMES, pcName } from "./chords.js";
@@ -75,7 +75,7 @@ export function columnAlternatives(note, done) {
   const columns = chordColumns(lane.notes);
   const focusIdx = columns.findIndex((c) => c.notes.includes(note));
   if (focusIdx < 0) { done(null); return; }
-  const influence = overrideInfluence(col.notes);
+  const influence = overrideFlow(col.notes);
   requestArrangementChoices({
     analysis: null, columns, focusIdx, tuning,
     sourcePitches: col.notes.map((n) => n.pitch),

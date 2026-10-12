@@ -30,7 +30,7 @@ import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previe
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { matchKey } from "./keymap.js";
 import { normLayerVolume } from "./util.js";
-import { chordColumns, normalizeOverrideInfluence, overrideInfluence, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, writeColumnOverride } from "./voicing.js";
+import { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, writeColumnOverride } from "./voicing.js";
 
 // ---- undo / redo (all edit lanes) ----
 export const MAX_UNDO = 200;
@@ -650,7 +650,8 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null) {
     // here. Defaulting to "forward" made an unchanged column compare as changed,
     // so re-applying the same shape rewrote it and cost an undo step.
     (a && b && a.string === b.string && a.fret === b.fret && (a.scope || "local") === scope &&
-      a.influencePrevious === flow.previous && a.influenceNext === flow.next && a.adapt === flow.adapt);
+      a.influencePrevious === flow.previous && a.influenceNext === flow.next &&
+      !!a.adaptPrevious === flow.adaptPrevious && (a.adaptNext ?? a.adapt) === flow.adaptNext);
   if (colNotes.every((n) => same(n.pos || null, want(n)))) return;
   const prev = snapshotEdit();
   for (const id of new Set(colNotes.map((n) => n.shapeId).filter(Boolean))) {
@@ -661,7 +662,8 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null) {
     const p = want(n);
     if (p) n.pos = {
       string: p.string, fret: p.fret, scope,
-      influencePrevious: flow.previous, influenceNext: flow.next, adapt: flow.adapt,
+      influencePrevious: flow.previous, influenceNext: flow.next,
+      adaptPrevious: flow.adaptPrevious, adaptNext: flow.adaptNext,
     };
     else delete n.pos;
   }
@@ -669,15 +671,15 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null) {
   refreshTabIfOpen();
 }
 
-// Turn one of an override's three switches on or off (`previous`, `next`, `adapt` —
-// see normalizeOverrideInfluence), in place on the pin that carries
-// it. Nothing else about the override changes, so this is not a re-application: the
+// Turn one of an override's four switches on or off (`previous`, `next`,
+// `adaptPrevious`, `adaptNext` — see normalizeOverrideInfluence), in place on the pin
+// that carries it. Nothing else about the override changes, so this is not a re-application: the
 // shape stays exactly as chosen and only its blast radius moves.
 //
 // Written as a new object rather than mutated, because the undo snapshot shares the
 // note's own `pos` reference and editing it in place would rewrite history too.
 export function setColumnInfluence(colNotes, direction, on) {
-  const key = { previous: "influencePrevious", next: "influenceNext", adapt: "adapt" }[direction];
+  const key = { previous: "influencePrevious", next: "influenceNext" }[direction] || direction;
   const prev = snapshotEdit();
   let touched = false;
   for (const n of colNotes) for (const field of ["pos", "arrangement"]) {
@@ -704,7 +706,7 @@ export function applyColumnAlternative(colNotes, choice, influence = null) {
 function writeAlternative(colNotes, choice, influence) {
   const lane = laneOf(colNotes?.[0]);
   if (!lane) return false;
-  const flow = normalizeOverrideInfluence(influence || overrideInfluence(colNotes));
+  const flow = normalizeOverrideInfluence(influence || overrideFlow(colNotes));
   for (const id of new Set(colNotes.map((n) => n.shapeId).filter(Boolean))) ungroupShape(lane.notes, id);
   const { notes, column } = writeColumnOverride(lane.notes, colNotes, choice, flow, nid);
   const rewritten = notes !== lane.notes;
@@ -773,7 +775,7 @@ export function setColumnShape(colNotes, shape, limits = null, maxFret = undefin
   if (!lane) return "These notes are not in an editable note layer";
   const wrong = shapeFault(colNotes, laneTuning(lane), shape, limits, maxFret);
   if (wrong) return wrong;
-  applyColumnPos(colNotes, shape, "local", overrideInfluence(colNotes));
+  applyColumnPos(colNotes, shape, "local", overrideFlow(colNotes));
   return null;
 }
 
@@ -799,7 +801,7 @@ export function setNotePosition(note, string, fret) {
     if (!p) return;                       // a column the voicer could not place
     shape.set(n, { string: p.string, fret: p.fret });
   }
-  applyColumnPos(ctx.col.notes, shape, "local", overrideInfluence(ctx.col.notes));
+  applyColumnPos(ctx.col.notes, shape, "local", overrideFlow(ctx.col.notes));
 }
 
 // THE WAY BACK OFF EVERYTHING THE NECK CAN PUT ON ONE BEAT: the shape pinned there

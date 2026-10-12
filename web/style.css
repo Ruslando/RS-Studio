@@ -508,7 +508,11 @@ body.row-resizing { cursor: row-resize; user-select: none; }
 #fretboardPin .icon-btn, #fretboardPin .btn:not(.btn--primary) { background: transparent; border-color: transparent; color: var(--stage-hint); }
 #fretboardPin :is(.icon-btn, .btn:not(.btn--primary)):hover:not(:disabled) { background: var(--stage-chrome-hover); color: var(--stage-text); }
 #fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"], #fretboardAuto, #fretboardEdit { color: var(--stage-text); }
-#fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"] { background: var(--stage-chrome-hover); box-shadow: inset 0 0 0 1px var(--stage-hint); }
+/* On has to read as on at a glance: the switches default to a mix of both, and a
+     hover-grey fill was indistinguishable from off. */
+#fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"] { background: color-mix(in srgb, var(--stage-accent) 30%, transparent); box-shadow: inset 0 0 0 1px var(--stage-accent); }
+/* Two pairs and the way back: same notes | other notes | reset. */
+#fretboardAdaptPrev, #fretboardAuto { margin-left: var(--s-sibling); }
 #fretboardName { padding: 0 var(--s-pair); font: 600 var(--text-body)/1 var(--font-mono); color: var(--stage-text); }
 #fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
 

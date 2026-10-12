@@ -1,7 +1,7 @@
 // Run: node tests/web/voicing-override.test.mjs
 // What an override reaches, and what a technique forbids an override to offer.
 import assert from "node:assert/strict";
-import { chordColumns, overrideInfluence, placementFault, placementLimits, shapeFault, voiceNotes, voiceNotesFingered } from "../../web/voicing-core.js";
+import { chordColumns, overrideFlow, overrideInfluence, placementFault, placementLimits, shapeFault, voiceNotes, voiceNotesFingered } from "../../web/voicing-core.js";
 
 const tuning = [64, 59, 55, 50, 45, 40];              // app order: string 0 = high E
 const note = (start, pitch, extra = {}) => ({ start, end: start + 0.4, pitch, ...extra });
@@ -13,8 +13,11 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
 // throughout, so this block measures the reach alone.
 {
   const lane = [0, 1, 2, 3, 4].map((t) => note(t, 57));
-  assert.deepEqual(overrideInfluence([lane[2]]), { previous: false, next: true, adapt: true },
-    "a new override reaches forward only, and the hand goes with it");
+  assert.deepEqual(overrideInfluence([lane[2]]), { previous: false, next: true, adaptPrevious: false, adaptNext: true },
+    "a new override: before stays, after follows, for both pairs");
+  // Written over a pin that carries no switches (an import), it still gets them.
+  assert.equal(overrideFlow([{ pitch: 57, pos: pin(4, 12) }]).next, true);
+  assert.equal(overrideInfluence([{ pitch: 57, pos: pin(4, 12) }]).next, false);
   const auto = at(voiceNotes(lane, tuning), lane[0]);
   assert.notEqual(auto, "4:12", "the test needs a pin that differs from the automatic answer");
   const set = (influencePrevious, influenceNext) => pin(4, 12, { influencePrevious, influenceNext, adapt: false });
@@ -42,9 +45,9 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
 // A line played around the 5th fret; its A3 is put on the low E string at the 17th.
 {
   const line = () => [52, 55, 57, 59, 57, 55, 52, 55].map((p, i) => note(i * 0.5, p));
-  const solve = (adapt) => {
+  const solve = (adaptNext, adaptPrevious = false) => {
     const lane = line();
-    lane[2].pos = pin(5, 17, { influencePrevious: false, influenceNext: false, adapt });
+    lane[2].pos = pin(5, 17, { influencePrevious: false, influenceNext: false, adaptPrevious, adaptNext });
     const { voiced, seats } = voiceNotesFingered(lane, tuning, Infinity, { bars: [0, 2, 4] });
     return { frets: lane.map((n) => voiced.get(n).fret), seats: lane.map((n) => seats.get(n)) };
   };
@@ -63,6 +66,15 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   assert.deepEqual(followed.frets.slice(0, 2), base.slice(0, 2));
   assert.equal(followed.seats[2], 17);
   assert.ok(followed.frets[3] >= 14, `the note after should be up at the hand, got fret ${followed.frets[3]}`);
+
+  // Before only: the notes leading in are already up there, the one after is not.
+  const led = solve(false, true);
+  assert.ok(led.frets[0] >= 12 && led.frets[1] >= 12, `the notes before should be up at the hand, got ${led.frets}`);
+  assert.equal(led.frets[3], base[3]);
+  // Both: the whole bar.
+  const both = solve(true, true);
+  assert.ok(both.frets.slice(0, 4).every((f) => f >= 12), `got ${both.frets}`);
+  assert.deepEqual(both.frets.slice(4), base.slice(4), "the next bar is its own");
 }
 
 // The same chord again follows; a different chord does not.

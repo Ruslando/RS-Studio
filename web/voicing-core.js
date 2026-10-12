@@ -1283,20 +1283,35 @@ export function contextualCandidateSets(columns, tuning, cap = DP_SHAPES_PER_COL
 //
 //   previous / next   is this grip also used for the SAME note or chord wherever it
 //                     comes up before / after (spreadPins)
-//   adapt             do the OTHER notes around it re-finger to suit it — the hand
-//                     goes where the override is and what follows is played from
-//                     there — or carry on as if it were not there
+//   adaptPrevious /   do the OTHER notes before / after it re-finger to suit it —
+//   adaptNext         the hand is already there for the notes leading up to it, or
+//                     stays there for the ones that follow — or carry on as if the
+//                     override were not there
 //
-// The rule when nothing says otherwise: what was already played stays as it is,
-// what comes after follows, and the hand goes with the override. `adapt` is left
-// undefined on a pin saved before it existed, which keeps that pin's old behaviour
-// (see registerColumns) instead of re-fingering a finished project on load.
+// The rule when nothing says otherwise, for both pairs: what was already played stays
+// as it is, and what comes after follows. `adaptNext` is left undefined on a pin
+// saved before it existed, which keeps that pin's old behaviour (see
+// registerColumns) instead of re-fingering a finished project on load. `adapt` is
+// the one-switch form this was first written as, read as `adaptNext`.
 export function normalizeOverrideInfluence(value = null) {
   return {
     previous: (value?.previous ?? value?.influencePrevious) === true,
     next: (value?.next ?? value?.influenceNext) !== false,
-    adapt: value ? value.adapt : true,
+    adaptPrevious: value?.adaptPrevious === true,
+    adaptNext: value ? value.adaptNext ?? value.adapt : true,
   };
+}
+
+// The switches a NEW override on this column is written with: the ones the column
+// already carries, and otherwise the defaults. Not overrideInfluence, which answers
+// how an existing pin behaves — a pin with no switches at all (an old project, every
+// position of an imported tab) behaves as one column's, and writing a fresh override
+// over it used to inherit that and come out with everything switched off.
+export function overrideFlow(notes) {
+  const source = (notes || []).find((note) => note.arrangement)?.arrangement
+    || (notes || []).find((note) => note.pos)?.pos;
+  const flagged = typeof source?.influencePrevious === "boolean" || typeof source?.influenceNext === "boolean";
+  return normalizeOverrideInfluence(flagged ? source : null);
 }
 
 // New overrides store two independent booleans. Legacy "local" pins already
@@ -1420,7 +1435,8 @@ export function chordArrangementChoices(pcs, root, count, tuning, sourcePitches 
 function columnRewritePlan(columnNotes, choice, flow) {
   const pin = (p) => ({
     string: p.string, fret: p.fret, scope: "local",
-    influencePrevious: flow.previous, influenceNext: flow.next, adapt: flow.adapt,
+    influencePrevious: flow.previous, influenceNext: flow.next,
+    adaptPrevious: flow.adaptPrevious, adaptNext: flow.adaptNext,
   });
   const spare = new Map();
   for (const note of columnNotes) {
@@ -1899,6 +1915,7 @@ function registerColumns(columns, tuning, options = {}) {
       return fret > frets || (fret === 0 && rules[k] && rules[k].fretted);
     }) ? spread[i] : null;
     const locked = pins[i] || handed;
+    const flow = locked ? overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes) : null;
     return {
       hold: holds[i],
       pitches: notes.map((n) => n.pitch),
@@ -1912,9 +1929,10 @@ function registerColumns(columns, tuning, options = {}) {
       // wins even when it contradicts the note's own technique. The user asked.
       fixed: locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
       soft: !!handed,
-      // Whether the notes around the override suit themselves to it. A handed-on
-      // grip answers for the pin it came from. See `aside` and the implied hold below.
-      adapt: locked ? overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes).adapt : undefined,
+      // Whether the notes after / before the override suit themselves to it. A
+      // handed-on grip answers for the pin it came from. See `aside` and the implied
+      // hold below.
+      adaptNext: flow?.adaptNext, adaptPrev: !!flow?.adaptPrevious,
       rules,
     };
   });
@@ -1956,7 +1974,7 @@ function registerColumns(columns, tuning, options = {}) {
   // AN OVERRIDE THE OTHERS IGNORE is not where the hand "just was": left in, the
   // continuity term drags the next notes toward it, which is the override
   // re-fingering its neighbours with that switched off.
-  for (const c of input) c.aside = c.adapt === false;
+  for (const c of input) c.aside = c.adaptNext === false;
 
   // AN OVERRIDE THE OTHERS ADAPT TO TAKES THE HAND WITH IT, when it is out of the
   // hand's reach from where the hand was. That is exactly what a hold says — "the
@@ -1964,11 +1982,27 @@ function registerColumns(columns, tuning, options = {}) {
   // the bar are played from there, and the bars after that are solved knowing it.
   // Inside the reach nothing is implied; the note is simply taken where the hand is.
   //
+  // BEFORE AND AFTER ARE WHERE THE HOLD STARTS AND STOPS. Notes after adapt: it starts
+  // on the override. Notes before adapt as well: it starts at the bar line, so the
+  // hand is already up there for the notes leading in. Before only: it starts at the
+  // bar line and is cut straight after the override, where the next note opens a
+  // block of its own and goes back to wherever the music wants it.
+  // Limitation: "before" reaches to the bar line and no further, and not at all on a
+  // lane with no bar lines — a hold is a bar's, like every other decision here.
+  //
   // Whether it is out of reach is read off a first solve, against the nearest fretted
   // column beside it: one more pass, and only for a lane that has such an override.
   const seats = [];
   let voiced = null;
-  if (input.some((c) => c.fixed && c.adapt === true && !c.hold)) {
+  const adapting = (c) => c.fixed && !c.hold && (c.adaptNext === true || c.adaptPrev);
+  if (input.some(adapting)) {
+    const bars = options.bars && options.bars.length >= 2 ? options.bars : null;
+    const barOf = (i) => {
+      let b = 0;
+      while (b + 1 < bars.length && bars[b + 1] <= columns[i].t0 + 1e-6) b++;
+      return b;
+    };
+    const todo = input.map(adapting);     // decided before any hold is implied
     const first = voiceRegister(low, input, undefined, seats, options.bars, frets);
     const span = (i) => {
       let lo = Infinity, hi = -Infinity;
@@ -1985,10 +2019,15 @@ function registerColumns(columns, tuning, options = {}) {
     };
     let moved = false;
     input.forEach((c, i) => {
-      if (!c.fixed || c.adapt !== true || c.hold) return;
+      if (!todo[i] || c.hold) return;
       const own = span(i), near = own && beside(i);
       if (!near || Math.max(own.hi, near.hi) - Math.min(own.lo, near.lo) < SPAN) return;
-      c.hold = { fret: own.lo }; moved = true;
+      let from = i;
+      if (c.adaptPrev && bars)
+        while (from > 0 && !input[from - 1].hold && barOf(from - 1) === barOf(i)) from--;
+      input[from].hold = { fret: own.lo };
+      if (c.adaptNext !== true && input[i + 1] && !input[i + 1].hold) input[i + 1].cut = true;
+      moved = true;
     });
     if (!moved && !price) voiced = first;
     else seats.length = 0;
@@ -2585,7 +2624,8 @@ function blockCost(tuning, cols, T, maxFret) {
 // not a fallback to some other engine — it is the same model at its coarsest,
 // and that is still worth 81.1% against the writers.
 //
-// A COLUMN THE PLAYER HAS PUT A HAND ON also starts a block, wherever it falls. The
+// A COLUMN THE PLAYER HAS PUT A HAND ON also starts a block, wherever it falls (and
+// so does a `cut`, which is where an implied hold is told to stop — see registerColumns). The
 // bar is the granularity the engine chooses at, because that is what measured best;
 // it is not the granularity a person is allowed to decide at, and a decision cannot
 // start in the middle of a block that was already decided. So a hold cuts the bar it
@@ -2601,7 +2641,7 @@ function blocksOf(columns, bars, ignoreHolds = false) {
   columns.forEach((c, i) => {
     let b = 0;
     if (graded && typeof c.t0 === "number") { while (b + 1 < bars.length && bars[b + 1] <= c.t0 + 1e-6) b++; }
-    if (!blocks.length || b !== last || (!ignoreHolds && c.hold != null)) { blocks.push([]); bar.push(b); }
+    if (!blocks.length || b !== last || (!ignoreHolds && (c.hold != null || c.cut))) { blocks.push([]); bar.push(b); }
     blocks[blocks.length - 1].push(i);
     last = b;
   });
@@ -2809,7 +2849,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
   const sorted = columns.map((c) => {
     const idx = c.pitches.map((_, i) => i).sort((a, b) => c.pitches[a] - c.pitches[b]);
     return {
-      idx, t0: c.t0, end: c.end, hold: c.hold, soft: !!c.soft, aside: !!c.aside,
+      idx, t0: c.t0, end: c.end, hold: c.hold, cut: !!c.cut, soft: !!c.soft, aside: !!c.aside,
       pitches: idx.map((i) => c.pitches[i]),
       fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
       rules: c.rules ? idx.map((i) => c.rules[i]) : null,

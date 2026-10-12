@@ -16,7 +16,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // Both mm → px scales are the same one, always.
 
 import { boardHalfWidthAt, boardLength, boardWidth, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
-import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardAdapt, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardStage } from "./dom.js";
+import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardAdaptNext, fretboardAdaptPrev, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardStage } from "./dom.js";
 import { HALO, UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
 import { dpr, hexA, noteName } from "./util.js";
@@ -699,21 +699,21 @@ export function drawFretboard() {
   if (waiting && fretboardBusyLabel.textContent !== waiting) fretboardBusyLabel.textContent = waiting;
 }
 
-// The override's three switches, on the column the board is showing: used again
-// before, used again after, and whether the other notes adapt (see
+// The override's four switches, on the column the board is showing: the same notes
+// before / after use it too, and the other notes before / after adapt to it (see
 // normalizeOverrideInfluence). They live ON a pin, and a column can be overridden
 // without one — a hand put on the beat, or an override that dropped notes and left
 // `written` behind — so there the bundle offers the way back alone.
 function refreshPinControls(lane, show) {
   const col = show ? pinnedColumn(lane) : null;
   const pinned = !!col?.notes.some((n) => n.pos || n.arrangement);
-  fretboardReachPrev.hidden = fretboardReachNext.hidden = fretboardAdapt.hidden = !pinned;
+  for (const [button] of PIN_SWITCHES) button.hidden = !pinned;
   if (!pinned) return;
   const reach = overrideInfluence(col.notes);
-  fretboardReachPrev.setAttribute("aria-pressed", String(!!reach.previous));
-  fretboardReachNext.setAttribute("aria-pressed", String(!!reach.next));
-  fretboardAdapt.setAttribute("aria-pressed", String(reach.adapt === true));
+  for (const [button, side] of PIN_SWITCHES) button.setAttribute("aria-pressed", String(reach[side] === true));
 }
+const PIN_SWITCHES = [[fretboardReachPrev, "previous"], [fretboardReachNext, "next"],
+  [fretboardAdaptPrev, "adaptPrevious"], [fretboardAdaptNext, "adaptNext"]];
 
 // The column under the hand, when it carries an override of any kind. Same focus the
 // offer uses, so the strip is always talking about the grip the heading names, and
@@ -1372,12 +1372,12 @@ export function init_fretboard() {
   for (const button of panelControls("fretboard")) button.addEventListener("click", () => setFretboardVisible(!visible));
   // Both reach toggles act on the column the strip is already naming, and both leave
   // the shape exactly as it is — only the blast radius moves.
-  for (const [button, side] of [[fretboardReachPrev, "previous"], [fretboardReachNext, "next"], [fretboardAdapt, "adapt"]]) {
+  for (const [button, side] of PIN_SWITCHES) {
     button.addEventListener("click", () => {
       const col = pinnedColumn(currentLane());
       if (!col) return;
       button.blur();                   // or it eats the arrow keys that walk the song
-      setColumnInfluence(col.notes, side, !overrideInfluence(col.notes)[side]);
+      setColumnInfluence(col.notes, side, overrideInfluence(col.notes)[side] !== true);
       drawFretboard();
     });
   }
