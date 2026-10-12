@@ -117,10 +117,10 @@ def build_attributes(ctx, header: bool) -> dict:
     attrs = {
         "AlbumArt": f"urn:image:dds:album_{low}",
         "AlbumName": ctx.album,
-        "AlbumNameSort": ctx.album,
+        "AlbumNameSort": _sort_field(ctx.latin["album"], ctx.dlc_key),
         "ArrangementName": arr_name,
         "ArtistName": ctx.artist,
-        "ArtistNameSort": ctx.artist,
+        "ArtistNameSort": _sort_field(ctx.latin["artist"], ctx.dlc_key),
         "CentOffset": 0.0,
         "DLC": True,
         "DLCKey": key,
@@ -145,7 +145,7 @@ def build_attributes(ctx, header: bool) -> dict:
         "SongKey": key,
         "SongLength": round(song_len, 3),
         "SongName": ctx.title,
-        "SongNameSort": ctx.title,
+        "SongNameSort": _sort_field(ctx.latin["title"], ctx.dlc_key),
         "SongYear": ctx.year,
         "Tuning": {f"string{i}": int(v) for i, v in enumerate(sng.metadata.tuning)},
     }
@@ -261,6 +261,12 @@ def _chord_map(sng) -> dict:
     return {"0": per_pi} if per_pi else {}
 
 
+def _dump(doc: dict) -> bytes:
+    """Names go out as raw UTF-8, as DLC Builder writes them: the game shows a
+    \\uXXXX escape as nothing at all, so 伊根 (Ine) came out as " (Ine)"."""
+    return json.dumps(doc, indent=2, ensure_ascii=False).encode("utf-8")
+
+
 def manifest_json(attrs: dict) -> bytes:
     doc = {
         "Entries": {attrs["PersistentID"]: {"Attributes": attrs}},
@@ -268,7 +274,7 @@ def manifest_json(attrs: dict) -> bytes:
         "IterationVersion": 2,
         "InsertRoot": "Static.Songs.Entries",
     }
-    return json.dumps(doc, indent=2).encode("utf-8")
+    return _dump(doc)
 
 
 def hsan_json(header_attrs: dict | list[dict]) -> bytes:
@@ -277,7 +283,13 @@ def hsan_json(header_attrs: dict | list[dict]) -> bytes:
         "Entries": {attrs["PersistentID"]: {"Attributes": attrs} for attrs in attrs_list},
         "InsertRoot": "Static.Songs.Headers",
     }
-    return json.dumps(doc, indent=2).encode("utf-8")
+    return _dump(doc)
+
+
+def _sort_field(value: str, fallback: str) -> str:
+    """Sort fields must start with an ASCII letter or digit (Rocksmith2014.NET
+    StringValidator.sortField). A name with no such character sorts by the DLC key."""
+    return re.sub(r"\A[^0-9A-Za-z]*", "", value) or fallback
 
 
 # The DLC key is pasted directly into XML attributes, RDF literals and asset

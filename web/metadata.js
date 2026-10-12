@@ -8,6 +8,10 @@ export function normalizeMetadata(raw = {}) {
     artist: (raw.artist || "").trim(),
     album: (raw.album || "").trim(),
     year: raw.year ? String(raw.year).trim() : "",
+    // Latin spellings for names in another script; Rocksmith sorts and names files by them.
+    titleLatin: (raw.titleLatin || "").trim(),
+    artistLatin: (raw.artistLatin || "").trim(),
+    albumLatin: (raw.albumLatin || "").trim(),
     coverArt: raw.coverArt || null,
     coverArtName: raw.coverArtName || "",
     coverArtUpdatedAt: raw.coverArtUpdatedAt || null,
@@ -29,11 +33,79 @@ export function metadataPayload(meta) {
     title: m.title,
     artist: m.artist,
     album: m.album,
+    titleLatin: m.titleLatin,
+    artistLatin: m.artistLatin,
+    albumLatin: m.albumLatin,
     year: Number.isFinite(year) && year >= 1000 && year <= 9999 ? year : null,
     coverArt: m.coverArt || null,
     coverArtName: m.coverArtName || "",
     coverArtUpdatedAt: m.coverArtUpdatedAt || null,
   };
+}
+
+// ---- Latin spelling for names in another script ----
+// Rocksmith displays 伊根 or トーテム as written, but sorts by a field that must
+// start with a Latin letter or digit, and the .psarc name is ASCII. So a name
+// with characters outside Western European Latin gets a second field beside it.
+const FOREIGN = /[^\x20-\x7e\xa1-\xff]/g;
+const LATIN_OK = /^[0-9A-Za-z][\x20-\x7e\xa1-\xff]*$/;
+const LATIN_WHY = "Rocksmith shows the name as written, but sorts the song and names its file by Latin letters.";
+const LATIN_MISSING = "Needed for Rocksmith export: Latin letters, starting with a letter or digit.";
+
+// "伊根 (Ine)" already carries its Latin spelling; offer that rather than an empty field.
+function latinGuess(name) {
+  const latin = name.replace(FOREIGN, " ").replace(/\s+/g, " ").replace(/^[^0-9A-Za-z]+/, "").trim();
+  return latin.includes("(") ? latin : latin.replace(/\)$/, "");
+}
+
+// ids: { title, artist, album } -> the name inputs' element ids. Each gets a
+// labelled field directly under its own, present only while that name needs one.
+// The explanation is the label's tooltip and "still missing" is a dot beside
+// it (rules 24 and 8) — shown as soon as it is true, not when Export is pressed.
+export function latinFields(ids) {
+  const fields = Object.entries(ids).map(([key, id]) => {
+    const name = document.getElementById(id), group = document.createElement("div");
+    group.className = "field-group block latin-field";
+    group.innerHTML = `<span class="label">Latin spelling <span class="info" role="img" tabindex="0" title="${LATIN_WHY}" aria-label="${LATIN_WHY}">i</span><span class="dot dot--warn" role="img" title="${LATIN_MISSING}" aria-label="${LATIN_MISSING}"></span></span><input type="text" maxlength="180" aria-label="Latin spelling" />`;
+    name.after(group);
+    const latin = group.querySelector("input"), dot = group.querySelector(".dot");
+    const needed = () => name.value.search(FOREIGN) !== -1;
+    const missing = () => needed() && !LATIN_OK.test(latin.value.trim());
+    const sync = () => {
+      group.hidden = !needed();
+      latin.disabled = name.disabled;
+      dot.hidden = !missing();
+    };
+    name.addEventListener("input", sync);
+    latin.addEventListener("input", sync);
+    // "change", not "input": the guess is made once the name is finished, not per keystroke.
+    name.addEventListener("change", () => { if (needed() && !latin.value) latin.value = latinGuess(name.value); sync(); });
+    sync();
+    return { key: `${key}Latin`, name, latin, needed, missing, sync };
+  });
+  return {
+    read(meta) { for (const f of fields) meta[f.key] = f.needed() ? f.latin.value.trim() : ""; return meta; },
+    fill(meta) {
+      for (const f of fields) {
+        f.latin.value = (meta && meta[f.key]) || (f.needed() ? latinGuess(f.name.value) : "");
+        f.sync();
+      }
+    },
+    sync() { for (const f of fields) f.sync(); },
+    missing() { return fields.some((f) => f.missing()); },
+  };
+}
+
+// A project is named after its song, so the name follows the details when they
+// change; without a title it keeps the name it had (server: _project_name).
+export function projectName(state) {
+  if (!state) return "";
+  const m = normalizeMetadata(state.metadata);
+  // The name, with its Latin spelling in brackets when it has a separate one.
+  const part = (value, latin) => (value && latin && !value.includes(latin) ? `${value} (${latin})` : value);
+  const title = part(m.title, m.titleLatin), artist = part(m.artist, m.artistLatin);
+  if (!title) return state.name || state.filename || "Untitled";
+  return artist ? `${artist} - ${title}` : title;
 }
 
 export function exportSongName(meta, fallback = "Untitled") {

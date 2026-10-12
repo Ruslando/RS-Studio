@@ -16,10 +16,10 @@
 // open — `onClosed`. Same rule as project-library.js and stem-settings.js: the
 // import edge runs one way, project.js → here.
 
-import { $, addStemBtn, fileInput, form, goBtn, modalBackdrop, newProjBtn, npCancelBtn, npClear, npDrop, npDropSub, npDropTitle, npNameInput, stemBulkBrowseBtn, stemBulkInput, stemsAddEl, stemsListEl, warnEl } from "./dom.js";
+import { $, addStemBtn, fileInput, form, goBtn, modalBackdrop, newProjBtn, npCancelBtn, npClear, npDrop, npDropSub, npDropTitle, stemBulkBrowseBtn, stemBulkInput, stemsAddEl, stemsListEl, warnEl } from "./dom.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { UPLOAD_ARROW_ICON } from "./icons.js";
-import { applyCoverChange, clearProjectCover, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { applyCoverChange, clearProjectCover, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { toast } from "./notify.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { DEFAULT_PART_ORDER, backendLabel, separators } from "./separators.js";
@@ -71,13 +71,17 @@ const npCoverDrop = $("npCoverDrop"), npCoverThumb = $("npCoverThumb");
 const npCoverTitle = $("npCoverTitle"), npCoverSub = $("npCoverSub");
 const npCoverClear = $("npCoverClear"), npCoverInput = $("npCoverInput");
 let draftMetadata = normalizeMetadata({});
+for (const input of [npSongTitleInput, npArtistInput]) input.addEventListener("input", () => refreshCreateEnabled());
+const npLatin = latinFields({ title: "npSongTitle", artist: "npArtist", album: "npAlbum" });
 
 function hasFullSong() { return fileInput.files.length > 0; }
 
 function refreshCreateEnabled() {
   const anyWorking = stemsListEl.querySelector(".stem-card[data-state='working']");
   const anyReady = stemsListEl.querySelector(".stem-card[data-state='ready']");
-  goBtn.disabled = !!anyWorking || !(hasFullSong() || anyReady);
+  // A project is named after its song, so it cannot be created without one.
+  const named = npSongTitleInput.value.trim() && npArtistInput.value.trim();
+  goBtn.disabled = !!anyWorking || !(hasFullSong() || anyReady) || !named;
 }
 
 // Cards parked in the "choosing" state render the backend list, so they need a
@@ -93,7 +97,7 @@ function collectNewProjectMetadata() {
   current.artist = (npArtistInput.value || "").trim();
   current.album = (npAlbumInput.value || "").trim();
   current.year = (npYearInput.value || "").trim();
-  return current;
+  return npLatin.read(current);
 }
 
 function renderNewProjectCover() {
@@ -422,8 +426,9 @@ export async function setMainFile(file) {
   npDropSub.textContent = "Uploading…";
   npClear.hidden = false;
   npClear.disabled = true;
-  if (!npNameInput.value) npNameInput.value = file.name.replace(/\.[^.]+$/, "");
   if (npSongTitleInput && !npSongTitleInput.value) npSongTitleInput.value = file.name.replace(/\.[^.]+$/, "");
+  npLatin.sync();   // a programmatic value fires no "change"
+  refreshCreateEnabled();
   try {
     const job = await ensureDraftJob();
     const fd = new FormData();
@@ -460,12 +465,12 @@ function disposeStemCards() {
 // has to wait for that, and gets nothing when the question was answered "cancel".
 export async function openNewProject() {
   if (!await canLeaveOpenProject()) return false;
-  npNameInput.value = "";
   if (npSongTitleInput) npSongTitleInput.value = "";
   if (npArtistInput) npArtistInput.value = "";
   if (npAlbumInput) npAlbumInput.value = "";
   if (npYearInput) npYearInput.value = "";
   draftMetadata = normalizeMetadata({});
+  npLatin.fill(draftMetadata);
   renderNewProjectCover();
   fileInput.value = "";
   npDrop.classList.remove("has-file", "error");
@@ -478,7 +483,7 @@ export async function openNewProject() {
   setNpStatus("", false);
   modalBackdrop.hidden = false;
   refreshCreateEnabled();
-  npNameInput.focus();
+  if (npSongTitleInput) npSongTitleInput.focus();
   return true;
 }
 
@@ -505,7 +510,7 @@ async function createProject() {
     draftMetadata = collectNewProjectMetadata();
     const res = await fetch(`/api/projects/${job}/finalize`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: (npNameInput.value || "").trim(), metadata: metadataPayload(draftMetadata) }),
+      body: JSON.stringify({ metadata: metadataPayload(draftMetadata) }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));

@@ -4,6 +4,10 @@
 const clean = (value) => String(value || "").trim();
 const sameLabel = (a, b) => clean(a).localeCompare(clean(b), undefined, { sensitivity: "base" }) === 0;
 
+// A name with its Latin spelling in brackets when it has a separate one — the
+// same form the toolbar uses (metadata.js projectName).
+const withLatin = (value, latin) => (value && clean(latin) && !value.includes(clean(latin)) ? `${value} (${clean(latin)})` : value);
+
 export function durationLabel(seconds) {
   const total = Math.round(Number(seconds) || 0);
   if (!total) return "";
@@ -18,9 +22,9 @@ export function durationLabel(seconds) {
 export function projectCardInfo(project = {}) {
   const metadata = project.metadata && typeof project.metadata === "object" ? project.metadata : {};
   const projectName = clean(project.name) || clean(project.filename) || clean(project.job) || "Untitled project";
-  const songTitle = clean(metadata.title);
+  const songTitle = withLatin(clean(metadata.title), metadata.titleLatin);
   const title = songTitle || projectName;
-  const artist = clean(metadata.artist);
+  const artist = withLatin(clean(metadata.artist), metadata.artistLatin);
   const album = clean(metadata.album);
   const year = clean(metadata.year);
   const filename = clean(project.filename);
@@ -29,8 +33,7 @@ export function projectCardInfo(project = {}) {
   const context = songDetails.join(" · ") || (
     filename && !sameLabel(filename, title) ? filename : ""
   );
-  const alias = songTitle && !sameLabel(projectName, songTitle) ? projectName : "";
-  const utility = [alias, durationLabel(project.duration)].filter(Boolean).join(" · ");
+  const utility = durationLabel(project.duration);
 
   return {
     title,

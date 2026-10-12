@@ -96,6 +96,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .field-group.block > input[type="text"], .field-group.block > input[type="search"],
 .field-group.block > .stem-card { width: 100%; }
 
+/* A name's Latin spelling, in the same column under it (metadata.js latinFields).
+   The pair then aligns on its labels: one column is taller than its neighbour. */
+.latin-field { width: 100%; }
+.field-pair:has(.latin-field:not([hidden])) { align-items: flex-start; }
+
 .field-unit { font: 400 var(--text-data)/1 var(--font-mono); color: var(--hint); }
 .field-stack { display: flex; flex-direction: column; gap: var(--s-group); }
 

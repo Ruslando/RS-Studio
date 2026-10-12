@@ -843,15 +843,15 @@
           <!-- Rule 27: title and artist are read together, and so are album and
                year; four digits never earn a row of their own. -->
           <div class="field-pair">
-            <label class="field-group block">Song title
+            <label class="field-group block"><span class="label" data-required="true">Song title</span>
               <input type="text" id="projTitle" maxlength="180" />
             </label>
-            <label class="field-group block">Artist
+            <label class="field-group block"><span class="label" data-required="true">Artist</span>
               <input type="text" id="projArtist" maxlength="180" />
             </label>
           </div>
           <div class="field-pair">
-            <label class="field-group block">Album
+            <label class="field-group block">Album / Single
               <input type="text" id="projAlbum" maxlength="180" />
             </label>
             <label class="field-group block is-narrow">Year
@@ -916,23 +916,19 @@
           <div class="section np-details">
           <div class="section-head"><span>Project details</span></div>
 
-          <div class="field-group block">
-            <label for="npName" class="field-label label" data-required="true">Project name</label>
-            <input type="text" id="npName" />
-          </div>
           <div class="field-pair">
             <div class="field-group block">
-              <label for="npSongTitle" class="field-label">Song title</label>
+              <label for="npSongTitle" class="field-label label" data-required="true">Song title</label>
               <input type="text" id="npSongTitle" maxlength="180" />
             </div>
             <div class="field-group block">
-              <label for="npArtist" class="field-label">Artist</label>
+              <label for="npArtist" class="field-label label" data-required="true">Artist</label>
               <input type="text" id="npArtist" maxlength="180" />
             </div>
           </div>
           <div class="field-pair">
             <div class="field-group block">
-              <label for="npAlbum" class="field-label">Album</label>
+              <label for="npAlbum" class="field-label">Album / Single</label>
               <input type="text" id="npAlbum" maxlength="180" />
             </div>
             <div class="field-group block is-narrow">
@@ -1093,15 +1089,15 @@
             <a class="rs-wwise-get" id="rsWwiseGet" href="https://www.audiokinetic.com/download/" target="_blank" rel="noopener noreferrer">Get Wwise</a>
           </div>
           <div class="field-pair">
-            <label class="field-group block">Song title
+            <label class="field-group block"><span class="label" data-required="true">Song title</span>
               <input type="text" id="rsTitle" maxlength="180" />
             </label>
-            <label class="field-group block">Artist
+            <label class="field-group block"><span class="label" data-required="true">Artist</span>
               <input type="text" id="rsArtist" maxlength="180" />
             </label>
           </div>
           <div class="field-pair">
-            <label class="field-group block">Album
+            <label class="field-group block">Album / Single
               <input type="text" id="rsAlbum" maxlength="180" />
             </label>
             <label class="field-group block is-narrow">Year

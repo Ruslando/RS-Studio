@@ -15,7 +15,8 @@ import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot
 import { renderLayerSettings, renderTuningManager } from "./lanes.js";
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
 import { panelMotion } from "./panel-motion.js";
-import { applyCoverChange, clearProjectCover, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { applyCoverChange, clearProjectCover, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { refreshSaveState } from "./project.js";
 import { renderModels, stopModelPolling } from "./models.js";
 import { S } from "./store.js";
 import { exportRocksmith } from "./rocksmith-export.js";
@@ -208,13 +209,15 @@ function projectSettingsMeta() {
   return S.state.metadata;
 }
 
+const projLatin = latinFields({ title: "projTitle", artist: "projArtist", album: "projAlbum" });
+
 function collectProjectSettingsMeta() {
   const meta = normalizeMetadata(projectSettingsMeta());
   meta.title = ($("projTitle").value || "").trim();
   meta.artist = ($("projArtist").value || "").trim();
   meta.album = ($("projAlbum").value || "").trim();
   meta.year = ($("projYear").value || "").trim();
-  return meta;
+  return projLatin.read(meta);
 }
 
 function setProjectMetaStatus(msg, error = false) {
@@ -249,6 +252,7 @@ function renderProjectSettings() {
   renderProjectCover(meta);
   for (const id of ["projTitle", "projArtist", "projAlbum", "projYear", "projCoverDrop", "settingsApply"])
     if ($(id)) $(id).disabled = !on;
+  projLatin.fill(meta);
   $("projCoverDrop").setAttribute("aria-disabled", String(!on));
   $("projCoverDrop").tabIndex = on ? 0 : -1;
   $("projCoverClear").disabled = !on;
@@ -258,6 +262,7 @@ function renderProjectSettings() {
 async function saveProjectSettings() {
   if (!S.state || S.state.job === "tutorial") return;
   const meta = collectProjectSettingsMeta();
+  if (!meta.title || !meta.artist) { setProjectMetaStatus("Enter a song title and an artist.", true); return; }
   S.state.metadata = meta;
   setProjectMetaStatus("Saving...");
   try {
@@ -266,6 +271,7 @@ async function saveProjectSettings() {
       body: JSON.stringify({ metadata: metadataPayload(meta) }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
+    refreshSaveState();   // the project is named after these details
     closeSettingsModal();
   } catch (err) {
     setProjectMetaStatus(err.message, true);

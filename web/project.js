@@ -23,7 +23,7 @@ import { layout, syncRowHeight, updateZoomLabels } from "./geometry.js";
 import { beatsPerBar, currentGridState, gridBpm, gridOffset, gridSubdiv, setSubdiv } from "./grid.js";
 import { dedupeIds, syncUidPastLoaded } from "./ids.js";
 import { rebuildLanes, renderLanes } from "./lanes.js";
-import { metadataPayload, normalizeMetadata } from "./metadata.js";
+import { metadataPayload, normalizeMetadata, projectName } from "./metadata.js";
 import { applyPreservePitch, disposeSynths, ensureStemMixer, isMasterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, toggleStemSolo, warmSynths } from "./playback.js";
 import { initNewProject, openNewProject, refreshChoosingCards, setMainFile } from "./new-project.js";
 import { hideWelcome, initProjectLibrary, showWelcome } from "./project-library.js";
@@ -67,7 +67,7 @@ function projectBody() {
     ...(l.handHolds?.length ? { handHolds: l.handHolds.map((h) => ({ t: h.t, fret: h.fret })) } : {}),
   });
   return {
-    name: (S.state.name || S.state.filename || "Untitled"),
+    name: projectName(S.state),
     metadata: metadataPayload(S.state.metadata || {}),
     // Audio-mixer choices belong to the project too. Keep the persisted shape
     // deliberately small: audio/spectrogram metadata remains server-owned.
@@ -140,13 +140,13 @@ export function refreshSaveState() {
   if (!projTab) return;
   if (!S.state) { projTab.hidden = true; return; }
   projTab.hidden = false;
-  projTabName.textContent = S.state.name || S.state.filename || "Untitled";
+  projTabName.textContent = projectName(S.state);
   projDirtyDot.hidden = !isDirty();
   saveBtn.disabled = S.state.job === "tutorial";
   saveAsBtn.disabled = S.state.job === "tutorial";
 }
 
-function projectLabel() { return S.state ? (S.state.name || S.state.filename || "Untitled") : ""; }
+function projectLabel() { return projectName(S.state); }
 
 // Leaving a project throws away everything since the last save, so ask first.
 // True when it is safe to proceed: saved, discarded, or nothing to lose.

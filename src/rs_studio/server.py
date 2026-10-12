@@ -273,7 +273,8 @@ def _normalize_metadata(raw: dict | None, current: dict | None = None) -> dict:
     """Project/song metadata kept portable inside project.json."""
     raw = raw if isinstance(raw, dict) else {}
     out = dict(current or {}) if isinstance(current, dict) else {}
-    for key, limit in (("title", 180), ("artist", 180), ("album", 180), ("coverArtName", 180)):
+    for key, limit in (("title", 180), ("artist", 180), ("album", 180), ("coverArtName", 180),
+                       ("titleLatin", 180), ("artistLatin", 180), ("albumLatin", 180)):
         if key in raw:
             out[key] = _clean_text(raw.get(key), limit)
         else:
@@ -360,9 +361,26 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
             m["guitarPro"]["sourceRel"] = source_rel
     if payload.get("name"):
         m["name"] = payload["name"]
+    m["name"] = _project_name(m)
     m["saved_at"] = _now()
     _write_manifest(job, m)
     return m
+
+
+def _project_name(m: dict) -> str:
+    """A project is named after its song, "Artist - Title", so the name follows
+    the details when they change. Without a title it keeps the name it had."""
+    meta = m.get("metadata") or {}
+
+    def part(key: str) -> str:
+        """The name, with its Latin spelling in brackets when it has a separate one."""
+        value, latin = (meta.get(key) or "").strip(), (meta.get(f"{key}Latin") or "").strip()
+        return f"{value} ({latin})" if value and latin and latin not in value else value
+
+    title, artist = part("title"), part("artist")
+    if not title:
+        return m.get("name") or "Untitled"
+    return f"{artist} - {title}" if artist else title
 
 
 def _attachment(filename: str) -> str:
@@ -776,6 +794,7 @@ def api_project_finalize(job: str, payload: dict = Body(default={})) -> JSONResp
     if "metadata" in (payload or {}):
         m["metadata"] = _normalize_metadata((payload or {}).get("metadata"), m.get("metadata"))
     m["name"] = name.strip() or (Path(m["filename"]).stem if m.get("filename") else "") or "Untitled"
+    m["name"] = _project_name(m)
     if m["duration"] is None:  # no full song — fall back to the longest stem
         m["duration"] = (max(s["spectrogram"]["duration"] for s in m["stems"])
                          if m["stems"] else m.get("scoreDuration") or 1.0)
@@ -1617,7 +1636,7 @@ def api_setup_complete() -> dict:
 def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
     """Build a Rocksmith 2014 CDLC (.psarc) from the tab spec + project audio.
 
-    Needs Wwise on Windows or oggenc and wav2wem on Linux for WAV-to-WEM.
+    Needs Wwise on Windows or wwise-wem on Linux for WAV-to-WEM.
     Missing tools come back as 424 with instructions.
     """
     job_dir = _job_dir(job)

@@ -5,7 +5,7 @@
 import { $ } from "./dom.js";
 import { editLanes } from "./lanes.js";
 import { isTablatureLane } from "./layer-role.js";
-import { applyCoverChange, clearProjectCover, exportSongName, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { applyCoverChange, clearProjectCover, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { downloadProjectBlob, toast } from "./notify.js";
 import { S } from "./store.js";
 import { TUNINGS, buildSpecForLanesAsync, customTunings, laneTuning, parseTuning, tuningToNames } from "./tablature.js";
@@ -99,12 +99,15 @@ function updateRsTuningSelect(row, preferred) {
   else row.append(next);
 }
 
+const rsLatin = latinFields({ title: "rsTitle", artist: "rsArtist", album: "rsAlbum" });
+
 function rsMetaFromForm() {
   const meta = normalizeMetadata(S.state.metadata || {});
   meta.title = ($("rsTitle").value || "").trim();
   meta.artist = ($("rsArtist").value || "").trim();
   meta.album = ($("rsAlbum").value || "").trim();
   meta.year = ($("rsYear").value || "").trim();
+  rsLatin.read(meta);
   return meta;
 }
 
@@ -198,11 +201,11 @@ async function checkAudioConverter() {
     $("rsWwiseWarn").querySelector(".rs-wwise-text").textContent = linux
       ? (converterOk
           ? "Linux audio export is experimental. Check playback and seeking in Rocksmith 2014."
-          : "Linux export needs oggenc (vorbis-tools) and wav2wem on PATH.")
+          : "Linux export needs the wwise-wem package.")
       : "Wwise isn't installed. Rocksmith audio can't be converted without it.";
     const link = $("rsWwiseGet");
-    link.href = linux ? "https://github.com/pas2k/wav2wem" : "https://www.audiokinetic.com/download/";
-    link.textContent = linux ? "Get wav2wem" : "Get Wwise";
+    link.href = linux ? "https://github.com/rabbit-smith/wem" : "https://www.audiokinetic.com/download/";
+    link.textContent = linux ? "Get wwise-wem" : "Get Wwise";
     link.hidden = converterOk;
   } catch {
     converterOk = false;
@@ -224,6 +227,7 @@ function openRocksmithExportModal() {
   $("rsArtist").value = meta.artist || "";
   $("rsAlbum").value = meta.album || "";
   $("rsYear").value = meta.year || "";
+  rsLatin.fill(meta);
   renderRsCover(meta);
   renderRsArrangements(lanes);
   setRsStatus("");
@@ -267,6 +271,14 @@ async function submitRocksmithExport() {
   // Enter in a text field submits a form whether or not its submit button is
   // disabled, so the check guards the work as well as the button.
   if (!converterOk) return;
+  if (!$("rsTitle").value.trim() || !$("rsArtist").value.trim()) {
+    setRsStatus("Enter a song title and an artist.", true);
+    return;
+  }
+  if (rsLatin.missing()) {
+    setRsStatus("Add a Latin spelling for each name written in another script.", true);
+    return;
+  }
   const picks = [];
   const seenKinds = new Set();
   for (const row of $("rsArrangements").querySelectorAll(".rs-arr-row")) {

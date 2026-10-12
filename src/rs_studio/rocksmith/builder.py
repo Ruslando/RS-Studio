@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import tempfile
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -32,6 +33,7 @@ class SongContext:
     title: str
     artist: str
     album: str
+    latin: dict[str, str]  # title/artist/album as the game sorts them
     year: int
     is_bass: bool
     arrangement: dict
@@ -108,13 +110,24 @@ def _dlc_key(artist: str, title: str) -> str:
     return f"MTT{stem}{suffix}"
 
 
-def _cdlc_filename(artist: str, title: str) -> str:
+def _latin_names(spec: dict, artist: str, title: str, album: str) -> dict[str, str]:
+    """The Latin spelling the user gave for a name in another script, else the name itself."""
+    meta = spec.get("metadata") or {}
+    return {field: str(meta.get(f"{field}Latin") or "").strip() or name
+            for field, name in (("artist", artist), ("title", title), ("album", album))}
+
+
+def _cdlc_filename(artist: str, title: str, key: str) -> str:
     """CustomsForge/Toolkit convention: Artist-Name_Song-Title_v1_p.psarc
-    (underscores between fields, hyphens for spaces within a field, _p = PC)."""
+    (underscores between fields, hyphens for spaces within a field, _p = PC).
+
+    ASCII only, as Rocksmith2014.NET's StringValidator.fileName does it:
+    diacritics folded, everything else outside [ 0-9A-Za-z_-] dropped."""
     def clean(s: str) -> str:
-        s = re.sub(r'[<>:"/\\|?*]', "", s).strip()
-        return re.sub(r"\s+", "-", s) or "Unknown"
-    return f"{clean(artist)}_{clean(title)}_v1_p.psarc"
+        s = unicodedata.normalize("NFD", s)
+        s = re.sub(r"[^ 0-9A-Za-z_-]", "", s).strip()
+        return re.sub(r"\s+", "-", s)
+    return f"{clean(artist) or 'Unknown'}_{clean(title) or key}_v1_p.psarc"
 
 
 def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[int], bool]:
@@ -279,6 +292,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
     arr_requests = _arrangement_specs(spec, tracks, warnings)
     artist, title, album, year = _song_meta(spec)
     key = _dlc_key(artist, title)
+    latin = _latin_names(spec, artist, title, album)
     low = key.lower()
 
     with tempfile.TemporaryDirectory(prefix="cw-rs-") as tmp:
@@ -331,7 +345,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             representative = arr["priority"] == "main"
 
             ctx = SongContext(
-                dlc_key=key, title=title, artist=artist, album=album, year=year,
+                dlc_key=key, title=title, artist=artist, album=album, latin=latin, year=year,
                 is_bass=is_bass, arrangement=arr, representative=representative,
                 arrangement_sort=sort_idx,
                 persistent_id=manifest.stable_uuid(key, arr["tag"]),
@@ -379,4 +393,4 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
              b"Package Comment: Experimental in-app export"),
             ("appid.appid", b"248750"),
         ]
-        return psarc.build_psarc(entries), warnings, _cdlc_filename(artist, title)
+        return psarc.build_psarc(entries), warnings, _cdlc_filename(latin["artist"], latin["title"], key)

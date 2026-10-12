@@ -58,7 +58,7 @@ export const welcome = $("welcome"), welcomeNewBtn = $("welcomeNew"), welcomeOpe
 export const welcomeGpBtn = $("welcomeGp");
 export const welcomeRecent = $("welcomeRecent"), recentListEl = $("recentList"), recentSearchEl = $("recentSearch"), recentCountEl = $("recentCount"), recentPaginationEl = $("recentPagination"), recentPrevBtn = $("recentPrev"), recentPageEl = $("recentPage"), recentNextBtn = $("recentNext"), welcomeVersion = $("welcomeVersion");
 export const fileMenuBtn = $("fileMenuBtn"), fileMenu = $("fileMenu");
-export const modalBackdrop = $("modalBackdrop"), npCancelBtn = $("npCancel"), npNameInput = $("npName");
+export const modalBackdrop = $("modalBackdrop"), npCancelBtn = $("npCancel");
 export const npDrop = $("npDrop"), npDropTitle = $("npDropTitle"), npDropSub = $("npDropSub"), npClear = $("npClear");
 export const stemsListEl = $("stemsList"), stemsAddEl = $("stemsAdd");
 export const addStemBtn = $("addStemBtn"), stemBulkBrowseBtn = $("stemBulkBrowseBtn"), stemBulkInput = $("stemBulkInput");
