@@ -221,6 +221,13 @@ let spotHover = -1;
 // being placed, which is the whole instruction (rule 24: state, never prose).
 let shaping = null;   // { notes, picked: Map(note -> { string, fret }) }
 
+// THE MOMENT THE BOARD SHOWS. While the song runs that is the playhead. Stopped, it is
+// the playhead plus a hair: a parked playhead is stored to the microsecond and a
+// note's onset is not, so a cursor sitting "on" a note is routinely a few nanoseconds
+// before it — which is the previous column, already released, and an empty neck. The
+// travel animation used to paper over this by drawing the next grip arriving.
+const boardTime = () => playbackTime() + (transportPlaying() ? 0 : 1e-3);
+
 // The column being decided: the selection's if there is one, and otherwise **the one
 // under the playhead**, which is the column the neck is already drawing. Requiring a
 // selection first was a step that bought nothing — the board shows you the grip, and
@@ -234,7 +241,7 @@ let shaping = null;   // { notes, picked: Map(note -> { string, fret }) }
 function focusNote(lane) {
   for (const n of S.selection) if (Number.isFinite(n.pitch)) return n;
   const found = lane && gripsFor(lane);
-  const i = found ? gripIndex(found.columns, playbackTime()) : -1;
+  const i = found ? gripIndex(found.columns, boardTime()) : -1;
   return i >= 0 ? found.columns[i].note || null : null;
 }
 
@@ -605,7 +612,7 @@ export function drawFretboard() {
   const hue = lane?.color || PAINT.accent;
   const moves = offered > 0 && offered !== seat;
   if (seat > 0 && seat <= s.frets) {
-    ctx.fillStyle = hexA(hue, moves ? WASH * FADED : WASH);
+    ctx.fillStyle = hexA(hue, moves ? WASH * 0.6 : WASH);
     fretSpace(ctx, seat, s, X, Y);
     ctx.fill();
   }
@@ -809,7 +816,7 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   }
   const status = $("fretboardResetStatus");
   status.hidden = false;
-  const at = resetPreview.columns && handAt(resetPreview.columns, grip?.start ?? focus?.start ?? playbackTime(), 0, s);
+  const at = resetPreview.columns && handAt(resetPreview.columns, grip?.start ?? focus?.start ?? boardTime(), 0, s);
   status.textContent = resetPreview.pending ? "Calculating preview" : at ? "Reset preview" : "Preview unavailable";
   if (at) {
     ctx.save();
@@ -1086,7 +1093,7 @@ function focusGrip(lane, s) {
   // Frozen while a choice is being made, and the playhead otherwise: the strip has to
   // know whether this column is a chord before any working view is switched on, and
   // that question is about the grip you are looking at either way.
-  return handAt(found.columns, frozenAt(lane) ?? playbackTime(), 0, s);
+  return handAt(found.columns, frozenAt(lane) ?? boardTime(), 0, s);
 }
 
 // A circle's box, for drawing and for the pointer in one step.
@@ -1210,7 +1217,7 @@ function anchorFret(lane) {
   if (!lane?.notes?.length) return 0;
   const found = gripsFor(lane);
   if (!found) return 0;
-  const i = gripIndex(found.columns, frozenAt(lane) ?? playbackTime());
+  const i = gripIndex(found.columns, frozenAt(lane) ?? boardTime());
   return i >= 0 ? Number(found.columns[i].seat) || 0 : 0;
 }
 
@@ -1222,7 +1229,7 @@ function offeredSeat(lane) {
   if (!lane?.notes?.length) return 0;
   if (resetPeeking) {
     const columns = resetPreview?.columns;
-    const i = columns ? gripIndex(columns, frozenAt(lane) ?? playbackTime()) : -1;
+    const i = columns ? gripIndex(columns, frozenAt(lane) ?? boardTime()) : -1;
     return i >= 0 ? Number(columns[i].seat) || 0 : 0;
   }
   if (altsOn && alts?.boxes?.length) return Number(alts.boxes[alts.hover]?.choice?.seat) || 0;
@@ -1242,7 +1249,7 @@ function drawHand(ctx, s, scale, X, Y, lane, quiet) {
   // moving target is not one. A grip's own onset asks for it pressed and still — the
   // travel window is zero, so nothing can be mid-slide at the moment it starts.
   const frozen = frozenAt(lane);
-  const t = frozen ?? playbackTime();
+  const t = frozen ?? boardTime();
   const hue = lane.color || PAINT.accent;
   if (editing && $("fretboardOnionEnabled").checked) drawOnion(ctx, s, scale, X, Y, found.columns, gripIndex(found.columns, t), hue);
   // THE HAND ONLY TRAVELS WHILE THE SONG DOES. Stopped, the board answers "what is
