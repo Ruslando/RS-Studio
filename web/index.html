@@ -677,6 +677,10 @@
           <label class="field-group block">Name
             <input type="text" id="stemSettNameInput" maxlength="80" title="Audio source name" />
           </label>
+          <label class="field-slider layer-volume-control"><span class="label">Volume</span>
+            <input type="range" id="stemVolume" min="0" max="100" step="1" value="100" title="Audio layer playback volume" />
+            <span id="stemVolumeValue" class="ro">100%</span>
+          </label>
           <div class="field-group block">
             <span class="field-label">Audio</span>
             <div class="stem-card" id="stemSettCard"></div>

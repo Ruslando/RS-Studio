@@ -24,7 +24,7 @@ import { beatsPerBar, currentGridState, gridBpm, gridOffset, gridSubdiv, setSubd
 import { dedupeIds, syncUidPastLoaded } from "./ids.js";
 import { rebuildLanes, renderLanes } from "./lanes.js";
 import { metadataPayload, normalizeMetadata, projectName } from "./metadata.js";
-import { applyPreservePitch, disposeSynths, ensureStemMixer, isMasterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, toggleStemSolo, warmSynths } from "./playback.js";
+import { applyPreservePitch, applyStemGains, disposeSynths, ensureStemMixer, isMasterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, toggleStemSolo, warmSynths } from "./playback.js";
 import { initNewProject, openNewProject, refreshChoosingCards, setMainFile } from "./new-project.js";
 import { hideWelcome, initProjectLibrary, showWelcome } from "./project-library.js";
 import { backendLabel, loadSeparators, separators } from "./separators.js";
@@ -73,7 +73,7 @@ function projectBody() {
     // Audio-mixer choices belong to the project too. Keep the persisted shape
     // deliberately small: audio/spectrogram metadata remains server-owned.
     stemSettings: S.state.stems.map((stem) => ({
-      id: stem.id, muted: !!stem.muted, solo: !!stem.solo,
+      id: stem.id, muted: !!stem.muted, solo: !!stem.solo, volume: normLayerVolume(stem.volume),
     })),
     editLanes: S.state.editLanes.map(serialize),
     ...(S.state.guitarPro ? { guitarPro: S.state.guitarPro } : {}),
@@ -368,7 +368,7 @@ export function applyProject(data) {
     // the full song is muted they play as a combined stem mix.
     stems: (data.stems || []).map((s) => ({
       id: s.id, name: s.name, spec: s.spectrogram, audioUrl: s.audio_url,
-      muted: !!s.muted, solo: !!s.solo,
+      muted: !!s.muted, solo: !!s.solo, volume: normLayerVolume(s.volume),
     })),
     editLanes: sourceLanes.map(mapLane),
     curStem: null,         // set by selectStem below
@@ -1045,7 +1045,8 @@ export function init_project() {
     onClosed: () => { if (!S.state) showWelcome(); },   // cancelled with nothing open
     canLeave: confirmLeave,   // the modal ends in a project swap, so ask before it opens
   });
-  initStemSettings({ onRename: renameStem, onRemove: removeStem, onReplaced: applyStemReplacement });
+  initStemSettings({ onRename: renameStem, onRemove: removeStem, onReplaced: applyStemReplacement,
+    onVolume: () => { applyStemGains(); refreshSaveState(); } });
 
   // Closing the window. The desktop shell cancels its own close and calls this
   // instead, so the question gets asked in the app's own dialog; it then quits for

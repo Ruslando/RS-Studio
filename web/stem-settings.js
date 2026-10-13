@@ -25,14 +25,17 @@ import { DEFAULT_PART_ORDER, backendLabel, separators } from "./separators.js";
 import { previewIcon, syncScrub, wireScrub } from "./stem-preview.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { S } from "./store.js";
+import { normLayerVolume } from "./util.js";
 
 // Set by initStemSettings. See the module banner: these are the only way out.
 let onRenameStem = async () => false;
 let onRemoveStem = async () => false;
 let onStemReplaced = () => {};
+let onStemVolume = () => {};
 
 let stemEditTarget = null;      // the S.state.stems entry being edited
 let stemEditIsMaster = false;   // captured at open; the master can't change under an open panel
+let stemVolumeAtOpen = 1;       // the volume slider plays live; Cancel/Escape put this back
 let stemEditState = "idle";     // "idle" (preview + replace) | "working"
 let stemEditMode = "separate";  // which replacement source is showing
 let stemEditBackend = null, stemEditPart = null;
@@ -60,6 +63,7 @@ export function openStemSettings(stem, isMaster) {
   stemEditState = "idle";
   stemEditMode = stemEditHasFullSong() ? "separate" : "upload";
   stemEditBackend = null; stemEditPart = null; stemEditError = null;
+  stemVolumeAtOpen = normLayerVolume(stem.volume);
   setStemEditAudio(stem.audioUrl);
   renderStemSettings();
   stemSettingsBackdrop.hidden = false;
@@ -67,6 +71,10 @@ export function openStemSettings(stem, isMaster) {
 }
 
 export function closeStemSettings() {
+  if (stemEditTarget && normLayerVolume(stemEditTarget.volume) !== stemVolumeAtOpen) {
+    stemEditTarget.volume = stemVolumeAtOpen;
+    onStemVolume();
+  }
   stemSettingsBackdrop.hidden = true;
   if (stemEditAudioEl) { stemEditAudioEl.pause(); stemEditAudioEl = null; }
   stemEditTarget = null;
@@ -76,6 +84,9 @@ function renderStemSettings() {
   if (!stemEditTarget) return;
   stemSettName.textContent = stemEditTarget.name;
   stemSettNameInput.value = stemEditTarget.name;
+  const pct = Math.round(normLayerVolume(stemEditTarget.volume) * 100);
+  $("stemVolume").value = String(pct);
+  $("stemVolumeValue").textContent = `${pct}%`;
   renderStemEditCard();
 }
 
@@ -98,7 +109,9 @@ async function commitStemRename() {
 }
 
 async function saveStemSettings() {
-  if (await commitStemRename()) closeStemSettings();
+  if (!(await commitStemRename())) return;
+  if (stemEditTarget) stemVolumeAtOpen = normLayerVolume(stemEditTarget.volume); // keep it: nothing to revert
+  closeStemSettings();
 }
 
 function renderStemEditCard() {
@@ -318,15 +331,22 @@ async function startStemEditReplace(file) {
  * @param {(stem: object) => Promise<boolean>} hooks.onRemove                 delete the stem and repair the editor; false keeps the panel open
  * @param {(stem: object, s: object, warn: ?string, duration: ?number) => void} hooks.onReplaced  point the project at the stem's new audio
  */
-export function initStemSettings({ onRename, onRemove, onReplaced }) {
+export function initStemSettings({ onRename, onRemove, onReplaced, onVolume }) {
   onRenameStem = onRename;
   onRemoveStem = onRemove;
   onStemReplaced = onReplaced;
+  onStemVolume = onVolume;
 
   stemSettingsClose.addEventListener("click", closeStemSettings);
   $("stemCancel").addEventListener("click", closeStemSettings);
   $("stemSave").addEventListener("click", saveStemSettings);
   $("stemRemove").addEventListener("click", requestStemRemoval);
+  $("stemVolume").addEventListener("input", (e) => {
+    if (!stemEditTarget) return;
+    stemEditTarget.volume = normLayerVolume((parseInt(e.target.value, 10) || 0) / 100);
+    $("stemVolumeValue").textContent = `${Math.round(stemEditTarget.volume * 100)}%`;
+    onStemVolume();
+  });
   stemSettNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveStemSettings(); } });
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (!stemSettingsBackdrop || stemSettingsBackdrop.hidden) return false;

@@ -131,6 +131,7 @@ export function cancelPassagePreview(opts = {}) {
 
 export function previewNotes(notes, lane) {
   if (!window.Tone || !S.toneReady) return;
+  if (lane.muted || normLayerVolume(lane.volume) <= 0) return; // muted means silent, auditions included
   const synth = laneSynth(lane);
   if (!synth) return;
   setSynthsMuted(false); // auditioning is an explicit request for sound — lift any pause mute
@@ -403,6 +404,9 @@ function stemAudible(stem) {
   return !stem.muted && (!soloed || !!stem.solo);
 }
 
+// Stems default to full volume; normLayerVolume clamps and defaults the same way.
+const stemVolume = (stem) => normLayerVolume(stem.volume);
+
 export function applyStemGains() {
   if (!S.state) return;
   for (const stem of S.state.stems) {
@@ -410,18 +414,20 @@ export function applyStemGains() {
     if (isMasterStem(stem)) {
       if (masterGain) {
         audio.muted = false;
-        masterGain.gain.value = on ? 1 : 0;
+        masterGain.gain.value = on ? stemVolume(stem) : 0;
       } else {
         audio.muted = !on;
+        audio.volume = stemVolume(stem);
       }
     } else {
       const node = stemNodes.get(stem.id);
       if (!node) continue;
       if (node.gain) {
         node.el.muted = false;
-        node.gain.gain.value = on ? 1 : 0;
+        node.gain.gain.value = on ? stemVolume(stem) : 0;
       } else {
         node.el.muted = !on;
+        node.el.volume = stemVolume(stem);
       }
     }
   }

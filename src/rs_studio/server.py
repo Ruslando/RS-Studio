@@ -335,6 +335,9 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
                 stem["muted"] = setting["muted"]
             if isinstance(setting.get("solo"), bool):
                 stem["solo"] = setting["solo"]
+            volume = setting.get("volume")
+            if isinstance(volume, (int, float)) and not isinstance(volume, bool) and 0 <= volume <= 1:
+                stem["volume"] = float(volume)
     if "grid" in payload:
         m["grid"] = payload["grid"]
     if "scoreBars" in payload and isinstance(payload.get("scoreBars"), list):
@@ -411,6 +414,7 @@ def _response_from_manifest(m: dict) -> dict:
             "audio_url": f"/api/audio/{job}/{st['id']}",
             "muted": bool(st.get("muted", False)),
             "solo": bool(st.get("solo", False)),
+            "volume": st.get("volume", 1.0),
         })
     return {
         "job": job,
