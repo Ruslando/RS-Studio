@@ -6,6 +6,7 @@ import { wireContextSubmenu } from "./context-submenu.js";
 import { MAX_POINTS, bendAt, bendCurve, normalizeCurve } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
+import { icon } from "./icons.js";
 import { $, inTourCard, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopyBtn, redoMI, scroll, stage, undoMI } from "./dom.js";
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
@@ -1219,6 +1220,14 @@ function flattenActions(entries, crumb = "", crumbKw = "") {
   return out;
 }
 
+// An entry whose label starts with "✓ " is on: the row shows the label and the
+// check as the menu's own mark on the right, not as a character in the text.
+function labelItem(button, label) {
+  const on = label.startsWith("✓ ");
+  button.textContent = on ? label.slice(2) : label;
+  if (on) button.insertAdjacentHTML("beforeend", `<span class="chkmark">${icon("check", 14)}</span>`);
+}
+
 // Render menu entries into `parent`, recursing for hover submenus.
 function buildMenu(parent, entries) {
   for (const e of entries) {
@@ -1229,13 +1238,13 @@ function buildMenu(parent, entries) {
     } else if (e.children) {
       const wrap = document.createElement("div"); wrap.className = "ctxmenu-sub";
       if (e.family) wrap.classList.add("ctxmenu-family");
-      const row = document.createElement("button"); row.type = "button"; row.className = "ctxmenu-item ctxmenu-parent"; row.textContent = e.label;
+      const row = document.createElement("button"); row.type = "button"; row.className = "ctxmenu-item ctxmenu-parent"; labelItem(row, e.label);
       const child = document.createElement("div"); child.className = "ctxmenu ctxmenu-child";
       buildMenu(child, e.children);
       wrap.append(row, child); parent.append(wrap);
       wireContextSubmenu(wrap, row, child);
     } else {
-      const b = document.createElement("button"); b.className = "ctxmenu-item"; b.textContent = e.label;
+      const b = document.createElement("button"); b.className = "ctxmenu-item"; labelItem(b, e.label);
       b.onclick = () => { e.fn(); if (!e.keepOpen) hideNoteMenu(); };
       parent.append(b);
     }

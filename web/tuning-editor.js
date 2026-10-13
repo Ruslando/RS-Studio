@@ -219,7 +219,7 @@ function renderList() {
 
 const stepBtn = (text, title, on, disabled = false) => {
   const b = document.createElement("button");
-  b.type = "button"; b.className = "tuning-step"; b.textContent = text;
+  b.type = "button"; b.className = "tuning-step"; b.innerHTML = text;
   b.title = title; b.setAttribute("aria-label", title); b.disabled = disabled;
   b.addEventListener("click", on);
   return b;
@@ -311,8 +311,8 @@ function renderEditor() {
     const nudge = document.createElement("span");
     nudge.className = "tuning-nudge";
     nudge.append(
-      stepBtn("▴", "Up a semitone", () => pick(p + 1), p >= NOTE_MAX),
-      stepBtn("▾", "Down a semitone", () => pick(p - 1), p <= NOTE_MIN),
+      stepBtn(icon("chevronUp", 12), "Up a semitone", () => pick(p + 1), p >= NOTE_MAX),
+      stepBtn(icon("chevronDown", 12), "Down a semitone", () => pick(p - 1), p <= NOTE_MIN),
     );
     const one = document.createElement("span");
     one.className = "tuning-string";

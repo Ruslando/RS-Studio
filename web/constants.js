@@ -58,10 +58,8 @@ export const SIMILAR_PITCH_MARGIN = 2;  // semitones of spectrogram band padding
 // the same scale, and 9 is the only size below 11 in the system. Everything on
 // the stage that floats free of a note — rails, flags, chips, the range readout
 // — is chrome and stays at 11.
-// Keep canvas text at the same 94% scale as the editor's DOM typography.
-const EDITOR_TEXT_SCALE = .94;
-export const stageUi = (px = 11, weight = 400) => `${weight} ${px * EDITOR_TEXT_SCALE}px 'Atkinson Hyperlegible Next', sans-serif`;
-export const stageMono = (px = 11, weight = 400) => `${weight} ${px * EDITOR_TEXT_SCALE}px 'IBM Plex Mono', ui-monospace, monospace`;
+export const stageUi = (px = 11, weight = 400) => `${weight} ${px}px 'Atkinson Hyperlegible Next', sans-serif`;
+export const stageMono = (px = 11, weight = 400) => `${weight} ${px}px 'IBM Plex Mono', ui-monospace, monospace`;
 export const STAGE_ANCHORED = 9;   // the note/row-anchored size, and the only one below 11
 
 export const EDIT_PALETTE = ["#6ee7b7", "#fbbf72", "#a5b4fc", "#f9a8d4", "#67e8f9", "#fca5a5"];

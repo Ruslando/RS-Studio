@@ -621,16 +621,17 @@ export function renderStemTabs() {
 
 
     const mute = document.createElement("button");
+    // The same speaker a note layer mutes with: one action, one mark.
+    mute.innerHTML = icon(stem.muted ? "speakerOff" : "speaker", 14);
     if (master) {
-      mute.className = "stem-master-mute" + (stem.muted ? " on" : "");
-      mute.textContent = stem.muted ? "Muted" : "Mute";
+      mute.className = "stem-btn mute" + (stem.muted ? " on" : "");
       mute.title = stem.muted ? "Unmute full song" : "Mute full song";
     } else {
       const implicitlyOff = !masterOn && anySolo && !stem.solo;
       mute.className = "stem-btn mute" + (stem.muted ? " on" : "") + (implicitlyOff ? " dim" : "");
-      mute.textContent = "M";
       mute.title = viewing ? "Mute (Shift+M)" : "Mute";
     }
+    mute.setAttribute("aria-label", mute.title);
     mute.addEventListener("click", (ev) => { ev.stopPropagation(); toggleStemMute(stem); });
 
     const edit = document.createElement("button");

@@ -386,7 +386,7 @@ export function gridDivLabelFor(value) {
 // Keep the toolbar's read-only tempo/meter/grid readout in sync with grid state.
 export function init_ui() {
   for (const slot of document.querySelectorAll('[data-ui-icon]')) {
-    slot.innerHTML = icon(slot.dataset.uiIcon, 18);
+    slot.innerHTML = icon(slot.dataset.uiIcon, Number(slot.dataset.iconSize) || 16);
   }
   document.querySelector('#spKeys .keymap-tabs').addEventListener('keydown', (event) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;

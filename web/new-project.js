@@ -27,7 +27,7 @@ import { previewIcon, syncScrub, wireScrub } from "./stem-preview.js";
 import { isAudioFile } from "./util.js";
 
 // The card's own close button; the upload arrow is shared, so it is in icons.js.
-const REMOVE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+const REMOVE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 
 // Set by initNewProject. See the module banner: these are the only way out.
 let onProjectCreated = () => {};

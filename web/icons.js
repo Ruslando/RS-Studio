@@ -13,7 +13,7 @@
 export const DRAG_HANDLE_ICON = `<svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>`;
 
 // "Drop a file here, or click to browse" — the stem card and the stem panel.
-export const UPLOAD_ARROW_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>`;
+export const UPLOAD_ARROW_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>`;
 
 // Dismiss: every dialog header, and every "remove the thing I just picked"
 // button next to a cover or a file. One mark for both, because they are the same
@@ -40,6 +40,11 @@ const OUTLINE = {
   speaker: '<path d="M4 9h4l5-4v14l-5-4H4ZM16 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/>',
   speakerOff: '<path d="M4 9h4l5-4v14l-5-4H4Zm13 1 4 4m0-4-4 4"/>',
   edit: '<path d="m4 16 12-12a2.8 2.8 0 0 1 4 4L8 20l-5 1Zm10-10 4 4M3 21h18"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  trash: '<path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/>',
+  check: '<path d="m5 12 5 5 9-10"/>',
+  chevronUp: '<path d="m6 15 6-6 6 6"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
 };
 export function icon(name, size = 16) {
   return `<svg class="ui-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${OUTLINE[name]}</svg>`;

@@ -38,21 +38,21 @@
         <section class="welcome-start" aria-label="Start a project">
           <div class="welcome-actions">
             <button class="welcome-opt" id="welcomeNew">
-              <span class="wo-icon" data-ui-icon="new" aria-hidden="true"></span>
+              <span class="wo-icon" data-ui-icon="new" data-icon-size="18" aria-hidden="true"></span>
               <span class="wo-copy">
                 <span class="wo-title">New project</span>
                 <span class="wo-desc">Load an audio file &amp; separate stems</span>
               </span>
             </button>
             <button class="welcome-opt" id="welcomeOpen">
-              <span class="wo-icon" data-ui-icon="folder" aria-hidden="true"></span>
+              <span class="wo-icon" data-ui-icon="folder" data-icon-size="18" aria-hidden="true"></span>
               <span class="wo-copy">
                 <span class="wo-title">Import project</span>
                 <span class="wo-desc">Open a .chart file into your library</span>
               </span>
             </button>
             <button class="welcome-opt" id="welcomeGp">
-              <span class="wo-icon" data-ui-icon="score" aria-hidden="true"></span>
+              <span class="wo-icon" data-ui-icon="score" data-icon-size="18" aria-hidden="true"></span>
               <span class="wo-copy">
                 <span class="wo-title">Open Guitar Pro</span>
                 <span class="wo-desc">Start a score-only guitar or bass project</span>
@@ -64,7 +64,7 @@
                  opens the tutorial song itself, so it belongs beside the other
                  three ways of getting a song on screen. -->
             <button class="welcome-opt" id="welcomeTour">
-              <span class="wo-icon" data-ui-icon="guide" aria-hidden="true"></span>
+              <span class="wo-icon" data-ui-icon="guide" data-icon-size="18" aria-hidden="true"></span>
               <span class="wo-copy">
                 <span class="wo-title">Walkthrough</span>
                 <span class="wo-desc">Learn the app on a tutorial song</span>
@@ -73,17 +73,17 @@
           </div>
           <div class="welcome-settings">
             <button type="button" id="welcomeSettingsBtn" class="welcome-opt" aria-haspopup="dialog" title="Settings" aria-label="Settings">
-              <span class="wo-icon" data-ui-icon="settings" aria-hidden="true"></span><span class="wo-copy"><span class="wo-title">Settings</span></span>
+              <span class="wo-icon" data-ui-icon="settings" data-icon-size="18" aria-hidden="true"></span><span class="wo-copy"><span class="wo-title">Settings</span></span>
             </button>
             <button type="button" id="welcomeUpdateBtn" class="welcome-opt">
-              <span class="wo-icon" data-ui-icon="update" aria-hidden="true"></span><span class="wo-copy"><span class="wo-title" id="welcomeUpdateTitle">Check for updates</span><span class="wo-desc" id="welcomeUpdateVersion" hidden></span></span>
+              <span class="wo-icon" data-ui-icon="update" data-icon-size="18" aria-hidden="true"></span><span class="wo-copy"><span class="wo-title" id="welcomeUpdateTitle">Check for updates</span><span class="wo-desc" id="welcomeUpdateVersion" hidden></span></span>
             </button>
           </div>
         </section>
         <section class="welcome-recent" id="welcomeRecent" aria-label="Project library">
           <div class="recent-tools">
             <label class="recent-search" for="recentSearch">
-              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
               <input type="search" id="recentSearch" placeholder="Search projects" autocomplete="off" />
             </label>
             <span id="recentCount" class="recent-count" aria-live="polite"></span>
@@ -106,7 +106,7 @@
     <div id="setupModal" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
       <div class="sp-head">
         <span class="sp-title" id="setupTitle">Set up RS Studio</span>
-        <button id="setupClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="setupClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <div class="sp-body">
         <div class="setup-progress" aria-label="Setup progress">
@@ -144,8 +144,8 @@
         <p id="setupSaveStatus" class="sp-note error" role="alert" hidden></p>
       </div>
       <div class="modal-footer">
-        <button type="button" id="setupSkip">Set up later</button>
         <div class="modal-actions">
+          <button type="button" id="setupSkip">Set up later</button>
           <button type="button" id="setupBack" hidden>Back</button>
           <button type="button" id="setupNext" class="primary">Continue</button>
         </div>
@@ -211,8 +211,8 @@
           <button class="menu-item" id="menuZoomOut">Zoom out<span class="kbd">Ctrl+−</span></button>
           <button class="menu-item" id="menuZoomReset">Reset zoom<span class="kbd">0</span></button>
           <div class="menu-sep"></div>
-          <button class="menu-item" id="menuMarkerLanes">Marker lanes<span class="chkmark" id="menuMarkerLanesCheck">✓</span></button>
-          <button class="menu-item" id="menuFretboard">Fretboard<span class="chkmark" id="menuFretboardCheck">✓</span></button>
+          <button class="menu-item" id="menuMarkerLanes">Marker lanes<span class="chkmark" id="menuMarkerLanesCheck" data-ui-icon="check" data-icon-size="14"></span></button>
+          <button class="menu-item" id="menuFretboard">Fretboard<span class="chkmark" id="menuFretboardCheck" data-ui-icon="check" data-icon-size="14"></span></button>
         </div>
       </div>
       <div hidden>
@@ -281,12 +281,12 @@
       <div id="mainArea">
 
         <!-- Left rail: Audio (resizable) · drag separator · Layers · sidebar resize handle -->
-        <aside id="sidebar" aria-label="Project layers"><button type="button" id="sidebarChevron" class="edge-toggle edge-toggle--sidebar" data-panel-toggle="sidebar" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <aside id="sidebar" aria-label="Project layers"><button type="button" id="sidebarChevron" class="edge-toggle edge-toggle--sidebar" data-panel-toggle="sidebar" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
 
           <section id="stemsSection" class="side-section">
             <div class="side-header">
             <button class="side-label" data-sec="stems" aria-expanded="true">
-              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
+              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
               <span>Audio layers</span>
             </button>
             </div>
@@ -298,7 +298,7 @@
           <section id="layersSection" class="side-section grow">
             <div class="side-header">
             <button class="side-label" data-sec="layers" aria-expanded="true">
-              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
+              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
               <span>Note layers</span>
             </button>
             </div>
@@ -325,7 +325,7 @@
           <div id="timelineResize" class="splitter splitter--y" aria-hidden="true"><svg class="splitter-dots" width="26" height="5" viewBox="0 0 26 5" fill="none"><circle cx="5" cy="2.5" r="1.4" fill="currentColor"/><circle cx="13" cy="2.5" r="1.4" fill="currentColor"/><circle cx="21" cy="2.5" r="1.4" fill="currentColor"/></svg></div>
 <div id="editingWorkspace">
           <div id="editingPanel"><div id="viewer">
-            <button type="button" id="markerLanesChevron" class="edge-toggle edge-toggle--markers" data-panel-toggle="markers" aria-expanded="true" aria-label="Hide markers" title="Hide markers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
+            <button type="button" id="markerLanesChevron" class="edge-toggle edge-toggle--markers" data-panel-toggle="markers" aria-expanded="true" aria-label="Hide markers" title="Hide markers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
             <canvas id="ruler"></canvas>
             <div id="scroll">
               <!-- #stageSpacer is as wide as the whole song (drives the scrollbar);
@@ -350,7 +350,7 @@
           <!-- Fretboard: the neck the song is played on, under the stage. Its
                chevron stays on the partial panel; hovering reveals more of the neck — the
                sidebar's idiom, so the way back is where the way out was. -->
-          <div id="fretboardPanel" data-collapsed><button type="button" id="fretboardChevron" class="edge-toggle edge-toggle--fretboard" data-panel-toggle="fretboard" aria-expanded="true" aria-label="Hide fretboard" title="Hide fretboard"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div id="fretboardPanel" data-collapsed><button type="button" id="fretboardChevron" class="edge-toggle edge-toggle--fretboard" data-panel-toggle="fretboard" aria-expanded="true" aria-label="Hide fretboard" title="Hide fretboard"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
             <!-- The board and the one thing that floats on it. A box of its own, so
                  the spinner is placed against the canvas and not against the panel,
                  and so the panel can shrink over it while it keeps its size. -->
@@ -405,7 +405,7 @@
     <div id="tabView" role="dialog" aria-modal="true" aria-labelledby="tabViewTitle">
       <div class="sp-head">
         <span class="sp-title" id="tabViewTitle">Tablature</span>
-        <button id="tabViewClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="tabViewClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <div class="tab-head">
         <div id="tabWarn" class="legend"></div>
@@ -419,13 +419,12 @@
   <!-- Detect panel: floating popover opened by right-click on the spectrogram or
        by finishing a Frame-tool drag. Runs a detector on the current stem into the
        active edit layer (whole stem, or a dragged time range). -->
-  <div id="detectPanel" hidden role="dialog" aria-label="Detect notes">
-    <!-- Anchored and live, so it is a popover and takes the popover's chrome:
-         no rule under the header, a 24 compact close, 12 of padding. "Detect"
-         is not a primary — it is an action with its own job (rule 17). -->
+  <div id="detectPanel" class="live-editor" hidden role="dialog" aria-label="Detect notes">
+    <!-- A popover like the marker editors, with one difference: it starts a job,
+         so it ends in the one primary that names it (design.md 3, rule 7). -->
     <div class="pop-head">
       <span class="pop-title">Detect notes</span>
-      <button id="detectClose" class="pop-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button id="detectClose" class="pop-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
     </div>
     <div class="dp-body">
       <p class="dp-on">On <span class="chip"><span class="chip-dot"></span><span id="detectStemName">stem</span></span> → note layer <span class="chip" id="detectTargetLayerChip"><span class="chip-dot"></span><span id="detectTargetLayer">—</span></span></p>
@@ -447,8 +446,8 @@
     <div class="pop-head">
       <span class="pop-title" id="markerPopTitle">Tempo marker</span>
       <span class="pop-head-actions">
-        <button id="markerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg></button>
-        <button id="markerPopClose" class="pop-x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="markerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="markerPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </span>
     </div>
     <div class="dp-body">
@@ -503,8 +502,8 @@
     <div class="pop-head">
       <span class="pop-title">Section marker</span>
       <span class="pop-head-actions">
-        <button id="sectionMarkerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg></button>
-        <button id="sectionMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="sectionMarkerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="sectionMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </span>
     </div>
     <div class="dp-body">
@@ -533,8 +532,8 @@
     <div class="pop-head">
       <span class="pop-title">Phrase boundary</span>
       <span class="pop-head-actions">
-        <button id="phraseMarkerDelete" class="pop-x pop-del" title="Delete boundary" aria-label="Delete boundary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg></button>
-        <button id="phraseMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="phraseMarkerDelete" class="pop-x pop-del" title="Delete boundary" aria-label="Delete boundary"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="phraseMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </span>
     </div>
     <div class="dp-body">
@@ -554,8 +553,8 @@
     <div class="pop-head">
       <span class="pop-title">Tone switch</span>
       <span class="pop-head-actions">
-        <button id="toneMarkerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg></button>
-        <button id="toneMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="toneMarkerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="toneMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </span>
     </div>
     <div class="dp-body">
@@ -579,7 +578,7 @@
         <span class="sp-title">
           <span>Note layer</span>
           <span class="chip" id="spLayerChip"><span class="chip-dot"></span><span id="spLayerName">—</span></span></span>
-        <button id="settingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="settingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Identity and Playback sit together; Notation follows because its
            instrument, tuning and fingering preferences change the tab. -->
@@ -613,12 +612,15 @@
             <div class="section-head"><span>Notation</span></div>
             <!-- Instrument is notation: it picks the neck the fretboard draws and the
                  default tuning. Playback tone and volume sit together above. -->
+            <div class="field-pair">
             <label class="field-group block"><span class="label">Instrument <span class="info" role="img" tabindex="0" title="Sets the fretboard, the string count and the default tuning" aria-label="Sets the fretboard, the string count and the default tuning">i</span></span>
               <select id="layerInstr"></select>
             </label>
             <label class="field-group block"><span class="label">Tuning <span class="info" role="img" tabindex="0" title="String tuning used for the tab" aria-label="String tuning used for the tab">i</span></span>
               <select id="layerTun"></select>
             </label>
+            </div>
+            <div class="field-pair">
             <label class="field-group block"><span class="label">Capo <span class="info" role="img" tabindex="0" title="Capo fret. Tab frets count from the capo, as in Guitar Pro; changing it keeps each note on its string" aria-label="Capo fret. Tab frets count from the capo, as in Guitar Pro; changing it keeps each note on its string">i</span></span>
               <select id="layerCapo"></select>
             </label>
@@ -638,6 +640,7 @@
                 <option value="bonus_bass">Bonus Bass</option>
               </select>
             </label>
+            </div>
           </div>
 
         </div>
@@ -668,7 +671,7 @@
         <span class="sp-title">
           <span>Audio</span>
           <span class="chip"><span class="chip-dot"></span><span id="stemSettName">—</span></span></span>
-        <button id="stemSettingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="stemSettingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Two groups, so no sections (rule 23). -->
       <div class="sp-body">
@@ -703,7 +706,7 @@
       <div class="sp-head">
         <span class="sp-title">
           <span id="settingsModalTitle">Trace options</span></span>
-        <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
 <div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="sp-body">
         <!-- Marker timing state: feature wiring still binds these ids, but BPM,
@@ -865,7 +868,7 @@
                 <span class="cover-title" id="projCoverTitle">Choose image</span>
                 <span class="cover-sub" id="projCoverSub"></span>
               </span>
-              <button type="button" class="cover-clear" id="projCoverClear" hidden aria-label="Remove cover art"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              <button type="button" class="cover-clear" id="projCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
               <input type="file" id="projCoverInput" accept="image/*" hidden />
             </div>
           </div>
@@ -918,7 +921,7 @@
     <div id="newProjModal" role="dialog" aria-modal="true" aria-labelledby="npTitle">
       <div class="op-head">
         <h2 id="npTitle">New Project</h2>
-        <button type="button" id="npClose" class="op-close" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" id="npClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <form id="form">
         <!-- Five groups, so it sections. Identity is what the project is called;
@@ -957,7 +960,7 @@
                 <span class="cover-title" id="npCoverTitle">Choose image</span>
                 <span class="cover-sub" id="npCoverSub"></span>
               </span>
-              <button type="button" class="cover-clear" id="npCoverClear" hidden aria-label="Remove cover art"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              <button type="button" class="cover-clear" id="npCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
               <input type="file" id="npCoverInput" accept="image/*" hidden />
             </div>
           </div>
@@ -970,14 +973,14 @@
             <span class="field-label">Full song</span>
             <div class="np-drop" id="npDrop" tabindex="0" role="button" aria-label="Choose or drop the full song audio file">
               <span class="np-icon" id="npDropIcon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
               </span>
               <span class="np-copy">
                 <span class="np-title" id="npDropTitle">Drop the full song, or click to browse</span>
                 <span class="np-sub" id="npDropSub"></span>
               </span>
               <button type="button" class="np-clear" id="npClear" hidden aria-label="Remove file">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                <span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span>
               </button>
               <input type="file" id="file" accept="audio/*" hidden />
             </div>
@@ -1048,7 +1051,7 @@
     <div id="openProjModal" role="dialog" aria-modal="true" aria-labelledby="openProjTitle">
       <div class="op-head">
         <h2 id="openProjTitle">Open project</h2>
-        <button type="button" id="openProjClose" class="op-close" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" id="openProjClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Rule 21, selectable list: the row IS the control, so the body runs the
            rows edge to edge (pads 8, gaps 4) instead of insetting them 16. -->
@@ -1067,7 +1070,7 @@
     <div id="gpImportModal" role="dialog" aria-modal="true" aria-labelledby="gpImportTitle">
       <div class="op-head">
         <h2 id="gpImportTitle">Import Guitar Pro</h2>
-        <button type="button" id="gpImportClose" class="op-close" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" id="gpImportClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <div class="modal-body">
         <p id="gpImportSummary" class="gp-import-summary"></p>
@@ -1089,10 +1092,10 @@
       <div class="sp-head">
         <span class="sp-title">
           <span id="rsExportTitle">Rocksmith CDLC</span></span>
-        <button id="rsExportClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="rsExportClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <form id="rocksmithExportForm">
-        <div class="sp-body">
+        <div class="sp-body dialog-body--sectioned">
           <!-- The audio conversion step needs local tools. The message and link
                are selected for Windows or Linux when this dialog opens. -->
           <div id="rsWwiseWarn" class="rs-wwise" hidden>
@@ -1100,6 +1103,8 @@
             <span class="rs-wwise-text">Wwise isn't installed. Rocksmith audio can't be converted without it.</span>
             <a class="rs-wwise-get" id="rsWwiseGet" href="https://www.audiokinetic.com/download/" target="_blank" rel="noopener noreferrer">Get Wwise</a>
           </div>
+          <div class="section">
+          <div class="section-head"><span>Song</span></div>
           <div class="field-pair">
             <label class="field-group block"><span class="label" data-required="true">Song title</span>
               <input type="text" id="rsTitle" maxlength="180" />
@@ -1124,20 +1129,26 @@
                 <span class="cover-title" id="rsCoverTitle">Choose image</span>
                 <span class="cover-sub" id="rsCoverSub"></span>
               </span>
-              <button type="button" class="cover-clear" id="rsCoverClear" hidden aria-label="Remove cover art"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              <button type="button" class="cover-clear" id="rsCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
               <input type="file" id="rsCoverInput" accept="image/*" hidden />
             </div>
           </div>
-          <div class="field-group block">
-            <span class="field-label">Arrangements</span>
+          </div>
+          <div class="section">
+          <div class="section-head"><span>Arrangements</span></div>
             <div id="rsArrangements" class="rs-arrangements"></div>
           </div>
+          <div class="section">
+          <div class="section-head"><span>Package</span></div>
+          <div class="field-pair">
           <label class="field-group block is-narrow" title="Silence added in front of the song, so the first notes can be seen coming">Leading silence (seconds)
             <input type="number" id="rsLeadIn" class="num-4" min="0" max="30" step="0.5" value="5" />
           </label>
           <label class="field-group block is-narrow" title="Goes into the file name (…_v2_p.psarc) and the package info">Version
             <input type="number" id="rsVersion" class="num-4" min="1" step="1" value="1" />
           </label>
+          </div>
+          </div>
           <p id="rsExportStatus" class="sp-note" hidden></p>
         </div>
         <div class="modal-footer">

@@ -190,7 +190,7 @@ export function drawStackBadges(badges, vx0, vx1) {
   if (!badges.length) return;
   sctx.save();
   // A count, inside a 15px disc pinned to a note: mono, and 9 for both reasons.
-  sctx.font = stageMono(STAGE_ANCHORED, 700);
+  sctx.font = stageMono(STAGE_ANCHORED, 600);
   sctx.textAlign = "center"; sctx.textBaseline = "middle";
   for (const { note, count } of badges) {
     const x = xOf(note.start), y = yOf(note.pitch);
