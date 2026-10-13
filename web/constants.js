@@ -36,11 +36,9 @@ export const TRACE_POINT_GAP = 3;   // px between stored guide points while trac
 export const TRACE_FALLBACK_STEP = 0.25;
 export const AUTOSCROLL_ZONE = 48;  // px from a viewport edge where the timeline starts panning
 export const AUTOSCROLL_MAX = 20;   // px/frame at the edge (ramps from 0 at the zone boundary)
-export const SIMILAR_THRESHOLD = 0.6;   // min normalized cross-correlation (note band) to surface a passage
-export const SIMILAR_GLOBAL_THRESHOLD = 0.7;  // higher bar for the wider harmonic band (less pitch-specific)
+export const SIMILAR_THRESHOLD = 0.5;   // min pitch-pattern score (similar-core.js) to surface a passage
 export const SIMILAR_MAX_MATCHES = 60;  // cap suggestions so a repetitive song can't flood the canvas
 export const SIMILAR_PITCH_MARGIN = 2;  // semitones of spectrogram band padding around the selection
-export const SIMILAR_HARMONIC_SPAN = 24; // semitones above the selection scored as a harmonic fallback band
 
 // ---- Stage type ----
 // No stylesheet reaches a canvas, so the two families from tokens.css are
