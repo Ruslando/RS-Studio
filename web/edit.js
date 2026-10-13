@@ -1009,24 +1009,6 @@ function appliedEffects(sel) {
   return out;
 }
 
-// The fretboard, reached from the notes you just right-clicked. Both entries go
-// through the View menu's own item rather than importing fretboard.js — which
-// imports from this file — and pressing that item is the one path that cannot end
-// up disagreeing with its check mark. Idempotent: "show" means show, so a panel
-// already open is left alone rather than toggled shut, and an entry that would do
-// nothing is not offered at all.
-const fretboardShown = () => !$("menuFretboardCheck").hidden;
-const showFretboard = () => { if (!fretboardShown()) $("menuFretboard").click(); };
-
-function fretboardEntries() {
-  return [
-    ...(fretboardShown() ? [] : [{
-      label: "Show on fretboard", kw: "neck guitar grip hand fingering diagram",
-      fn: showFretboard,
-    }]),
-  ];
-}
-
 // Find similar and its passage navigation. These were four toolbar buttons that
 // appeared whenever anything was selected, three of them greyed out until a search
 // was running; they act on the selection, so they belong on it. The nav entries
@@ -1102,7 +1084,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   const selectedShapeIds = [...new Set(sel.map((n) => n.shapeId).filter(Boolean))];
   const oneLane = new Set(sel.map(laneOf)).size === 1;
   const shapeActions = [
-    ...(sel.length >= 2 && oneLane ? [{ label: "Group selection into shape", fn: groupSelectionIntoShape }] : []),
+    ...(sel.length >= 2 && oneLane ? [{ label: "Group into shape", fn: groupSelectionIntoShape }] : []),
     ...(selectedShapeIds.length === 1 ? [{ label: "Select entire shape", fn: selectEntireShape }] : []),
     ...(selectedShapeIds.length ? [{ label: "Ungroup shape", fn: ungroupSelectedShapes }] : []),
   ];
@@ -1122,7 +1104,6 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // where "return this column to automatic" is about one column and is wanted
   // wherever you are.
   const columnActions = [
-    ...fretboardEntries(),
     ...(pinnedCol
       ? [{ label: "Return to automatic", kw: "reset unpin fingering position voicing",
         fn: () => applyColumnAlternative(pinnedCol.notes, null) }]
@@ -1139,8 +1120,10 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     // song built on repeats it is the first thing you do to a selection, not the
     // last. Every entry above a divider is conditional, so the divider is too: a
     // menu that opens on a rule is the same accident as an inset one.
-    ...(refEntry ? [refEntry, { sep: true }] : []),
-    ...(columnActions.length ? [...columnActions, { sep: true }] : []),
+    // One group: everything you do WITH a selection (group it, find it again). They
+    // were three groups of one or two entries each, divided by rules that said nothing.
+    ...(refEntry ? [refEntry] : []),
+    ...columnActions,
     ...similarEntries(),
     ...families,
     { sep: true },

@@ -204,7 +204,10 @@ async function submitRocksmithExport() {
   spec.metadata = metadataPayload(S.state.metadata);
   const leadingSilence = leadIn($("rsLeadIn").value);
   rememberPref(LS_LEAD_IN, leadingSilence);
-  spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo })), leadingSilence };
+  // A whole number from 1; anything else falls back to 1 (the server checks again).
+  const version = Math.max(1, Math.floor(Number($("rsVersion").value)) || 1);
+  $("rsVersion").value = String(version);
+  spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo })), leadingSilence, version };
 
   $("rsExportGo").disabled = true;
   setRsStatus("Building CDLC…");

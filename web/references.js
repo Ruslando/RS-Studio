@@ -416,9 +416,9 @@ export function resizeRefBox(drag, x, y) {
 // here — managing an existing reference happens in openRefMenu, off its badge.
 export function refMenuEntry(sel) {
   if (sel.some((n) => boxOfNote(n))) return null;   // inside a reference → managed via its badge
-  // Named like its sibling "Group selection into shape", and for the same reason:
+  // Named like its sibling "Group into shape", and for the same reason:
   // "Mark as reference" said what happens to the notes you can see and nothing
   // about the GROUP it creates, which is the whole point — the repeats it finds
   // elsewhere in the lane come along, and an edit to one reaches all of them.
-  return { label: "Group selection into reference", kw: "repeat copies linked duplicate", fn: () => markSelectionAsReference() };
+  return { label: "Group into reference", kw: "repeat copies linked duplicate", fn: () => markSelectionAsReference() };
 }
