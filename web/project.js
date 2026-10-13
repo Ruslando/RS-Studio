@@ -39,7 +39,7 @@ import { normalizeSectionMarkers, sectionMarkersFromScoreBars } from "./section-
 import { inferTablatureEnabled } from "./layer-role.js";
 import { cleanupShapeMembership } from "./shapes.js";
 import { defaultPinFlags } from "./voicing-core.js";
-import { isValidTuningKey, setView } from "./tablature.js";
+import { isValidTuningKey, parseTuning, setView } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
 
@@ -261,15 +261,17 @@ export function mapLane(l) {
   if (l.fingeringMode === "exact") for (const n of notes)
     if (n.pos && typeof n.pos.influenceNext !== "boolean") n.pos = { ...n.pos, ...defaultPinFlags() };
   cleanupShapeMembership(notes);
-  // Keep a valid tuning preset key / "custom"; older projects had none, so fall
-  // back to the instrument's default tuning.
+  // Keep a valid tuning preset key / "custom". A custom tuning deleted since the
+  // project was saved keeps its strings as an unnamed tuning; older projects had
+  // no tuning at all, so they fall back to the instrument's default.
   const tuningOk = isValidTuningKey(l.tuning);
+  const keepStrings = !tuningOk && /^ct_/.test(l.tuning || "") && parseTuning(l.customTuning);
   return {
     id: l.id, name: l.name, kind: "edit", color: l.color,
     visible: l.visible !== false, active: !!l.active, locked: !!l.locked,
     instrument,
     tone,
-    tuning: tuningOk ? l.tuning : INSTRUMENTS[instrument].tuning,
+    tuning: tuningOk ? l.tuning : keepStrings ? "custom" : INSTRUMENTS[instrument].tuning,
     customTuning: l.customTuning || "",
     volume: normLayerVolume(l.volume),
     // "none" was the old field's way of saying a layer makes no sound. There is no

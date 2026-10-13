@@ -5,15 +5,15 @@ import { DEFAULT_INSTRUMENT, DEFAULT_LAYER_VOLUME, EDIT_PALETTE, INSTRUMENTS, TO
 import { confirmAction } from "./dialog.js";
 import { clearArriving, lanesEl } from "./dom.js";
 import { draw } from "./repaint.js";
-import { CLOSE_ICON, icon } from "./icons.js";
+import { icon } from "./icons.js";
 import { updateUndoButtons } from "./edit.js";
 import { emptyLaneFields } from "./marker-rails.js";
 import { ungroupShape } from "./shapes.js";
 import { refreshSaveState } from "./project.js";
 import { S, setSelection } from "./store.js";
-import { TUNINGS, addCustomTuning, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, removeCustomTuning, tuningToNames, updateCustomTuning } from "./tablature.js";
-import { closeLayerSettings, layerArrangement, layerCapo, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName, tuningAddBtn, tuningListEl } from "./ui.js";
-import { clamp, layerVolumePercent, normLayerVolume, noteName, volumeToDb } from "./util.js";
+import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, tuningToNames } from "./tablature.js";
+import { closeLayerSettings, layerArrangement, layerCapo, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
+import { layerVolumePercent, normLayerVolume, notesLowToHigh, volumeToDb } from "./util.js";
 import { withStartTone } from "./tone-marker-core.js";
 import { moveCapo } from "./voicing-core.js";
 
@@ -25,7 +25,7 @@ export const editLanes = () => S.state.editLanes;
 
 export const activeLane = () => S.state.lanes.find((l) => l.active);
 let newLaneDraft = null;
-const settingsLane = () => newLaneDraft || activeLane();
+export const settingsLane = () => newLaneDraft || activeLane();
 
 export function targetLane() {
   return activeLane() || editLanes()[0] || null;
@@ -46,7 +46,7 @@ export function setLaneCapo(lane, capo) {
   if (moveCapo(lane, capo)) S.voicingRevision++;
 }
 
-function clearLaneShapes(lane) {
+export function clearLaneShapes(lane) {
   for (const shapeId of new Set((lane?.notes || []).map((note) => note.shapeId).filter(Boolean)))
     ungroupShape(lane.notes, shapeId);
 }
@@ -108,7 +108,7 @@ function buildTuningOptions(lane) {
   if (customTunings.length) {
     const grp = document.createElement("optgroup");
     grp.label = "Custom";
-    for (const t of customTunings) grp.append(new Option(`${t.name} (${t.notes})`, t.id));
+    for (const t of customTunings) grp.append(new Option(`${t.name} (${notesLowToHigh(parseTuning(t.notes) || [])})`, t.id));
     layerTun.append(grp);
   }
   // Older projects stored an ad-hoc "custom" tuning inline; keep it selectable
@@ -150,98 +150,6 @@ export function renderLayerSettings() {
     layerArrangement.value = ["none", "lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm", "bass", "alt_bass", "bonus_bass"].includes(value)
       ? value : lane.tablatureEnabled === false ? "none" : "auto";
   }
-}
-
-// ---- Settings → Manage tunings modal: create/edit/delete named custom tunings ----
-export function renderTuningManager() {
-  if (!tuningListEl) return;
-  tuningListEl.replaceChildren(...customTunings.map(tuningRow));
-}
-
-// C0..E6 — low enough for 5/6-string bass (B0 = 23) and drop tunings, high
-// enough for any guitar open string.
-const NOTE_MIN = 12, NOTE_MAX = 88;
-const TUNE_MIN_STRINGS = 4, TUNE_MAX_STRINGS = 8;
-
-// A per-string note dropdown (highest pitch at top). Value = open-string MIDI,
-// so the picker can't produce anything invalid — no free-text parsing needed.
-function noteSelect(midi) {
-  const sel = document.createElement("select");
-  sel.className = "tuning-str";
-  for (let p = NOTE_MAX; p >= NOTE_MIN; p--) sel.append(new Option(noteName(p), String(p)));
-  sel.value = String(midi);
-  return sel;
-}
-
-function tuningRow(t) {
-  const row = document.createElement("div");
-  row.className = "tuning-row";
-
-  const head = document.createElement("div");
-  head.className = "tuning-row-head";
-  const name = document.createElement("input");
-  name.type = "text"; name.className = "tuning-name"; name.value = t.name; name.placeholder = "Name";
-  name.addEventListener("change", () => {
-    updateCustomTuning(t.id, { name: name.value.trim() || t.name });
-    renderLayerSettings();
-  });
-  const del = document.createElement("button");
-  del.type = "button"; del.className = "lane-btn tuning-del"; del.title = "Delete tuning";
-  del.setAttribute("aria-label", "Delete tuning");
-  del.innerHTML = CLOSE_ICON;   // a literal ✕ is not the app's close mark
-  del.addEventListener("click", () => {
-    removeCustomTuning(t.id);
-    renderTuningManager(); renderLayerSettings(); refreshTabIfOpen();
-  });
-  head.append(name, del);
-
-  // Edit as MIDI numbers, persist back as the note-name string the store expects.
-  const midis = parseTuning(t.notes) || TUNINGS.guitar6.tuning.slice();
-  const strings = document.createElement("div");
-  strings.className = "tuning-strings";
-  // Rule 24: the paragraph that explained this window is gone; what it said
-  // belongs to the controls it was about.
-  strings.title = "Each open string, highest first.";
-  const commit = () => {
-    updateCustomTuning(t.id, { notes: tuningToNames(midis) });
-    if (S.state) for (const lane of S.state.editLanes)
-      if (lane.tuning === t.id) { lane.customTuning = tuningToNames(midis); clearLaneShapes(lane); }
-    renderLayerSettings(); refreshTabIfOpen();
-  };
-  const countBtn = (text, title, on, disabled) => {
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "tuning-count"; b.textContent = text; b.title = title; b.disabled = disabled;
-    b.addEventListener("click", on);
-    return b;
-  };
-  const rebuild = () => {
-    strings.replaceChildren();
-    midis.forEach((p, i) => {
-      const sel = noteSelect(p);
-      sel.addEventListener("change", () => { midis[i] = parseInt(sel.value, 10); commit(); });
-      strings.append(sel);
-    });
-    strings.append(
-      countBtn("−", "Remove lowest string", () => { midis.pop(); commit(); rebuild(); }, midis.length <= TUNE_MIN_STRINGS),
-      // New string defaults a fourth below the current lowest (the usual extended-range step).
-      countBtn("+", "Add a lower string", () => { midis.push(clamp(midis[midis.length - 1] - 5, NOTE_MIN, NOTE_MAX)); commit(); rebuild(); }, midis.length >= TUNE_MAX_STRINGS),
-    );
-  };
-  rebuild();
-
-  row.append(head, strings);
-  return row;
-}
-
-// Reached from an active lane's tuning select — seed the new preset from that
-// lane's current tuning and apply it right away, so this reads as "duplicate &
-// tweak" rather than a blank form.
-function addTuningFromManager() {
-  const lane = settingsLane();
-  const notes = tuningToNames(lane ? laneTuning(lane) : TUNINGS.guitar6.tuning);
-  const t = addCustomTuning(`Custom ${customTunings.length + 1}`, notes);
-  if (lane) { lane.tuning = t.id; lane.customTuning = notes; clearLaneShapes(lane); }
-  renderTuningManager(); renderLayerSettings(); refreshTabIfOpen();
 }
 
 // Inline-SVG icons for the per-layer controls (no icon library; design handoff).
@@ -594,7 +502,7 @@ export function init_lanes() {
     });
     layerTun.addEventListener("change", () => {
       const lane = settingsLane(); if (!lane) return;
-      if (layerTun.value === "__manage") { renderLayerSettings(); openTuningManager(); return; }
+      if (layerTun.value === "__manage") { renderLayerSettings(); openTuningManager(lane.tuning); return; }
       lane.tuning = layerTun.value;
       lane.customTuning = tuningToNames(laneTuning(lane));
       clearLaneShapes(lane);
@@ -619,5 +527,4 @@ export function init_lanes() {
       refreshSaveState();
     });
   }
-  if (tuningAddBtn) tuningAddBtn.addEventListener("click", addTuningFromManager);
 }

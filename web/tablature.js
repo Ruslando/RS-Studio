@@ -21,30 +21,12 @@ import { sectionMarkersForExport } from "./section-marker-core.js";
 import { isTablatureLane, selectedTablatureLane } from "./layer-role.js";
 import { modernGpProjectionStatus, modernGpResult, projectedGpLaneScore } from "./guitar-pro-score.js";
 import { parseTuning, songTimeToTabMs, tabMsToSongTime } from "./util.js";
+import { TUNINGS } from "./tunings.js";
 import { arrangedNotes, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
 
 // ---- tablature (Guitar Pro export + alphaTab preview) ----
-// Tuning presets: open-string MIDI in Guitar Pro order (string 1 = highest).
-// The 6-string standard/drop presets step down chromatically E→D#→D→C#→C, each
-// paired with its drop variant (lowest string dropped a further whole step) —
-// the common metal/rock tuning ladder.
-// `label` is shown inside an <optgroup> keyed by string count (see buildTuningOptions),
-// so the instrument/count prefix lives on the group — options just name the variant.
-export const TUNINGS = {
-  bass4:   { label: "Standard (E A D G)",     tuning: [43, 38, 33, 28] },
-  bass5:   { label: "Standard (B E A D G)",   tuning: [43, 38, 33, 28, 23] },
-  guitar6: { label: "Standard (E A D G B E)", tuning: [64, 59, 55, 50, 45, 40] },
-  guitar7: { label: "Standard (B E A D G B E)", tuning: [64, 59, 55, 50, 45, 40, 35] },
-  ds_standard: { label: "D# Standard (D# G# C# F# A# D#)", tuning: [63, 58, 54, 49, 44, 39] },
-  d_standard:  { label: "D Standard (D G C F A D)",        tuning: [62, 57, 53, 48, 43, 38] },
-  cs_standard: { label: "C# Standard (C# F# B E G# C#)",   tuning: [61, 56, 52, 47, 42, 37] },
-  c_standard:  { label: "C Standard (C F A# D# G C)",      tuning: [60, 55, 51, 46, 41, 36] },
-  drop_d:  { label: "Drop D (D A D G B E)",         tuning: [64, 59, 55, 50, 45, 38] },
-  drop_cs: { label: "Drop C# (C# G# C# F# A# D#)",  tuning: [63, 58, 54, 49, 44, 37] },
-  drop_c:  { label: "Drop C (C G C F A D)",         tuning: [62, 57, 53, 48, 43, 36] },
-  drop_b:  { label: "Drop B (B F# B E G# C#)",      tuning: [61, 56, 52, 47, 42, 35] },
-  drop_as: { label: "Drop A# (A# F A# D# G C)",     tuning: [60, 55, 51, 46, 41, 34] },
-};
+// Tuning presets live in tunings.js (no DOM), so guitar-pro-edit.js can read them too.
+export { TUNINGS } from "./tunings.js";
 
 // User-defined named tunings (typed as note strings, e.g. "G2 D2 A1 E1"),
 // managed via the "Manage tunings…" option on the layer tuning select.
@@ -55,20 +37,10 @@ const loadCustomTunings = () => { try { return JSON.parse(LS && LS.getItem(CUSTO
 const saveCustomTunings = () => { if (LS) LS.setItem(CUSTOM_TUNINGS_KEY, JSON.stringify(customTunings)); };
 export let customTunings = loadCustomTunings();
 
-export function addCustomTuning(name, notes) {
-  const t = { id: "ct_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, notes };
-  customTunings.push(t);
-  saveCustomTunings();
-  return t;
-}
-export function updateCustomTuning(id, patch) {
-  const t = customTunings.find((c) => c.id === id);
-  if (!t) return;
-  Object.assign(t, patch);
-  saveCustomTunings();
-}
-export function removeCustomTuning(id) {
-  customTunings = customTunings.filter((t) => t.id !== id);
+export const newTuningId = () => "ct_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+// The tuning manager edits a draft and hands the whole list over on Save.
+export function replaceCustomTunings(list) {
+  customTunings = list.map((t) => ({ id: t.id, name: t.name, notes: t.notes, ...(t.instrument ? { instrument: t.instrument } : {}) }));
   saveCustomTunings();
 }
 // A lane's `tuning` field resolves against built-ins, a custom-tuning id, or

@@ -659,27 +659,6 @@
 
   <!-- Custom-tuning manager: centered overlay modal. Opened via the layer
        tuning select's "Manage tunings…" option. -->
-  <div id="tuningManagerBackdrop" hidden>
-    <div id="tuningManagerPanel" role="dialog" aria-modal="true" aria-label="Manage tunings">
-      <div class="sp-head">
-        <span class="sp-title">
-          <span>Custom Tunings</span></span>
-        <button id="tuningManagerClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div class="sp-body">
-
-        <div id="tuningList" class="tuning-list"></div>
-        <button type="button" id="tuningAdd" class="ghost-btn tuning-add-btn">＋ Add tuning</button>
-      </div>
-      <div class="modal-footer">
-        <div class="modal-actions">
-          <button type="button" id="tuningCancel">Cancel</button>
-          <button type="button" id="tuningSave" class="primary">Save</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Stem editor: centered overlay modal. Opened by a stem's edit button. Rename
        it, or replace its audio by re-separating from the full song or uploading a
        file — the source-picker and preview reuse the New Project modal's
@@ -723,7 +702,7 @@
           <span id="settingsModalTitle">Trace options</span></span>
         <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
-<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="sp-body">
+<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="sp-body">
         <!-- Marker timing state: feature wiring still binds these ids, but BPM,
              meter, division, and offset are edited through the marker popover. -->
         <div class="sp-pane" id="spTempo" hidden>
@@ -888,6 +867,19 @@
             </div>
           </div>
           <p id="projMetaStatus" class="sp-note" hidden></p>
+        </div>
+        <!-- Tunings: the list on the left, the selected tuning's editor on the right.
+             Edits a draft (tuning-editor.js) that Apply saves and Cancel drops. -->
+        <div class="sp-pane" id="spTunings" hidden><div class="pane-intro"><h2>Tunings</h2><p>Make your own tunings, or start from a built-in one and save it under a new name.</p></div>
+          <div class="tuning-manager">
+            <div class="tuning-side">
+              <div id="tuningList" class="tuning-list" role="listbox" aria-label="Tunings"></div>
+              <div class="tuning-new">
+                <button type="button" id="tuningNewBtn" class="tuning-new-btn"><span data-ui-icon="plus" aria-hidden="true"></span>New tuning</button>
+              </div>
+            </div>
+            <div id="tuningEditor" class="tuning-editor"></div>
+          </div>
         </div>
         <div class="sp-pane" id="spKeys" hidden><div class="pane-intro"><h2>Keyboard shortcuts</h2><p>Customize editing commands, or view the fixed navigation shortcuts.</p></div>
           <div class="keymap-tabs" role="tablist">

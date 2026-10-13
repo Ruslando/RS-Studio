@@ -12,7 +12,8 @@ import { draw } from "./repaint.js";
 import { doCopy, doCut, doDelete, doPaste, redo, undo, updateUndoButtons } from "./edit.js";
 import { resetZoom, zoomCenter } from "./geometry.js";
 import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey } from "./keymap.js";
-import { renderLayerSettings, renderTuningManager } from "./lanes.js";
+import { renderLayerSettings } from "./lanes.js";
+import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen } from "./tuning-editor.js";
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
 import { panelMotion } from "./panel-motion.js";
 import { applyCoverChange, clearProjectCover, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
@@ -84,28 +85,12 @@ export function cancelLayerSettings() {
   actions?.cancel();
 }
 
-// Tuning manager: a separate modal (reached via layerTun's "Manage tunings…"
-// option) for creating/editing/deleting named custom tunings.
-export const tuningManagerBackdrop = $("tuningManagerBackdrop"), tuningManagerClose = $("tuningManagerClose");
-export const tuningListEl = $("tuningList"), tuningAddBtn = $("tuningAdd");
-
-// Staged like the layer editor: a tuning's strings apply as you change them, so
-// Cancel puts them back. Adding and deleting a tuning are actions and stand.
-let tuningSnapshot = null;
-export function openTuningManager() {
-  renderTuningManager();
-  tuningManagerBackdrop.hidden = false;
-  tuningSnapshot = snapshotInputs($("tuningManagerPanel"));
-}
-
-function closeTuningManager() { tuningSnapshot = null; tuningManagerBackdrop.hidden = true; }
-function cancelTuningManager() {
-  revertInputs(tuningSnapshot); tuningSnapshot = null;
-  tuningManagerBackdrop.hidden = true;
-}
+// Tunings live in Settings. A layer's "Manage tunings…" opens that page with the
+// layer's tuning selected.
+export function openTuningManager(selectKey) { openSettingsModal("tunings", selectKey); }
 
 // One modal, panes swapped by `section` ("trace" | "project" | "keys" | "appearance" | "models").
-const SP_TITLES = { trace: "Editor options", project: "Project details", keys: "Keyboard shortcuts", appearance: "Appearance", models: "Models" };
+const SP_TITLES = { trace: "Editor options", project: "Project details", keys: "Keyboard shortcuts", appearance: "Appearance", models: "Models", tunings: "Tunings" };
 // Rule 20: the primary names the work. A settings window applies; an editor saves.
 const SP_PRIMARY = { project: "Save" };
 let spSection = "trace";
@@ -115,8 +100,9 @@ let spSection = "trace";
 // them, which is the only way to judge them — so staging here is a snapshot on
 // open and a revert on Cancel, not a deferred write. Escape, Cancel, the close
 // and a backdrop click are all the same key, and all four take this path.
+// The Tunings page keeps its own draft (tuning-editor.js), so it stays out of this.
 const snapshotInputs = (root) => [...root.querySelectorAll("input, select")]
-  .filter((el) => !el.closest("[hidden]"))
+  .filter((el) => !el.closest("[hidden]") && !el.closest("#spTunings"))
   .map((el) => ({ el, v: el.type === "checkbox" ? el.checked : el.value }));
 
 // Put each value back and re-fire the event that applied it, so persistence and
@@ -150,6 +136,7 @@ function showSettingsPane(section) {
   $("spAppearance").hidden = section !== "appearance";
   $("spModels").hidden = section !== "models";
   $("spAcceleration").hidden = section !== "acceleration";
+  $("spTunings").hidden = section !== "tunings";
   $("settingsModalTitle").textContent = section === "project" ? SP_TITLES.project : "Settings";
   $("settingsApply").textContent = SP_PRIMARY[section] || "Apply";
   $("settingsApply").disabled = false;   // renderProjectSettings disables it with no project open
@@ -166,10 +153,14 @@ function showSettingsPane(section) {
   if (section === "project") renderProjectSettings();
   if (section === "models") renderModels();
   if (section === "acceleration") renderAcceleration();
+  if (section === "tunings" && !tuningDraftOpen()) beginTuningDraft(tuningSelect);
   if (section === "keys") { setKeyTab("edit"); renderKeymap(); }
 }
 
-function openSettingsModal(section = "trace") {
+let tuningSelect = null;   // the tuning the Tunings page opens on
+function openSettingsModal(section = "trace", selectTuning = null) {
+  dropTuningDraft();
+  tuningSelect = selectTuning;
   showSettingsPane(section);
   settingsModalBackdrop.hidden = false;
   snapshotSettings();
@@ -198,11 +189,12 @@ function setKeyTab(name) {
 // Closing stops the Models poll: a closed window that keeps asking the server
 // every second is a window that never actually closed.
 function closeSettingsModal() { spSnapshot = null; stopModelPolling(); settingsModalBackdrop.hidden = true; }
-function cancelSettingsModal() { revertSettings(); stopModelPolling(); settingsModalBackdrop.hidden = true; }
+function cancelSettingsModal() { revertSettings(); dropTuningDraft(); stopModelPolling(); settingsModalBackdrop.hidden = true; }
 // Project details is the one pane whose values live on the server, so its
 // primary is the only one that has work left to do when it is pressed.
-function applySettingsModal() {
+async function applySettingsModal() {
   if (spSection === "project") { saveProjectSettings(); return; }
+  if (!(await saveTuningDraft())) return;   // an unsaved built-in edit made them stay
   closeSettingsModal();
 }
 
@@ -412,10 +404,6 @@ export function init_ui() {
     cancelSettingsModal(); return true;   // rule 17: Escape and Cancel are the same key
   });
   registerEscapeLayer(ESC_DEPTH.modal, () => {
-    if (tuningManagerBackdrop.hidden) return false;
-    cancelTuningManager(); return true;
-  });
-  registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (layerSettingsBackdrop.hidden) return false;
     cancelLayerSettings(); return true;
   });
@@ -446,9 +434,6 @@ export function init_ui() {
   settingsClose.addEventListener("click", cancelLayerSettings);
   $("layerCancel").addEventListener("click", cancelLayerSettings);
   $("layerSave").addEventListener("click", closeLayerSettings);
-  tuningManagerClose.addEventListener("click", cancelTuningManager);
-  $("tuningCancel").addEventListener("click", cancelTuningManager);
-  $("tuningSave").addEventListener("click", closeTuningManager);
   settingsModalClose.addEventListener("click", cancelSettingsModal);
   $("settingsCancel").addEventListener("click", cancelSettingsModal);
   $("settingsApply").addEventListener("click", applySettingsModal);

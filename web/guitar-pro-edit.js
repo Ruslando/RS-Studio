@@ -8,6 +8,7 @@
 
 import { bendCurve, bendPeak, bendShape } from "./bend.js";
 import { MAX_RHYTHM_PIECES, MAX_TIE_CHAIN } from "./constants.js";
+import { TUNINGS } from "./tunings.js";
 import { parseTuning } from "./util.js";
 import { arrangedNotes, representPickedOpenSlides, unstacked, voiceNotes } from "./voicing-core.js";
 
@@ -30,20 +31,11 @@ function tuningFromImportedLane(lane) {
   return tuning;
 }
 
-const BUILTIN_TUNINGS = {
-  bass4: [43, 38, 33, 28], bass5: [43, 38, 33, 28, 23],
-  guitar6: [64, 59, 55, 50, 45, 40], guitar7: [64, 59, 55, 50, 45, 40, 35],
-  ds_standard: [63, 58, 54, 49, 44, 39], d_standard: [62, 57, 53, 48, 43, 38],
-  cs_standard: [61, 56, 52, 47, 42, 37], c_standard: [60, 55, 51, 46, 41, 36],
-  drop_d: [64, 59, 55, 50, 45, 38], drop_cs: [63, 58, 54, 49, 44, 37],
-  drop_c: [62, 57, 53, 48, 43, 36], drop_b: [61, 56, 52, 47, 42, 35],
-  drop_as: [60, 55, 51, 46, 41, 34],
-};
 
 function tuningFromLane(lane) {
-  if (BUILTIN_TUNINGS[lane.tuning]) return [...BUILTIN_TUNINGS[lane.tuning]];
+  if (TUNINGS[lane.tuning]) return [...TUNINGS[lane.tuning].tuning];
   if ((lane.customTuning || "").trim()) return tuningFromImportedLane(lane);
-  return [...(String(lane.instrument || "").includes("bass") ? BUILTIN_TUNINGS.bass4 : BUILTIN_TUNINGS.guitar6)];
+  return [...(String(lane.instrument || "").includes("bass") ? TUNINGS.bass4.tuning : TUNINGS.guitar6.tuning)];
 }
 
 export function validateImportedProjection(lanes) {

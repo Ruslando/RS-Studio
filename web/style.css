@@ -612,8 +612,7 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 .live-editor .tap-tempo-readout { text-align: right; font-size: var(--text-data); }
 .live-editor #markerAt { font-size: var(--text-data); text-align: right; }
 
-#layerSettingsBackdrop, #stemSettingsBackdrop, #tuningManagerBackdrop { z-index: 110; }
-#tuningManagerBackdrop { z-index: 115; }
+#layerSettingsBackdrop, #stemSettingsBackdrop { z-index: 110; }
 
 #openProjModal, #gpImportModal, #rocksmithExportModal, #setupModal.wide { width: var(--w-modal-wide); }
 #newProjModal { width: min(1080px, calc(100vw - 2 * var(--s-section))); height: min(640px, 92vh); max-height: 92vh; }
@@ -647,22 +646,38 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 }
 .keymap-clash::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--warn); align-self: center; }
 
-.tuning-list { display: flex; flex-direction: column; gap: var(--s-sibling); margin-bottom: var(--s-group); }
-.tuning-row {
-  display: flex; flex-direction: column; gap: var(--s-sibling);
-  padding: var(--s-row); border: 1px solid var(--line); border-radius: var(--r-container);
-}
-.tuning-row-head { display: flex; align-items: center; gap: var(--s-sibling); }
-.tuning-name { flex: 1; min-width: 0; }
-.tuning-strings { display: flex; flex-wrap: wrap; gap: var(--s-pair); align-items: center; }
-
-.tuning-str { min-width: 46px; padding-inline: var(--s-sibling); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; text-align: center; }
-.tuning-count { width: var(--h-control); flex: none; padding: 0; }
-.tuning-del {
-  width: var(--h-control); height: var(--h-control); border-radius: var(--r-control);
-  border-color: var(--error); color: var(--error); flex: none;
-}
-.tuning-add-btn { width: 100%; }
+/* Settings → Tunings: list | editor. The page fills the pane so the list scrolls on its own. */
+#spTunings:not([hidden]) { height: 100%; min-height: 0; }
+.tuning-manager { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(180px, 220px) minmax(0, 1fr); gap: var(--s-group); }
+.tuning-side { min-height: 0; display: flex; flex-direction: column; gap: var(--s-sibling); }
+.tuning-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 1px; padding: var(--s-pair); border: 1px solid var(--line); border-radius: var(--r-container); }
+.tuning-group-head { padding: var(--s-sibling) var(--s-sibling) var(--s-pair); font: 600 var(--text-caption)/1.2 var(--font-ui); letter-spacing: .02em; color: var(--label); }
+.tuning-group-head:not(:first-child) { margin-top: var(--s-sibling); }
+.tuning-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; height: auto; padding: var(--s-pair) var(--s-sibling); border: 1px solid transparent; border-radius: var(--r-control); background: transparent; box-shadow: none; text-align: left; color: var(--text); font: inherit; }
+.tuning-item:hover { background: var(--control-hover); }
+.tuning-item[aria-selected="true"] { background: var(--selection); border-color: var(--selection-line); }
+.tuning-item-name { font-weight: 500; }
+.tuning-item-notes { font: 400 var(--text-data)/1.2 var(--font-mono); color: var(--hint); }
+.tuning-new-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: var(--s-pair); }
+.tuning-new-btn svg { width: 14px; height: 14px; }
+.tuning-editor { min-width: 0; display: flex; flex-direction: column; gap: var(--s-group); }
+.tuning-field-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-pair); min-height: 22px; }
+.tuning-shape { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-row); }
+.tuning-strings { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-pair); }
+/* Only the left padding: the right one is the select's own, and it keeps the chevron clear of the note. */
+.tuning-str { width: 72px; padding-left: var(--s-sibling); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+/* One string: the note select with a slim up/down pair joined on its right. */
+.tuning-string { display: inline-flex; align-items: stretch; }
+.tuning-string .tuning-str { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.tuning-nudge { display: flex; flex-direction: column; width: 20px; height: var(--h-control); }
+.tuning-nudge .tuning-step { flex: 1; min-height: 0; height: auto; width: 100%; padding: 0; border-left: 0; font-size: 10px; line-height: 1; box-shadow: none; }
+.tuning-nudge .tuning-step:first-child { border-radius: 0 var(--r-control) 0 0; border-bottom-width: 0; }
+.tuning-nudge .tuning-step:last-child { border-radius: 0 0 var(--r-control) 0; }
+.tuning-whole { display: flex; gap: var(--s-sibling); }
+.tuning-whole-btn { min-width: 96px; }
+.tuning-actions { display: flex; align-items: center; gap: var(--s-sibling); margin-top: auto; }
+.tuning-actions > button:first-child { margin-left: auto; }
+@media (max-width: 640px) { .tuning-manager { grid-template-columns: 1fr; } .tuning-list { max-height: 220px; } }
 .layer-color-control input[type="color"] {
   width: 56px; height: var(--h-control); padding: var(--s-pair);
   background: var(--control); border: 1px solid var(--line); border-radius: var(--r-control); cursor: default;

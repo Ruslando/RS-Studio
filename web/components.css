@@ -243,7 +243,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   background: var(--control); border: 1px solid var(--line); pointer-events: auto;
 }
 
-.dialog, #settingsPanel, #stemSettingsPanel, #tuningManagerPanel, #settingsModal,
+.dialog, #settingsPanel, #stemSettingsPanel, #settingsModal,
 #newProjModal, #confirmModal, #actionConfirmModal, #pasteModal,
 #openProjModal, #gpImportModal, #rocksmithExportModal, #setupModal {
   width: var(--w-modal); max-width: calc(100vw - 2 * var(--s-section));
@@ -503,7 +503,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 /* All modal backdrops share geometry/material; screen CSS only sets stacking. */
 .scrim, #modalBackdrop, #layerSettingsBackdrop, #stemSettingsBackdrop,
-#tuningManagerBackdrop, #settingsModalBackdrop, #confirmBackdrop,
+#settingsModalBackdrop, #confirmBackdrop,
 #actionConfirmBackdrop, #pasteBackdrop, #openProjBackdrop, #gpImportBackdrop,
 #rocksmithExportBackdrop, #setupBackdrop, #tabViewBackdrop {
   position: fixed; inset: 0; background: var(--scrim);
