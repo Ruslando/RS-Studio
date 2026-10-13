@@ -117,9 +117,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 /* Stepper: a field with an up/down pair joined to its right edge (ui.js adds the pair
    to any input marked data-stepper). The only control below 24 high. */
 .stepper { display: inline-flex; align-items: stretch; }
-.stepper :is(input, select) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.stepper > :is(input, select, .pop-field) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .stepper .pop-field { width: auto; }
-.stepper .pop-field > input.num-4 { width: 88px; }
+.stepper .pop-field > input.num-4 { flex: none; width: 56px; }
 .stepper-nudge { display: flex; flex-direction: column; width: var(--w-stepper); height: var(--h-control); }
 .stepper-btn { flex: 1; min-height: 0; height: auto; width: 100%; padding: 0; border-left: 0; box-shadow: none; }
 .stepper-btn:first-child { border-radius: 0 var(--r-control) 0 0; border-bottom-width: 0; }
@@ -198,16 +198,16 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 
 .menu-sep, .ctxmenu-sep { height: 1px; background: var(--line); margin: var(--s-pair) 0; }
 
-.dialog-header, .sp-head, .op-head {
+.dialog-header {
   background: var(--surface-toolbar);
   height: var(--h-chrome); flex: none;
   padding: 0 var(--s-sibling) 0 var(--s-group); border-bottom: 1px solid var(--line);
   display: flex; align-items: center; justify-content: space-between; gap: var(--s-sibling);
 }
 
-.sp-title { display: flex; align-items: center; gap: var(--s-sibling); font: 600 var(--text-heading)/1.2 var(--font-ui); letter-spacing: -.01em; color: var(--text); }
+.dialog-title { margin: 0; display: flex; align-items: center; gap: var(--s-sibling); font: 600 var(--text-heading)/1.2 var(--font-ui); letter-spacing: -.01em; color: var(--text); }
 
-.sp-title svg { color: var(--label); }
+.dialog-title svg { color: var(--label); }
 
 /* Close and remove: the icon button at its two sizes, whatever the feature calls it. */
 .sp-x, .op-close, .cover-clear, .np-clear, .pop-x, .sc-remove, .field-revert {
@@ -220,17 +220,17 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 :is(.sp-x, .op-close, .cover-clear, .np-clear, .pop-x, .sc-remove, .field-revert):hover:not(:disabled) { color: var(--text); background: var(--control-hover); }
 :is(.pop-del, .sc-remove, .ri-delete):hover:not(:disabled) { color: var(--error); }
 
-.dialog-body, .sp-body, .modal-body { padding: var(--s-group); flex: 1; min-height: 0; overflow: auto;
+.dialog-body { padding: var(--s-group); flex: 1; min-height: 0; overflow: auto;
                         display: flex; flex-direction: column; gap: var(--s-group); }
 
-.dialog-footer, .modal-footer {
+.dialog-footer {
   background: var(--surface-toolbar);
   height: var(--h-chrome); flex: none; margin: 0;
   padding: 0 var(--s-group); border-top: 1px solid var(--line);
   display: flex; align-items: center; gap: var(--s-sibling);
 }
 
-.dialog-actions, .modal-actions { display: flex; gap: var(--s-sibling); margin-left: auto; }
+.dialog-actions { display: flex; gap: var(--s-sibling); margin-left: auto; }
 
 
 .toast {

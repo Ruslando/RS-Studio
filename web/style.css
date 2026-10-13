@@ -577,9 +577,16 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 
 .pop-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-row); align-items: end; }
 
-.pop-field { position: relative; display: flex; align-items: center; width: 100%; }
-.pop-field > input { width: 100%; padding-right: var(--s-empty); }
-.pop-unit { position: absolute; right: var(--s-row); font: 400 var(--text-data)/1 var(--font-mono); color: var(--hint); pointer-events: none; }
+/* A field with its unit: the box is the field, the number and the unit sit in it side
+   by side, so a long unit (BPM) keeps the same distance from its value as a short one (s). */
+.pop-field {
+  display: flex; align-items: center; gap: var(--s-pair); width: 100%; height: var(--h-control); padding-right: var(--s-row);
+  background: var(--surface-inset); border: 1px solid transparent; border-radius: var(--r-control);
+}
+.pop-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
+.pop-field > input { flex: 1; min-width: 0; width: 100%; height: 100%; padding-right: 0; background: transparent; border: 0; border-radius: 0; }
+.pop-field > input:is(:focus, :focus-visible) { border-color: transparent; box-shadow: none; }
+.pop-unit { flex: none; font: 400 var(--text-data)/1 var(--font-mono); color: var(--hint); pointer-events: none; }
 .live-editor .sp-row { display: flex; gap: var(--s-sibling); align-items: center; }
 #markerPop .sp-slash { color: var(--hint); }
 .live-editor input[type="number"] { width: 100%; }
@@ -806,18 +813,9 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 
 #actionConfirmBackdrop { z-index: var(--z-confirm); }
 
-#confirmModal h2, #actionConfirmModal h2, #pasteModal h2 {
-  height: var(--h-chrome); flex: none; margin: 0; background: var(--surface-toolbar);
-  padding: 0 var(--s-group); border-bottom: 1px solid var(--line);
-  display: flex; align-items: center;
-  font: 600 var(--text-heading)/1.2 var(--font-ui); letter-spacing: -.01em;
-}
-
 #openProjBackdrop, #gpImportBackdrop, #rocksmithExportBackdrop, #setupBackdrop { z-index: var(--z-window-menu); }
 
 #setupBackdrop { z-index: var(--z-window-setup); }
-
-.op-head h2 { margin: 0; font: 600 var(--text-heading)/1.2 var(--font-ui); letter-spacing: -.01em; }
 
 .gp-import-summary { margin: 0; color: var(--label); font: 400 var(--text-body)/1.5 var(--font-ui); }
 .gp-import-tracks { flex: 1; min-height: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-container); }
@@ -841,9 +839,9 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 .confirm-msg { color: var(--text); margin: 0; font: 400 var(--text-body)/1.5 var(--font-ui); white-space: pre-line; }
 
 #rocksmithExportForm { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-#rocksmithExportForm .sp-body { flex: 1 1 auto; min-height: 0; }
+#rocksmithExportForm .dialog-body { flex: 1 1 auto; min-height: 0; }
 
-#rocksmithExportForm .modal-footer { margin-top: 0; padding: var(--s-group); }
+#rocksmithExportForm .dialog-footer { margin-top: 0; padding: var(--s-group); }
 
 .rs-wwise { display: flex; align-items: center; gap: var(--s-sibling); }
 .rs-wwise-text { flex: 1 1 auto; color: var(--text); font: 400 var(--text-body)/1.5 var(--font-ui); }
@@ -899,11 +897,7 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 }
 .tab-head:empty, .tab-head:has(#tabWarn:empty) { display: none; }
 
-#tabWarn {
-  margin-left: auto; display: flex; align-items: center; gap: var(--s-sibling);
-  color: var(--text); font: 400 var(--text-control)/1 var(--font-ui);
-}
-#tabWarn:not(:empty)::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--warn); flex: none; }
+#tabWarn { margin-left: auto; }
 
 #tabScroll { flex: 1; min-height: 0; overflow: auto; background: #fff; position: relative; }
 #tabRender { padding: var(--s-row); position: relative; }
@@ -1098,7 +1092,7 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 .settings-layout { display: flex; flex: 1; min-height: 0; }
 #settingsModal.settings-window { width: min(var(--w-settings), calc(100vw - 2 * var(--s-section))); height: min(620px, calc(100dvh - 2 * var(--s-section))); }
 .settings-nav { flex: 0 0 190px; display: flex; flex-direction: column; gap: var(--s-pair); padding: var(--s-row); background: var(--surface-toolbar); border-right: 1px solid var(--line); overflow: auto; }
-.settings-layout > .sp-body { min-width: 0; padding: var(--s-section); }
+.settings-layout > .dialog-body { min-width: 0; padding: var(--s-section); }
 @media (max-width: 1100px) {
   .welcome-main { grid-template-columns: 230px minmax(0, 1fr); }
   .welcome-recent { padding: var(--s-sibling) var(--s-row) var(--s-row); }

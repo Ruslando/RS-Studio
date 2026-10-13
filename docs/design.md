@@ -338,8 +338,10 @@ Class: `input[type=text|number|search]`, `select`, `textarea`, or `.field`.
 13px. Focus per rule 2. Placeholder `--hint`.
 
 - Number: mono 11, right aligned, no native spin buttons. A unit sits inside the
-  field on the right in mono `--hint` (`.pop-field` + `.pop-unit`); it is never
-  written into the label, in brackets or otherwise.
+  field, right after the number, in mono `--hint`: `.pop-field` is the field's
+  box and holds the input and a `.pop-unit`, 4 apart, so "BPM" and "s" keep
+  the same distance from their value. A unit is never written into the label,
+  in brackets or otherwise.
 - Select: the native control with the drawn chevron; width follows its longest
   option. Inside a row it is 24 high, radius 4.
 - A field inside a row or the stage is 24 high, radius 4.
@@ -441,7 +443,7 @@ width `--w-modal` (wide: `--w-modal-wide`), max-height `--h-modal-max` or 80vh.
 
 | Part | Class | Spec |
 |---|---|---|
-| Header | `.dialog-header` | 48 high, `--surface-toolbar`, hairline below, padding `0 8 0 16`. Title 16/600 (`.sp-title`), optionally the object's chip, then the 32 close button |
+| Header | `.dialog-header` | 48 high, `--surface-toolbar`, hairline below, padding `0 8 0 16`. Title 16/600 (`.dialog-title`), optionally the object's chip, then the 32 close button |
 | Body | `.dialog-body` | Padding 16, groups 16 apart, scrolls. `--sectioned`: sections 24 apart. `--flush`: padding 8, rows 4 apart, for a list whose rows are the controls |
 | Footer | `.dialog-footer` | 48 high, `--surface-toolbar`, hairline above, padding `0 16`. Left: the destructive button or nothing. Right (`.dialog-actions`): Cancel, then the primary, 8 apart |
 
@@ -614,16 +616,14 @@ Remove a line when it is fixed; add one when a deviation is found.
 
 | # | What | Where |
 |---|---|---|
-| D31 | The UI still runs on alias class names (`.sp-head`, `.op-head`, `.modal-footer`, `.view-switch`, `.menu-list`, `.sp-x`, `.pop-x`) that share their rules with the names in section 4. New markup uses the names in section 4; the aliases go when their markup is next touched | `components.css` |
-| D35 | Three status lines are still written out on their own: `#tabWarn`, `.np-drop.error .np-title`, `.setup-readiness` | `style.css` |
-| D36 | The marker editors are consistent but plain; Detect notes has been redrawn, they have not | `.live-editor` |
+| D31 | Three components still run on alias names that are not plain synonyms, so renaming them changes behaviour and is its own piece of work: the segmented control (`.view-switch` / `.keymap-tabs`, chosen by `.active` instead of `aria-checked`), the toolbar menu (`.menu-list`, which also positions itself) and the close buttons (`.sp-x`, `.op-close`, `.pop-x`, whose hover differs from `.icon-btn`). The parts of a window have their names from section 4 | `components.css` |
 
 **Findings the audit reports that are deliberate**
 
 | Finding | Why it stays |
 |---|---|
 | `height`: launcher actions, library rows, tuning rows, drop zones, cover picker | Rows whose height comes from their content (4.13, 4.14) |
-| `height`: edge strips, stepper halves, the cover tile, the input inside the search field, a layer row's name | Not controls of their own: part of a larger one |
+| `height`: edge strips, stepper halves, the cover tile, the input inside the search field or a unit field, a layer row's name | Not controls of their own: part of a larger one |
 | `space` 3px in the segmented control | (32 − 24 − 2) / 2: what centres a 24 item in a 32 track |
 | `space` 14px beside the sidebar and above the stage | `--w-edge` |
 | `space` 34px on the right of a select | Room for the drawn chevron: two `--s-row` plus its 10px |

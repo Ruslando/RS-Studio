@@ -535,10 +535,11 @@ async function refreshTab() {
     if (ok === false) throw new Error("alphaTab could not load the selected layer");
     tabSpecJson = marker;
     const warnings = score.cwWarnings || [];
-    tabWarnEl.textContent = warnings.length ? "⚠ " + warnings.join(" · ") : "";
+    tabWarnEl.textContent = warnings.join(" · ");   // the dot says "warning"
+    tabWarnEl.classList.add("status-line--warn");
   } catch (e) {
     tabLoadGuard = null;
-    if (e?.name !== "AbortError") tabWarnEl.textContent = "error: " + e.message;
+    if (e?.name !== "AbortError") { tabWarnEl.textContent = e.message; tabWarnEl.classList.remove("status-line--warn"); }
   } finally {
     if (tabBuildController === controller) { tabBuildController = null; document.getElementById("tabBusy").hidden = true; }
   }

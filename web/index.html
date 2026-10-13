@@ -104,11 +104,11 @@
        as Settings > Models; closing this window never cancels a download. -->
   <div id="setupBackdrop" hidden>
     <div id="setupModal" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
-      <div class="sp-head">
-        <span class="sp-title" id="setupTitle">Set up RS Studio</span>
+      <div class="dialog-header">
+        <span class="dialog-title" id="setupTitle">Set up RS Studio</span>
         <button id="setupClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-      <div class="sp-body">
+      <div class="dialog-body">
         <div class="setup-progress" aria-label="Setup progress">
           <span id="setupProgressAudio" aria-current="step">01&nbsp; Rocksmith audio</span>
           <span id="setupProgressModels">02&nbsp; Models</span>
@@ -143,8 +143,8 @@
         </div>
         <p id="setupSaveStatus" class="sp-note error" role="alert" hidden></p>
       </div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="setupSkip">Set up later</button>
           <button type="button" id="setupBack" hidden>Back</button>
           <button type="button" id="setupNext" class="primary">Continue</button>
@@ -403,12 +403,12 @@
        the swap; File → Tablature view opens this. -->
   <div id="tabViewBackdrop" hidden>
     <div id="tabView" role="dialog" aria-modal="true" aria-labelledby="tabViewTitle">
-      <div class="sp-head">
-        <span class="sp-title" id="tabViewTitle">Tablature</span>
+      <div class="dialog-header">
+        <span class="dialog-title" id="tabViewTitle">Tablature</span>
         <button id="tabViewClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <div class="tab-head">
-        <div id="tabWarn" class="legend"></div>
+        <div id="tabWarn" class="status-line status-line--warn" role="status"></div>
       </div>
       <!-- Scroll wrapper ≠ render element: alphaTab's auto-scroll math assumes the
            scroll container is an ancestor of the render container. -->
@@ -587,15 +587,15 @@
       <!-- The header names its subject with the layer's own entity chip. That is
            what the body's old "Editing layer [chip]" row was for, and naming the
            object being edited is the header's job, not the body's first line. -->
-      <div class="sp-head">
-        <span class="sp-title">
+      <div class="dialog-header">
+        <span class="dialog-title">
           <span>Note layer</span>
           <span class="chip" id="spLayerChip"><span class="chip-dot"></span><span id="spLayerName">—</span></span></span>
         <button id="settingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Identity and Playback sit together; Notation follows because its
            instrument, tuning and fingering preferences change the tab. -->
-      <div class="sp-body dialog-body--sectioned">
+      <div class="dialog-body dialog-body--sectioned">
 
         <div class="sp-pane" id="spLayer">
           <div class="section">
@@ -662,9 +662,9 @@
       <!-- Destructive far left and outlined: it is one mis-aimed click from the
            primary and only one of the two is reversible. It opens a confirmation;
            it never fires from here. -->
-      <div class="modal-footer">
+      <div class="dialog-footer">
         <button type="button" id="layerDelete" class="danger">Delete note layer</button>
-        <div class="modal-actions">
+        <div class="dialog-actions">
           <button type="button" id="layerCancel">Cancel</button>
           <button type="button" id="layerSave" class="primary">Save</button>
         </div>
@@ -680,14 +680,14 @@
        stem-card markup/classes. -->
   <div id="stemSettingsBackdrop" hidden>
     <div id="stemSettingsPanel" role="dialog" aria-modal="true" aria-label="Edit audio source">
-      <div class="sp-head">
-        <span class="sp-title">
+      <div class="dialog-header">
+        <span class="dialog-title">
           <span>Audio</span>
           <span class="chip"><span class="chip-dot"></span><span id="stemSettName">—</span></span></span>
         <button id="stemSettingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Two groups, so no sections (rule 23). -->
-      <div class="sp-body">
+      <div class="dialog-body">
         <div class="sp-pane" id="spStem">
           <label class="field-group block">Name
             <input type="text" id="stemSettNameInput" maxlength="80" title="Audio source name" />
@@ -702,9 +702,9 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="dialog-footer">
         <button type="button" id="stemRemove" class="danger">Remove audio</button>
-        <div class="modal-actions">
+        <div class="dialog-actions">
           <button type="button" id="stemCancel">Cancel</button>
           <button type="button" id="stemSave" class="primary">Save</button>
         </div>
@@ -716,12 +716,12 @@
        One section for now (Trace); future options swap into the body. -->
   <div id="settingsModalBackdrop" hidden>
     <div id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
-      <div class="sp-head">
-        <span class="sp-title">
+      <div class="dialog-header">
+        <span class="dialog-title">
           <span id="settingsModalTitle">Trace options</span></span>
         <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="sp-body">
+<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="dialog-body">
         <!-- Marker timing state: feature wiring still binds these ids, but BPM,
              meter, division, and offset are edited through the marker popover. -->
         <div class="sp-pane" id="spTempo" hidden>
@@ -923,9 +923,9 @@
       <!-- Rule 17: this window is scrimmed, so it is staged, and a staged window
            always ends in a footer. Left slot is a button position and holds the
            destructive action only (rule 24) — here, resetting every binding. -->
-      <div class="modal-footer">
+      <div class="dialog-footer">
         <button type="button" id="keymapReset" class="danger" hidden>Reset to defaults</button>
-        <div class="modal-actions">
+        <div class="dialog-actions">
           <button type="button" id="settingsCancel">Cancel</button>
           <button type="button" id="settingsApply" class="primary">Apply</button>
         </div>
@@ -936,15 +936,15 @@
   <!-- New Project modal -->
   <div id="modalBackdrop" hidden>
     <div id="newProjModal" role="dialog" aria-modal="true" aria-labelledby="npTitle">
-      <div class="op-head">
-        <h2 id="npTitle">New Project</h2>
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="npTitle">New Project</h2>
         <button type="button" id="npClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <form id="form">
         <!-- Five groups, so it sections. Identity is what the project is called;
              Audio is what it is made of, and it is second because you name a thing
              before you fill it. -->
-        <div class="modal-body dialog-body--sectioned project-create-body">
+        <div class="dialog-body dialog-body--sectioned project-create-body">
           <div class="section np-details">
           <div class="section-head"><span>Project details</span></div>
 
@@ -1024,8 +1024,8 @@
           </div>
 
         </div>
-        <div class="modal-footer">
-          <div class="modal-actions">
+        <div class="dialog-footer">
+          <div class="dialog-actions">
             <button type="button" id="npCancel">Cancel</button>
             <button type="submit" id="go" class="primary">Create</button>
           </div>
@@ -1038,10 +1038,10 @@
   <!-- Detect-into-frame merge prompt (shown when the frame already has notes) -->
   <div id="confirmBackdrop" hidden>
     <div id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-      <h2 id="confirmTitle">Detect into frame</h2>
-      <div class="modal-body"><p id="confirmMsg" class="confirm-msg"></p></div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-header"><h2 class="dialog-title" id="confirmTitle">Detect into frame</h2></div>
+      <div class="dialog-body"><p id="confirmMsg" class="confirm-msg"></p></div>
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="confirmCancel">Cancel</button>
           <button type="button" id="confirmAppend">Append</button>
           <button type="button" id="confirmReplace" class="primary">Replace</button>
@@ -1053,11 +1053,11 @@
   <!-- Shared confirmation for two- or three-choice actions -->
   <div id="actionConfirmBackdrop" hidden>
     <div id="actionConfirmModal" role="alertdialog" aria-modal="true" aria-labelledby="actionConfirmTitle" aria-describedby="actionConfirmMsg">
-      <h2 id="actionConfirmTitle"></h2>
-      <div class="modal-body"><p id="actionConfirmMsg" class="confirm-msg"></p></div>
-      <div class="modal-footer">
+      <div class="dialog-header"><h2 class="dialog-title" id="actionConfirmTitle"></h2></div>
+      <div class="dialog-body"><p id="actionConfirmMsg" class="confirm-msg"></p></div>
+      <div class="dialog-footer">
         <button type="button" id="actionConfirmDiscard" class="danger" hidden>Discard</button>
-        <div class="modal-actions">
+        <div class="dialog-actions">
           <button type="button" id="actionConfirmCancel">Cancel</button>
           <button type="button" id="actionConfirmAccept" class="primary"></button>
         </div>
@@ -1068,15 +1068,15 @@
   <!-- Open an existing project from the library -->
   <div id="openProjBackdrop" hidden>
     <div id="openProjModal" role="dialog" aria-modal="true" aria-labelledby="openProjTitle">
-      <div class="op-head">
-        <h2 id="openProjTitle">Open project</h2>
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="openProjTitle">Open project</h2>
         <button type="button" id="openProjClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Rule 21, selectable list: the row IS the control, so the body runs the
            rows edge to edge (pads 8, gaps 4) instead of insetting them 16. -->
       <div id="openProjList" class="op-list dialog-body--flush"></div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="openProjCancel">Cancel</button>
           <button type="button" id="openProjOpen" class="primary" disabled>Open</button>
         </div>
@@ -1087,17 +1087,17 @@
   <!-- Guitar Pro track chooser: unsupported score layers remain visible but disabled. -->
   <div id="gpImportBackdrop" hidden>
     <div id="gpImportModal" role="dialog" aria-modal="true" aria-labelledby="gpImportTitle">
-      <div class="op-head">
-        <h2 id="gpImportTitle">Import Guitar Pro</h2>
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="gpImportTitle">Import Guitar Pro</h2>
         <button type="button" id="gpImportClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-      <div class="modal-body">
+      <div class="dialog-body">
         <p id="gpImportSummary" class="gp-import-summary"></p>
         <div id="gpImportTracks" class="gp-import-tracks"></div>
         <p id="gpImportStatus" class="gp-import-status" hidden></p>
       </div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="gpImportCancel">Cancel</button>
           <button type="button" id="gpImportConfirm" class="primary">Import tracks</button>
         </div>
@@ -1108,13 +1108,13 @@
   <!-- Rocksmith export modal -->
   <div id="rocksmithExportBackdrop" hidden>
     <div id="rocksmithExportModal" role="dialog" aria-modal="true" aria-labelledby="rsExportTitle">
-      <div class="sp-head">
-        <span class="sp-title">
+      <div class="dialog-header">
+        <span class="dialog-title">
           <span id="rsExportTitle">Rocksmith CDLC</span></span>
         <button id="rsExportClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <form id="rocksmithExportForm">
-        <div class="sp-body dialog-body--sectioned">
+        <div class="dialog-body dialog-body--sectioned">
           <!-- The audio conversion step needs local tools. The message and link
                are selected for Windows or Linux when this dialog opens. -->
           <div id="rsWwiseWarn" class="rs-wwise" hidden>
@@ -1178,8 +1178,8 @@
           </div>
           <p id="rsExportStatus" class="sp-note" hidden></p>
         </div>
-        <div class="modal-footer">
-          <div class="modal-actions">
+        <div class="dialog-footer">
+          <div class="dialog-actions">
             <button type="button" id="rsExportCancel">Cancel</button>
             <button type="submit" id="rsExportGo" class="primary">Export</button>
           </div>
@@ -1190,10 +1190,10 @@
 
   <div id="pasteBackdrop" hidden>
     <div id="pasteModal" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
-      <h2 id="pasteTitle">Paste reference</h2>
-      <div class="modal-body"><p id="pasteMsg" class="confirm-msg">Editing a linked reference mirrors to every copy.</p></div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-header"><h2 class="dialog-title" id="pasteTitle">Paste reference</h2></div>
+      <div class="dialog-body"><p id="pasteMsg" class="confirm-msg">Editing a linked reference mirrors to every copy.</p></div>
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="pasteCancel">Cancel</button>
           <button type="button" id="pasteCopy">Paste as copy</button>
           <button type="button" id="pasteAsRef" class="primary">Paste as reference</button>
