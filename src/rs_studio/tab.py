@@ -595,6 +595,10 @@ def build_gp5(spec: dict) -> tuple[bytes, list[str]]:
 
     segs = _segments(grid, resolution)
     measures, to_slot = _plan_measures(segs, resolution)
+    odd = sorted({s["bpm"] for s in segs if abs(s["bpm"] - round(s["bpm"])) > 1e-6})
+    if odd:
+        warnings.add("Guitar Pro 5 stores whole-number tempos: "
+                     + ", ".join(f"{b:g} → {round(b)} BPM" for b in odd) + " — the tab drifts slightly from the audio")
 
     # Quantize every track first to learn how far the last segment must run.
     quantized = [(t, _quantize(t["notes"], to_slot)) for t in tracks_spec]

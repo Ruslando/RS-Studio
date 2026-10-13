@@ -30,7 +30,7 @@ let popSnapshot = null;
 const beginPopEdit = () => { if (!popSnapshot) popSnapshot = snapshotEdit(); };
 const endPopEdit = () => { const prev = popSnapshot; popSnapshot = null; if (prev) commitStructure(prev); };
 
-const fmtBpm = (b) => (Number.isInteger(b) ? String(b) : (+b).toFixed(1));
+const fmtBpm = (b) => String(+(+b).toFixed(2));   // label only; the popup shows the exact value
 
 const markerFields = (seg) => ([
   { value: `${fmtBpm(seg.bpm)} BPM`, font: stageMono(11, 500), color: PAINT.text },
@@ -187,7 +187,7 @@ function openMarkerPop(clientX, clientY, seg) {
   S.taps = [];
   document.getElementById("tapInfo").hidden = true;
   markerPopTitle.textContent = seg.seg0 ? "Tempo (start)" : "Tempo marker";
-  markerBpm.value = fmtBpm(seg.bpm);
+  markerBpm.value = String(seg.bpm);   // exact: applyPop reads it back
   markerTsNum.value = seg.tsNum;
   markerTsDen.value = seg.tsDen;
   setSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, seg.subdiv || 1);

@@ -455,7 +455,7 @@
       <div class="pop-pair">
         <label class="field-group block">Tempo
           <span class="tempo-input-group">
-            <span class="pop-field"><input type="number" id="markerBpm" min="20" max="320" step="0.01" /><span class="pop-unit">BPM</span></span>
+            <span class="pop-field"><input type="number" id="markerBpm" min="20" max="320" step="any" /><span class="pop-unit">BPM</span></span>
             <button id="tap" type="button" class="icon-btn" title="Tap tempo" aria-label="Tap tempo"><span data-ui-icon="tap" aria-hidden="true"></span></button>
           </span>
         </label>
@@ -725,7 +725,7 @@
         <div class="sp-pane" id="spTempo" hidden>
           <label class="field-group block" hidden>Tempo (BPM)
             <div class="sp-row">
-              <input type="number" id="bpm" min="20" max="320" step="0.01" value="120" />
+              <input type="number" id="bpm" min="20" max="320" step="any" value="120" />
               <button id="detectBpm" class="ghost-btn">↻ detected</button>
             </div>
           </label>

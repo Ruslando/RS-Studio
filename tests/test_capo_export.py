@@ -48,6 +48,12 @@ class CapoExportTests(unittest.TestCase):
         frets = sorted(n.value for m in track.measures for v in m.voices for b in v.beats for n in b.notes)
         self.assertEqual(frets, [0, 0, 2, 3], "positions are kept, not refingered from the nut")
 
+    def test_gp5_warns_when_the_tempo_is_rounded(self):
+        _, warnings = build_gp5({"name": "t", "grid": GRID, "resolution": 4, "tracks": [_track(0)]})
+        self.assertFalse(any("whole-number" in w for w in warnings))
+        _, warnings = build_gp5({"name": "t", "grid": {**GRID, "bpm": 160.15}, "resolution": 4, "tracks": [_track(0)]})
+        self.assertTrue(any("160.15 → 160" in w for w in warnings), warnings)
+
 
 if __name__ == "__main__":
     unittest.main()
