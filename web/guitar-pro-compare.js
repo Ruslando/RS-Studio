@@ -211,7 +211,7 @@ function importedLaneSnapshot(lane) {
     capo: scalar(lane.capo), transpositionPitch: scalar(lane.transpositionPitch),
     displayTranspositionPitch: scalar(lane.displayTranspositionPitch),
     tuning: lane.tuning || "", customTuning: lane.customTuning || "",
-    fingeringMode: lane.fingeringMode || "", tablatureEnabled: lane.tablatureEnabled !== false,
+    tablatureEnabled: lane.tablatureEnabled !== false,
     notes: (lane.notes || []).map(importedNoteSnapshot),
   };
 }

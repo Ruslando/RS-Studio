@@ -25,7 +25,7 @@ import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
 import { S, setSelection } from "./store.js";
-import { laneTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
+import { laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { matchKey } from "./keymap.js";
@@ -562,17 +562,10 @@ function groupSelectionIntoShape() {
   if (lanes.length !== 1) { toast("A shape must stay within one note layer"); return false; }
   const lane = lanes[0];
   if (!canEditLane(lane)) return false;
-  const tuning = laneTuning(lane);
-  // Preserve a coherent authored/manual grip. Automatic lanes otherwise get one
-  // joint voicing; exact GP positions are never silently rewritten.
-  const positions = chooseShapePositions(selected, tuning,
-    { allowAutomatic: lane.fingeringMode !== "exact" });
-  if (!positions) {
-    toast(lane.fingeringMode === "exact"
-      ? "Those authored positions cannot be held as one shape"
-      : "No playable shared shape was found for those notes");
-    return false;
-  }
+  const tuning = laneFretTuning(lane);
+  // Preserve a coherent authored/manual grip; otherwise one joint voicing.
+  const positions = chooseShapePositions(selected, tuning);
+  if (!positions) { toast("No playable shared shape was found for those notes"); return false; }
   const prev = snapshotEdit(), id = shapeId();
   for (const note of selected) {
     const pos = positions.get(note);
@@ -632,7 +625,7 @@ export function columnOf(note) {
   const lane = laneOf(note);
   if (!lane) return null;
   const col = chordColumns(lane.notes).find((c) => c.notes.includes(note));
-  return col ? { lane, tuning: laneTuning(lane), col } : null;
+  return col ? { lane, tuning: laneFretTuning(lane), col } : null;
 }
 
 // One-line description of a shape for the menu/toast: "A string · fret 7",
@@ -773,7 +766,7 @@ export function setHandHold(lane, t, fret) {
 export function setColumnShape(colNotes, shape, limits = null, maxFret = undefined) {
   const lane = laneOf(colNotes?.[0]);
   if (!lane) return "These notes are not in an editable note layer";
-  const wrong = shapeFault(colNotes, laneTuning(lane), shape, limits, maxFret);
+  const wrong = shapeFault(colNotes, laneFretTuning(lane), shape, limits, maxFret);
   if (wrong) return wrong;
   applyColumnPos(colNotes, shape, "local", overrideFlow(colNotes));
   return null;
@@ -783,11 +776,9 @@ export function setColumnShape(colNotes, shape, limits = null, maxFret = undefin
 // grips the engine ranked; this is the other grain of the same question — a shape
 // nobody ranked, built a note at a time.
 //
-// The rest of the column is written out with it, and that is not the edit widening
-// itself: lockedShape is all-or-nothing (a column with one pin and three free notes
-// voices as if nothing were pinned), so "this note here" can only be said by stating
-// the whole column. The others keep exactly the places they already had, so the
-// change on screen is the one note that moved.
+// The rest of the column is written out with it, so the whole column is one override
+// with one set of reach switches. The others keep exactly the places they already
+// had, so the change on screen is the one note that moved.
 export function setNotePosition(note, string, fret) {
   const ctx = columnOf(note);
   if (!ctx) return;

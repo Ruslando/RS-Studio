@@ -9,6 +9,7 @@ import { songBarStarts } from "./song-bars.js";
 import { isTablatureLane } from "./layer-role.js";
 import { assignSectionsToBars } from "./section-marker-core.js";
 import { S } from "./store.js";
+import { laneFingering } from "./tablature.js";
 
 let cacheKey = "";
 let cachedSelectedJson = "";
@@ -212,6 +213,25 @@ export async function selectedOriginalGpLaneScore(alphaTabRuntime, lane, signal)
   return selectGpScoreLane(alphaTabRuntime, score, trackPosition, Number(lane.sourceStaffIndex) || 0);
 }
 
+// Every note on the position laneFingering gives it — the one the fretboard, the tab
+// view and the Rocksmith export use — so the file never disagrees with the screen.
+// Copies: exporting must not edit the project.
+async function fingered(lanes, signal) {
+  return Promise.all(lanes.map(async (lane) => {
+    const { voiced } = await laneFingering(lane, signal);
+    return { ...lane, notes: lane.notes.map((note) => {
+      const pos = voiced.get(note);
+      return pos ? { ...note, pos: { ...note.pos, string: pos.string, fret: pos.fret, scope: note.pos?.scope || "local" } } : note;
+    }) };
+  }));
+}
+
+// A reference group can move a note off its stored position without editing any
+// note, which the import signature cannot see; the original file would then say
+// something the screen does not.
+const movedOff = (stored, played) => stored.some((lane, i) => lane.notes.some((note, k) =>
+  note.pos?.string !== played[i].notes[k].pos?.string || note.pos?.fret !== played[i].notes[k].pos?.fret));
+
 export async function modernGpResult(alphaTabRuntime, signal) {
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) throw new Error(status.reason);
@@ -226,7 +246,7 @@ export async function projectedGpScore(alphaTabRuntime, signal) {
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) throw new Error(status.reason);
   if (!S.state.guitarPro?.sourceRel) {
-    const lanes = enabledScoreLanes();
+    const lanes = await fingered(enabledScoreLanes(), signal);
     const score = blankProjectScore(alphaTabRuntime);
     appendCreatedLanes(alphaTabRuntime, score, lanes, songBarStarts());
     const structure = projectStructureForGeneratedScore(score);
@@ -247,9 +267,10 @@ export async function projectedGpScore(alphaTabRuntime, signal) {
   applyScoreStructure(alphaTabRuntime, score, structure.bars);
   appendSectionWarnings(score, structure.warnings);
   if (!liveSelection.length) score.tracks = [];
-  if (!status.pristine && liveSelection.length)
-    applyProjectionToGpScore(alphaTabRuntime, score, importedLanes(), liveSelection);
-  const created = enabledScoreLanes().filter((lane) => lane.sourceTrackIndex == null);
+  const imported = await fingered(importedLanes(), signal);
+  if ((!status.pristine || movedOff(importedLanes(), imported)) && liveSelection.length)
+    applyProjectionToGpScore(alphaTabRuntime, score, imported, liveSelection);
+  const created = await fingered(enabledScoreLanes().filter((lane) => lane.sourceTrackIndex == null), signal);
   const importedTracks = new Map(liveSelection.map((sourceIndex, index) => [sourceIndex, score.tracks[index]]));
   appendCreatedLanes(alphaTabRuntime, score, created, songBarStarts());
   const createdTracks = new Map(created.map((lane, index) => [lane.id, score.tracks[liveSelection.length + index]]));
@@ -271,7 +292,7 @@ export async function projectedGpLaneScore(alphaTabRuntime, lane, signal) {
 
   if (!S.state?.guitarPro?.sourceRel) {
     const score = blankProjectScore(alphaTabRuntime);
-    appendCreatedLanes(alphaTabRuntime, score, [lane], songBarStarts());
+    appendCreatedLanes(alphaTabRuntime, score, await fingered([lane], signal), songBarStarts());
     const structure = projectStructureForGeneratedScore(score);
     applyScoreStructure(alphaTabRuntime, score, structure.bars);
     appendSectionWarnings(score, structure.warnings);
@@ -286,7 +307,7 @@ export async function projectedGpLaneScore(alphaTabRuntime, lane, signal) {
     score = selectGpScoreLane(alphaTabRuntime, score, 0, 0);
     applyScoreStructure(alphaTabRuntime, score, effectiveScoreBars());
     score.tracks = [];
-    appendCreatedLanes(alphaTabRuntime, score, [lane], songBarStarts());
+    appendCreatedLanes(alphaTabRuntime, score, await fingered([lane], signal), songBarStarts());
     score.finish(new alphaTabRuntime.Settings());
     return score;
   }
@@ -296,8 +317,9 @@ export async function projectedGpLaneScore(alphaTabRuntime, lane, signal) {
   if (trackPosition < 0) throw new Error("The selected layer's source track is no longer imported");
   score = selectGpScoreLane(alphaTabRuntime, score, trackPosition, Number(lane.sourceStaffIndex) || 0);
   applyScoreStructure(alphaTabRuntime, score, effectiveScoreBars());
+  const [played] = await fingered([lane], signal);
   applyProjectionToGpScore(alphaTabRuntime, score,
-    [{ ...lane, sourceStaffIndex: 0 }], [Number(lane.sourceTrackIndex)]);
+    [{ ...played, sourceStaffIndex: 0 }], [Number(lane.sourceTrackIndex)]);
   return score;
 }
 

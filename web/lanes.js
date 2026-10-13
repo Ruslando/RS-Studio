@@ -30,44 +30,17 @@ export function targetLane() {
   return activeLane() || editLanes()[0] || null;
 }
 
-// Vertical edits on an imported exact-tab lane keep the authored string and
-// move along that string. This prevents pitch and string/fret from diverging,
-// which would otherwise make a modern Guitar Pro export ambiguous.
+// A pitch edit leaves the note's old position behind; it no longer sounds the pitch,
+// so it lapses (lockedShape / pinnedPositions) and the note is fingered like any other.
 export function setLaneNotePitch(lane, note, desiredPitch) {
   if (desiredPitch !== note.pitch && note.shapeId) ungroupShape(lane.notes, note.shapeId);
-  let pitch = desiredPitch;
-  if (lane?.fingeringMode === "exact" && Number.isInteger(note.pos?.string)) {
-    const tuning = laneTuning(lane), open = tuning[note.pos.string];
-    if (Number.isFinite(open)) {
-      const transposition = Number(lane.transpositionPitch) || 0;
-      pitch = Math.max(open - transposition, Math.round(desiredPitch));
-      const delta = pitch - note.pitch;
-      note.pos = { ...note.pos, fret: pitch + transposition - open, scope: "local" };
-      if (Number.isFinite(note.soundingPitch)) note.soundingPitch += delta;
-    }
-  }
-  note.pitch = pitch;
+  if (Number.isFinite(note.soundingPitch)) note.soundingPitch += desiredPitch - note.pitch;
+  note.pitch = desiredPitch;
 }
 
 function clearLaneShapes(lane) {
   for (const shapeId of new Set((lane?.notes || []).map((note) => note.shapeId).filter(Boolean)))
     ungroupShape(lane.notes, shapeId);
-}
-
-function retuneExactLane(lane) {
-  if (lane?.fingeringMode !== "exact") return;
-  const tuning = laneTuning(lane);
-  const transposition = Number(lane.transpositionPitch) || 0;
-  for (const note of lane.notes) {
-    let string = Number(note.pos?.string);
-    if (!Number.isInteger(string) || string < 0 || string >= tuning.length || note.pitch + transposition < tuning[string]) {
-      const choices = tuning.map((open, index) => ({ string: index, fret: Math.round(note.pitch + transposition - open) }))
-        .filter((choice) => choice.fret >= 0).sort((a, b) => a.fret - b.fret);
-      if (!choices.length) continue;
-      string = choices[0].string;
-    }
-    note.pos = { string, fret: Math.round(note.pitch + transposition - tuning[string]), scope: "local" };
-  }
 }
 
 // A lane is editable only when it's shown and not locked. Editing is further
@@ -217,7 +190,7 @@ function tuningRow(t) {
   const commit = () => {
     updateCustomTuning(t.id, { notes: tuningToNames(midis) });
     if (S.state) for (const lane of S.state.editLanes)
-      if (lane.tuning === t.id) { lane.customTuning = tuningToNames(midis); retuneExactLane(lane); clearLaneShapes(lane); }
+      if (lane.tuning === t.id) { lane.customTuning = tuningToNames(midis); clearLaneShapes(lane); }
     renderLayerSettings(); refreshTabIfOpen();
   };
   const countBtn = (text, title, on, disabled) => {
@@ -594,7 +567,6 @@ export function init_lanes() {
       if (toneKey(lane.tone) === INSTRUMENTS[was].tone) setLaneTone(lane, INSTRUMENTS[lane.instrument].tone);
       lane.tuning = INSTRUMENTS[layerInstr.value].tuning;   // instrument drives the default tuning
       lane.customTuning = tuningToNames(laneTuning(lane));  // materialize for portable GP export
-      retuneExactLane(lane);
       clearLaneShapes(lane);
       renderLayerSettings(); draw(); refreshTabIfOpen();   // a new neck to draw
       refreshSaveState();
@@ -610,7 +582,6 @@ export function init_lanes() {
       if (layerTun.value === "__manage") { renderLayerSettings(); openTuningManager(); return; }
       lane.tuning = layerTun.value;
       lane.customTuning = tuningToNames(laneTuning(lane));
-      retuneExactLane(lane);
       clearLaneShapes(lane);
       renderLayerSettings(); refreshTabIfOpen();
       refreshSaveState();

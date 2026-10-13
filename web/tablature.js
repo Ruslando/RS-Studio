@@ -92,6 +92,14 @@ export function laneTuning(lane) {
   return TUNINGS[INSTRUMENTS[instrKey(lane.instrument)].tuning].tuning;
 }
 
+// The tuning positions are counted against: a note's pitch is this open pitch plus
+// its fret. Differs from laneTuning only on a staff a Guitar Pro file transposes,
+// where alphaTab's pitch is fret + open - transposition.
+export function laneFretTuning(lane) {
+  const transposition = Number(lane.transpositionPitch) || 0;
+  return laneTuning(lane).map((open) => open - transposition);
+}
+
 // General-MIDI program for a lane's tone (the exported track's sound). A sound, so
 // it comes off the tone and not off the neck.
 function laneGm(lane) {
@@ -148,20 +156,6 @@ const aborted = () => Object.assign(new Error("tablature generation cancelled"),
 function voicedMap(notes, positions) {
   const voiced = new Map();
   positions.forEach((position, i) => { if (position && notes[i]) voiced.set(notes[i], position); });
-  return voiced;
-}
-
-// Imported GP lanes already carry the authored string/fret. Keeping this path
-// separate is the guardrail that prevents the MIDI-to-tab optimizer from
-// silently rewriting the original transcription.
-function exactVoicedMap(notes, laneName = "Imported track", stringCount = Infinity) {
-  const voiced = new Map();
-  for (const note of notes) {
-    const string = Number(note.pos?.string), fret = Number(note.pos?.fret);
-    if (!Number.isInteger(string) || string < 0 || string >= stringCount || !Number.isFinite(fret) || fret < 0)
-      throw new Error(`${laneName} has a note without its original string/fret position`);
-    voiced.set(note, { string, fret });
-  }
   return voiced;
 }
 
@@ -265,20 +259,15 @@ function buildSpecFromPrepared(prepared) {
 }
 
 // One lane's fingering: its tuning, its arranged notes, and the string/fret each
-// one lands on. The two paths — an imported lane's authored positions and the
-// optimizer's — are chosen here so every consumer gets the same answer.
+// one lands on. Imported positions are pins like any other, so every consumer — the
+// fretboard, the tab, both Guitar Pro exports and Rocksmith — gets this one answer.
 //
 // The fretboard view calls this too, which is the point of it being one function:
 // what the neck shows a player and what the .gp5 contains are the same fingering,
 // out of the same worker and the same cache.
 export async function laneFingering(lane, signal) {
-  const tuning = laneTuning(lane), notes = arrangedNotes(lane.notes);
-  // An exact lane's positions are the transcriber's own, so there is no walk behind
-  // them and no hand to report; the board falls back to reading a fingering off each
-  // shape, which is all anyone can do for positions nobody's hand chose.
-  const found = lane.fingeringMode === "exact"
-    ? { voiced: exactVoicedMap(notes, lane.name, tuning.length), fingers: null, seats: null }
-    : await voiceLaneAsync(lane, notes, tuning, signal);
+  const tuning = laneFretTuning(lane), notes = arrangedNotes(lane.notes);
+  const found = await voiceLaneAsync(lane, notes, tuning, signal);
   alignReferences(lane, notes, found);
   return { tuning, notes, ...found };
 }
@@ -308,7 +297,7 @@ export async function laneFingering(lane, signal) {
 // from it would put a note on a fret that does not sound it.
 function alignReferences(lane, notes, found) {
   const groups = lane.refBoxes;
-  if (!groups || lane.fingeringMode === "exact") return;
+  if (!groups) return;
   const { voiced, fingers, seats } = found;
   const minIn = minDur();
   for (const key of Object.keys(groups)) {

@@ -30,7 +30,7 @@ import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
 import { S } from "./store.js";
 import { FX_GLYPHS } from "./note-effects.js";
-import { laneFingering, laneTuning } from "./tablature.js";
+import { laneFingering, laneFretTuning, laneTuning } from "./tablature.js";
 import { assignFingers, chordColumns, handProfileForTuning, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
 import { columnAlternatives } from "./voicing.js";
 import { applyColumnAlternative, clearOverrideAt, columnOf, setColumnInfluence, setColumnShape, setHandHold, setNotePosition } from "./edit.js";
@@ -71,8 +71,7 @@ let hand = null;      // { key, columns, strings }
 let handJob = "";     // the key currently being voiced, so one lane is asked once
 
 function handKey(lane) {
-  return `${lane.id}:${S.voicingRevision}:${lane.notes.length}:${lane.tuning}:${
-    lane.fingeringMode || ""}`;
+  return `${lane.id}:${S.voicingRevision}:${lane.notes.length}:${lane.tuning}:${lane.transpositionPitch || 0}`;
 }
 
 // Which finger holds which note, and which fret the hand is anchored on.
@@ -160,7 +159,7 @@ function limitsFor(lane, note) {
   if (limitsMemo?.key === found.key && limitsMemo.limits.has(note)) return limitsMemo.limits;
   const columns = chordColumns(lane.notes);
   const limits = placementLimits(columns, columns.findIndex((c) => c.notes.includes(note)),
-    laneTuning(lane), (n) => found.voiced?.get(n) || null, laneSpec(lane).frets);
+    laneFretTuning(lane), (n) => found.voiced?.get(n) || null, laneSpec(lane).frets);
   limitsMemo = { key: found.key, limits };
   return limits;
 }
@@ -354,7 +353,7 @@ function setFretboardShape(on) {
 //
 // Returns the note still to be placed, or null when the shape is complete.
 function drawShaping(ctx, s, scale, X, Y, lane) {
-  const tuning = lane && laneTuning(lane);
+  const tuning = lane && laneFretTuning(lane);
   if (!tuning || tuning.length !== s.strings) return null;
   const hue = lane.color || PAINT.accent;
   const placed = [...shaping.picked].map(([note, p]) => ({
@@ -1133,7 +1132,7 @@ function spotBox(p, scale, s, X, Y) {
 // note before it goes, so that is the one to move.
 // Limitation: a swap (two notes trading strings) is two clicks, not one gesture.
 function notePlaces(lane, s, at) {
-  const tuning = lane && laneTuning(lane);
+  const tuning = lane && laneFretTuning(lane);
   if (!at || !tuning || tuning.length !== s.strings) return null;
   return { at, out: notePlacements(at.marks, tuning, s.frets)
     .filter(allowedAt(lane, tuning, s))
@@ -1171,7 +1170,7 @@ function drawNoteOffer(ctx, s, scale, X, Y, lane, { hovered, at }) {
     ? { ...m, string: hovered.string, fret: hovered.fret, x: fretCentre(hovered.fret, s) } : m);
   const marks = at.marks.map(moved);
   const shape = new Map(marks.map((m) => [m.note, { string: m.string, fret: m.fret }]));
-  const fingers = assignFingers(shape, handProfileForTuning(laneTuning(lane)));
+  const fingers = assignFingers(shape, handProfileForTuning(laneFretTuning(lane)));
   drawGrip(ctx, s, scale, X, Y,
     marks.map((m) => ({ ...m, finger: fingers.get(m.note) || 0 })),
     lane.color || PAINT.accent, false);

@@ -3,6 +3,7 @@
 // Node with the same vendored bundle used by the browser.
 
 import { effectSignatureFields } from "./note-effects.js";
+import { defaultPinFlags } from "./voicing-core.js";
 
 const GP_SCHEMA_VERSION = 2;
 const QUARTER_TICKS = 960;
@@ -75,7 +76,6 @@ export function scoreProjectionSignature(lanes) {
     gmProgram: lane.gmProgram ?? null,
     tuning: lane.tuning,
     customTuning: lane.customTuning,
-    fingeringMode: lane.fingeringMode,
     capo: lane.capo || 0,
     transpositionPitch: lane.transpositionPitch || 0,
     displayTranspositionPitch: lane.displayTranspositionPitch || 0,
@@ -451,7 +451,7 @@ function staffLane(track, staff, classification, timeline, laneNumber, beatRecor
         end: Math.max(0.001, tickToSeconds(endTick, timeline)),
         pitch: basePitch,
         soundingPitch: note.realValue,
-        pos: { string: editorString, fret: note.fret, scope: "local" },
+        pos: { string: editorString, fret: note.fret, scope: "local", ...defaultPinFlags() },
         ...editorEffects(note, beat),
         gp: exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, segments),
       });
@@ -478,7 +478,6 @@ function staffLane(track, staff, classification, timeline, laneNumber, beatRecor
     volume: 1,
     muted: false,
     tablatureEnabled: true,
-    fingeringMode: "exact",
     sourceTrackIndex: track.index,
     sourceStaffIndex: staff.index,
     notes,

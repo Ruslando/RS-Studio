@@ -1052,24 +1052,30 @@ export function assignFingers(shape, profile = GUITAR_HAND_PROFILE) {
   return fingers;
 }
 
-// A column is "locked" to an explicit voicing when EVERY note in it carries a
-// manual `pos` override that is in range, sounds the note's pitch, and sits on
-// its own string. Returns that pinned shape (Map note -> {string, fret}) or
-// null to fall back to automatic voicing — so a pin left stale by a later pitch
-// edit simply lapses instead of corrupting the tab.
-export function lockedShape(notes, tuning) {
+// The notes of a column whose own `pos` is still a real place for them: in range,
+// sounding the note's pitch, and on a string no earlier note of the column took. A
+// pin left stale by a later pitch edit simply lapses instead of corrupting the tab.
+export function pinnedPositions(notes, tuning) {
   const shape = new Map();
   const usedStrings = new Set();
   for (const n of notes) {
     const p = n.pos;
-    if (!p || !Number.isInteger(p.string) || !Number.isInteger(p.fret)) return null;
-    if (p.string < 0 || p.string >= tuning.length || p.fret < 0 || p.fret > MAX_FRET) return null;
-    if (tuning[p.string] + p.fret !== n.pitch) return null;   // no longer this pitch
-    if (usedStrings.has(p.string)) return null;               // two notes, one string
+    if (!p || !Number.isInteger(p.string) || !Number.isInteger(p.fret)) continue;
+    if (p.string < 0 || p.string >= tuning.length || p.fret < 0 || p.fret > MAX_FRET) continue;
+    if (tuning[p.string] + p.fret !== n.pitch) continue;   // no longer this pitch
+    if (usedStrings.has(p.string)) continue;               // two notes, one string
     usedStrings.add(p.string);
     shape.set(n, { string: p.string, fret: p.fret });
   }
-  return shape.size ? shape : null;
+  return shape;
+}
+
+// A column is "locked" to an explicit voicing when EVERY note in it is pinned.
+// Returns that pinned shape (Map note -> {string, fret}) or null. A column where
+// only some notes are pinned is voiced around them — see `pinned` in registerColumns.
+export function lockedShape(notes, tuning) {
+  const shape = pinnedPositions(notes, tuning);
+  return shape.size && shape.size === notes.length ? shape : null;
 }
 
 // IS A SHAPE THE PLAYER BUILT BY HAND A REAL ONE? The same three things lockedShape
@@ -1300,6 +1306,14 @@ export function normalizeOverrideInfluence(value = null) {
     adaptPrevious: value?.adaptPrevious === true,
     adaptNext: value ? value.adaptNext ?? value.adapt : true,
   };
+}
+
+// The stored switches of a pin nobody chose them for: an imported tab's positions.
+// They behave exactly like a fresh override, so notes added around them follow them.
+export function defaultPinFlags() {
+  const flow = normalizeOverrideInfluence();
+  return { influencePrevious: flow.previous, influenceNext: flow.next,
+    adaptPrevious: flow.adaptPrevious, adaptNext: flow.adaptNext };
 }
 
 // The switches a NEW override on this column is written with: the ones the column
@@ -1910,7 +1924,11 @@ function registerColumns(columns, tuning, options = {}) {
     // the pitches match but the technique may not, and a grip with an open string
     // under a note that slides here is not the same grip. (An incoming slide's string
     // is the other refusal, and only the walk knows it — see `soft` in voiceRegister.)
-    const handed = !pins[i] && spread[i] && !notes.some((n, k) => {
+    // Some notes pinned and some not (a note added to an imported chord): the pinned
+    // ones keep their strings exactly and only the rest are placed, around them.
+    const some = pins[i] ? null : pinnedPositions(notes, tuning);
+    const partial = some && some.size ? some : null;
+    const handed = !pins[i] && !partial && spread[i] && !notes.some((n, k) => {
       const fret = spread[i].get(n).fret;
       return fret > frets || (fret === 0 && rules[k] && rules[k].fretted);
     }) ? spread[i] : null;
@@ -1928,6 +1946,7 @@ function registerColumns(columns, tuning, options = {}) {
       // which is the behaviour the full engine already documents: an explicit pin
       // wins even when it contradicts the note's own technique. The user asked.
       fixed: locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
+      pinned: partial ? notes.map((n) => partial.has(n) ? seat.get(partial.get(n).string) : null) : null,
       soft: !!handed,
       // Whether the notes after / before the override suit themselves to it. A
       // handed-on grip answers for the pin it came from. See `aside` and the implied
@@ -2527,6 +2546,9 @@ function gripAt(tuning, pitches, T, o, g, span, maxFret, loose = false) {
   const used = new Array(tuning.length).fill(false);
   const out = new Array(pitches.length).fill(-1);
   let cost = 0;
+  // Pinned notes are seated as given, before anything is searched: no grip, no rule
+  // and no cost applies to them, and no other note may take their string.
+  if (o.pinned) o.pinned.forEach((s, i) => { if (s != null) { used[s] = true; out[i] = s; } });
   const fretOn = (i, s, free) => {
     const f = pitches[i] - tuning[s];
     const rule = rules ? rules[i] : null;
@@ -2557,7 +2579,7 @@ function gripAt(tuning, pitches, T, o, g, span, maxFret, loose = false) {
   if (forced) {
     for (let i = 0; i < pitches.length; i++) {
       const s = forced[i];
-      if (s == null || s < 0 || used[s]) continue;
+      if (s == null || s < 0 || used[s] || out[i] >= 0) continue;
       const f = fretOn(i, s, true);
       if (f < 0) continue;
       used[s] = true; out[i] = s; cost += Math.abs(f - T);
@@ -2852,6 +2874,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       idx, t0: c.t0, end: c.end, hold: c.hold, cut: !!c.cut, soft: !!c.soft, aside: !!c.aside,
       pitches: idx.map((i) => c.pitches[i]),
       fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
+      pinned: c.pinned ? idx.map((i) => c.pinned[i]) : null,
       rules: c.rules ? idx.map((i) => c.rules[i]) : null,
     };
   });
@@ -2908,7 +2931,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       // to fret 2 one beat after fret 12 was charged 48 for the drop and played at 7
       // instead, which is a pin that visibly does not do what it says.
       const opts = {
-        rules: c.rules, forced: carry, span, maxFret,
+        rules: c.rules, forced: carry, pinned: c.pinned, span, maxFret,
         next: after ? after.pitches : null, prev: grip != null ? null : prevFret,
       };
       let got;
@@ -2925,6 +2948,9 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
         else got = fitAtRegister(tuning, c.pitches, T, opts);
         stood[i] = stand;
       } else got = fitAtRegister(tuning, c.pitches, T, opts);
+      // The searches above seat pinned notes first, but their last-resort fallback
+      // seats nothing; a pin is never the thing that gives way.
+      if (c.pinned) c.pinned.forEach((s, k) => { if (s != null) got[k] = s; });
       // Nothing placeable at all: a chord no instrument can hold. Say so with -1
       // rather than silently inventing a shape.
       if (got.some((s) => s < 0)) got = placeAnyway(tuning, c.pitches, got, maxFret);

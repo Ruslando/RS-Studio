@@ -59,8 +59,6 @@ export function validateImportedProjection(lanes) {
       }
       const position = resolvedPosition(note, tuning, transposition);
       if (!position) throw new Error(`A pitch on “${lane.name}” is below every open string in its tuning.`);
-      if (note.pos && (position.string !== Number(note.pos.string) || position.fret !== Number(note.pos.fret)))
-        throw new Error(`A pitch on “${lane.name}” no longer matches its stored string and fret.`);
       if (!Number.isFinite(note.start) || !Number.isFinite(note.end) || note.end <= note.start)
         throw new Error(`Modern export found an invalid note duration on “${lane.name}”.`);
     }
@@ -71,7 +69,7 @@ function resolvedPosition(note, tuning, transposition = 0) {
   const string = Number(note.pos?.string), fret = Number(note.pos?.fret), pitch = Number(note.pitch);
   if (Number.isInteger(string) && string >= 0 && string < tuning.length && Number.isFinite(fret) && fret >= 0
       && Math.abs(tuning[string] + fret - transposition - pitch) < 1e-6) return { string, fret: Math.round(fret) };
-  if (note.pos) return null; // explicit but stale positions must never be silently changed
+  // A stale position (the pitch was edited since) has lapsed: the note is fingered anew.
   let best = null;
   for (let index = 0; index < tuning.length; index++) {
     const candidate = Math.round(pitch + transposition - tuning[index]);
@@ -460,17 +458,12 @@ export function applyImportedProjection(alphaTab, score, lanes, selectedTrackInd
     if (track.staves.length === 1) track.name = lane.name;
     if (Number.isFinite(lane.gmProgram)) track.playbackInfo.program = Math.round(lane.gmProgram);
     const tuning = tuningFromImportedLane(lane);
-    // New notes drawn/pasted into an exact imported lane have no source
-    // fingering, and one has to be picked to write the file. On COPIES: export
-    // is a read-only operation as far as the user is concerned, and writing the
-    // chosen positions back into lane.notes edited the project outside undo,
-    // without marking it dirty and without bumping voicingRevision — so the
-    // change rode along invisibly with whatever save came next.
-    // appendCreatedLanes below does the same job on copies already.
-    const laneNotes = unstacked(lane.notes || []).map((note) => (note.pos ? note : {
-      ...note,
-      pos: { ...resolvedPosition(note, tuning, Number(lane.transpositionPitch) || 0), scope: "local" },
-    }));
+    // Positions come in from laneFingering (guitar-pro-score.js), so this only
+    // covers a headless caller. On COPIES: export must never edit the project.
+    const laneNotes = unstacked(lane.notes || []).map((note) => {
+      const pos = resolvedPosition(note, tuning, Number(lane.transpositionPitch) || 0);
+      return pos ? { ...note, pos: { ...note.pos, ...pos, scope: "local" } } : note;
+    });
     const sourceTuning = [...(staff.stringTuning?.tunings || [])];
     const tuningChanged = sourceTuning.length !== tuning.length
       || sourceTuning.some((pitch, index) => pitch !== tuning[index]);
@@ -595,12 +588,12 @@ export function appendCreatedLanes(alphaTab, score, lanes, bars = []) {
   for (const lane of lanes) {
     const tuning = tuningFromLane(lane);
     const sourceNotes = arrangedNotes(lane.notes || []);
-    const positions = lane.fingeringMode === "exact"
+    // The app hands lanes in already fingered by laneFingering (guitar-pro-score.js),
+    // so the file says what the fretboard shows. Voicing here is the headless fallback.
+    const positions = sourceNotes.every((note) => note.pos)
       ? new Map(sourceNotes.map((note) => [note, note.pos]))
       : voiceNotes(sourceNotes, tuning, Infinity, { bars, instrument: lane.instrument, holds: lane.handHolds });
     const missing = sourceNotes.filter((note) => !positions.get(note));
-    if (missing.length && lane.fingeringMode === "exact")
-      throw new Error(`Modern export needs the original string/fret position for every note on "${lane.name}".`);
     if (missing.length) {
       score.cwWarnings ||= [];
       score.cwWarnings.push(`${lane.name}: ${missing.length} note(s) cannot be played in this tuning and were skipped`);
@@ -609,7 +602,7 @@ export function appendCreatedLanes(alphaTab, score, lanes, bars = []) {
       const position = positions.get(note);
       return position ? [{ ...note, pos: { string: Number(position.string), fret: Number(position.fret), scope: "local" } }] : [];
     });
-    if (lane.fingeringMode !== "exact") {
+    {
       const normalized = normalizeAutomaticStringPerformance(projected);
       projected = normalized.notes;
       if (normalized.dropped) {

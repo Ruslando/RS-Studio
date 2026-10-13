@@ -38,6 +38,7 @@ import { withStartTone } from "./tone-marker-core.js";
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars } from "./section-marker-core.js";
 import { inferTablatureEnabled } from "./layer-role.js";
 import { cleanupShapeMembership } from "./shapes.js";
+import { defaultPinFlags } from "./voicing-core.js";
 import { isValidTuningKey, setView } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
@@ -55,7 +56,6 @@ function projectBody() {
     muted: l.muted, active: l.active, tablatureEnabled: l.tablatureEnabled !== false,
     ...(l.rocksmithArrangement ? { rocksmithArrangement: l.rocksmithArrangement } : {}), notes: l.notes,
     ...normalizedLaneFields(l, Number(S.state.duration) || Infinity),
-    ...(l.fingeringMode ? { fingeringMode: l.fingeringMode } : {}),
     ...(Number.isFinite(l.gmProgram) ? { gmProgram: l.gmProgram } : {}),
     ...(Number.isFinite(l.sourceTrackIndex) ? { sourceTrackIndex: l.sourceTrackIndex } : {}),
     ...(Number.isFinite(l.sourceStaffIndex) ? { sourceStaffIndex: l.sourceStaffIndex } : {}),
@@ -255,6 +255,11 @@ export function mapLane(l) {
   // dropped on the way in and the next save writes the project without it. A note
   // is a note however it got there.
   const notes = (l.notes || []).map(({ source, ...n }) => n);
+  // An imported tab used to be an "exact" lane, whose positions were never voiced.
+  // They are pins now; ones saved without switches get a fresh override's, so the
+  // notes added around them follow them (defaultPinFlags).
+  if (l.fingeringMode === "exact") for (const n of notes)
+    if (n.pos && typeof n.pos.influenceNext !== "boolean") n.pos = { ...n.pos, ...defaultPinFlags() };
   cleanupShapeMembership(notes);
   // Keep a valid tuning preset key / "custom"; older projects had none, so fall
   // back to the instrument's default tuning.
@@ -282,7 +287,6 @@ export function mapLane(l) {
         .filter((h) => Number.isFinite(h.t) && Number.isFinite(h.fret) && h.fret >= 0)
         .sort((a, b) => a.t - b.t)
       : [],
-    fingeringMode: l.fingeringMode === "exact" ? "exact" : "automatic",
     gmProgram: Number.isFinite(l.gmProgram) ? l.gmProgram : undefined,
     sourceTrackIndex: Number.isFinite(l.sourceTrackIndex) ? l.sourceTrackIndex : undefined,
     sourceStaffIndex: Number.isFinite(l.sourceStaffIndex) ? l.sourceStaffIndex : undefined,
