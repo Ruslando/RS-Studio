@@ -41,20 +41,60 @@ export const RS_KIND_OPTIONS = [
   ["bonus_bass", "Bonus Bass"],
 ];
 
-// What an "Auto" layer exports as: the first free kind for its neck, in layer
-// order. The export dialog pre-selects this and the sidebar row shows it, so the
-// two walk the same layers through the same `used` set.
+// The order a layer without an arrangement is given one: what a band has first
+// (lead, rhythm, bass), then the rest of the list from the top.
+const RS_KIND_ORDER = ["lead", "rhythm", "bass",
+  ...RS_KIND_OPTIONS.map(([kind]) => kind).filter((kind) => !["lead", "rhythm", "bass"].includes(kind))];
+const isRsKind = (kind) => RS_KIND_OPTIONS.some(([known]) => known === kind);
+const isBassTuning = (tuning) => tuning.length === 4 || (tuning.length === 5 && Math.max(...tuning) < 52);
+
+// A bass arrangement needs a bass neck and a guitar one a guitar neck: Rocksmith
+// loads nothing else, so a kind that does not fit is never offered or assigned.
+export const rsKindFits = (kind, tuning) => kind.includes("bass") === isBassTuning(tuning || []);
+
+// The first free kind for this neck. The export dialog uses it for a layer that
+// has none of its own (tablature switched off, ticked there anyway).
 export function defaultRsKind(track, used) {
-  if (RS_KIND_OPTIONS.some(([kind]) => kind === track.arrangement)) {
+  if (isRsKind(track.arrangement)) {
     used.add(track.arrangement);
     return track.arrangement;
   }
-  const tuning = track.tuning || [];
-  const isBass = tuning.length === 4 || (tuning.length === 5 && Math.max(...tuning) < 52);
-  const order = isBass
-    ? ["bass", "alt_bass", "bonus_bass"]
-    : ["lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm"];
+  const order = RS_KIND_ORDER.filter((kind) => rsKindFits(kind, track.tuning));
   const kind = order.find((k) => !used.has(k)) || order[0];
   used.add(kind);
   return kind;
+}
+
+// EVERY LAYER HAS ONE ARRANGEMENT, AND NO TWO THE SAME. A layer keeps the one it
+// has while it is free and fits its neck; a layer without one (new, or from a
+// project saved when "Auto" existed), with one another layer holds already, or
+// with one its neck cannot play, takes the first free in RS_KIND_ORDER. When the
+// game has no kind left for it, it is "none": not exported.
+//
+// The staves of one Guitar Pro track are one part and share theirs. Returns true
+// when a layer changed.
+export function assignRsKinds(lanes, tuningOf) {
+  const partOf = (lane) => (lane.sourceTrackIndex == null ? lane : `track:${lane.sourceTrackIndex}`);
+  const kinds = new Map(), used = new Set(), waiting = [];
+  for (const lane of lanes) {
+    const part = partOf(lane), kind = lane.rocksmithArrangement;
+    if (kinds.has(part)) continue;
+    if (kind === "none" || (kind == null && lane.tablatureEnabled === false)) kinds.set(part, "none");
+    else if (isRsKind(kind) && rsKindFits(kind, tuningOf(lane)) && !used.has(kind)) { kinds.set(part, kind); used.add(kind); }
+    else { kinds.set(part, null); waiting.push(lane); }
+  }
+  for (const lane of waiting) {
+    const kind = RS_KIND_ORDER.find((k) => rsKindFits(k, tuningOf(lane)) && !used.has(k)) || "none";
+    kinds.set(partOf(lane), kind);
+    used.add(kind);
+  }
+  let changed = false;
+  for (const lane of lanes) {
+    const kind = kinds.get(partOf(lane));
+    if (lane.rocksmithArrangement === kind) continue;
+    lane.rocksmithArrangement = kind;
+    if (kind === "none") lane.tablatureEnabled = false;
+    changed = true;
+  }
+  return changed;
 }

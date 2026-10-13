@@ -286,7 +286,7 @@ def _arrangement_specs(spec: dict, tracks: list[dict], warnings: list[str]) -> l
         if arr["tag"] in used_tags:
             raise ValueError("Rocksmith arrangement types must be unique in one package")
         used_tags.add(arr["tag"])
-        out.append({"track": idx, "kind": kind, "tuning": item.get("tuning")})
+        out.append({"track": idx, "kind": kind, "tuning": item.get("tuning"), "capo": item.get("capo")})
     if not out:
         raise ValueError("No Rocksmith arrangements selected")
     return out

@@ -11,9 +11,120 @@ import { S } from "./store.js";
 import { rememberPref } from "./util.js";
 import { TUNINGS, buildSpecForLanesAsync, customTunings, laneTuning, parseTuning, tuningToNames } from "./tablature.js";
 
+function rsStringCountForKind(kind) {
+  return kind.includes("bass") ? 4 : 6;
+}
+
+function sameTuning(a, b) {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function rsTuningValue(tuning) {
+  return tuning.map((v) => String(v)).join(",");
+}
+
+function rsTuningFromSelect(select) {
+  return (select.value || "").split(",").map((v) => parseInt(v, 10)).filter((v) => Number.isFinite(v));
+}
+
+function rsDefaultTuning(count, preferred) {
+  if (preferred && preferred.length === count) return preferred;
+  return (count === 4 ? TUNINGS.bass4 : TUNINGS.guitar6).tuning;
+}
+
+function appendRsTuningGroup(select, label, tunings) {
+  if (!tunings.length) return;
+  const group = document.createElement("optgroup");
+  group.label = label;
+  for (const item of tunings) group.append(new Option(item.label, rsTuningValue(item.tuning)));
+  select.append(group);
+}
+
+function createRsTuningSelect(count, selected) {
+  const select = document.createElement("select");
+  select.className = "rs-arr-tuning";
+  select.title = "Open-string tuning, highest first";
+  select.setAttribute("aria-label", "Tuning");
+
+  const builtIns = Object.entries(TUNINGS)
+    .filter(([, def]) => def.tuning.length === count)
+    .map(([, def]) => ({ label: def.label, tuning: def.tuning }));
+  const customs = customTunings
+    .map((t) => ({ label: `${t.name} (${t.notes})`, tuning: parseTuning(t.notes) || [] }))
+    .filter((t) => t.tuning.length === count);
+  const allKnown = [...builtIns, ...customs];
+  const current = selected && selected.length === count && !allKnown.some((t) => sameTuning(t.tuning, selected))
+    ? [{ label: `Current layer (${tuningToNames(selected)})`, tuning: selected }]
+    : [];
+
+  appendRsTuningGroup(select, "Built-in", builtIns);
+  appendRsTuningGroup(select, "Custom", customs);
+  appendRsTuningGroup(select, "Current note layer", current);
+  select.value = rsTuningValue(selected);
+  return select;
+}
+
+function updateRsTuningSelect(row, preferred) {
+  const count = rsStringCountForKind(row.querySelector(".rs-arr-kind").value);
+  const selected = rsDefaultTuning(count, preferred && preferred.length === count ? preferred : row._trackTuning);
+  const next = createRsTuningSelect(count, selected);
+  const current = row.querySelector(".rs-arr-tuning");
+  if (current) current.replaceWith(next);
+  else row.append(next);
+}
+
+const rsLatin = latinFields({ title: "rsTitle", artist: "rsArtist", album: "rsAlbum" });
+
+function rsMetaFromForm() {
+  const meta = normalizeMetadata(S.state.metadata || {});
+  meta.title = ($("rsTitle").value || "").trim();
+  meta.artist = ($("rsArtist").value || "").trim();
+  meta.album = ($("rsAlbum").value || "").trim();
+  meta.year = ($("rsYear").value || "").trim();
+  rsLatin.read(meta);
+  return meta;
+}
+
+// Failure is a dot, not red text (rule 8), so this is a class rather than an
+// inline colour — and the colour it used to set, --danger, has never been a
+// token in this system, so the line was rendering at its ordinary --label
+// either way.
+function setRsStatus(msg, error = false) {
+  const el = $("rsExportStatus");
+  el.textContent = msg || "";
+  el.hidden = !msg;
+  el.classList.toggle("error", !!msg && error);
+}
+
+function renderRsCover(meta) {
+  const thumb = $("rsCoverThumb"), title = $("rsCoverTitle"), sub = $("rsCoverSub"), clear = $("rsCoverClear");
+  const has = !!meta.coverArtUrl;
+  thumb.classList.toggle("has-cover", has);
+  thumb.replaceChildren();
+  // .src takes a URL, so an image whose name or address contains quotes or
+  // angle brackets can't close the attribute and inject markup.
+  if (has) { const img = document.createElement("img"); img.src = meta.coverArtUrl; img.alt = ""; thumb.append(img); }
+  title.textContent = has ? (meta.coverArtName || "Cover art") : "Choose image";
+  sub.textContent = "";   // rule 24: optional is silent; the title carries the name
+  clear.hidden = !has;
+}
+
+// Rule 24: a warning is a triangle with its sentence in the tooltip, on a
+// wrapping span — `title` on an <svg> is inert without a <title> child, and an
+// aria-hidden svg would leave the mark with no accessible name either.
+const OFF_REASON = "Tablature is off for this note layer. Check it to export anyway.";
+const WARN_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 2.5 20h19L12 4Z"/><path d="M12 10v4M12 17.5v.01"/></svg>`;
+
+// Lanes shown in the currently-open export dialog, indexed by rs-arr-row
+// dataset.track. Includes layers with tablature off (shown but unchecked) so
+// the user can see and override that per-layer setting instead of the lane
+// silently disappearing from the picker.
+let rsModalLanes = [];
+
 function renderRsArrangements(lanes) {
   const wrap = $("rsArrangements");
-  const used = new Set();
+  // Every layer's own arrangement is spoken for before a layer without one is given a free one.
+  const used = new Set(lanes.map((lane) => lane.rocksmithArrangement));
   wrap.innerHTML = "";
   lanes.forEach((lane, i) => {
     const notes = lane.notes || [];

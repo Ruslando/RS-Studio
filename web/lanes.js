@@ -15,7 +15,7 @@ import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refr
 import { closeLayerSettings, layerArrangement, layerCapo, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
 import { layerVolumePercent, normLayerVolume, notesLowToHigh, volumeToDb } from "./util.js";
 import { withStartTone } from "./tone-marker-core.js";
-import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane } from "./layer-role.js";
+import { RS_KIND_OPTIONS, assignRsKinds, isTablatureLane, rsKindFits } from "./layer-role.js";
 import { moveCapo } from "./voicing-core.js";
 
 // ---- lane / stem helpers ----
@@ -148,9 +148,11 @@ export function renderLayerSettings() {
     layerCapo.value = String(Number(lane.capo) || 0);
   }
   if (layerArrangement) {
-    const value = lane.rocksmithArrangement;
-    layerArrangement.value = ["none", "lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm", "bass", "alt_bass", "bonus_bass"].includes(value)
-      ? value : lane.tablatureEnabled === false ? "none" : "auto";
+    // An arrangement another layer holds, or this neck cannot play, is not on offer.
+    const taken = new Set(arrangedLanes().filter((other) => !samePart(other, lane)).map((other) => other.rocksmithArrangement));
+    for (const option of layerArrangement.options)
+      option.disabled = option.value !== "none" && (taken.has(option.value) || !rsKindFits(option.value, laneTuning(lane)));
+    layerArrangement.value = lane.rocksmithArrangement || "none";
   }
 }
 
@@ -344,8 +346,7 @@ function setLaneArrangement(lane, arrangement) {
   const targets = sourceTrack == null ? [lane]
     : editLanes().filter((candidate) => candidate.sourceTrackIndex === sourceTrack);
   for (const target of targets) {
-    if (arrangement === "auto") delete target.rocksmithArrangement;
-    else target.rocksmithArrangement = arrangement;
+    target.rocksmithArrangement = arrangement;
     target.tablatureEnabled = arrangement !== "none";
   }
   renderLanes();
@@ -396,8 +397,7 @@ function toggleLaneLock(lane) {
   refreshSaveState();
 }
 
-// The row's second line: "Lead · Eb Standard · Capo 2 · 124 notes". Auto
-// arrangements resolve exactly as the Rocksmith export dialog pre-selects them.
+// The row's second line: "Lead · Eb Standard · Capo 2 · 124 notes".
 function tuningLabel(lane) {
   if (TUNINGS[lane.tuning]) {
     // The notes are in Settings; the presets' plain "Standard" needs its root back.
@@ -408,13 +408,19 @@ function tuningLabel(lane) {
   return custom ? custom.name : notesLowToHigh(laneTuning(lane));
 }
 
+// The layers that hold an arrangement: every one in the project, and the one being
+// made in the dialog, which is not in the project until it is saved.
+const arrangedLanes = () => [...editLanes(), ...(newLaneDraft ? [newLaneDraft] : [])];
+const samePart = (a, b) => a === b || (a.sourceTrackIndex != null && a.sourceTrackIndex === b.sourceTrackIndex);
+
 export function refreshCounts() {
-  const used = new Set();
+  // Here because every change that can leave a layer without a valid arrangement
+  // (a project loaded, a layer added or imported, another neck chosen) repaints the rows.
+  assignRsKinds(arrangedLanes(), laneTuning);
   for (const lane of editLanes()) {
-    const kind = defaultRsKind({ tuning: laneTuning(lane), arrangement: lane.rocksmithArrangement }, used);
     if (!lane._count) continue;
     const parts = [
-      isTablatureLane(lane) ? RS_KIND_OPTIONS.find(([k]) => k === kind)[1] : "No export",
+      isTablatureLane(lane) ? RS_KIND_OPTIONS.find(([k]) => k === lane.rocksmithArrangement)[1] : "No export",
       tuningLabel(lane),
       ...(Number(lane.capo) > 0 ? [`Capo ${lane.capo}`] : []),
       `${lane.notes.length.toLocaleString()} note${lane.notes.length === 1 ? "" : "s"}`,

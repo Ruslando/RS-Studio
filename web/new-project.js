@@ -75,13 +75,16 @@ for (const input of [npSongTitleInput, npArtistInput]) input.addEventListener("i
 const npLatin = latinFields({ title: "npSongTitle", artist: "npArtist", album: "npAlbum" });
 
 function hasFullSong() { return fileInput.files.length > 0; }
+// True while the full song is still on its way to the server: Create would
+// finalize a draft with no audio in it yet.
+let mainUploading = false;
 
 function refreshCreateEnabled() {
   const anyWorking = stemsListEl.querySelector(".stem-card[data-state='working']");
   const anyReady = stemsListEl.querySelector(".stem-card[data-state='ready']");
   // A project is named after its song, so it cannot be created without one.
   const named = npSongTitleInput.value.trim() && npArtistInput.value.trim();
-  goBtn.disabled = !!anyWorking || !(hasFullSong() || anyReady) || !named;
+  goBtn.disabled = mainUploading || !!anyWorking || !(hasFullSong() || anyReady) || !named;
 }
 
 // Cards parked in the "choosing" state render the backend list, so they need a
@@ -428,6 +431,7 @@ export async function setMainFile(file) {
   npClear.disabled = true;
   if (npSongTitleInput && !npSongTitleInput.value) npSongTitleInput.value = file.name.replace(/\.[^.]+$/, "");
   npLatin.sync();   // a programmatic value fires no "change"
+  mainUploading = true;
   refreshCreateEnabled();
   try {
     const job = await ensureDraftJob();
@@ -443,6 +447,7 @@ export async function setMainFile(file) {
     npDropSub.textContent = err.message;
     fileInput.value = "";
   }
+  mainUploading = false;
   npClear.disabled = false;
   refreshChoosingCards();
   refreshCreateEnabled();
