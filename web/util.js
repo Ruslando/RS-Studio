@@ -7,6 +7,10 @@ export function noteName(p) {
   return n[((p % 12) + 12) % 12] + (Math.floor(p / 12) - 1);
 }
 
+// Open strings as a player reads them, lowest first, no octaves: "E A D G B E".
+// Tunings are stored highest first.
+export const notesLowToHigh = (midis) => midis.slice().reverse().map((p) => noteName(p).replace(/-?\d+$/, "")).join(" ");
+
 // "C#4" / "Eb2" -> MIDI, or null. Octave numbering is scientific pitch (C4 = 60),
 // matching noteName above so the two round-trip.
 const PITCH_CLASS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };

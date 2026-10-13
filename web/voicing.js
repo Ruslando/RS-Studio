@@ -87,7 +87,7 @@ export function columnAlternatives(note, done) {
     bars: songBarStarts(),
     // The neck the shapes are priced against. Without it the worker falls back to
     // the electric's 22 frets and would offer an acoustic a shape at fret 21.
-    instrument: lane.instrument,
+    instrument: lane.instrument, capo: lane.capo,
     // And where the hand has been put. An offer priced against a hand the player
     // moved is priced against a hand that is not there.
     holds: lane.handHolds,

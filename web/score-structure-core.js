@@ -6,7 +6,7 @@
 // price is that changing the bar list is not a bar-list edit — it is a rewrite
 // of every note and marker that sits after the seam. That arithmetic is here,
 // separated from the dialog in score-structure.js so it can be tested without a
-// DOM: see tests/score-structure.test.mjs.
+// DOM: see tests/web/score-structure.test.mjs.
 //
 // The mutating functions take plain arrays rather than reading S.state, so a
 // test can hand them three notes instead of a project.

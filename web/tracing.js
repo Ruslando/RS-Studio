@@ -1,7 +1,8 @@
 // Spectrogram tracing (drawing notes along the CQT ridge) and the similar-passage
 // search that finds, ranks, and previews repeated phrases from a selection.
 
-import { MIN_DUR, SIMILAR_GLOBAL_THRESHOLD, stageMono, SIMILAR_HARMONIC_SPAN, SIMILAR_MAX_MATCHES, SIMILAR_PITCH_MARGIN, SIMILAR_THRESHOLD, TRACE_FALLBACK_STEP, TRACE_POINT_GAP } from "./constants.js";
+import { MIN_DUR, stageMono, SIMILAR_MAX_MATCHES, SIMILAR_PITCH_MARGIN, SIMILAR_THRESHOLD, TRACE_FALLBACK_STEP, TRACE_POINT_GAP } from "./constants.js";
+import { similarScores } from "./similar-core.js";
 import { audio, scroll, sctx, traceRangeSel, traceSnapInput, traceThresholdInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { commit, confirmPasteMode, copyEffects, snapshotEdit } from "./edit.js";
@@ -482,14 +483,11 @@ async function previewSimilarMatch(i, opts = {}) {
   }, ms);
 }
 
-// Score every candidate start column by normalized cross-correlation
-// (brightness-invariant) and keep the non-overlapping peaks above threshold that
-// aren't already transcribed. Two bands are scored per column: the note band
-// (the selection's pitch range) and a wider band extending up over the overtones.
-// A guitar's fundamental is often dark while its harmonics are bright, so the
-// note band alone can be too sparse to correlate — the wide band carries the
-// match in that case. Either band qualifying surfaces the passage; the stronger
-// of the two sets the confidence.
+// Score every candidate start column (see similar-core.js: loudness is removed, so
+// what is compared is which pitch stands out at each instant) and keep the
+// non-overlapping peaks above threshold that aren't already transcribed. The band
+// is the selection's own pitch range; the notes decide where to look, the audio
+// under them is what gets compared.
 function computeSimilarMatches(selNotes, fillLane = targetLane()) {
   if (!S.state || !S.spectImg || !S.spectPixels || !selNotes.length) return [];
   const iw = S.spectImg.width, ih = S.spectImg.height;
@@ -505,79 +503,29 @@ function computeSimilarMatches(selNotes, fillLane = targetLane()) {
   const hiP = Math.max(...selNotes.map((n) => n.pitch));
   const pTop = Math.min(S.state.spec.midi_high, hiP + SIMILAR_PITCH_MARGIN);
   const pBot = Math.max(S.state.spec.midi_low, loP - SIMILAR_PITCH_MARGIN);
-  // Harmonic fallback band: extend the scored region up over the overtones (not
-  // the displayed box, which stays the note band). pTopWide >= pTop always.
-  const pTopWide = Math.min(S.state.spec.midi_high, hiP + SIMILAR_HARMONIC_SPAN);
 
-  // Image-space patch: columns [c0,c1). Rows: higher pitch = lower index, so the
-  // wide band's top row (rWideTop) sits at or above the note band's top (rTop).
+  // Image-space patch: columns [c0,c1), rows [rTop,rBot] (higher pitch = lower index).
   const c0 = Math.floor(imageXForTime(t0));
   const c1 = Math.max(c0 + 1, Math.ceil(imageXForTime(t1)));
   const patchW = c1 - c0;
-  const rWideTop = clamp(Math.floor(imageYForPitch(pTopWide)), 0, ih - 1);
   const rTop = clamp(Math.floor(imageYForPitch(pTop)), 0, ih - 1);
-  const rBot = clamp(Math.ceil(imageYForPitch(pBot)), 0, ih - 1);
-  const Hwide = rBot - rWideTop + 1;
-  if (patchW < 1 || Hwide < 1 || c0 + patchW > iw) return [];
+  const rBot = clamp(Math.floor(imageYForPitch(pBot)), 0, ih - 1);
+  const H = rBot - rTop + 1;
+  if (patchW < 1 || H < 2 || c0 + patchW > iw) return [];
 
-  // Cache the wide band's per-pixel energy once; the note band is its lower rows.
-  const band = new Float64Array(Hwide * iw);
-  for (let ri = 0; ri < Hwide; ri++) {
-    const off = ri * iw, row = rWideTop + ri;
+  const band = new Float64Array(H * iw);
+  for (let ri = 0; ri < H; ri++) {
+    const off = ri * iw, row = rTop + ri;
     for (let col = 0; col < iw; col++) band[off + col] = spectEnergyAt(col, row);
   }
-  const loOff = rTop - rWideTop;   // first note-band row within `band`
 
-  // Mean-centred template over rows [r0, r0+H) of `band` + its norm. Returns null
-  // for a flat (silent) patch — common for a dark guitar fundamental, which is
-  // exactly when the wide band must carry the match instead.
-  const buildTemplate = (r0, H) => {
-    const n = H * patchW;
-    const tmpl = new Float64Array(n);
-    let tsum = 0;
-    for (let ri = 0; ri < H; ri++)
-      for (let ci = 0; ci < patchW; ci++) {
-        const v = band[(r0 + ri) * iw + c0 + ci];
-        tmpl[ri * patchW + ci] = v; tsum += v;
-      }
-    const tmean = tsum / n;
-    let tnorm = 0;
-    for (let i = 0; i < n; i++) { tmpl[i] -= tmean; tnorm += tmpl[i] * tmpl[i]; }
-    tnorm = Math.sqrt(tnorm);
-    return tnorm < 1e-6 ? null : { tmpl, tnorm, r0, H, n };
-  };
-  const noteTmpl = buildTemplate(loOff, rBot - rTop + 1);
-  const wideTmpl = buildTemplate(0, Hwide);
-  if (!noteTmpl && !wideTmpl) return [];
-
-  // NCC of a template against the window starting at column cs. 0 for a null
-  // template (flat selection patch) or a flat window.
-  const scoreAt = (tpl, cs) => {
-    if (!tpl) return 0;
-    let dot = 0, wsum = 0, wsq = 0;
-    for (let ri = 0; ri < tpl.H; ri++) {
-      const base = (tpl.r0 + ri) * iw + cs, tb = ri * patchW;
-      for (let ci = 0; ci < patchW; ci++) {
-        const w = band[base + ci];
-        dot += tpl.tmpl[tb + ci] * w; wsum += w; wsq += w * w;
-      }
-    }
-    const wvar = wsq - (wsum * wsum) / tpl.n;
-    const denom = tpl.tnorm * Math.sqrt(Math.max(wvar, 1e-9));
-    return denom > 1e-9 ? dot / denom : 0;
-  };
-
-  // Score each candidate start column against both bands. Budget the stride off
-  // the wider template so the one-shot search stays snappy (NCC peaks are broad).
+  // Budget the stride so a long selection in a long song stays snappy.
   const lastCs = iw - patchW;
-  const stride = Math.max(1, Math.ceil((Hwide * patchW * (lastCs + 1)) / 30e6));
+  const stride = Math.max(1, Math.ceil((H * patchW * (lastCs + 1)) / 30e6));
+  const scores = similarScores(band, iw, H, c0, patchW, stride);
   const scored = [];   // { cs, score }
-  for (let cs = 0; cs <= lastCs; cs += stride) {
-    const ns = scoreAt(noteTmpl, cs);
-    const ws = scoreAt(wideTmpl, cs);
-    if (ns >= SIMILAR_THRESHOLD || ws >= SIMILAR_GLOBAL_THRESHOLD)
-      scored.push({ cs, score: Math.max(ns, ws) });
-  }
+  for (let cs = 0; cs <= lastCs; cs += stride)
+    if (scores[cs] >= SIMILAR_THRESHOLD) scored.push({ cs, score: scores[cs] });
 
   // Greedy non-maximum suppression: strongest peaks first, keep them apart.
   scored.sort((a, b) => b.score - a.score);
@@ -586,6 +534,7 @@ function computeSimilarMatches(selNotes, fillLane = targetLane()) {
   const picked = [];
   const out = [];
   for (const { cs, score } of scored) {
+    if (Math.abs(cs - c0) < minSep) continue;   // the selection itself, or a slice of it
     if (picked.some((p) => Math.abs(p - cs) < minSep)) continue;
     const dt = (cs - c0) * dtPerCol;
     const ghosts = selNotes.map((nn) => copyEffects(nn, { start: nn.start + dt, end: nn.end + dt, pitch: nn.pitch }));
@@ -619,6 +568,7 @@ export function runFindSimilar() {
   clearMatches();
   S.matches = computeSimilarMatches(selNotes, lane);
   if (!S.matches.length) { toast("No similar passages found"); draw(); return; }
+  toast(`Found ${S.matches.length} similar passage${S.matches.length === 1 ? "" : "s"}`);
   draw();
 }
 
@@ -737,7 +687,8 @@ export function drawMatches() {
     sctx.strokeStyle = active ? PAINT.trace : hexA(PAINT.trace, 0.7);
     sctx.strokeRect(bx + 0.5, byTop + 0.5, bw - 1, byBot - byTop - 1);
     sctx.restore();
-    const pct = `${Math.round(m.score * 100)}%`;
+    // "2/5 · 84%": which one this is (left to right), of how many, and how close.
+    const pct = `${i + 1}/${S.matches.length} · ${Math.round(m.score * 100)}%`;
     const tw = sctx.measureText(pct).width;
     const ly = clamp(byTop, vy0, vy0 + S.stageHeight - 13);
     sctx.fillStyle = active ? PAINT.trace : hexA(PAINT.trace, 0.85);

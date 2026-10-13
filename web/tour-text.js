@@ -1,7 +1,7 @@
 // Walkthrough instructions use text nodes, action labels, and input glyphs.
 const ACTIONS = [
   "Export Rocksmith CDLC (.psarc)", "Export legacy Guitar Pro (.gp5)",
-  "Export Guitar Pro (.gp)", "Group selection into reference", "Group selection into shape",
+  "Export Guitar Pro (.gp)", "Group into reference", "Group into shape",
   "Edit note layer settings", "Find similar passage", "Rocksmith arrangement",
   "Add audio layer", "Note layers", "Audio layers", "Upload my own", "Detect notes", "Export .chart",
   "Palm mute", "Vibrato", "Slide", "Reset override", "Heat", "Snap", "Edit", "File",

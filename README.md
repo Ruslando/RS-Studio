@@ -90,7 +90,8 @@ On Linux it uses the system's FFmpeg. With the NVIDIA libraries installed, run
 - Linux export uses the [`wwise-wem`](https://github.com/rabbit-smith/wem)
   encoder. RS Studio does not ship it; uv builds it on your machine from a
   pinned commit.
-- Tests: `uv run python -m unittest discover -s tests`
+- Tests: `uv run python -m unittest discover -s tests`. The browser tests
+  need Node.js and Microsoft Edge.
 - Packaging the Windows installer:
   [docs/bootstrap-installer.md](docs/bootstrap-installer.md)
 

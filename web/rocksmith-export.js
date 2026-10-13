@@ -3,40 +3,14 @@
 // other exports.
 
 import { $ } from "./dom.js";
-import { editLanes } from "./lanes.js";
-import { isTablatureLane } from "./layer-role.js";
-import { applyCoverChange, clearProjectCover, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { MAX_CAPO, editLanes } from "./lanes.js";
+import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane } from "./layer-role.js";
+import { applyCoverChange, clearProjectCover, coverStatus, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { downloadProjectBlob, toast } from "./notify.js";
+import { jobRequest } from "./operation-progress.js";
 import { S } from "./store.js";
 import { rememberPref } from "./util.js";
 import { TUNINGS, buildSpecForLanesAsync, customTunings, laneTuning, parseTuning, tuningToNames } from "./tablature.js";
-
-const RS_KIND_OPTIONS = [
-  ["lead", "Lead"],
-  ["rhythm", "Rhythm"],
-  ["alt_lead", "Alt Lead"],
-  ["alt_rhythm", "Alt Rhythm"],
-  ["bonus_lead", "Bonus Lead"],
-  ["bonus_rhythm", "Bonus Rhythm"],
-  ["bass", "Bass"],
-  ["alt_bass", "Alt Bass"],
-  ["bonus_bass", "Bonus Bass"],
-];
-
-function defaultRsKind(track, used) {
-  if (RS_KIND_OPTIONS.some(([kind]) => kind === track.arrangement)) {
-    used.add(track.arrangement);
-    return track.arrangement;
-  }
-  const tuning = track.tuning || [];
-  const isBass = tuning.length === 4 || (tuning.length === 5 && Math.max(...tuning) < 52);
-  const order = isBass
-    ? ["bass", "alt_bass", "bonus_bass"]
-    : ["lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm"];
-  const kind = order.find((k) => !used.has(k)) || order[0];
-  used.add(kind);
-  return kind;
-}
 
 function rsStringCountForKind(kind) {
   return kind.includes("bass") ? 4 : 6;
@@ -150,7 +124,8 @@ let rsModalLanes = [];
 
 function renderRsArrangements(lanes) {
   const wrap = $("rsArrangements");
-  const used = new Set();
+  // Every layer's own arrangement is spoken for before a layer without one is given a free one.
+  const used = new Set(lanes.map((lane) => lane.rocksmithArrangement));
   wrap.innerHTML = "";
   lanes.forEach((lane, i) => {
     const notes = lane.notes || [];
@@ -183,6 +158,16 @@ function renderRsArrangements(lanes) {
     row.querySelector(".rs-arr-kind").addEventListener("change", () =>
       updateRsTuningSelect(row, rsTuningFromSelect(row.querySelector(".rs-arr-tuning"))));
     updateRsTuningSelect(row, row._trackTuning);
+    // The layer's capo, overridable here like the tuning. Frets count from it, so a
+    // different capo keeps the shapes and moves where they sit on the neck.
+    const capo = document.createElement("select");
+    capo.className = "rs-arr-capo";
+    capo.title = "Capo fret in Rocksmith";
+    capo.setAttribute("aria-label", `Capo for ${trackName}`);
+    const own = Number(lane.capo) || 0;
+    for (let fret = 0; fret <= Math.max(MAX_CAPO, own); fret++) capo.append(new Option(fret ? `Capo ${fret}` : "No capo", String(fret)));
+    capo.value = String(own);
+    row.append(capo);
     wrap.append(row);
   });
 }
@@ -251,7 +236,7 @@ function closeRocksmithExportModal() {
 // discard a title the user has typed but not yet exported with.
 async function applyRsCover(working, done, run) {
   if (!S.state) return;
-  const meta = await applyCoverChange(rsMetaFromForm(), () => run(S.state.job), setRsStatus, working, done);
+  const meta = await applyCoverChange(rsMetaFromForm(), () => run(S.state.job), coverStatus($("rsCoverDrop"), setRsStatus), working, done);
   if (!meta) return;
   S.state.metadata = meta;
   renderRsCover(S.state.metadata);
@@ -277,8 +262,10 @@ export function exportRocksmith() {
   openRocksmithExportModal();
 }
 
+let exporting = false;
+
 async function submitRocksmithExport() {
-  if (!S.state) return;
+  if (!S.state || exporting) return;
   // Enter in a text field submits a form whether or not its submit button is
   // disabled, so the check guards the work as well as the button.
   if (!converterOk) return;
@@ -310,49 +297,51 @@ async function submitRocksmithExport() {
       setRsStatus("Bass arrangements need 4 strings; guitar arrangements need 6.", true);
       return;
     }
-    picks.push({ lane, kind, tuning });
+    picks.push({ lane, kind, tuning, capo: Number(row.querySelector(".rs-arr-capo").value) || 0 });
   }
   if (!picks.length) { setRsStatus("Select at least one arrangement.", true); return; }
 
-  let spec;
-  try {
-    setRsStatus("Calculating fingerings…");
-    // Rocksmith is independent of eye visibility and note count: the picker
-    // above decides what to voice, including layers with tablature switched
-    // off if the user ticked them here.
-    spec = await buildSpecForLanesAsync(picks.map((p) => p.lane));
-  } catch (e) {
-    setRsStatus(e.message, true);
-    return;
-  }
   const meta = rsMetaFromForm();
   S.state.metadata = { ...normalizeMetadata(S.state.metadata || {}), ...meta };
-  spec.name = exportSongName(meta, S.state.name || S.state.filename || "song");
-  spec.metadata = metadataPayload(S.state.metadata);
   const leadingSilence = leadIn($("rsLeadIn").value);
   rememberPref(LS_LEAD_IN, leadingSilence);
-  spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning })), leadingSilence };
+  // A whole number from 1; anything else falls back to 1 (the server checks again).
+  const version = Math.max(1, Math.floor(Number($("rsVersion").value)) || 1);
+  $("rsVersion").value = String(version);
+  const state = S.state, songName = exportSongName(meta, state.name || state.filename || "song");
 
-  $("rsExportGo").disabled = true;
-  setRsStatus("Building CDLC…");
+  // A job, not a wait in a window (design.md 4.17): the form has been read, so the
+  // window closes and the build runs in the progress panel while the editor stays
+  // usable. What was typed is in the project's details, so reopening the window
+  // after a failure finds it again.
+  exporting = true;
+  closeRocksmithExportModal();
   try {
-    const res = await fetch(`/api/projects/${S.state.job}/rocksmith`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec),
+    await jobRequest("Exporting Rocksmith CDLC", songName, async (panel) => {
+      panel.update({ stage: "Calculating fingerings", fraction: null });
+      // Rocksmith is independent of eye visibility and note count: the picker
+      // decides what to voice, including layers with tablature switched off if
+      // the user ticked them.
+      const spec = await buildSpecForLanesAsync(picks.map((p) => p.lane));
+      spec.name = songName;
+      spec.metadata = metadataPayload(state.metadata);
+      spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo })), leadingSilence, version };
+      panel.update({ stage: "Building the package", fraction: null });
+      const res = await fetch(`/api/projects/${state.job}/rocksmith`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "CDLC build failed");
+      const buf = await res.arrayBuffer();
+      const cd = res.headers.get("Content-Disposition") || "";
+      // filename* carries the real (UTF-8) name; filename="" is only its ASCII fallback.
+      const encoded = cd.match(/filename\*=UTF-8''([^;]+)/i);
+      const name = (encoded ? decodeURIComponent(encoded[1]) : (cd.match(/filename="([^"]+)"/) || [])[1]) || "song_p.psarc";
+      let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
+      downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name);
+      toast(warns.length ? `Exported ${name} - ${warns.length} warning(s)` : `Exported ${name}`, 2200, warns.length ? "warn" : "ok");
     });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "CDLC build failed");
-    const buf = await res.arrayBuffer();
-    const cd = res.headers.get("Content-Disposition") || "";
-    // filename* carries the real (UTF-8) name; filename="" is only its ASCII fallback.
-    const encoded = cd.match(/filename\*=UTF-8''([^;]+)/i);
-    const name = (encoded ? decodeURIComponent(encoded[1]) : (cd.match(/filename="([^"]+)"/) || [])[1]) || "song_p.psarc";
-    let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
-    downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name);
-    closeRocksmithExportModal();
-    toast(warns.length ? `Exported ${name} - ${warns.length} warning(s)` : `Exported ${name}`, 2200, warns.length ? "warn" : "ok");
-  } catch (e) {
-    setRsStatus(e.message, true);
-  } finally {
-    $("rsExportGo").disabled = !converterOk;
+  } catch { /* the panel's toast has said what failed */ } finally {
+    exporting = false;
   }
 }
 
@@ -360,7 +349,6 @@ export function init_rocksmith_export() {
   $("rocksmithExportForm").addEventListener("submit", (e) => { e.preventDefault(); submitRocksmithExport(); });
   $("rsExportClose").addEventListener("click", closeRocksmithExportModal);
   $("rsExportCancel").addEventListener("click", closeRocksmithExportModal);
-  $("rocksmithExportBackdrop").addEventListener("click", (e) => { if (e.target === $("rocksmithExportBackdrop")) closeRocksmithExportModal(); });
   $("rsCoverDrop").addEventListener("click", (e) => { if (!e.target.closest(".cover-clear")) $("rsCoverInput").click(); });
   $("rsCoverDrop").addEventListener("keydown", (e) => {
     if (e.target.closest(".cover-clear")) return;

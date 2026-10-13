@@ -4,6 +4,7 @@
 // the app's own transport (song audio + lane synths) remains the sound engine.
 
 import { INSTRUMENTS, TONES, instrKey, toneKey } from "./constants.js";
+import { fretboardFor } from "./fretboard-core.js";
 import { audio, tabRenderEl, tabScrollEl, tabViewBackdropEl, tabViewCloseEl, tabWarnEl, tsDenInput } from "./dom.js";
 import { copyEffects } from "./note-effects.js";
 import { beatsPerBar, exportResolution, gridBpm, gridOffset, gridSubdiv, minDur } from "./grid.js";
@@ -13,6 +14,7 @@ import { editLanes } from "./lanes.js";
 import { exportSongName, metadataFromState, metadataPayload } from "./metadata.js";
 import { ensureTone, pauseTransport, playbackTime, playTransport, revealPlaybackPosition, seekPlayback, transportPlaying } from "./playback.js";
 import { downloadProjectBlob, toast } from "./notify.js";
+import { jobRequest } from "./operation-progress.js";
 import { S } from "./store.js";
 import { scoreProjectionSignature } from "./guitar-pro-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
@@ -20,30 +22,12 @@ import { sectionMarkersForExport } from "./section-marker-core.js";
 import { isTablatureLane, selectedTablatureLane } from "./layer-role.js";
 import { modernGpProjectionStatus, modernGpResult, projectedGpLaneScore } from "./guitar-pro-score.js";
 import { parseTuning, songTimeToTabMs, tabMsToSongTime } from "./util.js";
+import { TUNINGS } from "./tunings.js";
 import { arrangedNotes, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
 
 // ---- tablature (Guitar Pro export + alphaTab preview) ----
-// Tuning presets: open-string MIDI in Guitar Pro order (string 1 = highest).
-// The 6-string standard/drop presets step down chromatically E→D#→D→C#→C, each
-// paired with its drop variant (lowest string dropped a further whole step) —
-// the common metal/rock tuning ladder.
-// `label` is shown inside an <optgroup> keyed by string count (see buildTuningOptions),
-// so the instrument/count prefix lives on the group — options just name the variant.
-export const TUNINGS = {
-  bass4:   { label: "Standard (E A D G)",     tuning: [43, 38, 33, 28] },
-  bass5:   { label: "Standard (B E A D G)",   tuning: [43, 38, 33, 28, 23] },
-  guitar6: { label: "Standard (E A D G B E)", tuning: [64, 59, 55, 50, 45, 40] },
-  guitar7: { label: "Standard (B E A D G B E)", tuning: [64, 59, 55, 50, 45, 40, 35] },
-  ds_standard: { label: "D# Standard (D# G# C# F# A# D#)", tuning: [63, 58, 54, 49, 44, 39] },
-  d_standard:  { label: "D Standard (D G C F A D)",        tuning: [62, 57, 53, 48, 43, 38] },
-  cs_standard: { label: "C# Standard (C# F# B E G# C#)",   tuning: [61, 56, 52, 47, 42, 37] },
-  c_standard:  { label: "C Standard (C F A# D# G C)",      tuning: [60, 55, 51, 46, 41, 36] },
-  drop_d:  { label: "Drop D (D A D G B E)",         tuning: [64, 59, 55, 50, 45, 38] },
-  drop_cs: { label: "Drop C# (C# G# C# F# A# D#)",  tuning: [63, 58, 54, 49, 44, 37] },
-  drop_c:  { label: "Drop C (C G C F A D)",         tuning: [62, 57, 53, 48, 43, 36] },
-  drop_b:  { label: "Drop B (B F# B E G# C#)",      tuning: [61, 56, 52, 47, 42, 35] },
-  drop_as: { label: "Drop A# (A# F A# D# G C)",     tuning: [60, 55, 51, 46, 41, 34] },
-};
+// Tuning presets live in tunings.js (no DOM), so guitar-pro-edit.js can read them too.
+export { TUNINGS } from "./tunings.js";
 
 // User-defined named tunings (typed as note strings, e.g. "G2 D2 A1 E1"),
 // managed via the "Manage tunings…" option on the layer tuning select.
@@ -54,20 +38,10 @@ const loadCustomTunings = () => { try { return JSON.parse(LS && LS.getItem(CUSTO
 const saveCustomTunings = () => { if (LS) LS.setItem(CUSTOM_TUNINGS_KEY, JSON.stringify(customTunings)); };
 export let customTunings = loadCustomTunings();
 
-export function addCustomTuning(name, notes) {
-  const t = { id: "ct_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, notes };
-  customTunings.push(t);
-  saveCustomTunings();
-  return t;
-}
-export function updateCustomTuning(id, patch) {
-  const t = customTunings.find((c) => c.id === id);
-  if (!t) return;
-  Object.assign(t, patch);
-  saveCustomTunings();
-}
-export function removeCustomTuning(id) {
-  customTunings = customTunings.filter((t) => t.id !== id);
+export const newTuningId = () => "ct_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+// The tuning manager edits a draft and hands the whole list over on Save.
+export function replaceCustomTunings(list) {
+  customTunings = list.map((t) => ({ id: t.id, name: t.name, notes: t.notes, ...(t.instrument ? { instrument: t.instrument } : {}) }));
   saveCustomTunings();
 }
 // A lane's `tuning` field resolves against built-ins, a custom-tuning id, or
@@ -91,6 +65,17 @@ export function laneTuning(lane) {
   if (lane.tuning === "custom") return parseTuning(lane.customTuning) || TUNINGS.guitar6.tuning;
   return TUNINGS[INSTRUMENTS[instrKey(lane.instrument)].tuning].tuning;
 }
+
+// The tuning positions are counted against: a note's pitch is this open pitch plus
+// its fret. Frets count from the capo, as in Guitar Pro (alphaTab's pitch is
+// fret + open + capo - transposition), so fret 0 is the capo itself.
+export function laneFretTuning(lane) {
+  const shift = (Number(lane.capo) || 0) - (Number(lane.transpositionPitch) || 0);
+  return laneTuning(lane).map((open) => open + shift);
+}
+
+// How many frets there are above the capo: the neck's own, minus the capo's.
+export const laneFretCount = (lane) => fretboardFor(lane.instrument).frets - (Number(lane.capo) || 0);
 
 // General-MIDI program for a lane's tone (the exported track's sound). A sound, so
 // it comes off the tone and not off the neck.
@@ -151,20 +136,6 @@ function voicedMap(notes, positions) {
   return voiced;
 }
 
-// Imported GP lanes already carry the authored string/fret. Keeping this path
-// separate is the guardrail that prevents the MIDI-to-tab optimizer from
-// silently rewriting the original transcription.
-function exactVoicedMap(notes, laneName = "Imported track", stringCount = Infinity) {
-  const voiced = new Map();
-  for (const note of notes) {
-    const string = Number(note.pos?.string), fret = Number(note.pos?.fret);
-    if (!Number.isInteger(string) || string < 0 || string >= stringCount || !Number.isFinite(fret) || fret < 0)
-      throw new Error(`${laneName} has a note without its original string/fret position`);
-    voiced.set(note, { string, fret });
-  }
-  return voiced;
-}
-
 // Returns { voiced, fingers, seats }: the positions, and the hand that played them.
 // The two extra maps are what the fretboard annotates the neck with — see
 // voiceNotesFingered. They are absent on the exact-fingering path, where the
@@ -178,7 +149,7 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
   // Headless callers and older embedded browsers retain the synchronous path.
   if (typeof Worker === "undefined") {
     const { voiced, fingers, seats } = voiceNotesFingered(notes, tuning, Infinity,
-      { bars: songBarStarts(), instrument: lane.instrument,
+      { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo,
         holds: lane.handHolds });
     const got = {
       positions: notes.map((note) => voiced.get(note) || null),
@@ -210,7 +181,7 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
     };
     worker.onerror = () => finish(reject, new Error("automatic fingering worker failed"));
     worker.postMessage({ task: "voice", notes, tuning, bars: songBarStarts(),
-      instrument: lane.instrument, holds: lane.handHolds });
+      instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
   });
   if (signal?.aborted || laneVoicingKey(lane, tuning) !== key) throw aborted();
   laneVoicingCache.set(lane, { key, ...got });
@@ -251,6 +222,8 @@ function buildSpecFromPrepared(prepared) {
         ...normalizedLaneFields(l),
         instrument: laneGm(l),
         tuning,
+        // Frets below count from it; the .gp5 writer and Rocksmith both need it.
+        capo: Number(l.capo) || 0,
         notes: representPickedOpenSlides(exportNotes.map((n) => {
           const pos = voiced.get(n);
           return copyEffects(n, {
@@ -265,20 +238,15 @@ function buildSpecFromPrepared(prepared) {
 }
 
 // One lane's fingering: its tuning, its arranged notes, and the string/fret each
-// one lands on. The two paths — an imported lane's authored positions and the
-// optimizer's — are chosen here so every consumer gets the same answer.
+// one lands on. Imported positions are pins like any other, so every consumer — the
+// fretboard, the tab, both Guitar Pro exports and Rocksmith — gets this one answer.
 //
 // The fretboard view calls this too, which is the point of it being one function:
 // what the neck shows a player and what the .gp5 contains are the same fingering,
 // out of the same worker and the same cache.
 export async function laneFingering(lane, signal) {
-  const tuning = laneTuning(lane), notes = arrangedNotes(lane.notes);
-  // An exact lane's positions are the transcriber's own, so there is no walk behind
-  // them and no hand to report; the board falls back to reading a fingering off each
-  // shape, which is all anyone can do for positions nobody's hand chose.
-  const found = lane.fingeringMode === "exact"
-    ? { voiced: exactVoicedMap(notes, lane.name, tuning.length), fingers: null, seats: null }
-    : await voiceLaneAsync(lane, notes, tuning, signal);
+  const tuning = laneFretTuning(lane), notes = arrangedNotes(lane.notes);
+  const found = await voiceLaneAsync(lane, notes, tuning, signal);
   alignReferences(lane, notes, found);
   return { tuning, notes, ...found };
 }
@@ -308,7 +276,7 @@ export async function laneFingering(lane, signal) {
 // from it would put a note on a fret that does not sound it.
 function alignReferences(lane, notes, found) {
   const groups = lane.refBoxes;
-  if (!groups || lane.fingeringMode === "exact") return;
+  if (!groups) return;
   const { voiced, fingers, seats } = found;
   const minIn = minDur();
   for (const key of Object.keys(groups)) {
@@ -555,7 +523,8 @@ async function refreshTab() {
       grid: S.appliedGrid || S.state.baseGrid || {} };
     const marker = `projected:${S.state.job}:${lane.id}:${scoreProjectionSignature([lane])}:${JSON.stringify(timing)}`;
     if (marker === tabSpecJson && tabApi) return;
-    tabWarnEl.textContent = "building selected note layer…";
+    tabWarnEl.textContent = "";
+    document.getElementById("tabBusy").hidden = false;
     await loadAlphaTab();
     const score = await projectedGpLaneScore(alphaTab, lane, controller.signal);
     if (controller.signal.aborted) return;
@@ -566,21 +535,27 @@ async function refreshTab() {
     if (ok === false) throw new Error("alphaTab could not load the selected layer");
     tabSpecJson = marker;
     const warnings = score.cwWarnings || [];
-    tabWarnEl.textContent = warnings.length ? "⚠ " + warnings.join(" · ") : "";
+    tabWarnEl.textContent = warnings.join(" · ");   // the dot says "warning"
+    tabWarnEl.classList.add("status-line--warn");
   } catch (e) {
     tabLoadGuard = null;
-    if (e?.name !== "AbortError") tabWarnEl.textContent = "error: " + e.message;
+    if (e?.name !== "AbortError") { tabWarnEl.textContent = e.message; tabWarnEl.classList.remove("status-line--warn"); }
   } finally {
-    if (tabBuildController === controller) tabBuildController = null;
+    if (tabBuildController === controller) { tabBuildController = null; document.getElementById("tabBusy").hidden = true; }
   }
 }
 
 // Build and download the .gp5 immediately, without opening the tab view.
 export async function exportTab() {
   if (!S.state) return;
-  try {
+  const name = (S.state.name || S.state.filename || "tab").replace(/[^A-Za-z0-9._ -]+/g, "_");
+  // A job (design.md 4.17): fingering a long song takes a while, and until now
+  // nothing on screen said the export had started.
+  await jobRequest("Exporting Guitar Pro", name + ".gp5", async (panel) => {
+    panel.update({ stage: "Calculating fingerings", fraction: null });
     const spec = await buildTabSpecAsync();
     if (!spec.tracks.length) { toast("No tablature notes to export"); return; }
+    panel.update({ stage: "Writing the file", fraction: null });
     const res = await fetch("/api/tab", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec),
     });
@@ -589,13 +564,10 @@ export async function exportTab() {
     // The warning header is advisory; a malformed one must not fail the export
     // the user is already downloading.
     let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
-    const name = (S.state.name || S.state.filename || "tab").replace(/[^A-Za-z0-9._ -]+/g, "_");
     downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name + ".gp5");
     toast(warns.length ? `Exported ${name}.gp5 · ${warns.length} warning${warns.length === 1 ? "" : "s"}` : `Exported ${name}.gp5`,
           2200, warns.length ? "warn" : "ok");
-  } catch (e) {
-    toast("Export failed: " + e.message, 2200, "error");
-  }
+  }).catch(() => { /* the panel's toast has said what failed */ });
 }
 
 // Modern GP7+ export starts from the selected source hierarchy and applies the
@@ -604,25 +576,19 @@ export async function exportModernGp() {
   if (!S.state) return;
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) { toast(status.reason, 4200); return; }
-  try {
+  const name = exportSongName(metadataFromState(S.state), S.state.name || S.state.filename || "score");
+  await jobRequest("Exporting Guitar Pro", name + ".gp", async (panel) => {
+    panel.update({ stage: "Writing the file", fraction: null });
     await loadAlphaTab();
     const { bytes, warnings } = await modernGpResult(alphaTab);
-    const meta = metadataFromState(S.state);
-    const name = exportSongName(meta, S.state.name || S.state.filename || "score");
     downloadProjectBlob(new Blob([bytes], { type: "application/octet-stream" }), name + ".gp");
     toast(warnings.length ? `Exported ${name}.gp · ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : `Exported ${name}.gp`,
           2200, warnings.length ? "warn" : "ok");
-  } catch (e) {
-    toast("Modern Guitar Pro export failed: " + e.message, 4500, "error");
-  }
+  }).catch(() => { /* the panel's toast has said what failed */ });
 }
 
 export function init_tablature() {
   tabViewCloseEl?.addEventListener("click", () => setView("spec"));
-  // Click-away on the scrim closes it, like every other window over the editor.
-  tabViewBackdropEl?.addEventListener("mousedown", (event) => {
-    if (event.target === tabViewBackdropEl) setView("spec");
-  });
   // Keep alphaTab's player state and cursor in step with the app transport. In
   // external-media mode play()/pause() round-trip through our handler back to the
   // same <audio> element, where they are no-ops — no feedback loop. The echo()

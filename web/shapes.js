@@ -83,7 +83,7 @@ function automaticShape(notes, tuning) {
 
 // Preserve a coherent authored/manual grip when one exists. Created automatic
 // layers otherwise receive one jointly optimized shape for all distinct pitches.
-export function chooseShapePositions(notes, tuning, { allowAutomatic = true } = {}) {
+export function chooseShapePositions(notes, tuning) {
   return coherentPinnedShape(notes, tuning) ||
-    (allowAutomatic ? automaticShape(notes, tuning) : null);
+    automaticShape(notes, tuning);
 }

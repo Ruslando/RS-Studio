@@ -19,31 +19,22 @@
 import { $, addStemBtn, fileInput, form, goBtn, modalBackdrop, newProjBtn, npCancelBtn, npClear, npDrop, npDropSub, npDropTitle, stemBulkBrowseBtn, stemBulkInput, stemsAddEl, stemsListEl, warnEl } from "./dom.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { UPLOAD_ARROW_ICON } from "./icons.js";
-import { applyCoverChange, clearProjectCover, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { toast } from "./notify.js";
+import { loadWithScreen } from "./project-loading.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { DEFAULT_PART_ORDER, backendLabel, separators } from "./separators.js";
 import { previewIcon, syncScrub, wireScrub } from "./stem-preview.js";
 import { isAudioFile } from "./util.js";
 
 // The card's own close button; the upload arrow is shared, so it is in icons.js.
-const REMOVE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+const REMOVE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 
 // Set by initNewProject. See the module banner: these are the only way out.
 let onProjectCreated = () => {};
 let onModalClosed = () => {};
 let canLeaveOpenProject = async () => true;
 
-const npStatusEl = $("npStatus");
-
-function setNpStatus(msg, busy) {
-  npStatusEl.textContent = "";
-  npStatusEl.classList.toggle("busy", !!busy);
-  if (busy) npStatusEl.append(Object.assign(document.createElement("span"), { className: "spinner" }));
-  if (msg) npStatusEl.append(document.createTextNode(msg));
-  npStatusEl.hidden = !msg && !busy;
-  goBtn.disabled = !!busy;
-}
 
 let draftJob = null;
 let draftJobPromise = null;
@@ -75,13 +66,16 @@ for (const input of [npSongTitleInput, npArtistInput]) input.addEventListener("i
 const npLatin = latinFields({ title: "npSongTitle", artist: "npArtist", album: "npAlbum" });
 
 function hasFullSong() { return fileInput.files.length > 0; }
+// True while the full song is still on its way to the server: Create would
+// finalize a draft with no audio in it yet.
+let mainUploading = false;
 
 function refreshCreateEnabled() {
   const anyWorking = stemsListEl.querySelector(".stem-card[data-state='working']");
   const anyReady = stemsListEl.querySelector(".stem-card[data-state='ready']");
   // A project is named after its song, so it cannot be created without one.
   const named = npSongTitleInput.value.trim() && npArtistInput.value.trim();
-  goBtn.disabled = !!anyWorking || !(hasFullSong() || anyReady) || !named;
+  goBtn.disabled = mainUploading || !!anyWorking || !(hasFullSong() || anyReady) || !named;
 }
 
 // Cards parked in the "choosing" state render the backend list, so they need a
@@ -124,9 +118,8 @@ const setNewProjectCoverFromDrop = (dataTransfer) =>
 // where both progress and errors go.
 async function changeNewProjectCover(run) {
   const before = collectNewProjectMetadata();
-  const status = (msg, error) => { if (error || msg !== "Uploaded") npCoverSub.textContent = msg; };
   const meta = await applyCoverChange(before, async () => run(await ensureDraftJob()),
-    status, "Uploading...", "Uploaded");
+    coverStatus(npCoverDrop, (message) => { npCoverSub.textContent = message; }), "Uploading...", "Uploaded");
   draftMetadata = meta || before;
   renderNewProjectCover();
 }
@@ -198,7 +191,7 @@ function createStemCard() {
       `;
     } else if (state === "working") {
       body = `
-        <div class="sc-working">
+        <div class="sc-working busy">
           <span class="sc-work-copy">
             <span class="sc-work-label"></span>
           </span>
@@ -423,19 +416,18 @@ export async function setMainFile(file) {
   npDrop.classList.remove("error");
   npDrop.classList.add("has-file");
   npDropTitle.textContent = file.name;
-  npDropSub.textContent = "Uploading…";
+  npDropSub.textContent = "";   // the progress panel says it, with the bytes sent
   npClear.hidden = false;
   npClear.disabled = true;
   if (npSongTitleInput && !npSongTitleInput.value) npSongTitleInput.value = file.name.replace(/\.[^.]+$/, "");
   npLatin.sync();   // a programmatic value fires no "change"
+  mainUploading = true;
   refreshCreateEnabled();
   try {
     const job = await ensureDraftJob();
     const fd = new FormData();
     fd.append("audio", file);
-    const res = await fetch(`/api/projects/${job}/mix`, { method: "POST", body: fd });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Upload failed");
-    const data = await res.json();
+    const data = await uploadRequest(`/api/projects/${job}/mix`, fd, "Uploading song", file.name);
     npDropSub.textContent = data.tempo ? `${Math.round(data.tempo)} BPM detected` : "Ready";
   } catch (err) {
     npDrop.classList.remove("has-file"); npDrop.classList.add("error");
@@ -443,6 +435,7 @@ export async function setMainFile(file) {
     npDropSub.textContent = err.message;
     fileInput.value = "";
   }
+  mainUploading = false;
   npClear.disabled = false;
   refreshChoosingCards();
   refreshCreateEnabled();
@@ -480,7 +473,6 @@ export async function openNewProject() {
   disposeStemCards();
   stemSeq = 0;
   draftJob = null; draftJobPromise = null;
-  setNpStatus("", false);
   modalBackdrop.hidden = false;
   refreshCreateEnabled();
   if (npSongTitleInput) npSongTitleInput.focus();
@@ -503,9 +495,12 @@ export function closeNewProject() {
 
 async function createProject() {
   if (!hasFullSong() && !stemsListEl.querySelector(".stem-card[data-state='ready']")) return;
-  setNpStatus("Creating project…", true);
   warnEl.innerHTML = "";   // a previous project's warnings must not survive the wait
-  try {
+  goBtn.disabled = true;
+  // The loading screen (design.md 4.17): this ends in the project opening, and
+  // nothing can be done until it has. A failure is said there, and Back returns
+  // to this window with everything still in it.
+  await loadWithScreen(async () => {
     const job = await ensureDraftJob();
     draftMetadata = collectNewProjectMetadata();
     const res = await fetch(`/api/projects/${job}/finalize`, {
@@ -517,13 +512,11 @@ async function createProject() {
       throw new Error(err.detail || "Request failed");
     }
     const data = await res.json();
-    setNpStatus("", false);
     draftJob = null; draftJobPromise = null;   // it's a real project now — closeNewProject must not delete it
     closeNewProject();
-    onProjectCreated(data);
-  } catch (err) {
-    setNpStatus("Error: " + err.message, false);
-  }
+    await onProjectCreated(data);
+  }, { title: "Creating project", failureTitle: "Could not create the project" });
+  refreshCreateEnabled();
 }
 
 /**
@@ -542,7 +535,6 @@ export function initNewProject({ onCreated, onClosed, canLeave }) {
   newProjBtn.addEventListener("click", openNewProject);
   npCancelBtn.addEventListener("click", closeNewProject);
   $("npClose").addEventListener("click", closeNewProject);
-  modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop) closeNewProject(); });
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (modalBackdrop.hidden) return false;
     closeNewProject(); return true;

@@ -45,8 +45,16 @@
   --w-modal-wide: 720px;
   --w-settings:   860px;
   --w-popover:    320px;
+  --w-cover:      96px;     /* the cover-art tile: three control heights */
+  --w-stepper:    20px;     /* the up/down pair joined to a field */
   --h-modal-max:  640px;
   --h-chrome:      48px;
+  /* Layers, lowest first. A new layer takes a name here, never a number in between. */
+  --z-splitter: 12; --z-edge: 15; --z-outline: 20;
+  --z-menu: 50; --z-flyout: 60; --z-popover: 75; --z-launcher: 90;
+  --z-window: 100; --z-window-editor: 110; --z-window-menu: 120; --z-window-setup: 121; --z-confirm: 130;
+  --z-context: 200; --z-tour: 250; --z-tour-menu: 255; --z-tour-card: 260;
+  --z-loading: 280; --z-tour-confirm: 300; --z-toast: 1000;
   --s-pair:    4px;
   --s-sibling: 8px;
   --s-row:     12px;
@@ -59,6 +67,8 @@
   --dur-state:   100ms;
   --dur-overlay: 160ms;
   --dur-panel:   240ms;
+  --dur-spin:    800ms;    /* one turn of a spinner */
+  --dur-sweep:   1400ms;   /* one pass of an indeterminate progress bar */
   --dur-note:    100ms;
   --dur-note-bounce: 160ms;
   --ease-note-bounce: cubic-bezier(.2,1.55,.35,1);
@@ -98,7 +108,6 @@
   --text-title: 28px;
   --text-data: 11px;
   --text-small: 10px;
-  --editor-text-scale: .94;
   --text-caption: 12px;
 }
 [data-theme="light"] {

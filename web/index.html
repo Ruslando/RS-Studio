@@ -38,21 +38,21 @@
         <section class="welcome-start" aria-label="Start a project">
           <div class="welcome-actions">
             <button class="welcome-opt" id="welcomeNew">
-              <span class="wo-icon" data-ui-icon="new" aria-hidden="true"></span>
+              <span class="wo-icon" data-ui-icon="new" data-icon-size="18" aria-hidden="true"></span>
               <span class="wo-copy">
                 <span class="wo-title">New project</span>
                 <span class="wo-desc">Load an audio file &amp; separate stems</span>
               </span>
             </button>
             <button class="welcome-opt" id="welcomeOpen">
-              <span class="wo-icon" data-ui-icon="folder" aria-hidden="true"></span>
+              <span class="wo-icon" data-ui-icon="folder" data-icon-size="18" aria-hidden="true"></span>
               <span class="wo-copy">
                 <span class="wo-title">Import project</span>
                 <span class="wo-desc">Open a .chart file into your library</span>
               </span>
             </button>
             <button class="welcome-opt" id="welcomeGp">
-              <span class="wo-icon" data-ui-icon="score" aria-hidden="true"></span>
+              <span class="wo-icon" data-ui-icon="score" data-icon-size="18" aria-hidden="true"></span>
               <span class="wo-copy">
                 <span class="wo-title">Open Guitar Pro</span>
                 <span class="wo-desc">Start a score-only guitar or bass project</span>
@@ -64,7 +64,7 @@
                  opens the tutorial song itself, so it belongs beside the other
                  three ways of getting a song on screen. -->
             <button class="welcome-opt" id="welcomeTour">
-              <span class="wo-icon" data-ui-icon="guide" aria-hidden="true"></span>
+              <span class="wo-icon" data-ui-icon="guide" data-icon-size="18" aria-hidden="true"></span>
               <span class="wo-copy">
                 <span class="wo-title">Walkthrough</span>
                 <span class="wo-desc">Learn the app on a tutorial song</span>
@@ -73,17 +73,17 @@
           </div>
           <div class="welcome-settings">
             <button type="button" id="welcomeSettingsBtn" class="welcome-opt" aria-haspopup="dialog" title="Settings" aria-label="Settings">
-              <span class="wo-icon" data-ui-icon="settings" aria-hidden="true"></span><span class="wo-copy"><span class="wo-title">Settings</span></span>
+              <span class="wo-icon" data-ui-icon="settings" data-icon-size="18" aria-hidden="true"></span><span class="wo-copy"><span class="wo-title">Settings</span></span>
             </button>
             <button type="button" id="welcomeUpdateBtn" class="welcome-opt">
-              <span class="wo-icon" data-ui-icon="update" aria-hidden="true"></span><span class="wo-copy"><span class="wo-title" id="welcomeUpdateTitle">Check for updates</span><span class="wo-desc" id="welcomeUpdateVersion" hidden></span></span>
+              <span class="wo-icon" data-ui-icon="update" data-icon-size="18" aria-hidden="true"></span><span class="wo-copy"><span class="wo-title" id="welcomeUpdateTitle">Check for updates</span><span class="wo-desc" id="welcomeUpdateVersion" hidden></span></span>
             </button>
           </div>
         </section>
         <section class="welcome-recent" id="welcomeRecent" aria-label="Project library">
           <div class="recent-tools">
             <label class="recent-search" for="recentSearch">
-              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
               <input type="search" id="recentSearch" placeholder="Search projects" autocomplete="off" />
             </label>
             <span id="recentCount" class="recent-count" aria-live="polite"></span>
@@ -104,11 +104,11 @@
        as Settings > Models; closing this window never cancels a download. -->
   <div id="setupBackdrop" hidden>
     <div id="setupModal" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
-      <div class="sp-head">
-        <span class="sp-title" id="setupTitle">Set up RS Studio</span>
-        <button id="setupClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="dialog-header">
+        <span class="dialog-title" id="setupTitle">Set up RS Studio</span>
+        <button id="setupClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-      <div class="sp-body">
+      <div class="dialog-body">
         <div class="setup-progress" aria-label="Setup progress">
           <span id="setupProgressAudio" aria-current="step">01&nbsp; Rocksmith audio</span>
           <span id="setupProgressModels">02&nbsp; Models</span>
@@ -116,9 +116,9 @@
         <div id="setupStepAudio" class="sp-pane">
           <h2 class="setup-heading">Rocksmith audio export</h2>
           <p class="sp-note" id="setupAudioIntro">Checking the audio converter…</p>
-          <div class="setup-readiness" role="status">
-            <span id="setupAudioDot" class="dot dot--warn" aria-hidden="true"></span>
-            <span id="setupAudioStatus">Checking…</span>
+          <div class="setup-readiness busy" id="setupAudioRow" role="status">
+            <span id="setupAudioDot" class="dot" aria-hidden="true" hidden></span>
+            <span id="setupAudioStatus">Checking the audio converter</span>
           </div>
           <p class="sp-note" id="setupAudioDetail"></p>
           <div class="setup-audio-actions">
@@ -143,9 +143,9 @@
         </div>
         <p id="setupSaveStatus" class="sp-note error" role="alert" hidden></p>
       </div>
-      <div class="modal-footer">
-        <button type="button" id="setupSkip">Set up later</button>
-        <div class="modal-actions">
+      <div class="dialog-footer">
+        <div class="dialog-actions">
+          <button type="button" id="setupSkip">Set up later</button>
           <button type="button" id="setupBack" hidden>Back</button>
           <button type="button" id="setupNext" class="primary">Continue</button>
         </div>
@@ -211,8 +211,8 @@
           <button class="menu-item" id="menuZoomOut">Zoom out<span class="kbd">Ctrl+−</span></button>
           <button class="menu-item" id="menuZoomReset">Reset zoom<span class="kbd">0</span></button>
           <div class="menu-sep"></div>
-          <button class="menu-item" id="menuMarkerLanes">Marker lanes<span class="chkmark" id="menuMarkerLanesCheck">✓</span></button>
-          <button class="menu-item" id="menuFretboard">Fretboard<span class="chkmark" id="menuFretboardCheck">✓</span></button>
+          <button class="menu-item" id="menuMarkerLanes">Marker lanes<span class="chkmark" id="menuMarkerLanesCheck" data-ui-icon="check" data-icon-size="14"></span></button>
+          <button class="menu-item" id="menuFretboard">Fretboard<span class="chkmark" id="menuFretboardCheck" data-ui-icon="check" data-icon-size="14"></span></button>
         </div>
       </div>
       <div hidden>
@@ -281,12 +281,12 @@
       <div id="mainArea">
 
         <!-- Left rail: Audio (resizable) · drag separator · Layers · sidebar resize handle -->
-        <aside id="sidebar" aria-label="Project layers"><button type="button" id="sidebarChevron" class="edge-toggle edge-toggle--sidebar" data-panel-toggle="sidebar" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <aside id="sidebar" aria-label="Project layers"><button type="button" id="sidebarChevron" class="edge-toggle edge-toggle--sidebar" data-panel-toggle="sidebar" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
 
           <section id="stemsSection" class="side-section">
             <div class="side-header">
             <button class="side-label" data-sec="stems" aria-expanded="true">
-              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
+              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
               <span>Audio layers</span>
             </button>
             </div>
@@ -298,7 +298,7 @@
           <section id="layersSection" class="side-section grow">
             <div class="side-header">
             <button class="side-label" data-sec="layers" aria-expanded="true">
-              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
+              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
               <span>Note layers</span>
             </button>
             </div>
@@ -325,7 +325,7 @@
           <div id="timelineResize" class="splitter splitter--y" aria-hidden="true"><svg class="splitter-dots" width="26" height="5" viewBox="0 0 26 5" fill="none"><circle cx="5" cy="2.5" r="1.4" fill="currentColor"/><circle cx="13" cy="2.5" r="1.4" fill="currentColor"/><circle cx="21" cy="2.5" r="1.4" fill="currentColor"/></svg></div>
 <div id="editingWorkspace">
           <div id="editingPanel"><div id="viewer">
-            <button type="button" id="markerLanesChevron" class="edge-toggle edge-toggle--markers" data-panel-toggle="markers" aria-expanded="true" aria-label="Hide markers" title="Hide markers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
+            <button type="button" id="markerLanesChevron" class="edge-toggle edge-toggle--markers" data-panel-toggle="markers" aria-expanded="true" aria-label="Hide markers" title="Hide markers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
             <canvas id="ruler"></canvas>
             <div id="scroll">
               <!-- #stageSpacer is as wide as the whole song (drives the scrollbar);
@@ -350,7 +350,7 @@
           <!-- Fretboard: the neck the song is played on, under the stage. Its
                chevron stays on the partial panel; hovering reveals more of the neck — the
                sidebar's idiom, so the way back is where the way out was. -->
-          <div id="fretboardPanel" data-collapsed><button type="button" id="fretboardChevron" class="edge-toggle edge-toggle--fretboard" data-panel-toggle="fretboard" aria-expanded="true" aria-label="Hide fretboard" title="Hide fretboard"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div id="fretboardPanel" data-collapsed><button type="button" id="fretboardChevron" class="edge-toggle edge-toggle--fretboard" data-panel-toggle="fretboard" aria-expanded="true" aria-label="Hide fretboard" title="Hide fretboard"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
             <!-- The board and the one thing that floats on it. A box of its own, so
                  the spinner is placed against the canvas and not against the panel,
                  and so the panel can shrink over it while it keeps its size. -->
@@ -403,37 +403,49 @@
        the swap; File → Tablature view opens this. -->
   <div id="tabViewBackdrop" hidden>
     <div id="tabView" role="dialog" aria-modal="true" aria-labelledby="tabViewTitle">
-      <div class="sp-head">
-        <span class="sp-title" id="tabViewTitle">Tablature</span>
-        <button id="tabViewClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="dialog-header">
+        <span class="dialog-title" id="tabViewTitle">Tablature</span>
+        <button id="tabViewClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <div class="tab-head">
-        <div id="tabWarn" class="legend"></div>
+        <div id="tabWarn" class="status-line status-line--warn" role="status"></div>
       </div>
       <!-- Scroll wrapper ≠ render element: alphaTab's auto-scroll math assumes the
            scroll container is an ancestor of the render container. -->
-      <div id="tabScroll"><div id="tabRender"></div></div>
+      <div id="tabScroll"><div id="tabBusy" class="busy" role="status" hidden>Building tablature</div><div id="tabRender"></div></div>
     </div>
   </div>
 
   <!-- Detect panel: floating popover opened by right-click on the spectrogram or
        by finishing a Frame-tool drag. Runs a detector on the current stem into the
        active edit layer (whole stem, or a dragged time range). -->
-  <div id="detectPanel" hidden role="dialog" aria-label="Detect notes">
-    <!-- Anchored and live, so it is a popover and takes the popover's chrome:
-         no rule under the header, a 24 compact close, 12 of padding. "Detect"
-         is not a primary — it is an action with its own job (rule 17). -->
+  <div id="detectPanel" class="live-editor" hidden role="dialog" aria-label="Detect notes">
+    <!-- A popover like the marker editors, with one difference: it starts a job,
+         so it ends in the one primary that names it (design.md 3, rule 7). -->
     <div class="pop-head">
       <span class="pop-title">Detect notes</span>
-      <button id="detectClose" class="pop-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button id="detectClose" class="pop-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
     </div>
     <div class="dp-body">
-      <p class="dp-on">On <span class="chip"><span class="chip-dot"></span><span id="detectStemName">stem</span></span> → note layer <span class="chip" id="detectTargetLayerChip"><span class="chip-dot"></span><span id="detectTargetLayer">—</span></span></p>
+      <!-- The marker editors' rows: what it reads, where the notes go, with what,
+           and over which stretch of the song. The result of a run is a line beside
+           the button, not a value in the form. -->
+      <div class="field-group block"><span class="label">Audio</span>
+        <span class="chip"><span class="chip-dot"></span><span id="detectStemName">stem</span></span>
+      </div>
+      <div class="field-group block"><span class="label">Note layer</span>
+        <span class="chip" id="detectTargetLayerChip"><span class="chip-dot"></span><span id="detectTargetLayer">—</span></span>
+      </div>
       <label class="field-group block"><span class="label">Model <span class="info" role="img" tabindex="0" title="Detection model" aria-label="Detection model">i</span></span>
         <select id="detectModel"></select>
       </label>
-      <div class="dp-scope">Scope <span id="detectStatus" class="legend">whole source</span></div>
-      <button id="detectBtn" class="primary dp-run"><span id="detectButtonLabel">Detect</span></button>
+      <div class="field-group block"><span class="label">Range <span class="info" role="img" tabindex="0" title="Hold Alt and drag on the spectrogram to detect only that part of the song." aria-label="Hold Alt and drag on the spectrogram to detect only that part of the song.">i</span></span>
+        <span id="detectRange" class="dp-range">Whole song</span>
+      </div>
+      <div class="dp-actions">
+        <span id="detectStatus" class="dp-result" role="status"></span>
+        <button id="detectBtn" class="primary dp-run"><span id="detectButtonLabel">Detect</span></button>
+      </div>
     </div>
   </div>
 
@@ -447,17 +459,18 @@
     <div class="pop-head">
       <span class="pop-title" id="markerPopTitle">Tempo marker</span>
       <span class="pop-head-actions">
-        <button id="markerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg></button>
-        <button id="markerPopClose" class="pop-x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="markerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="markerPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </span>
     </div>
     <div class="dp-body">
       <div class="pop-pair">
         <label class="field-group block">Tempo
           <span class="tempo-input-group">
-            <span class="pop-field"><input type="number" id="markerBpm" min="20" max="320" step="0.01" /><span class="pop-unit">BPM</span></span>
+            <span class="pop-field"><input type="number" id="markerBpm" min="20" max="320" step="any" /><span class="pop-unit">BPM</span></span>
             <button id="tap" type="button" class="icon-btn" title="Tap tempo" aria-label="Tap tempo"><span data-ui-icon="tap" aria-hidden="true"></span></button>
           </span>
+          <button type="button" class="field-revert" data-revert="bpm" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
         </label>
         <label class="field-group block">Time signature
           <div class="sp-row">
@@ -465,6 +478,7 @@
             <span class="sp-slash">/</span>
             <input type="number" id="markerTsDen" min="1" max="64" step="1" />
           </div>
+          <button type="button" class="field-revert" data-revert="ts" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
         </label>
       </div>
       <output id="tapInfo" class="tap-tempo-readout" aria-live="polite" hidden></output>
@@ -478,12 +492,14 @@
           <option value="8">1/32</option>
           <option value="custom">Custom...</option>
         </select>
+          <button type="button" class="field-revert" data-revert="subdiv" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
       </label>
       <label class="field-group block" id="markerSubdivCustomWrap" hidden>Custom (per beat)
         <input type="number" id="markerSubdivCustom" min="1" max="64" step="1" value="2" />
       </label>
       <label class="field-group block">Position
         <span class="pop-field"><input type="number" id="markerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
+          <button type="button" class="field-revert" data-revert="time" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
       </label>
       <span id="markerAt" class="legend"></span>
     </div>
@@ -499,8 +515,8 @@
     <div class="pop-head">
       <span class="pop-title">Section marker</span>
       <span class="pop-head-actions">
-        <button id="sectionMarkerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg></button>
-        <button id="sectionMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="sectionMarkerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="sectionMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </span>
     </div>
     <div class="dp-body">
@@ -529,8 +545,8 @@
     <div class="pop-head">
       <span class="pop-title">Phrase boundary</span>
       <span class="pop-head-actions">
-        <button id="phraseMarkerDelete" class="pop-x pop-del" title="Delete boundary" aria-label="Delete boundary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg></button>
-        <button id="phraseMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="phraseMarkerDelete" class="pop-x pop-del" title="Delete boundary" aria-label="Delete boundary"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="phraseMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </span>
     </div>
     <div class="dp-body">
@@ -550,8 +566,8 @@
     <div class="pop-head">
       <span class="pop-title">Tone switch</span>
       <span class="pop-head-actions">
-        <button id="toneMarkerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg></button>
-        <button id="toneMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="toneMarkerDelete" class="pop-x pop-del" title="Delete marker" aria-label="Delete marker"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="toneMarkerPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </span>
     </div>
     <div class="dp-body">
@@ -571,15 +587,15 @@
       <!-- The header names its subject with the layer's own entity chip. That is
            what the body's old "Editing layer [chip]" row was for, and naming the
            object being edited is the header's job, not the body's first line. -->
-      <div class="sp-head">
-        <span class="sp-title">
+      <div class="dialog-header">
+        <span class="dialog-title">
           <span>Note layer</span>
           <span class="chip" id="spLayerChip"><span class="chip-dot"></span><span id="spLayerName">—</span></span></span>
-        <button id="settingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="settingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Identity and Playback sit together; Notation follows because its
            instrument, tuning and fingering preferences change the tab. -->
-      <div class="sp-body dialog-body--sectioned">
+      <div class="dialog-body dialog-body--sectioned">
 
         <div class="sp-pane" id="spLayer">
           <div class="section">
@@ -609,17 +625,22 @@
             <div class="section-head"><span>Notation</span></div>
             <!-- Instrument is notation: it picks the neck the fretboard draws and the
                  default tuning. Playback tone and volume sit together above. -->
+            <div class="field-pair">
             <label class="field-group block"><span class="label">Instrument <span class="info" role="img" tabindex="0" title="Sets the fretboard, the string count and the default tuning" aria-label="Sets the fretboard, the string count and the default tuning">i</span></span>
               <select id="layerInstr"></select>
             </label>
             <label class="field-group block"><span class="label">Tuning <span class="info" role="img" tabindex="0" title="String tuning used for the tab" aria-label="String tuning used for the tab">i</span></span>
               <select id="layerTun"></select>
             </label>
+            </div>
+            <div class="field-pair">
+            <label class="field-group block"><span class="label">Capo <span class="info" role="img" tabindex="0" title="Capo fret. Tab frets count from the capo, as in Guitar Pro; changing it keeps each note on its string" aria-label="Capo fret. Tab frets count from the capo, as in Guitar Pro; changing it keeps each note on its string">i</span></span>
+              <select id="layerCapo"></select>
+            </label>
             <!-- The paragraph that used to explain this checkbox is its tooltip
                  now (rule 24): a sentence a control needs belongs to that control. -->
-            <label class="field-group block"><span class="label">Rocksmith arrangement <span class="info" role="img" tabindex="0" title="Assigns this note layer's role in a Rocksmith export. Auto chooses from the tuning; None excludes it from tablature." aria-label="Assigns this note layer's role in a Rocksmith export. Auto chooses from the tuning; None excludes it from tablature.">i</span></span>
+            <label class="field-group block"><span class="label">Rocksmith arrangement <span class="info" role="img" tabindex="0" title="This note layer's role in a Rocksmith export. Each role can be used once; None excludes the layer from tablature." aria-label="This note layer's role in a Rocksmith export. Each role can be used once; None excludes the layer from tablature.">i</span></span>
               <select id="layerArrangement">
-                <option value="auto">Auto</option>
                 <option value="none">None</option>
                 <option value="lead">Lead</option>
                 <option value="rhythm">Rhythm</option>
@@ -632,6 +653,7 @@
                 <option value="bonus_bass">Bonus Bass</option>
               </select>
             </label>
+            </div>
           </div>
 
         </div>
@@ -640,9 +662,9 @@
       <!-- Destructive far left and outlined: it is one mis-aimed click from the
            primary and only one of the two is reversible. It opens a confirmation;
            it never fires from here. -->
-      <div class="modal-footer">
+      <div class="dialog-footer">
         <button type="button" id="layerDelete" class="danger">Delete note layer</button>
-        <div class="modal-actions">
+        <div class="dialog-actions">
           <button type="button" id="layerCancel">Cancel</button>
           <button type="button" id="layerSave" class="primary">Save</button>
         </div>
@@ -652,44 +674,27 @@
 
   <!-- Custom-tuning manager: centered overlay modal. Opened via the layer
        tuning select's "Manage tunings…" option. -->
-  <div id="tuningManagerBackdrop" hidden>
-    <div id="tuningManagerPanel" role="dialog" aria-modal="true" aria-label="Manage tunings">
-      <div class="sp-head">
-        <span class="sp-title">
-          <span>Custom Tunings</span></span>
-        <button id="tuningManagerClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div class="sp-body">
-
-        <div id="tuningList" class="tuning-list"></div>
-        <button type="button" id="tuningAdd" class="ghost-btn tuning-add-btn">＋ Add tuning</button>
-      </div>
-      <div class="modal-footer">
-        <div class="modal-actions">
-          <button type="button" id="tuningCancel">Cancel</button>
-          <button type="button" id="tuningSave" class="primary">Save</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Stem editor: centered overlay modal. Opened by a stem's edit button. Rename
        it, or replace its audio by re-separating from the full song or uploading a
        file — the source-picker and preview reuse the New Project modal's
        stem-card markup/classes. -->
   <div id="stemSettingsBackdrop" hidden>
     <div id="stemSettingsPanel" role="dialog" aria-modal="true" aria-label="Edit audio source">
-      <div class="sp-head">
-        <span class="sp-title">
+      <div class="dialog-header">
+        <span class="dialog-title">
           <span>Audio</span>
           <span class="chip"><span class="chip-dot"></span><span id="stemSettName">—</span></span></span>
-        <button id="stemSettingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="stemSettingsClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Two groups, so no sections (rule 23). -->
-      <div class="sp-body">
+      <div class="dialog-body">
         <div class="sp-pane" id="spStem">
           <label class="field-group block">Name
             <input type="text" id="stemSettNameInput" maxlength="80" title="Audio source name" />
+          </label>
+          <label class="field-slider layer-volume-control"><span class="label">Volume</span>
+            <input type="range" id="stemVolume" min="0" max="100" step="1" value="100" title="Audio layer playback volume" />
+            <span id="stemVolumeValue" class="ro">100%</span>
           </label>
           <div class="field-group block">
             <span class="field-label">Audio</span>
@@ -697,9 +702,9 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="dialog-footer">
         <button type="button" id="stemRemove" class="danger">Remove audio</button>
-        <div class="modal-actions">
+        <div class="dialog-actions">
           <button type="button" id="stemCancel">Cancel</button>
           <button type="button" id="stemSave" class="primary">Save</button>
         </div>
@@ -711,20 +716,17 @@
        One section for now (Trace); future options swap into the body. -->
   <div id="settingsModalBackdrop" hidden>
     <div id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
-      <div class="sp-head">
-        <span class="sp-title">
+      <div class="dialog-header">
+        <span class="dialog-title">
           <span id="settingsModalTitle">Trace options</span></span>
-        <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="sp-body">
+<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="dialog-body">
         <!-- Marker timing state: feature wiring still binds these ids, but BPM,
              meter, division, and offset are edited through the marker popover. -->
         <div class="sp-pane" id="spTempo" hidden>
           <label class="field-group block" hidden>Tempo (BPM)
-            <div class="sp-row">
-              <input type="number" id="bpm" min="20" max="320" step="0.01" value="120" />
-              <button id="detectBpm" class="ghost-btn">↻ detected</button>
-            </div>
+            <input type="number" id="bpm" min="20" max="320" step="any" value="120" />
           </label>
           <label class="field-group block" hidden>Time signature
             <div class="sp-row">
@@ -797,6 +799,15 @@
                a setting at all, and the two sides are separate because the one you
                are working against is usually one of them. -->
           <div class="section">
+            <div class="section-head"><span>Fret numbers</span></div>
+            <label class="field-group block"><span class="label">With a capo <span class="info" role="img" tabindex="0" title="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo." aria-label="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo.">i</span></span>
+              <select id="fretNumbering">
+                <option value="capo">Count from the capo</option>
+                <option value="nut">Count from the nut</option>
+              </select>
+            </label>
+          </div>
+          <div class="section">
             <div class="section-head"><span>Onion skin</span></div>
             <label class="chk"><input type="checkbox" id="fretboardOnionEnabled" /> Show neighbouring chords in fretboard edit mode</label>
             <label class="field-slider"><span class="label">Previous chord <span class="info" role="img" tabindex="0" title="How strongly the fretboard ghosts the chord before the one being played. 0 turns it off." aria-label="How strongly the fretboard ghosts the chord before the one being played. 0 turns it off.">i</span></span>
@@ -846,6 +857,20 @@
         <div class="sp-pane" id="spProject" hidden>
           <!-- Rule 27: title and artist are read together, and so are album and
                year; four digits never earn a row of their own. -->
+          <div class="cover-row">
+          <div class="field-group block">
+            <span class="field-label">Cover art</span>
+            <div class="cover-picker" id="projCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
+              <span class="cover-thumb" id="projCoverThumb"></span>
+              <span class="cover-copy">
+                <span class="cover-title" id="projCoverTitle">Choose image</span>
+                <span class="cover-sub" id="projCoverSub"></span>
+              </span>
+              <button type="button" class="cover-clear" id="projCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+              <input type="file" id="projCoverInput" accept="image/*" hidden />
+            </div>
+          </div>
+          <div class="field-stack">
           <div class="field-pair">
             <label class="field-group block"><span class="label" data-required="true">Song title</span>
               <input type="text" id="projTitle" maxlength="180" />
@@ -862,19 +887,22 @@
               <input type="number" id="projYear" class="num-4" min="1000" max="9999" step="1" placeholder="YYYY" />
             </label>
           </div>
-          <div class="field-group block">
-            <span class="field-label">Cover art</span>
-            <div class="cover-picker" id="projCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
-              <span class="cover-thumb" id="projCoverThumb"></span>
-              <span class="cover-copy">
-                <span class="cover-title" id="projCoverTitle">Choose image</span>
-                <span class="cover-sub" id="projCoverSub"></span>
-              </span>
-              <button type="button" class="cover-clear" id="projCoverClear" hidden aria-label="Remove cover art"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-              <input type="file" id="projCoverInput" accept="image/*" hidden />
-            </div>
+          </div>
           </div>
           <p id="projMetaStatus" class="sp-note" hidden></p>
+        </div>
+        <!-- Tunings: the list on the left, the selected tuning's editor on the right.
+             Edits a draft (tuning-editor.js) that Apply saves and Cancel drops. -->
+        <div class="sp-pane" id="spTunings" hidden><div class="pane-intro"><h2>Tunings</h2><p>Make your own tunings, or start from a built-in one and save it under a new name.</p></div>
+          <div class="tuning-manager">
+            <div class="tuning-side">
+              <div id="tuningList" class="tuning-list" role="listbox" aria-label="Tunings"></div>
+              <div class="tuning-new">
+                <button type="button" id="tuningNewBtn" class="tuning-new-btn"><span data-ui-icon="plus" aria-hidden="true"></span>New tuning</button>
+              </div>
+            </div>
+            <div id="tuningEditor" class="tuning-editor"></div>
+          </div>
         </div>
         <div class="sp-pane" id="spKeys" hidden><div class="pane-intro"><h2>Keyboard shortcuts</h2><p>Customize editing commands, or view the fixed navigation shortcuts.</p></div>
           <div class="keymap-tabs" role="tablist">
@@ -895,9 +923,9 @@
       <!-- Rule 17: this window is scrimmed, so it is staged, and a staged window
            always ends in a footer. Left slot is a button position and holds the
            destructive action only (rule 24) — here, resetting every binding. -->
-      <div class="modal-footer">
+      <div class="dialog-footer">
         <button type="button" id="keymapReset" class="danger" hidden>Reset to defaults</button>
-        <div class="modal-actions">
+        <div class="dialog-actions">
           <button type="button" id="settingsCancel">Cancel</button>
           <button type="button" id="settingsApply" class="primary">Apply</button>
         </div>
@@ -908,18 +936,32 @@
   <!-- New Project modal -->
   <div id="modalBackdrop" hidden>
     <div id="newProjModal" role="dialog" aria-modal="true" aria-labelledby="npTitle">
-      <div class="op-head">
-        <h2 id="npTitle">New Project</h2>
-        <button type="button" id="npClose" class="op-close" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="npTitle">New Project</h2>
+        <button type="button" id="npClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <form id="form">
         <!-- Five groups, so it sections. Identity is what the project is called;
              Audio is what it is made of, and it is second because you name a thing
              before you fill it. -->
-        <div class="modal-body dialog-body--sectioned project-create-body">
+        <div class="dialog-body dialog-body--sectioned project-create-body">
           <div class="section np-details">
           <div class="section-head"><span>Project details</span></div>
 
+          <div class="cover-row">
+          <div class="field-group block">
+            <span class="field-label">Cover art</span>
+            <div class="cover-picker" id="npCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
+              <span class="cover-thumb" id="npCoverThumb"></span>
+              <span class="cover-copy">
+                <span class="cover-title" id="npCoverTitle">Choose image</span>
+                <span class="cover-sub" id="npCoverSub"></span>
+              </span>
+              <button type="button" class="cover-clear" id="npCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+              <input type="file" id="npCoverInput" accept="image/*" hidden />
+            </div>
+          </div>
+          <div class="field-stack">
           <div class="field-pair">
             <div class="field-group block">
               <label for="npSongTitle" class="field-label label" data-required="true">Song title</label>
@@ -940,18 +982,7 @@
               <input type="number" id="npYear" class="num-4" min="1000" max="9999" step="1" placeholder="YYYY" />
             </div>
           </div>
-
-          <div class="field-group block">
-            <span class="field-label">Cover art</span>
-            <div class="cover-picker" id="npCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
-              <span class="cover-thumb" id="npCoverThumb"></span>
-              <span class="cover-copy">
-                <span class="cover-title" id="npCoverTitle">Choose image</span>
-                <span class="cover-sub" id="npCoverSub"></span>
-              </span>
-              <button type="button" class="cover-clear" id="npCoverClear" hidden aria-label="Remove cover art"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-              <input type="file" id="npCoverInput" accept="image/*" hidden />
-            </div>
+          </div>
           </div>
           </div>
 
@@ -962,14 +993,14 @@
             <span class="field-label">Full song</span>
             <div class="np-drop" id="npDrop" tabindex="0" role="button" aria-label="Choose or drop the full song audio file">
               <span class="np-icon" id="npDropIcon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
               </span>
               <span class="np-copy">
                 <span class="np-title" id="npDropTitle">Drop the full song, or click to browse</span>
                 <span class="np-sub" id="npDropSub"></span>
               </span>
               <button type="button" class="np-clear" id="npClear" hidden aria-label="Remove file">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                <span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span>
               </button>
               <input type="file" id="file" accept="audio/*" hidden />
             </div>
@@ -993,9 +1024,8 @@
           </div>
 
         </div>
-        <div class="modal-footer">
-          <p id="npStatus" class="hint" hidden></p>
-          <div class="modal-actions">
+        <div class="dialog-footer">
+          <div class="dialog-actions">
             <button type="button" id="npCancel">Cancel</button>
             <button type="submit" id="go" class="primary">Create</button>
           </div>
@@ -1008,10 +1038,10 @@
   <!-- Detect-into-frame merge prompt (shown when the frame already has notes) -->
   <div id="confirmBackdrop" hidden>
     <div id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-      <h2 id="confirmTitle">Detect into frame</h2>
-      <div class="modal-body"><p id="confirmMsg" class="confirm-msg"></p></div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-header"><h2 class="dialog-title" id="confirmTitle">Detect into frame</h2></div>
+      <div class="dialog-body"><p id="confirmMsg" class="confirm-msg"></p></div>
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="confirmCancel">Cancel</button>
           <button type="button" id="confirmAppend">Append</button>
           <button type="button" id="confirmReplace" class="primary">Replace</button>
@@ -1023,11 +1053,11 @@
   <!-- Shared confirmation for two- or three-choice actions -->
   <div id="actionConfirmBackdrop" hidden>
     <div id="actionConfirmModal" role="alertdialog" aria-modal="true" aria-labelledby="actionConfirmTitle" aria-describedby="actionConfirmMsg">
-      <h2 id="actionConfirmTitle"></h2>
-      <div class="modal-body"><p id="actionConfirmMsg" class="confirm-msg"></p></div>
-      <div class="modal-footer">
+      <div class="dialog-header"><h2 class="dialog-title" id="actionConfirmTitle"></h2></div>
+      <div class="dialog-body"><p id="actionConfirmMsg" class="confirm-msg"></p></div>
+      <div class="dialog-footer">
         <button type="button" id="actionConfirmDiscard" class="danger" hidden>Discard</button>
-        <div class="modal-actions">
+        <div class="dialog-actions">
           <button type="button" id="actionConfirmCancel">Cancel</button>
           <button type="button" id="actionConfirmAccept" class="primary"></button>
         </div>
@@ -1038,15 +1068,15 @@
   <!-- Open an existing project from the library -->
   <div id="openProjBackdrop" hidden>
     <div id="openProjModal" role="dialog" aria-modal="true" aria-labelledby="openProjTitle">
-      <div class="op-head">
-        <h2 id="openProjTitle">Open project</h2>
-        <button type="button" id="openProjClose" class="op-close" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="openProjTitle">Open project</h2>
+        <button type="button" id="openProjClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <!-- Rule 21, selectable list: the row IS the control, so the body runs the
            rows edge to edge (pads 8, gaps 4) instead of insetting them 16. -->
       <div id="openProjList" class="op-list dialog-body--flush"></div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="openProjCancel">Cancel</button>
           <button type="button" id="openProjOpen" class="primary" disabled>Open</button>
         </div>
@@ -1057,17 +1087,17 @@
   <!-- Guitar Pro track chooser: unsupported score layers remain visible but disabled. -->
   <div id="gpImportBackdrop" hidden>
     <div id="gpImportModal" role="dialog" aria-modal="true" aria-labelledby="gpImportTitle">
-      <div class="op-head">
-        <h2 id="gpImportTitle">Import Guitar Pro</h2>
-        <button type="button" id="gpImportClose" class="op-close" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="gpImportTitle">Import Guitar Pro</h2>
+        <button type="button" id="gpImportClose" class="op-close" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-      <div class="modal-body">
+      <div class="dialog-body">
         <p id="gpImportSummary" class="gp-import-summary"></p>
         <div id="gpImportTracks" class="gp-import-tracks"></div>
         <p id="gpImportStatus" class="gp-import-status" hidden></p>
       </div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="gpImportCancel">Cancel</button>
           <button type="button" id="gpImportConfirm" class="primary">Import tracks</button>
         </div>
@@ -1078,13 +1108,13 @@
   <!-- Rocksmith export modal -->
   <div id="rocksmithExportBackdrop" hidden>
     <div id="rocksmithExportModal" role="dialog" aria-modal="true" aria-labelledby="rsExportTitle">
-      <div class="sp-head">
-        <span class="sp-title">
+      <div class="dialog-header">
+        <span class="dialog-title">
           <span id="rsExportTitle">Rocksmith CDLC</span></span>
-        <button id="rsExportClose" class="sp-x" title="Close (Esc)" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button id="rsExportClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <form id="rocksmithExportForm">
-        <div class="sp-body">
+        <div class="dialog-body dialog-body--sectioned">
           <!-- The audio conversion step needs local tools. The message and link
                are selected for Windows or Linux when this dialog opens. -->
           <div id="rsWwiseWarn" class="rs-wwise" hidden>
@@ -1092,6 +1122,22 @@
             <span class="rs-wwise-text">Wwise isn't installed. Rocksmith audio can't be converted without it.</span>
             <a class="rs-wwise-get" id="rsWwiseGet" href="https://www.audiokinetic.com/download/" target="_blank" rel="noopener noreferrer">Get Wwise</a>
           </div>
+          <div class="section">
+          <div class="section-head"><span>Song</span></div>
+          <div class="cover-row">
+          <div class="field-group block">
+            <span class="field-label">Cover art</span>
+            <div class="cover-picker" id="rsCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
+              <span class="cover-thumb" id="rsCoverThumb"></span>
+              <span class="cover-copy">
+                <span class="cover-title" id="rsCoverTitle">Choose image</span>
+                <span class="cover-sub" id="rsCoverSub"></span>
+              </span>
+              <button type="button" class="cover-clear" id="rsCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+              <input type="file" id="rsCoverInput" accept="image/*" hidden />
+            </div>
+          </div>
+          <div class="field-stack">
           <div class="field-pair">
             <label class="field-group block"><span class="label" data-required="true">Song title</span>
               <input type="text" id="rsTitle" maxlength="180" />
@@ -1108,29 +1154,32 @@
               <input type="number" id="rsYear" class="num-4" min="1000" max="9999" step="1" placeholder="YYYY" />
             </label>
           </div>
-          <div class="field-group block">
-            <span class="field-label">Cover art</span>
-            <div class="cover-picker" id="rsCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
-              <span class="cover-thumb" id="rsCoverThumb"></span>
-              <span class="cover-copy">
-                <span class="cover-title" id="rsCoverTitle">Choose image</span>
-                <span class="cover-sub" id="rsCoverSub"></span>
-              </span>
-              <button type="button" class="cover-clear" id="rsCoverClear" hidden aria-label="Remove cover art"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-              <input type="file" id="rsCoverInput" accept="image/*" hidden />
-            </div>
           </div>
-          <div class="field-group block">
-            <span class="field-label">Arrangements</span>
+          </div>
+          </div>
+          <div class="section">
+          <div class="section-head"><span>Arrangements</span></div>
             <div id="rsArrangements" class="rs-arrangements"></div>
           </div>
-          <label class="field-group block is-narrow" title="Silence added in front of the song, so the first notes can be seen coming">Leading silence (seconds)
-            <input type="number" id="rsLeadIn" class="num-4" min="0" max="30" step="0.5" value="5" />
-          </label>
+          <div class="section">
+          <div class="section-head"><span>Package</span></div>
+          <div class="field-pair">
+          <!-- A div and a label[for], not a wrapping label: the stepper's buttons sit
+               beside the field, and a click on them must not land on the field. -->
+          <div class="field-group block is-narrow" title="Silence added in front of the song, so the first notes can be seen coming">
+            <label class="label" for="rsLeadIn">Leading silence</label>
+            <span class="stepper"><span class="pop-field"><input type="number" id="rsLeadIn" class="num-4" min="0" max="30" step="0.5" value="5" data-stepper /><span class="pop-unit">s</span></span></span>
+          </div>
+          <div class="field-group block is-narrow" title="Goes into the file name (…_v2_p.psarc) and the package info">
+            <label class="label" for="rsVersion">Version</label>
+            <span class="stepper"><input type="number" id="rsVersion" class="num-4" min="1" step="1" value="1" data-stepper /></span>
+          </div>
+          </div>
+          </div>
           <p id="rsExportStatus" class="sp-note" hidden></p>
         </div>
-        <div class="modal-footer">
-          <div class="modal-actions">
+        <div class="dialog-footer">
+          <div class="dialog-actions">
             <button type="button" id="rsExportCancel">Cancel</button>
             <button type="submit" id="rsExportGo" class="primary">Export</button>
           </div>
@@ -1141,10 +1190,10 @@
 
   <div id="pasteBackdrop" hidden>
     <div id="pasteModal" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
-      <h2 id="pasteTitle">Paste reference</h2>
-      <div class="modal-body"><p id="pasteMsg" class="confirm-msg">Editing a linked reference mirrors to every copy.</p></div>
-      <div class="modal-footer">
-        <div class="modal-actions">
+      <div class="dialog-header"><h2 class="dialog-title" id="pasteTitle">Paste reference</h2></div>
+      <div class="dialog-body"><p id="pasteMsg" class="confirm-msg">Editing a linked reference mirrors to every copy.</p></div>
+      <div class="dialog-footer">
+        <div class="dialog-actions">
           <button type="button" id="pasteCancel">Cancel</button>
           <button type="button" id="pasteCopy">Paste as copy</button>
           <button type="button" id="pasteAsRef" class="primary">Paste as reference</button>

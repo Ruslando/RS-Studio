@@ -35,7 +35,8 @@ def _conversion_stamp() -> str:
            else datetime.now())
     return f"{now.month:02}-{now.day}-{now:%y %H:%M}"
 
-SUSTAIN_MIN = 0.18       # shorter notes render without a tail
+SUSTAIN_MIN = 0.18       # tail floor for slides, so the slide has something to draw
+SUSTAIN_TAIL = 0.25      # a note value this long at the song's main tempo gets a tail
 SECTION_MEASURES = 8     # riff-repeater section granularity
 MAX_FRET = 24
 ANCHOR_WIDTH = 4
@@ -90,7 +91,8 @@ def _f(value, default=0.0) -> float:
 
 # ---- beat grid -------------------------------------------------------------
 
-def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
+def _tempo_segments(grid: dict) -> list[tuple[float, float, int]]:
+    """(start, bpm, beats per measure) for each stretch of constant tempo."""
     bpm = _f(grid.get("bpm"), 120.0) or 120.0
     offset = max(0.0, _f(grid.get("offset")))
     ts = max(1, int(grid.get("tsNum") or 4))
@@ -107,7 +109,33 @@ def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
     while markers and markers[0][0] <= offset + 1e-4:
         _, bpm, ts = markers.pop(0)
 
-    segments = [(offset, bpm, ts)] + markers
+    return [(offset, bpm, ts)] + markers
+
+
+def _sustain_rule(grid: dict, song_length: float):
+    """Whether a note of `dur` seconds starting at `t` gets a tail.
+
+    Decided by note value, not by the raw length: the length is rounded to the
+    nearest note value at the local tempo, then timed at the song's main tempo
+    (the one covering most of the song). So every eighth in a song gets the same
+    answer, a few ms of gap never flips it, and slow songs still sustain eighths.
+    """
+    segments = _tempo_segments(grid)
+    span: dict[float, float] = {}
+    for i, (t0, bpm, _) in enumerate(segments):
+        t1 = segments[i + 1][0] if i + 1 < len(segments) else max(song_length, t0)
+        span[bpm] = span.get(bpm, 0.0) + t1 - t0
+    main_beat = 60.0 / max(span, key=span.get)
+
+    def sustained(t: float, dur: float) -> bool:
+        bpm = next((b for t0, b, _ in reversed(segments) if t0 <= t + 1e-4), segments[0][1])
+        value = round(dur * bpm / 60.0 * 24) / 24      # whole beats, to the nearest 1/24
+        return value * main_beat >= SUSTAIN_TAIL - 1e-6
+    return sustained
+
+
+def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
+    segments = _tempo_segments(grid)
     beats = []  # (time, measure, beat_in_measure)
     measure = -1
     for i, (t0, bpm, ts) in enumerate(segments):
@@ -416,7 +444,7 @@ def _find_section(sections: list, time: float) -> int:
 
 
 def _voiced_entities(track: dict, n_str: int, tuning_low: list,
-                     warnings: list) -> _Voicing:
+                     warnings: list, sustained, capo: int = 0) -> _Voicing:
     """Editor notes -> entities (chords = same onset), chord templates, Shapes.
 
     Takes nothing from the rest of the compile: it reads the track and produces
@@ -437,6 +465,10 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         if not (0 <= rs_string < n_str) or fret < 0:
             dropped += 1
             continue
+        # The editor counts frets from the capo; Rocksmith counts them from the nut
+        # and keeps 0 for a string open at the capo (Rocksmith2014.NET Midi.toMidiNote).
+        if capo and fret > 0:
+            fret += capo
         if fret > MAX_FRET:
             fret = MAX_FRET
             clamped += 1
@@ -504,7 +536,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         midi = [-1] * 6
         for string, fret in by_string.items():
             frets[string] = fret
-            midi[string] = tuning_low[string] + fret
+            midi[string] = tuning_low[string] + (fret or capo)
         start = min(item[0] for item in members)
         end = max(max(_f(item[3].get("end"), item[0]), item[0] + 0.02) for item in members)
         shape_info[shape_id] = {
@@ -523,7 +555,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         t = voiced[i][0]
         notes = [(s, fret, n) for s, (_, _, fret, n) in sorted(group.items())]
         dur = max(_f(n.get("end"), t) - t for _, _, n in notes)
-        sustain = dur if dur >= SUSTAIN_MIN else 0.0
+        sustain = dur if sustained(t, dur) else 0.0
         ent = _Entity(time=t, sustain=sustain, notes=notes)
         entity_shape_ids = {n.get("shapeId") for _, _, n in notes if n.get("shapeId") in shape_info}
         if len(entity_shape_ids) == 1 and all(n.get("shapeId") in entity_shape_ids for _, _, n in notes):
@@ -533,7 +565,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             midi = [-1] * 6
             for s, fret, _ in notes:
                 frets[s] = fret
-                midi[s] = tuning_low[s] + fret
+                midi[s] = tuning_low[s] + (fret or capo)
             ent.chord_id = ensure_chord_template(frets, midi)
         entities.append(ent)
         i = j
@@ -684,11 +716,13 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
                         sections=sections, end_t=end_t)
 
 
-def _plan_anchors(entities: list, shape_info: dict) -> list:
+def _plan_anchors(entities: list, shape_info: dict, capo: int = 0) -> list:
     """Greedy fret window at entity onsets, widened to fit whatever chord it is
     drawn around (a fixed 4-fret box clips a wide voicing's top notes outside the
     in-game chord box). Returns (time, fret, width); also stamps each entity.
+    Never behind a capo: the lowest anchor is the first fret above it.
     """
+    floor = capo + 1
     anchors_raw = []
     cur = cur_w = None
     for e in entities:
@@ -698,7 +732,7 @@ def _plan_anchors(entities: list, shape_info: dict) -> list:
         hi = max(fretted) if fretted else None
         if cur is None:
             cur_w = max(ANCHOR_WIDTH, hi - lo + 1) if lo is not None else ANCHOR_WIDTH
-            cur = max(1, min(lo or 1, MAX_FRET - cur_w + 1))
+            cur = max(floor, min(lo or floor, MAX_FRET - cur_w + 1))
             anchors_raw.append((e.time, cur, cur_w))
         elif lo is not None:
             span = hi - lo + 1
@@ -711,7 +745,7 @@ def _plan_anchors(entities: list, shape_info: dict) -> list:
                 cur <= lo and hi <= cur + ANCHOR_WIDTH - 1)
             if not fits or stale_wide:
                 cur_w = max(ANCHOR_WIDTH, span)
-                cur = max(1, min(lo, MAX_FRET - cur_w + 1))
+                cur = max(floor, min(lo, MAX_FRET - cur_w + 1))
                 anchors_raw.append((e.time, cur, cur_w))
         e.anchor_fret = cur
         e.anchor_width = cur_w
@@ -1035,14 +1069,16 @@ def compile_track(track: dict, grid: dict, song_length: float,
         raise ValueError(f"Rocksmith needs a 4-6 string lane, got {n_str} strings")
     tuning_low = list(reversed(tuning_hi_lo))  # index 0 = lowest string
 
-    voicing = _voiced_entities(track, n_str, tuning_low, warnings)
+    capo = max(0, int(track.get("capo") or 0))
+    voicing = _voiced_entities(track, n_str, tuning_low, warnings,
+                               _sustain_rule(grid, song_length), capo)
     entities = voicing.entities
     song_length = max(song_length, voicing.last_end + 0.5)
 
     arr = _beats_phrases_sections(grid, song_length, section_markers, phrase_boundaries,
                                   voicing.first_t, voicing.last_end, warnings)
 
-    anchors_raw = _plan_anchors(entities, voicing.shape_info)
+    anchors_raw = _plan_anchors(entities, voicing.shape_info, capo)
     fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t)
     emitted = _emit_notes(entities, voicing.chord_templates, arr)
     notes = emitted.notes
@@ -1083,6 +1119,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
         last_conversion_date_time=_conversion_stamp(),
         song_length=song_length,
         first_note_time=voicing.first_t,
+        capo_fret_id=capo if capo > 0 else -1,
     )
 
     sng_obj = S.SNG(

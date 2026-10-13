@@ -22,7 +22,7 @@ import { ACT, FIRST, TOURS, UNTIL, previousTourStep } from "./tour-core.js";
 import { renderInstruction } from "./tour-text.js";
 import { addTutorialBass, clearTutorialNotes, openTutorialProject, removeTutorialBass, seedTutorialNotes, showBassStem } from "./tutorial-project.js";
 import { bpmInput, detectPanel, offsetInput, scroll, stage } from "./dom.js";
-import { currentGridState, gridBpm, gridOffset, minDur } from "./grid.js";
+import { currentGridState, gridBpm, gridOffset, gridSegments, minDur, retimeTempoSpan } from "./grid.js";
 import { xOf, yOf } from "./geometry.js";
 import { playbackTime, seekPlayback, transportPlaying } from "./playback.js";
 import { S, setSelection } from "./store.js";
@@ -282,8 +282,10 @@ const ACTIONS = {
     scroll.scrollLeft = 0;
   },
   [ACT.tempoFix]: () => {
+    const old = gridBpm();
     bpmInput.value = "60";
-    bpmInput.dispatchEvent(new Event("change", { bubbles: true }));
+    S.appliedGrid = currentGridState();
+    retimeTempoSpan(gridOffset(), gridSegments()[1]?.t ?? Infinity, old, 60);   // as the marker popover would
     offsetInput.value = "0.35";
     offsetInput.dispatchEvent(new Event("change", { bubbles: true }));
     click("markerPopClose");

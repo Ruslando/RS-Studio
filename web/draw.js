@@ -21,7 +21,7 @@ import { shapeGroups } from "./shapes.js";
 import { songBarStarts } from "./song-bars.js";
 import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
-import { laneTuning } from "./tablature.js";
+import { laneFretCount, laneFretTuning } from "./tablature.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, hexA, noteName } from "./util.js";
 import { moveViewportTo } from "./viewport-motion.js";
@@ -51,7 +51,7 @@ function overrideEffectsForLane(lane) {
     overrideEffectCache.delete(lane);
     return null;
   }
-  const tuning = laneTuning(lane), key = overrideEffectKey(lane, tuning);
+  const tuning = laneFretTuning(lane), key = overrideEffectKey(lane, tuning);
   const cached = overrideEffectCache.get(lane);
   if (cached?.key === key) return cached;
   const pending = overrideEffectJobs.get(lane);
@@ -68,7 +68,7 @@ function overrideEffectsForLane(lane) {
       worker.terminate();
       if (overrideEffectJobs.get(lane)?.worker !== worker) return;
       overrideEffectJobs.delete(lane);
-      if (lane.notes !== sourceNotes || overrideEffectKey(lane, laneTuning(lane)) !== key) return;
+      if (lane.notes !== sourceNotes || overrideEffectKey(lane, laneFretTuning(lane)) !== key) return;
       const effects = new Map(), review = new Map();
       (event.data.kinds || []).forEach((kind, index) => {
         if (kind && sourceNotes[index]) effects.set(sourceNotes[index], kind);
@@ -83,7 +83,7 @@ function overrideEffectsForLane(lane) {
       worker.terminate();
       if (overrideEffectJobs.get(lane)?.worker !== worker) return;
       overrideEffectJobs.delete(lane);
-      if (overrideEffectKey(lane, laneTuning(lane)) === key)
+      if (overrideEffectKey(lane, laneFretTuning(lane)) === key)
         overrideEffectCache.set(lane, { key, effects: new Map(), review: new Map() });
     };
     worker.postMessage({
@@ -91,7 +91,7 @@ function overrideEffectsForLane(lane) {
       notes: sourceNotes,
       tuning,
       bars: songBarStarts(),
-      instrument: lane.instrument,
+      instrument: lane.instrument, capo: lane.capo,
       holds: lane.handHolds,
     });
   } catch {
@@ -370,7 +370,7 @@ function paintFrame() {
     // Every lane has a tuning and the fretboard will voice against it, whether
     // or not the tab view happens to render this lane — so the range warning is
     // not conditional on tablatureEnabled.
-    const tuning = laneTuning(lane);
+    const tuning = laneFretTuning(lane);
     // Non-active and locked lanes are read-only reference — dim them so the one
     // layer you're actually editing stands out.
     const laneAlpha = (lane === actLane && !lane.locked) ? 1 : 0.55;
@@ -491,7 +491,7 @@ function paintFrame() {
         const crossY = drop ? y - drop : y;
         omittedCrosses.push({ x, y: crossY, w, h: rowH + drop, alpha: laneAlpha });
       }
-      if (outOfFretboardRange(n.pitch, tuning))
+      if (outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)))
         outOfRange.push({ x, y: drop ? y - drop : y, w, h: rowH + drop, alpha: laneAlpha });
       sctx.restore();
     }

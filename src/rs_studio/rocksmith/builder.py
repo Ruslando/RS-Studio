@@ -118,7 +118,13 @@ def _latin_names(spec: dict, artist: str, title: str, album: str) -> dict[str, s
             for field, name in (("artist", artist), ("title", title), ("album", album))}
 
 
-def _cdlc_filename(artist: str, title: str, key: str) -> str:
+def _package_version(spec: dict) -> int:
+    """The version the export asked for: a whole number from 1 (1 when it did not)."""
+    value = (spec.get("rocksmith") or {}).get("version")
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 1 else 1
+
+
+def _cdlc_filename(artist: str, title: str, key: str, version: int = 1) -> str:
     """CustomsForge/Toolkit convention: Artist-Name_Song-Title_v1_p.psarc
     (underscores between fields, hyphens for spaces within a field, _p = PC).
 
@@ -128,7 +134,7 @@ def _cdlc_filename(artist: str, title: str, key: str) -> str:
         s = unicodedata.normalize("NFD", s)
         s = re.sub(r"[^ 0-9A-Za-z_-]", "", s).strip()
         return re.sub(r"\s+", "-", s)
-    return f"{clean(artist) or 'Unknown'}_{clean(title) or key}_v1_p.psarc"
+    return f"{clean(artist) or 'Unknown'}_{clean(title) or key}_v{version}_p.psarc"
 
 
 def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[int], bool]:
@@ -280,7 +286,7 @@ def _arrangement_specs(spec: dict, tracks: list[dict], warnings: list[str]) -> l
         if arr["tag"] in used_tags:
             raise ValueError("Rocksmith arrangement types must be unique in one package")
         used_tags.add(arr["tag"])
-        out.append({"track": idx, "kind": kind, "tuning": item.get("tuning")})
+        out.append({"track": idx, "kind": kind, "tuning": item.get("tuning"), "capo": item.get("capo")})
     if not out:
         raise ValueError("No Rocksmith arrangements selected")
     return out
@@ -363,6 +369,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
     """
     warnings: list[str] = []
     lead = _lead_in_seconds(spec)
+    version = _package_version(spec)
     source_tracks = spec.get("tracks") or []      # still in the audio's own time
     spec = _with_lead_in(spec, lead)
     tracks = spec.get("tracks") or []
@@ -401,6 +408,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             track = dict(base_track)
             if req.get("tuning"):
                 track["tuning"] = req["tuning"]
+            if req.get("capo") is not None:
+                track["capo"] = int(req["capo"])
             offsets, is_bass = _tuning_offsets(track.get("tuning") or [], warnings)
             arr = ARRANGEMENTS[req["kind"]]
             if arr["is_bass"] != is_bass:
@@ -468,8 +477,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             ("toolkit.version",
              b"Toolkit version: rs-studio rocksmith-export\n"
              b"Package Author: RS Studio\n"
-             b"Package Version: 1\n"
-             b"Package Comment: Experimental in-app export"),
+             + f"Package Version: {version}\n".encode()
+             + b"Package Comment: Experimental in-app export"),
             ("appid.appid", b"248750"),
         ]
-        return psarc.build_psarc(entries), warnings, _cdlc_filename(latin["artist"], latin["title"], key)
+        return psarc.build_psarc(entries), warnings, _cdlc_filename(latin["artist"], latin["title"], key, version)

@@ -1,14 +1,13 @@
 // Tempo grid: marker-owned BPM / subdivision / meter state and note quantization
 // against it, plus the transport-bar timing readout.
 
-import { segBeatSec } from "./bars.js";
+import { retimeSpan, segBeatSec } from "./bars.js";
 import { MIN_DUR } from "./constants.js";
-import { bpmInput, detectBpmBtn, markerBpm, offsetInput, subdivCustom, subdivCustomWrap, subdivSel, tapBtn, tapInfo, tsDenInput, tsNumInput } from "./dom.js";
+import { bpmInput, markerBpm, offsetInput, subdivCustom, subdivCustomWrap, subdivSel, tapBtn, tapInfo, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { commit, snapshotEdit } from "./edit.js";
 import { editLanes, refreshCounts, renderLanes } from "./lanes.js";
 import { refreshSaveState } from "./project.js";
-import { eachRefGroup } from "./references.js";
 import { S } from "./store.js";
 
 // ---- tempo grid ----
@@ -167,11 +166,6 @@ function copyGridState(g) {
   };
 }
 
-function gridStepFor(g) {
-  const grid = copyGridState(g);
-  return segStep(grid);
-}
-
 export function restoreGridState(g) {
   const grid = copyGridState(g);
   bpmInput.value = grid.bpm || "";
@@ -243,96 +237,18 @@ function hasGridContent() {
   return editLanes().some((l) => l.notes.length || (l.refBoxes && Object.keys(l.refBoxes).length));
 }
 
-function retimeGridTime(t, oldGrid, newGrid) {
-  const newG = copyGridState(newGrid), oldG = copyGridState(oldGrid);
-  const newStep = gridStepFor(newG);
-  if (!newStep) return t;
-  const oldStep = gridStepFor(oldG);
-  if (!oldStep) return Math.max(0, newG.offset + Math.round((t - newG.offset) / newStep) * newStep);
-  const beatPos = Math.round((t - oldG.offset) / oldStep) / oldG.subdiv;
-  return Math.max(0, newG.offset + Math.round(beatPos * newG.subdiv) * newStep);
-}
-
-function retimeGridRelative(v, oldGrid, newGrid) {
-  const newG = copyGridState(newGrid), oldG = copyGridState(oldGrid);
-  const newStep = gridStepFor(newG);
-  if (!newStep) return v;
-  const oldStep = gridStepFor(oldG);
-  if (!oldStep) return Math.round(v / newStep) * newStep;
-  const beatOffset = Math.round(v / oldStep) / oldG.subdiv;
-  return Math.round(beatOffset * newG.subdiv) * newStep;
-}
-
-function retimeGridDuration(d, oldGrid, newGrid) {
-  const newStep = gridStepFor(newGrid);
-  if (!newStep) return d;
-  return Math.max(newStep, Math.abs(retimeGridRelative(d, oldGrid, newGrid)));
-}
-
-function changedTime(a, b) {
-  return Math.abs((+a || 0) - (+b || 0)) > 1e-9;
-}
-
-export function retimeEditLanesToGrid(oldGrid, newGrid) {
-  const counts = { notes: 0, boxes: 0 };
-  const step = gridStepFor(newGrid);
-  if (!step) return counts;
-  eachRefGroup((lane, ref, group) => {
-    group.anchors = group.anchors.map((a) => {
-      const next = retimeGridTime(a, oldGrid, newGrid);
-      if (changedTime(next, a)) counts.boxes++;
-      return next;
-    });
-    const rt0 = retimeGridRelative(group.rt0, oldGrid, newGrid);
-    const rt1 = Math.max(rt0 + step, retimeGridRelative(group.rt1, oldGrid, newGrid));
-    if (changedTime(rt0, group.rt0)) { group.rt0 = rt0; counts.boxes++; }
-    if (changedTime(rt1, group.rt1)) { group.rt1 = rt1; counts.boxes++; }
-  });
-  for (const lane of editLanes()) {
-    for (const n of lane.notes) {
-      const s = retimeGridTime(n.start, oldGrid, newGrid);
-      const e = Math.min(S.state.duration, s + retimeGridDuration(n.end - n.start, oldGrid, newGrid));
-      if (changedTime(s, n.start) || changedTime(e, n.end)) {
-        n.start = s; n.end = e; counts.notes++;
-      }
-    }
-  }
-  return counts;
-}
-
-function commitGridTimingChange(oldGrid = S.appliedGrid || currentGridState()) {
-  const oldG = copyGridState(oldGrid), newG = currentGridState();
-  const sameTiming = !changedTime(oldG.bpm, newG.bpm) &&
-    !changedTime(oldG.offset, newG.offset) &&
-    oldG.subdiv === newG.subdiv;
-  if (!S.state || sameTiming || !hasGridContent()) {
-    S.appliedGrid = copyGridState(newG);
-    S.appliedOffset = newG.offset;
-    if (S.state) draw();
-    return;
-  }
-  const prev = snapshotEdit();
-  prev.grid = oldG;
-  prev.offset = oldG.offset;
-  const changed = retimeEditLanesToGrid(oldG, newG);
-  S.appliedGrid = copyGridState(newG);
-  S.appliedOffset = newG.offset;
-  if (changed.notes || changed.boxes) {
-    commit(prev);
-    refreshCounts(); renderLanes();
-  }
-  draw();
+// A tempo marker's BPM changed: re-time what sits under it (see retimeSpan).
+export function retimeTempoSpan(t0, t1, oldBpm, newBpm) {
+  if (!S.state) return 0;
+  return retimeSpan(editLanes(), S.state.sectionMarkers, S.state.duration, minDur(), t0, t1, oldBpm, newBpm);
 }
 
 export function init_grid() {
-  // ---- marker-backed grid controls ----
-  [bpmInput, offsetInput, subdivSel, subdivCustom, tsNumInput, tsDenInput]
-    .forEach((el) => el.addEventListener("input", () => { draw(); }));
-  // A committed grid edit (blur/Enter/step) may not retime notes (empty project,
-  // meter-only change) so it can skip commit() — refresh the unsaved dot directly.
-  [bpmInput, offsetInput, subdivSel, subdivCustom, tsNumInput, tsDenInput]
-    .forEach((el) => el.addEventListener("change", () => refreshSaveState()));
-  bpmInput.addEventListener("change", () => commitGridTimingChange());
+  // The grid fields are hidden state the marker popover writes; only the offset
+  // still fires "change" (applyMarkerTime), so only it shifts notes from here.
+  // A committed offset edit may not shift notes (empty project), so refresh the
+  // unsaved dot directly.
+  offsetInput.addEventListener("change", () => refreshSaveState());
   // Commit on "change" (blur / Enter / spinner step), not on every keystroke, so the
   // delta is measured against the last committed offset rather than half-typed values.
   offsetInput.addEventListener("change", () => {
@@ -348,19 +264,10 @@ export function init_grid() {
     commit(prev);
     refreshCounts(); renderLanes(); draw();
   });
-  subdivSel.addEventListener("change", () => { syncSubdivCustom(); commitGridTimingChange(); });
-  subdivCustom.addEventListener("change", () => commitGridTimingChange());
   syncSubdivCustom();
   // Prevent the mouse wheel from silently changing number fields on hover/scroll.
   document.querySelectorAll('input[type="number"]').forEach((el) =>
     el.addEventListener("wheel", (e) => { if (document.activeElement !== el) e.preventDefault(); }, { passive: false }));
-  detectBpmBtn.addEventListener("click", () => {
-    if (S.state && S.state.detectedTempo) {
-      const oldGrid = S.appliedGrid || currentGridState();
-      bpmInput.value = S.state.detectedTempo;
-      commitGridTimingChange(oldGrid);
-    }
-  });
   tapBtn.addEventListener("click", () => {
     const now = performance.now() / 1000;
     // Restart the tap session after a pause.
@@ -384,7 +291,7 @@ export function init_grid() {
     // Apply to the open tempo flag through its existing live-edit/undo path.
     const measured = Math.max(20, Math.min(320, bpm));
     markerBpm.value = measured.toFixed(1);
-    markerBpm.dispatchEvent(new Event("input"));
+    markerBpm.dispatchEvent(new Event("input", { bubbles: true }));   // bubbles so the popover sees it (revert button)
     showTapReadout(`${measured.toFixed(1)} BPM · ${S.taps.length} taps`);
   });
 }

@@ -9,7 +9,9 @@ import { MM_HEAD, stageMono, stageUi } from "./constants.js";
 import { bpmInput, inTourCard, markerAtEl, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
-import { addMarker, currentGridState, gridOffset, gridSegments, removeMarker, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid.js";
+import { addMarker, currentGridState, gridOffset, gridSegments, removeMarker, retimeTempoSpan, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid.js";
+import { toast } from "./notify.js";
+import { refreshTabIfOpen } from "./tablature.js";
 import { timeAt, xOf } from "./geometry.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
@@ -27,10 +29,30 @@ let editSeg = null;         // the segment currently open in the popover
 // the snapshot before the session's first mutation, commit when the popover
 // closes, and drop it uncommitted when undo is what closed it.
 let popSnapshot = null;
-const beginPopEdit = () => { if (!popSnapshot) popSnapshot = snapshotEdit(); };
-const endPopEdit = () => { const prev = popSnapshot; popSnapshot = null; if (prev) commitStructure(prev); };
+let popSeg = null;          // the segment as it was when the session began: its bpm is the old tempo
+const beginPopEdit = () => { if (!popSnapshot) { popSnapshot = snapshotEdit(); popSeg = editSeg; } };
+const endPopEdit = () => {
+  const prev = popSnapshot, seg = popSeg;
+  popSnapshot = popSeg = null;
+  if (!prev) return;
+  retimeSession(seg);
+  commitStructure(prev);
+};
 
-const fmtBpm = (b) => (Number.isInteger(b) ? String(b) : (+b).toFixed(1));
+// A BPM change re-times what sits under the marker, once, when the session ends —
+// not per keystroke, where typing "1" on the way to "125" would mean 1 BPM.
+function retimeSession(seg) {
+  if (!seg || (!seg.seg0 && !S.state.tempoMap?.includes(seg.ref))) return;   // deleted: nothing to stretch
+  const t0 = seg.seg0 ? gridOffset() : +seg.ref.t;
+  const bpm = seg.seg0 ? parseFloat(bpmInput.value) : +seg.ref.bpm;
+  const t1 = gridSegments().find((s) => s.t > t0 + 1e-6)?.t ?? Infinity;
+  if (bpm === seg.bpm) return;
+  const spilled = retimeTempoSpan(t0, t1, seg.bpm, bpm);
+  draw(); refreshTabIfOpen();   // the notes moved; nothing else repaints until the next mouse move
+  if (spilled) toast(`${spilled} note${spilled === 1 ? "" : "s"} moved past the next tempo marker — check them`, 6000, "warn");
+}
+
+const fmtBpm = (b) => String(+(+b).toFixed(2));   // label only; the popup shows the exact value
 
 const markerFields = (seg) => ([
   { value: `${fmtBpm(seg.bpm)} BPM`, font: stageMono(11, 500), color: PAINT.text },
@@ -187,7 +209,7 @@ function openMarkerPop(clientX, clientY, seg) {
   S.taps = [];
   document.getElementById("tapInfo").hidden = true;
   markerPopTitle.textContent = seg.seg0 ? "Tempo (start)" : "Tempo marker";
-  markerBpm.value = fmtBpm(seg.bpm);
+  markerBpm.value = String(seg.bpm);   // exact: applyPop reads it back
   markerTsNum.value = seg.tsNum;
   markerTsDen.value = seg.tsDen;
   setSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, seg.subdiv || 1);
@@ -195,8 +217,43 @@ function openMarkerPop(clientX, clientY, seg) {
   markerAtEl.textContent = seg.seg0 ? "start marker" : "";
   markerDeleteBtn.hidden = !!seg.seg0;   // the anchor can't be deleted (it's the base grid)
   markerPop.hidden = false;
+  syncReverts();
   placeFloating(markerPop, clientX, clientY);
   markerBpm.focus();
+}
+
+// Each field offers to go back to what it held when the popover opened. editSeg is
+// that snapshot: edits land on editSeg.ref (or the grid inputs), never on editSeg.
+const revertBtns = () => markerPop.querySelectorAll(".field-revert");
+const popValues = {
+  bpm: () => parseFloat(markerBpm.value),
+  ts: () => `${parseInt(markerTsNum.value, 10)}/${parseInt(markerTsDen.value, 10)}`,
+  subdiv: () => subdivValue(markerSubdiv, markerSubdivCustom),
+  time: () => +(+markerTime.value).toFixed(3),
+};
+const origValues = (seg) => ({ bpm: seg.bpm, ts: `${seg.tsNum}/${seg.tsDen}`, subdiv: seg.subdiv || 1, time: +seg.t.toFixed(3) });
+const origLabel = (seg, k) => ({ bpm: `${seg.bpm} BPM`, ts: `${seg.tsNum}/${seg.tsDen}`,
+  subdiv: gridDivLabelFor(seg.subdiv || 1), time: `${+seg.t.toFixed(3)} s` })[k];
+
+function syncReverts() {
+  if (!editSeg) return;
+  const orig = origValues(editSeg);
+  for (const b of revertBtns()) {
+    const k = b.dataset.revert;
+    b.hidden = popValues[k]() === orig[k];
+    b.title = `Revert to ${origLabel(editSeg, k)}`;
+  }
+}
+
+function revertField(k) {
+  if (!editSeg) return;
+  const seg = editSeg;
+  if (k === "bpm") markerBpm.value = String(seg.bpm);
+  if (k === "ts") { markerTsNum.value = seg.tsNum; markerTsDen.value = seg.tsDen; }
+  if (k === "subdiv") setSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, seg.subdiv || 1);
+  if (k === "time") { markerTime.value = String(+seg.t.toFixed(3)); applyMarkerTime(true); }
+  else applyPop();
+  syncReverts();
 }
 
 /** Reopen the first marker when the walkthrough pages back to its settings. */
@@ -278,6 +335,9 @@ export function init_markers() {
   markerSubdivCustom.addEventListener("input", applyPop);
   markerTime.addEventListener("input", () => applyMarkerTime(false));
   markerTime.addEventListener("change", () => applyMarkerTime(true));
+  markerPop.addEventListener("input", syncReverts);
+  markerPop.addEventListener("change", syncReverts);
+  for (const b of revertBtns()) b.addEventListener("click", (e) => { e.preventDefault(); revertField(b.dataset.revert); });
   markerDeleteBtn.addEventListener("click", () => { if (editSeg && editSeg.ref) { beginPopEdit(); removeMarker(editSeg.ref); closeMarkerPop(); draw(); refreshSaveState(); } });
   markerPopClose.addEventListener("click", closeMarkerPop);
   // Undo replaced S.state.tempoMap, so editSeg.ref points at an object no longer

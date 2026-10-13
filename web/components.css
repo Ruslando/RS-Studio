@@ -42,7 +42,7 @@ button svg, .btn svg, .metro-toggle svg { display: block; flex: none; }
   background: var(--surface-inset); color: var(--text); border: 1px solid transparent;
   border-radius: var(--r-control); font: 400 var(--text-control)/1 var(--font-ui);
 }
-textarea { height: auto; padding: var(--s-sibling) var(--s-row); line-height: 1.65; }
+textarea { height: auto; padding: var(--s-sibling) var(--s-row); line-height: 1.5; }
 ::placeholder { color: var(--hint); }
 
 input[type="number"] {
@@ -90,11 +90,13 @@ input[type="range"]:disabled { opacity: .45; cursor: default; }
 
 input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
 
-.field-group { color: var(--label); display: inline-flex; flex-direction: row; gap: var(--s-pair); align-items: center; white-space: nowrap; }
+.field-group { color: var(--label); font: 400 var(--text-control)/1 var(--font-ui); display: inline-flex; flex-direction: row; gap: var(--s-pair); align-items: center; white-space: nowrap; }
 .field-group.block { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-pair); white-space: normal; }
 
 .field-group.block > input[type="text"], .field-group.block > input[type="search"],
 .field-group.block > .stem-card { width: 100%; }
+/* A select keeps the width of its longest option, but never more than its column. */
+.field-group.block > select { max-width: 100%; }
 
 /* A name's Latin spelling, in the same column under it (metadata.js latinFields).
    The pair then aligns on its labels: one column is taller than its neighbour. */
@@ -108,6 +110,21 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .field-pair > .field-group.block { flex: 1; min-width: 0; }
 .field-pair > .field-group.block.is-narrow { flex: none; }
 
+/* Cover art beside the fields it belongs to: the tile left, the fields stacked right. */
+.cover-row { display: flex; align-items: flex-start; gap: var(--s-group); }
+.cover-row > .field-stack { flex: 1; min-width: 0; }
+
+/* Stepper: a field with an up/down pair joined to its right edge (ui.js adds the pair
+   to any input marked data-stepper). The only control below 24 high. */
+.stepper { display: inline-flex; align-items: stretch; }
+.stepper > :is(input, select, .pop-field) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.stepper .pop-field { width: auto; }
+.stepper .pop-field > input.num-4 { flex: none; width: 56px; }
+.stepper-nudge { display: flex; flex-direction: column; width: var(--w-stepper); height: var(--h-control); }
+.stepper-btn { flex: 1; min-height: 0; height: auto; width: 100%; padding: 0; border-left: 0; box-shadow: none; }
+.stepper-btn:first-child { border-radius: 0 var(--r-control) 0 0; border-bottom-width: 0; }
+.stepper-btn:last-child { border-radius: 0 0 var(--r-control) 0; }
+
 .field-inline { display: flex; align-items: center; justify-content: space-between; gap: var(--s-row); }
 .field-inline > :last-child { flex: none; }
 
@@ -118,7 +135,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .field-slider input[type="range"] { flex: 1; min-width: 0; }
 .field-slider > .ro { width: 40px; text-align: right; flex: none; }
 
-.field-group.block > input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .chip {
   --chip-dot: var(--label);
@@ -129,11 +146,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 }
 .chip-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; background: var(--chip-dot); }
 
-.key {
+.key, .keymap-key {
   height: var(--h-compact); min-width: var(--h-compact); padding: 0 var(--s-sibling);
   border-radius: var(--r-compact); background: var(--control); border: 1px solid var(--line);
   display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
-  color: var(--text); font: 400 var(--text-data)/1 var(--font-mono);
+  color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); white-space: nowrap;
 }
 .mono { font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 .chk { color: var(--text); display: inline-flex; gap: var(--s-sibling); align-items: center; white-space: nowrap; font-size: var(--text-control); }
@@ -160,56 +177,60 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 .pill > [aria-checked="true"]:hover, .pill > [aria-checked="true"]:active, .view-switch .mode.active:hover, .view-switch .mode.active:active, .keymap-tab.active:hover, .keymap-tab.active:active { background: var(--control-hover); color: var(--text); }
 
-.menu-item {
-  display: grid; grid-template-columns: 1fr auto; gap: var(--s-row); align-items: center;
+.menu-item, .ctxmenu-item {
   height: var(--h-compact); width: 100%; text-align: left;
   background: transparent; border: 1px solid transparent; border-radius: var(--r-compact);
   padding: 0 var(--s-row); font: 400 var(--text-control)/1 var(--font-ui); color: var(--text);
 }
+.menu-item { display: grid; grid-template-columns: 1fr auto; gap: var(--s-row); align-items: center; }
+.ctxmenu-item { display: flex; align-items: center; justify-content: flex-start; gap: var(--s-sibling); }
 
-.menu-item:hover:not(:disabled) { background: var(--control-hover); color: var(--text); }
+:is(.menu-item, .ctxmenu-item):hover:not(:disabled), .ctxmenu-item.ctxmenu-hi { background: var(--control-hover); color: var(--text); }
 
-.menu-item:active:not(:disabled) { color: var(--label); }
+:is(.menu-item, .ctxmenu-item):active:not(:disabled) { color: var(--label); }
 
 .menu-item .kbd { min-width: 48px; color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); text-align: right; white-space: nowrap; }
 
 .menu-item:hover .kbd { color: var(--label); }
 
-.menu-item .chkmark { min-width: 48px; color: var(--accent); text-align: right; }
+.menu-item .chkmark { min-width: 48px; color: var(--text); display: flex; justify-content: flex-end; }
+.ctxmenu-item .chkmark { margin-left: auto; color: var(--text); display: flex; }
 
-.menu-sep { height: 1px; background: var(--line); margin: var(--s-pair) 0; }
+.menu-sep, .ctxmenu-sep { height: 1px; background: var(--line); margin: var(--s-pair) 0; }
 
-.dialog-header, .sp-head, .op-head {
+.dialog-header {
   background: var(--surface-toolbar);
   height: var(--h-chrome); flex: none;
   padding: 0 var(--s-sibling) 0 var(--s-group); border-bottom: 1px solid var(--line);
   display: flex; align-items: center; justify-content: space-between; gap: var(--s-sibling);
 }
 
-.sp-title { display: flex; align-items: center; gap: var(--s-sibling); font: 600 var(--text-heading)/1.2 var(--font-ui); letter-spacing: -.01em; color: var(--text); }
+.dialog-title { margin: 0; display: flex; align-items: center; gap: var(--s-sibling); font: 600 var(--text-heading)/1.2 var(--font-ui); letter-spacing: -.01em; color: var(--text); }
 
-.sp-title svg { color: var(--label); }
+.dialog-title svg { color: var(--label); }
 
-.sp-x, .op-close {
+/* Close and remove: the icon button at its two sizes, whatever the feature calls it. */
+.sp-x, .op-close, .cover-clear, .np-clear, .pop-x, .sc-remove, .field-revert {
   flex: none; width: var(--h-control); height: var(--h-control); padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid transparent; border-radius: var(--r-control);
-  color: var(--label);
+  color: var(--label); box-shadow: none;
 }
+.pop-x, .sc-remove, .field-revert { width: var(--h-compact); height: var(--h-compact); border-radius: var(--r-compact); }
+:is(.sp-x, .op-close, .cover-clear, .np-clear, .pop-x, .sc-remove, .field-revert):hover:not(:disabled) { color: var(--text); background: var(--control-hover); }
+:is(.pop-del, .sc-remove, .ri-delete):hover:not(:disabled) { color: var(--error); }
 
-.sp-x:hover:not(:disabled), .op-close:hover:not(:disabled) { color: var(--text); background: var(--control-hover); }
-
-.dialog-body, .sp-body, .modal-body { padding: var(--s-group); flex: 1; min-height: 0; overflow: auto;
+.dialog-body { padding: var(--s-group); flex: 1; min-height: 0; overflow: auto;
                         display: flex; flex-direction: column; gap: var(--s-group); }
 
-.dialog-footer, .modal-footer, .op-actions {
+.dialog-footer {
   background: var(--surface-toolbar);
   height: var(--h-chrome); flex: none; margin: 0;
   padding: 0 var(--s-group); border-top: 1px solid var(--line);
   display: flex; align-items: center; gap: var(--s-sibling);
 }
 
-.dialog-actions, .modal-actions { display: flex; gap: var(--s-sibling); margin-left: auto; }
+.dialog-actions { display: flex; gap: var(--s-sibling); margin-left: auto; }
 
 
 .toast {
@@ -225,7 +246,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 .toast-text { max-height: 40vh; overflow-y: auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; user-select: text; -webkit-user-select: text; }
 .toast-copy { flex: none; user-select: none; -webkit-user-select: none; }
-.processing-text { display: flex; flex-direction: column; gap: 6px; }
+.processing-text { display: flex; flex-direction: column; gap: var(--s-pair); }
 .processing-toast .toast-cancel { align-self: flex-end; }
 
 .toast.show { visibility: visible; transform: translateY(0); }
@@ -238,12 +259,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 .toast .dot.error { background: var(--error); }
 
-.toast button {
-  height: var(--h-compact); padding: 0 var(--s-sibling); border-radius: var(--r-compact);
-  background: var(--control); border: 1px solid var(--line); pointer-events: auto;
-}
+.toast button { pointer-events: auto; }
 
-.dialog, #settingsPanel, #stemSettingsPanel, #tuningManagerPanel, #settingsModal,
+.dialog, #settingsPanel, #stemSettingsPanel, #settingsModal,
 #newProjModal, #confirmModal, #actionConfirmModal, #pasteModal,
 #openProjModal, #gpImportModal, #rocksmithExportModal, #setupModal {
   width: var(--w-modal); max-width: calc(100vw - 2 * var(--s-section));
@@ -255,7 +273,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 .clickable { cursor: default; transition: background-color var(--dur-state) var(--ease), color var(--dur-state) var(--ease); }
 
-:is(.icon-btn, .menu-btn, .menu-item, .mode, .sp-x, .op-close, .pop-x, .pop-del, .ri-del, .side-label, .drag-handle, .stem-btn, .stem-name, .layer-name, .lane-name, .layer-btn, .icon, .ri-open, .sc-remove, .np-clear, .cover-clear, .link) { box-shadow: none; }
+:is(.icon-btn, .menu-btn, .menu-item, .mode, .sp-x, .op-close, .pop-x, .pop-del, .side-label, .drag-handle, .stem-btn, .stem-name, .lane-name, .icon, .ri-open, .sc-remove, .np-clear, .cover-clear, .link) { box-shadow: none; }
 
 :where(.card, .recent-item, .stem-card, .cover-picker) { background: var(--surface-card); border: 1px solid var(--line); border-radius: var(--r-container); }
 .card { padding: var(--s-group); }
@@ -270,7 +288,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   background: var(--selection); border-color: var(--selection-line); color: var(--text); font-weight: 600;
 }
 .icon-btn[aria-expanded="true"] { background: var(--selection); color: var(--text); }
-.icon-btn[aria-pressed="true"], .btn[aria-pressed="true"] { background: var(--selection); color: var(--text); }
+.icon-btn[aria-pressed="true"], .btn[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
 
 /* Shared production components. Legacy markup aliases below share these rules. */
 .t-title    { font: 700 var(--text-title)/1.2 var(--font-ui); letter-spacing:-.02em; }
@@ -278,24 +296,21 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .t-body     { font: 400 var(--text-body)/1.5 var(--font-ui); }
 .t-body-strong { font: 600 var(--text-body)/1.5 var(--font-ui); }
 .t-data     { font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
-.t-caps { font: 600 var(--text-caption)/1.2 var(--font-ui); letter-spacing: .02em; color: var(--label); }
+.t-caps { font: 600 var(--text-caption)/1.2 var(--font-ui); letter-spacing: .02em; color: var(--hint); }
 
 .t-body, .t-body-strong { text-wrap: pretty; }
 
 .clickable[aria-checked="true"],
 .clickable[data-selected="true"] { background: var(--selection); border-color: var(--selection-line); }
 
-.clickable[data-engaged="true"] { background: var(--label); color: var(--panel); }
-.clickable[data-engaged="true"]:is(:hover, :active) { background: var(--label-hover); color: var(--panel); }
-
 @media (prefers-reduced-motion: reduce) {
   .clickable { transition: none; }
 }
 
-.btn--compact { height: var(--h-compact); padding: 0 var(--s-sibling); border-radius: var(--r-compact); }
+.btn--compact, .toast button, .model-get, .rs-wwise-get { height: var(--h-compact); padding: 0 var(--s-sibling); border-radius: var(--r-compact); }
 
 .btn--secondary { background: var(--surface-button); border-color: transparent; }
-.btn--ghost, .ghost-btn { background: transparent; border-color: transparent; color: var(--label); box-shadow: none; }
+.btn--ghost { background: transparent; border-color: transparent; color: var(--label); box-shadow: none; }
 
 .field--numeric { font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 
@@ -314,7 +329,27 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .list-row .drag { color: transparent; }
 .list-row:hover .drag { color: var(--hint); }
 
+/* Waiting in place: add .busy to the thing that is waiting and it leads with the
+   spinner (design.md 4.17). An element may also hold a .spinner of its own. */
+.busy::before {
+  content: ""; display: inline-block; box-sizing: border-box; flex: none; vertical-align: -2px;
+  width: var(--s-row); height: var(--s-row); margin-right: var(--s-sibling); border-radius: 999px;
+  border: 2px solid var(--hint); border-top-color: var(--text); animation: spin var(--dur-spin) linear infinite;
+}
+/* A flex row already has its own gap. */
+:is(.stem-row, .sc-working, .setup-readiness, .menu-list).busy::before { margin-right: 0; }
+@media (prefers-reduced-motion: reduce) { .busy::before { animation: none; } }
+
 .dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+/* A dot and its sentence: a problem or a state, said where it is. */
+.status-line, .warn, .sp-note.error, .keymap-clash, .sc-error, .gp-import-status.error {
+  display: grid; grid-template-columns: 8px 1fr; gap: var(--s-sibling); align-items: start;
+  color: var(--text); font: 400 var(--text-body)/1.5 var(--font-ui);
+}
+:is(.status-line, .warn, .sp-note.error, .keymap-clash, .sc-error, .gp-import-status.error)::before {
+  content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--error); align-self: center;
+}
+:is(.status-line--warn, .warn, .keymap-clash)::before { background: var(--warn); }
 .dot--ok { background: var(--ok); } .dot--warn { background: var(--warn); } .dot--error { background: var(--error); }
 
 .key[data-rebinding="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
@@ -323,12 +358,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
         border-radius: var(--r-container); padding: var(--s-pair); box-shadow: var(--e1);
         max-height: calc(100dvh - 48px); overflow-y: auto; }
 .menu-anchor[data-floating-menu] > .menu-list { position: fixed; margin-top: 0; transition-property: none; }
-.menu-group { padding: var(--s-sibling) var(--s-row) var(--s-pair); }
 
 
-.menu-item .shortcut { min-width: 48px; font: 400 var(--text-data)/1 var(--font-mono); color: var(--hint); text-align: right; white-space: nowrap; }
-.menu-item:hover .shortcut { color: var(--label); }
-.menu-item .check { min-width: 48px; color: var(--accent); text-align: right; }
 
 
 
@@ -338,7 +369,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .section       { display: flex; flex-direction: column; gap: var(--s-group); }
 .section-head  { display: flex; align-items: center; gap: var(--s-sibling); }
 .section-head::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.section-head > span { font: 600 var(--text-caption)/1.2 var(--font-ui); letter-spacing: .02em; color: var(--label); }
+.section-head > span { font: 600 var(--text-caption)/1.2 var(--font-ui); letter-spacing: .02em; color: var(--hint); }
 
 .dialog-body--flush { padding: var(--s-sibling); gap: var(--s-pair); }
 
@@ -346,19 +377,19 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .list-row--fields:hover { background: var(--page); }
 .sub-list         { display: flex; flex-direction: column; gap: var(--s-sibling); }
 
-.dialog-body--table { padding: 0 var(--s-group); }
-.row-read   { height: var(--h-control); display: flex; align-items: center;
-              justify-content: space-between; border-bottom: 1px solid var(--line);
-              font: 400 var(--text-control)/1 var(--font-ui); }
-.row-read:last-child { border-bottom: 0; }
-
 .label            { display: flex; align-items: center; gap: var(--s-pair);
                     font: 400 var(--text-control)/1 var(--font-ui); color: var(--label); }
 .label[data-required="true"]::after {
                     content: ""; width: 4px; height: 4px; border-radius: 999px;
                     background: var(--accent); flex: none; }
 
-.droppable        { border-style: dashed; border-color: var(--line-mark); }
+/* Takes a file: dashed, and nothing else in the app is. */
+.droppable, .np-drop, .sc-drop, .stems-add, .cover-picker {
+  border: 1px dashed var(--line-mark); border-radius: var(--r-container); background: var(--control);
+  transition: border-color var(--dur-state) var(--ease);
+}
+:is(.droppable, .np-drop, .sc-drop, .cover-picker):hover,
+:is(.droppable, .np-drop, .sc-drop, .stems-add, .cover-picker).drag { border-color: var(--accent); }
 
 .info             { width: 16px; height: 16px; border-radius: 999px;
                     border: 1px solid var(--line-mark); color: var(--hint);
@@ -369,23 +400,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
                     padding: var(--s-sibling) var(--s-row);
                     font: 400 var(--text-control)/1.4 var(--font-ui); color: var(--text); }
 
-.row-warn         { color: var(--warn); flex: none; display: inline-flex; }
-
 .popover { max-width: var(--w-popover); background: var(--panel);
            border: 1px solid var(--line); border-radius: var(--r-container);
            box-shadow: var(--e1); padding: var(--s-row);
            display: flex; flex-direction: column; gap: var(--s-row); }
-
-.popover-header { display: flex; align-items: center; justify-content: space-between;
-                  gap: var(--s-sibling); }
-
-.table-toolbar { padding: var(--s-row) var(--s-group); background: var(--page);
-                 border-bottom: 1px solid var(--line);
-                 display: flex; align-items: center; justify-content: space-between; gap: var(--s-group); }
-.table-row { height: var(--h-control); display: flex; align-items: center;
-             justify-content: space-between; border-bottom: 1px solid var(--line);
-             font: 400 var(--text-control)/1 var(--font-ui); }
-.table-row:last-child { border-bottom: none; }
 
 .panel { background: var(--panel); border: 1px solid var(--line);
          border-radius: var(--r-container); padding: var(--s-group); }
@@ -400,34 +418,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 /* Anchored production popovers share a shell, with content layout in style.css. */
 #detectPanel, .live-editor { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-container); box-shadow: var(--e1); }
-.live-editor { position: fixed; z-index: 75; width: max-content; min-width: 230px; max-width: var(--w-popover); }
+.live-editor { position: fixed; z-index: var(--z-popover); width: max-content; min-width: 230px; max-width: var(--w-popover); }
 
-.ctxmenu-item {
-  display: flex; align-items: center; justify-content: flex-start; width: 100%; height: var(--h-compact); text-align: left;
-  background: transparent; border: 1px solid transparent; color: var(--text);
-  padding: 0 var(--s-row); border-radius: var(--r-compact); font: 400 var(--text-control)/1 var(--font-ui);
-}
 
-.ctxmenu-item:hover { background: var(--control-hover); color: var(--text); }
-
-.ctxmenu-item:active { color: var(--label); }
-
-.ctxmenu-sep { height: 1px; background: var(--line); margin: var(--s-pair) 0; }
-
-.ctxmenu-item.ctxmenu-hi { background: var(--control-hover); color: var(--text); }
-
-.pop-x {
-  flex: none; width: var(--h-compact); height: var(--h-compact); padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid transparent; border-radius: var(--r-compact);
-  color: var(--label);
-}
-
-.pop-x:hover:not(:disabled) { color: var(--text); background: var(--control-hover); }
-
-.pop-del { color: var(--error); }
-
-.pop-del:hover:not(:disabled) { color: var(--error); background: var(--control-hover); }
 
 /* Transport controls share geometry; Play uses the plain icon button skin. */
 .sc-preview { flex: none; width: var(--h-control); height: var(--h-control); padding: 0; }
@@ -443,24 +436,17 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   background: transparent; border: 1px solid transparent; color: var(--label);
 }
 .stem-btn.mute.dim { color: var(--hint); }
-.stem-btn.solo.on, .stem-btn.mute.on, .stem-master-mute.on {
+.stem-btn.solo.on, .stem-btn.mute.on {
   background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
 }
 .stem-btn.edit { color: var(--hint); }
-.stem-row :is(.stem-btn, .stem-master-mute):is(:hover, :active):not(:disabled),
+.stem-row .stem-btn:is(:hover, :active):not(:disabled),
 .lane-row .lane-btn:is(:hover, :active):not(:disabled) {
   background: var(--surface-button-hover); color: var(--text); border-color: transparent;
 }
 .stem-row .stem-btn.mute.dim:is(:hover, :active) { color: var(--label); }
-.stem-row :is(.stem-btn.solo, .stem-btn.mute, .stem-master-mute).on:is(:hover, :active) {
+.stem-row :is(.stem-btn.solo, .stem-btn.mute).on:is(:hover, :active) {
   background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
-}
-.stem-master-mute {
-  width: calc(2 * var(--h-compact) + var(--s-pair));
-  height: var(--h-compact); padding: 0; border-radius: var(--r-compact);
-  display: flex; align-items: center; justify-content: center;
-  font: 600 var(--text-caption)/1 var(--font-ui); letter-spacing: .02em;
-  background: transparent; border: 1px solid transparent; color: var(--label);
 }
 .lane-btn:disabled { color: var(--hint); background: transparent; cursor: default; }
 .lane-ctrls .lane-btn.edit-btn { color: var(--hint); }
@@ -471,7 +457,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
 }
 
-.ghost-btn:hover, .btn--ghost:hover { color: var(--text); background: var(--control-hover); }
+.btn--ghost:hover { color: var(--text); background: var(--control-hover); }
 
 :is(#detectPanel, #markerPop, #sectionMarkerPop, #phraseMarkerPop, #toneMarkerPop) { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: auto; }
 
@@ -486,24 +472,15 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .stem-pending:hover { background: transparent; }
 .stem-pending .stem-name { cursor: default; }
 
-.keymap-key {
-  height: var(--h-compact); min-width: var(--h-compact); padding: 0 var(--s-sibling);
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--surface-button); border: 1px solid transparent; border-radius: var(--r-control);
-  color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); white-space: nowrap;
-}
-.keymap-key:hover { background: var(--control-hover); }
-.keymap-key.capturing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); color: var(--text); }
-.keymap-fixed-key {
-  cursor: default; color: var(--hint);
-  background: transparent; border-color: var(--line); white-space: nowrap;
-}
-.keymap-fixed-key:hover { background: transparent; }
+/* A key you can rebind is the key cap as a button; a fixed one is the cap, quieter. */
+button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
+.keymap-key.capturing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
+.keymap-fixed-key { color: var(--hint); }
 /* Sub-tabs are the same component as the view switch: one pill size covers both. */
 
 /* All modal backdrops share geometry/material; screen CSS only sets stacking. */
 .scrim, #modalBackdrop, #layerSettingsBackdrop, #stemSettingsBackdrop,
-#tuningManagerBackdrop, #settingsModalBackdrop, #confirmBackdrop,
+#settingsModalBackdrop, #confirmBackdrop,
 #actionConfirmBackdrop, #pasteBackdrop, #openProjBackdrop, #gpImportBackdrop,
 #rocksmithExportBackdrop, #setupBackdrop, #tabViewBackdrop {
   position: fixed; inset: 0; background: var(--scrim);

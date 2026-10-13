@@ -28,6 +28,12 @@ def _prep_runtime() -> None:
     if sys.stderr is None:
         sys.stderr = sink
     prepare_ffmpeg()
+    # Name the volume-mixer entry on Linux: libpulse (also PipeWire's pulse layer)
+    # merges PULSE_PROP_* into every client the web engine opens. Windows has no
+    # equivalent — WebView2's own process owns the audio session there.
+    # ponytail: untested on a real Linux desktop; drop it if the engine overrides it.
+    os.environ.setdefault("PULSE_PROP_application.name", "RS Studio")
+    os.environ.setdefault("PULSE_PROP_application.icon_name", "rs-studio")
 
 
 def _free_port(preferred: int = 8000) -> int:

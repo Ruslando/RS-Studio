@@ -57,6 +57,21 @@ export async function operationRequest(url, body, title, detail) {
   }
 }
 
+// A job the server reports no counters for: the panel with a running bar until the
+// work settles. `work` gets the panel, to name the stage it is in.
+export async function jobRequest(title, detail, work) {
+  const notification = progressToast(title, detail);
+  notification.update({stage: "Working", fraction: null});
+  try {
+    return await work(notification);
+  } catch (error) {
+    toast(title + " failed: " + error.message, 6000, "error");
+    throw error;
+  } finally {
+    notification.finish();
+  }
+}
+
 // Browser upload counters measure transferred bytes; server analysis remains indeterminate.
 export function uploadRequest(url, form, title, detail) {
   const notification = progressToast(title, detail);

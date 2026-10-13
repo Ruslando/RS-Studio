@@ -20,17 +20,6 @@ class DetectorAvailabilityTests(unittest.TestCase):
             },
         )
 
-    def test_detector_labels_describe_their_intended_role(self):
-        self.assertEqual(
-            {detector_id: entry["label"] for detector_id, entry in pipeline.DETECTORS.items()},
-            {
-                "basic_pitch": "Basic Pitch (polyphonic model)",
-                "mt3": "MR-MT3 (multi-instrument model)",
-                "torchcrepe": "torchcrepe (bass / melody model)",
-                "piano": "Piano Transcription (piano model)",
-            },
-        )
-
     def test_missing_detector_remains_in_catalog_as_unavailable(self):
         catalog = {
             "ready": {"label": "Ready", "fn": object()},

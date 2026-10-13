@@ -1,0 +1,69 @@
+// Run: node tests/web/markers.test.mjs
+// Section, phrase and tone markers: what is kept on load, and where sections land on export.
+import assert from "node:assert/strict";
+import { assignSectionsToBars, beatStartsFromScoreBars, normalizePhraseBoundaries, normalizeSectionMarkers, sectionMarkersForExport, sectionMarkersFromScoreBars, sectionTypeLabel, validSectionType } from "../../web/section-marker-core.js";
+import { normalizeToneMarkers, startTone, withStartTone } from "../../web/tone-marker-core.js";
+
+// ---- section types --------------------------------------------------------
+assert.equal(validSectionType("Verse 2"), "verse", "a numbered name is still its type");
+assert.equal(validSectionType("pre-chorus"), validSectionType("PreChorus"));
+assert.equal(validSectionType("zzz"), "riff");
+assert.equal(validSectionType("zzz", "intro"), "intro");
+assert.equal(sectionTypeLabel("chorus"), "Chorus");
+
+// ---- sections on load -----------------------------------------------------
+{
+  const got = normalizeSectionMarkers([
+    { t: 30, text: "Chorus" }, { seconds: 5, name: " Verse 1 " }, { t: "x", text: "bad time" },
+    { t: 8, text: "  " }, { t: -3, text: "My part", sectionType: "solo" }, { t: 99, text: "Outro" },
+  ], 60);
+  assert.deepEqual(got.map((m) => [m.t, m.text, m.sectionType, m.custom]), [
+    [0, "My part", "solo", true], [5, "Verse 1", "verse", true], [30, "Chorus", "chorus", false], [60, "Outro", "outro", false],
+  ], "sorted, clamped into the song, nameless and timeless ones dropped");
+  assert.equal(new Set(got.map((m) => m.id)).size, 4);
+  assert.deepEqual(normalizeSectionMarkers(null), []);
+  assert.deepEqual(sectionMarkersForExport([{ t: 1, text: "Intro", id: "x" }]), [{ t: 1, text: "Intro", marker: "", sectionType: "intro" }]);
+}
+
+// ---- sections onto bars ---------------------------------------------------
+{
+  const bars = [0, 2, 4, 6].map((seconds) => ({ seconds, durationSeconds: 2, section: { text: "old" } }));
+  const names = (list) => list.map((bar) => bar.section?.text || null);
+  const { bars: placed, warnings } = assignSectionsToBars(bars, [{ t: 0.2, text: "Intro" }, { t: 4.9, text: "Verse" }]);
+  assert.deepEqual(names(placed), ["Intro", null, "Verse", null], "each lands on the nearest bar; what was embedded is cleared");
+  assert.deepEqual(warnings, []);
+  assert.equal(bars[0].section.text, "old", "the source bars are not touched");
+
+  // Two in one bar: the second moves on and says so; with no bar left it is reported, not dropped silently.
+  const crowded = assignSectionsToBars(bars, [{ t: 4.1, text: "A" }, { t: 4.2, text: "B" }, { t: 6, text: "C" }, { t: 6.1, text: "D" }]);
+  assert.deepEqual(names(crowded.bars), [null, null, "A", "B"]);
+  assert.equal(crowded.warnings.length, 3);
+  assert.match(crowded.warnings[0], /B.* moved to bar 4/);
+  assert.match(crowded.warnings[2], /D.* could not be placed/);
+  assert.deepEqual(assignSectionsToBars([], [{ t: 0, text: "A" }]), { bars: [], warnings: [] });
+
+  // And back: sections embedded in a score's bars become markers at the bar starts.
+  const back = sectionMarkersFromScoreBars([{ seconds: 0, section: { text: "Intro" } }, { seconds: 2 }, { seconds: 4, section: { marker: "Bridge-ish" } }]);
+  assert.deepEqual(back.map((m) => [m.t, m.text, m.sectionType, m.custom]), [[0, "Intro", "intro", false], [4, "Bridge-ish", "riff", true]]);
+  assert.deepEqual(beatStartsFromScoreBars([{ seconds: 0, durationSeconds: 2 }, { seconds: 2, durationSeconds: 3, timeSignatureNumerator: 3 }]),
+    [0, 0.5, 1, 1.5, 2, 3, 4]);
+}
+
+// ---- phrase boundaries ----------------------------------------------------
+assert.deepEqual(normalizePhraseBoundaries([{ t: 5 }, 2, { seconds: 2 }, { t: "x" }, { t: 80 }], 60).map((b) => b.t), [2, 5, 60],
+  "sorted, clamped, two at the same time are one");
+
+// ---- tone markers ---------------------------------------------------------
+{
+  const got = normalizeToneMarkers([{ t: 4, tone: "Lead" }, { t: 0, preset: "clean" }, { t: 2, tone: "fuzz" }, { t: 4, tone: "crunch", id: "a" }, { t: 90, tone: "bass" }], 60);
+  assert.deepEqual(got.map((m) => [m.t, m.tone]), [[0, "clean"], [4, "crunch"], [60, "bass"]],
+    "unknown presets dropped, one marker per moment");
+  assert.equal(startTone({ instrument: "bass" }), "clean");
+  assert.equal(startTone({ instrument: "electric" }), "crunch");
+  assert.equal(startTone({ instrument: "bass", rocksmithArrangement: "lead" }), "crunch", "the chosen arrangement outranks the instrument");
+  assert.equal(startTone({ instrument: "electric", rocksmithArrangement: "alt_bass" }), "clean");
+  assert.deepEqual(withStartTone([{ t: 3, tone: "lead" }], { instrument: "bass" }).map((m) => [m.t, m.tone]), [[0, "clean"], [3, "lead"]]);
+  const own = [{ t: 0, tone: "lead" }];
+  assert.equal(withStartTone(own, {}), own, "a lane that already starts on a tone keeps it");
+}
+console.log("markers: ok");

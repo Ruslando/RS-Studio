@@ -3,6 +3,7 @@
 
 import { STAGE_ANCHORED, stageMono } from "./constants.js";
 import { scroll, sctx } from "./dom.js";
+import { confirmChoice } from "./dialog.js";
 import { draw } from "./repaint.js";
 import { commit, snapshotEdit } from "./edit.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
@@ -163,18 +164,31 @@ function findRepeats(selNotes, lane) {
   return result;
 }
 
-// Group the selection into a reference: find its repeats in the lane and drop a
-// capture box over each. The boxes (not the notes) hold the link.
-function markSelectionAsReference() {
+// Group the selection into a reference: find its repeats in the lane and, if the
+// user agrees, drop a capture box over each. The boxes (not the notes) hold the
+// link — so linking a repeat by surprise means a later edit lands where nobody
+// looked. Repeats are therefore offered, never applied silently.
+async function markSelectionAsReference() {
   const sel = [...S.selection].filter((n) => laneOf(n));
   if (!sel.length) { toast("Select notes in an edit lane to group into a reference"); return; }
   const lane = laneOf(sel[0]);
   const selNotes = sel.filter((n) => laneOf(n) === lane);
   if (selNotes.some((n) => boxOfNote(n))) { toast("Selection is already inside a reference"); return; }
-  const occ = findRepeats(selNotes, lane);
+  let occ = findRepeats(selNotes, lane);
   if (!occ.length) return;
-  const prev = snapshotEdit();
   const ref = nextRef();
+  if (occ.length > 1) {
+    const choice = await confirmChoice({
+      title: "Link repeats?",
+      message: `${occ.length - 1} other place${occ.length === 2 ? "" : "s"} in "${lane.name}" ha${occ.length === 2 ? "s" : "ve"} exactly the same notes. `
+        + `Link ${occ.length === 2 ? "it" : "them"} into reference #${ref} too? Editing one copy will then change all of them.`,
+      confirmLabel: `Link all ${occ.length}`,
+      alternativeLabel: "Only the selection",
+    });
+    if (choice === "cancel") return;
+    if (choice === "alternative") occ = [selNotes];
+  }
+  const prev = snapshotEdit();
   const nb = noteBounds(selNotes);
   (lane.refBoxes || (lane.refBoxes = {}))[ref] = {
     rt0: 0, rt1: nb.t1 - nb.t0,
@@ -183,7 +197,7 @@ function markSelectionAsReference() {
   };
   commit(prev);
   refreshCounts(); draw();
-  toast(occ.length > 1 ? `Reference #${ref}: ${occ.length} boxes` : `Reference #${ref}: boxed (no repeats found)`);
+  toast(occ.length > 1 ? `Reference #${ref}: ${occ.length} boxes` : `Reference #${ref}: 1 box`);
 }
 
 // Detach the selected occurrence(s): drop their box from the group (the notes stay,
@@ -208,6 +222,16 @@ export function detachSelection() {
   }
   commit(prev); draw();
   toast(`Detached ${n} occurrence(s)`);
+}
+
+// Detach a whole reference: every box goes, every note stays (now unlinked).
+export function detachRefGroup(lane, ref) {
+  const group = lane.refBoxes && lane.refBoxes[ref];
+  if (!group) return;
+  const prev = snapshotEdit();
+  delete lane.refBoxes[ref];
+  commit(prev); draw();
+  toast(`Reference #${ref} detached (${group.anchors.length} occurrence${group.anchors.length === 1 ? "" : "s"})`);
 }
 
 // ---- reference-level (occurrence) operations ----
@@ -392,9 +416,9 @@ export function resizeRefBox(drag, x, y) {
 // here — managing an existing reference happens in openRefMenu, off its badge.
 export function refMenuEntry(sel) {
   if (sel.some((n) => boxOfNote(n))) return null;   // inside a reference → managed via its badge
-  // Named like its sibling "Group selection into shape", and for the same reason:
+  // Named like its sibling "Group into shape", and for the same reason:
   // "Mark as reference" said what happens to the notes you can see and nothing
   // about the GROUP it creates, which is the whole point — the repeats it finds
   // elsewhere in the lane come along, and an edit to one reaches all of them.
-  return { label: "Group selection into reference", kw: "repeat copies linked duplicate", fn: () => markSelectionAsReference() };
+  return { label: "Group into reference", kw: "repeat copies linked duplicate", fn: () => markSelectionAsReference() };
 }

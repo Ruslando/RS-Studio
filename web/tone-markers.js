@@ -7,6 +7,7 @@ import { placeFloating } from "./floating-position.js";
 import { stageUi } from "./constants.js";
 import { inTourCard, mmctx, scroll, sctx, stage, toneMarkerDelete, toneMarkerPop, toneMarkerPopClose, toneMarkerPreset, toneMarkerTime } from "./dom.js";
 import { draw } from "./repaint.js";
+import { STATE_RESTORED } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
@@ -170,6 +171,7 @@ export function drawMinimapToneMarkers(scale) {
 }
 
 export function init_tone_markers() {
+  window.addEventListener(STATE_RESTORED, closeToneMarkerPop);   // undo replaced the marker it holds
   registerMarkerRail({
     id: "tone",
     height: TONE_MARK_H,

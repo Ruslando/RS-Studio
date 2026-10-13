@@ -89,9 +89,13 @@ async function loadDetectors() {
 // Reflect what Detect will run on (whole stem, or the Alt-dragged frame) while
 // idle. Result/error text overwrites this until the next frame change.
 export function updateDetectStatus() {
-  if (detectStatus) detectStatus.textContent = S.detectRegion
-    ? `range ${fmtTime(S.detectRegion.t0)}–${fmtTime(S.detectRegion.t1)}`
-    : "whole stem";
+  const range = document.getElementById("detectRange");
+  if (range) {
+    // Two times are values, so they are set as values; "Whole song" is a word.
+    range.textContent = S.detectRegion ? `${fmtTime(S.detectRegion.t0)} – ${fmtTime(S.detectRegion.t1)}` : "Whole song";
+    range.classList.toggle("is-range", !!S.detectRegion);
+  }
+  if (detectStatus) detectStatus.textContent = "";
   if (detectTargetLayer) {
     const lane = targetLane();
     detectTargetLayer.textContent = lane ? lane.name : "—";
@@ -117,7 +121,6 @@ function confirmDetectMerge(count, laneName, scoped) {
       confirmReplaceBtn.removeEventListener("click", onReplace);
       confirmAppendBtn.removeEventListener("click", onAppend);
       confirmCancelBtn.removeEventListener("click", onCancel);
-      confirmBackdrop.removeEventListener("mousedown", onBackdrop);
       window.removeEventListener("keydown", onKey, true);
       resolve(v);
     };
@@ -125,12 +128,10 @@ function confirmDetectMerge(count, laneName, scoped) {
     const onAppend = () => finish("append");
     const onCancel = () => finish(null);
     cancelMerge = onCancel;
-    const onBackdrop = (e) => { if (e.target === confirmBackdrop) onCancel(); };
     const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } };
     confirmReplaceBtn.addEventListener("click", onReplace);
     confirmAppendBtn.addEventListener("click", onAppend);
     confirmCancelBtn.addEventListener("click", onCancel);
-    confirmBackdrop.addEventListener("mousedown", onBackdrop);
     window.addEventListener("keydown", onKey, true);   // capture so it beats the global Esc handlers
     confirmReplaceBtn.focus();
   });

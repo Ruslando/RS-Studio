@@ -59,9 +59,9 @@ async function loadVersion() {
   }
 }
 
-const EMPTY_FOLDER_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>`;
-const PROJECT_ART_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 10v4M10 7v10M14 9v6M18 5v14"/></svg>`;
-const TRASH_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>`;
+const EMPTY_FOLDER_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>`;
+const PROJECT_ART_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 10v4M10 7v10M14 9v6M18 5v14"/></svg>`;
+const TRASH_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>`;
 
 let recentItems = [];
 let recentPage = 0;
@@ -338,7 +338,6 @@ export function initProjectLibrary({ onNew, onOpenFile, onPick }) {
   openProjClose.addEventListener("click", closeOpenProjPicker);
   $("openProjCancel").addEventListener("click", closeOpenProjPicker);
   $("openProjOpen").addEventListener("click", commitOpenProj);
-  openProjBackdrop.addEventListener("click", (e) => { if (e.target === openProjBackdrop) closeOpenProjPicker(); });
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (openProjBackdrop.hidden) return false;
     closeOpenProjPicker(); return true;

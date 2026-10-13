@@ -38,6 +38,8 @@ function showAudioStatus(status) {
     ? (linux ? "Linux audio tools found" : `Wwise ${status.version || ""} found`)
     : (linux ? "Linux audio tools missing" : "Wwise not found");
   $("setupAudioDot").className = `dot dot--${ready ? "ok" : "warn"}`;
+  $("setupAudioDot").hidden = false;
+  $("setupAudioRow").classList.remove("busy");
   $("setupAudioDetail").textContent = linux
     ? (ready ? "This Linux export path is experimental. Check playback and seeking in Rocksmith 2014."
       : "Install Rust, then run uv sync: it builds the encoder.")
@@ -57,6 +59,8 @@ export async function refreshRocksmithReadiness() {
     // An unreachable status route is not evidence that Wwise is missing.
     $("welcomeRocksmithWarning").hidden = true;
     $("setupAudioStatus").textContent = "Could not check the audio converter";
+    $("setupAudioDot").className = "dot dot--warn"; $("setupAudioDot").hidden = false;
+    $("setupAudioRow").classList.remove("busy");
     $("setupAudioDetail").textContent = "You can continue setup and check again later.";
     $("setupAudioLink").hidden = true;
   }
@@ -106,9 +110,6 @@ export async function init_setup() {
   $("setupAudioRecheck").addEventListener("click", refreshRocksmithReadiness);
   $("setupSkip").addEventListener("click", finishSetup);
   $("setupClose").addEventListener("click", finishSetup);
-  $("setupBackdrop").addEventListener("click", (event) => {
-    if (event.target === $("setupBackdrop")) finishSetup();
-  });
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if ($("setupBackdrop").hidden) return false;
     finishSetup();

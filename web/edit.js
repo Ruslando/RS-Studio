@@ -6,6 +6,7 @@ import { wireContextSubmenu } from "./context-submenu.js";
 import { MAX_POINTS, bendAt, bendCurve, normalizeCurve } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
+import { icon } from "./icons.js";
 import { $, inTourCard, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopyBtn, redoMI, scroll, stage, undoMI } from "./dom.js";
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
@@ -13,19 +14,19 @@ import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapNote 
 import { nid, shapeId } from "./ids.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addMarkerAtTime } from "./markers.js";
-import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, targetLane, toggleLaneMute } from "./lanes.js";
+import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, targetLane, toggleLaneMute } from "./lanes.js";
 import { FX_KEYS, FX_LABELS, copyEffects } from "./note-effects.js";
 import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, togglePlay } from "./playback.js";
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachSelection, nextRef, noteBounds, reconcileReferences, refMenuEntry } from "./references.js";
+import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, refMenuEntry } from "./references.js";
 import { chooseShapePositions, cleanupShapeMembership, shapeGroups, ungroupShape } from "./shapes.js";
 import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
 import { S, setSelection } from "./store.js";
-import { laneTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
+import { laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { matchKey } from "./keymap.js";
@@ -73,7 +74,7 @@ export const STATE_RESTORED = "cw-state-restored";
 export function snapshotEdit() {
   const a = activeLane();
   const snap = {
-    lanes: {}, boxes: {}, ui: {}, holds: {},
+    lanes: {}, boxes: {}, ui: {}, holds: {}, capo: {}, marks: {},
     active: a ? a.id : null,
     stem: S.state ? S.state.curStem : null,
     grid: currentGridState(),
@@ -86,6 +87,10 @@ export function snapshotEdit() {
     // Where the hand was put. Not a note field, so nothing above captures it, and a
     // hold that undo cannot reach is an edit with no way back.
     snap.holds[l.id] = (l.handHolds || []).map((h) => ({ ...h }));
+    // The capo too: moving it rewrites every fret, and those frets are undone above.
+    snap.capo[l.id] = Number(l.capo) || 0;
+    // Tone and phrase markers: a tempo change re-times them along with the notes.
+    snap.marks[l.id] = { tone: cloneJson(l.toneMarkers), phrase: cloneJson(l.phraseBoundaries) };
     snap.ui[l.id] = { visible: l.visible, muted: l.muted, locked: l.locked,
       tablatureEnabled: l.tablatureEnabled !== false, volume: normLayerVolume(l.volume) };
   }
@@ -147,6 +152,11 @@ function restore(snap) {
     if (snap.lanes && snap.lanes[l.id]) l.notes = snap.lanes[l.id].map((n) => ({ ...n }));
     if (snap.boxes) l.refBoxes = JSON.parse(JSON.stringify(snap.boxes[l.id] || {}));
     if (snap.holds) l.handHolds = (snap.holds[l.id] || []).map((h) => ({ ...h }));
+    if (snap.capo && snap.capo[l.id] != null) l.capo = snap.capo[l.id];
+    if (snap.marks && snap.marks[l.id]) {
+      l.toneMarkers = cloneJson(snap.marks[l.id].tone);
+      l.phraseBoundaries = cloneJson(snap.marks[l.id].phrase);
+    }
     const ui = snap.ui && snap.ui[l.id];
     if (ui) {
       l.visible = ui.visible; l.muted = ui.muted;
@@ -262,7 +272,6 @@ export function confirmPasteMode({ signal } = {}) {
       pasteCopyBtn.removeEventListener("click", onCopy);
       pasteAsRefBtn.removeEventListener("click", onRef);
       pasteCancelBtn.removeEventListener("click", onCancel);
-      pasteBackdrop.removeEventListener("mousedown", onBackdrop);
       window.removeEventListener("keydown", onKey, true);
       signal?.removeEventListener("abort", onCancel);
       resolve(v);
@@ -270,12 +279,10 @@ export function confirmPasteMode({ signal } = {}) {
     const onCopy = () => finish("copy");
     const onRef = () => finish("reference");
     const onCancel = () => finish(null);
-    const onBackdrop = (e) => { if (e.target === pasteBackdrop) onCancel(); };
     const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } };
     pasteCopyBtn.addEventListener("click", onCopy);
     pasteAsRefBtn.addEventListener("click", onRef);
     pasteCancelBtn.addEventListener("click", onCancel);
-    pasteBackdrop.addEventListener("mousedown", onBackdrop);
     window.addEventListener("keydown", onKey, true);   // capture so it beats the global Esc handlers
     signal?.addEventListener("abort", onCancel, { once: true });
     pasteAsRefBtn.focus();
@@ -562,17 +569,10 @@ function groupSelectionIntoShape() {
   if (lanes.length !== 1) { toast("A shape must stay within one note layer"); return false; }
   const lane = lanes[0];
   if (!canEditLane(lane)) return false;
-  const tuning = laneTuning(lane);
-  // Preserve a coherent authored/manual grip. Automatic lanes otherwise get one
-  // joint voicing; exact GP positions are never silently rewritten.
-  const positions = chooseShapePositions(selected, tuning,
-    { allowAutomatic: lane.fingeringMode !== "exact" });
-  if (!positions) {
-    toast(lane.fingeringMode === "exact"
-      ? "Those authored positions cannot be held as one shape"
-      : "No playable shared shape was found for those notes");
-    return false;
-  }
+  const tuning = laneFretTuning(lane);
+  // Preserve a coherent authored/manual grip; otherwise one joint voicing.
+  const positions = chooseShapePositions(selected, tuning);
+  if (!positions) { toast("No playable shared shape was found for those notes"); return false; }
   const prev = snapshotEdit(), id = shapeId();
   for (const note of selected) {
     const pos = positions.get(note);
@@ -632,7 +632,7 @@ export function columnOf(note) {
   const lane = laneOf(note);
   if (!lane) return null;
   const col = chordColumns(lane.notes).find((c) => c.notes.includes(note));
-  return col ? { lane, tuning: laneTuning(lane), col } : null;
+  return col ? { lane, tuning: laneFretTuning(lane), col } : null;
 }
 
 // One-line description of a shape for the menu/toast: "A string · fret 7",
@@ -773,7 +773,7 @@ export function setHandHold(lane, t, fret) {
 export function setColumnShape(colNotes, shape, limits = null, maxFret = undefined) {
   const lane = laneOf(colNotes?.[0]);
   if (!lane) return "These notes are not in an editable note layer";
-  const wrong = shapeFault(colNotes, laneTuning(lane), shape, limits, maxFret);
+  const wrong = shapeFault(colNotes, laneFretTuning(lane), shape, limits, maxFret);
   if (wrong) return wrong;
   applyColumnPos(colNotes, shape, "local", overrideFlow(colNotes));
   return null;
@@ -783,18 +783,24 @@ export function setColumnShape(colNotes, shape, limits = null, maxFret = undefin
 // grips the engine ranked; this is the other grain of the same question — a shape
 // nobody ranked, built a note at a time.
 //
-// The rest of the column is written out with it, and that is not the edit widening
-// itself: lockedShape is all-or-nothing (a column with one pin and three free notes
-// voices as if nothing were pinned), so "this note here" can only be said by stating
-// the whole column. The others keep exactly the places they already had, so the
-// change on screen is the one note that moved.
+// The rest of the column is written out with it, so the whole column is one override
+// with one set of reach switches. The others keep exactly the places they already
+// had, so the change on screen is the one note that moved.
+// The fretboard's capo drag: one undo step, like every other edit made on the neck.
+export function moveLaneCapo(lane, capo) {
+  if (!canEditLane(lane) || (Number(lane.capo) || 0) === capo) return;
+  const prev = snapshotEdit();
+  setLaneCapo(lane, capo);
+  commit(prev); draw(); refreshTabIfOpen();
+}
+
 export function setNotePosition(note, string, fret) {
   const ctx = columnOf(note);
   if (!ctx) return;
   // The same solve the tab was voiced under, so "where the others already are" is
   // what is on screen and not a second engine's answer.
   const voiced = voiceNotes(ctx.lane.notes, ctx.tuning, Infinity,
-    { bars: songBarStarts(), instrument: ctx.lane.instrument, holds: ctx.lane.handHolds });
+    { bars: songBarStarts(), instrument: ctx.lane.instrument, capo: ctx.lane.capo, holds: ctx.lane.handHolds });
   const shape = new Map();
   for (const n of ctx.col.notes) {
     const p = n === note ? { string, fret } : voiced.get(n);
@@ -978,7 +984,8 @@ export function openRefMenu(clientX, clientY, occ) {
     { label: "Delete this occurrence", fn: () => deleteRefOccurrence(occ) },
     { label: "Delete entire reference", fn: () => deleteRefGroup(occ.lane, occ.ref) },
     { sep: true },
-    { label: "Detach (unlink, keep notes)", fn: () => detachSelection() },
+    { label: "Detach this occurrence (keep notes)", fn: () => detachSelection() },
+    { label: "Detach entire reference (keep notes)", fn: () => detachRefGroup(occ.lane, occ.ref) },
   ]);
   markWalkthroughMenu(m);
   menuOpenCount++;
@@ -1001,24 +1008,6 @@ function appliedEffects(sel) {
   for (const f of ["whammy", "trill", "grace", "tremPick", "slap", "stroke"])
     if (any((n) => n[f])) out.push({ label: CHOICE_NAME[f], clear: () => setChoiceOnSelection(f, null) });
   return out;
-}
-
-// The fretboard, reached from the notes you just right-clicked. Both entries go
-// through the View menu's own item rather than importing fretboard.js — which
-// imports from this file — and pressing that item is the one path that cannot end
-// up disagreeing with its check mark. Idempotent: "show" means show, so a panel
-// already open is left alone rather than toggled shut, and an entry that would do
-// nothing is not offered at all.
-const fretboardShown = () => !$("menuFretboardCheck").hidden;
-const showFretboard = () => { if (!fretboardShown()) $("menuFretboard").click(); };
-
-function fretboardEntries() {
-  return [
-    ...(fretboardShown() ? [] : [{
-      label: "Show on fretboard", kw: "neck guitar grip hand fingering diagram",
-      fn: showFretboard,
-    }]),
-  ];
 }
 
 // Find similar and its passage navigation. These were four toolbar buttons that
@@ -1096,7 +1085,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   const selectedShapeIds = [...new Set(sel.map((n) => n.shapeId).filter(Boolean))];
   const oneLane = new Set(sel.map(laneOf)).size === 1;
   const shapeActions = [
-    ...(sel.length >= 2 && oneLane ? [{ label: "Group selection into shape", fn: groupSelectionIntoShape }] : []),
+    ...(sel.length >= 2 && oneLane ? [{ label: "Group into shape", fn: groupSelectionIntoShape }] : []),
     ...(selectedShapeIds.length === 1 ? [{ label: "Select entire shape", fn: selectEntireShape }] : []),
     ...(selectedShapeIds.length ? [{ label: "Ungroup shape", fn: ungroupSelectedShapes }] : []),
   ];
@@ -1116,7 +1105,6 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // where "return this column to automatic" is about one column and is wanted
   // wherever you are.
   const columnActions = [
-    ...fretboardEntries(),
     ...(pinnedCol
       ? [{ label: "Return to automatic", kw: "reset unpin fingering position voicing",
         fn: () => applyColumnAlternative(pinnedCol.notes, null) }]
@@ -1133,8 +1121,10 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     // song built on repeats it is the first thing you do to a selection, not the
     // last. Every entry above a divider is conditional, so the divider is too: a
     // menu that opens on a rule is the same accident as an inset one.
-    ...(refEntry ? [refEntry, { sep: true }] : []),
-    ...(columnActions.length ? [...columnActions, { sep: true }] : []),
+    // One group: everything you do WITH a selection (group it, find it again). They
+    // were three groups of one or two entries each, divided by rules that said nothing.
+    ...(refEntry ? [refEntry] : []),
+    ...columnActions,
     ...similarEntries(),
     ...families,
     { sep: true },
@@ -1230,6 +1220,14 @@ function flattenActions(entries, crumb = "", crumbKw = "") {
   return out;
 }
 
+// An entry whose label starts with "✓ " is on: the row shows the label and the
+// check as the menu's own mark on the right, not as a character in the text.
+function labelItem(button, label) {
+  const on = label.startsWith("✓ ");
+  button.textContent = on ? label.slice(2) : label;
+  if (on) button.insertAdjacentHTML("beforeend", `<span class="chkmark">${icon("check", 14)}</span>`);
+}
+
 // Render menu entries into `parent`, recursing for hover submenus.
 function buildMenu(parent, entries) {
   for (const e of entries) {
@@ -1240,13 +1238,13 @@ function buildMenu(parent, entries) {
     } else if (e.children) {
       const wrap = document.createElement("div"); wrap.className = "ctxmenu-sub";
       if (e.family) wrap.classList.add("ctxmenu-family");
-      const row = document.createElement("button"); row.type = "button"; row.className = "ctxmenu-item ctxmenu-parent"; row.textContent = e.label;
+      const row = document.createElement("button"); row.type = "button"; row.className = "ctxmenu-item ctxmenu-parent"; labelItem(row, e.label);
       const child = document.createElement("div"); child.className = "ctxmenu ctxmenu-child";
       buildMenu(child, e.children);
       wrap.append(row, child); parent.append(wrap);
       wireContextSubmenu(wrap, row, child);
     } else {
-      const b = document.createElement("button"); b.className = "ctxmenu-item"; b.textContent = e.label;
+      const b = document.createElement("button"); b.className = "ctxmenu-item"; labelItem(b, e.label);
       b.onclick = () => { e.fn(); if (!e.keepOpen) hideNoteMenu(); };
       parent.append(b);
     }

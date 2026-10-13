@@ -403,6 +403,16 @@ class InstallerTests(unittest.TestCase):
             self.install(probe=lambda *args: (_ for _ in ()).throw(installer.InstallError("DLL load failed")))
         self.assertEqual(len(installer.missing_wheels(Path(active["environment"]), self.payload, "core")), 2)
 
+    def test_repair_restores_a_library_the_receipt_still_lists(self):
+        active = self.install()
+        environment = Path(active["environment"])
+        shutil.rmtree(next((environment / SITE).glob("numpy-*.dist-info")))
+        self.install()                                   # trusts the receipt: nothing is checked
+        self.assertEqual(len(installer.missing_wheels(environment, self.payload, "core")), 1)
+        installer.install(self.destination, self.envelope, self.config, self.cancel, lambda *args, **detail: None,
+                          repair=True, allow_local=True, probe=lambda *args: None, prepare=fake_environment)
+        self.assertEqual(installer.missing_wheels(environment, self.payload, "core"), [])
+
     def test_damaged_finished_download_is_fetched_again(self):
         wheel = self.payload["runtimes"]["core"]["wheels"][0]
         target = self.destination / "downloads" / "wheels" / wheel["name"]
@@ -516,6 +526,9 @@ class InstallerTests(unittest.TestCase):
                 installer.checked_url(url, allow_local=True)
         with self.assertRaisesRegex(installer.InstallError, "newer RS Studio installer"):
             installer.validate_manifest(self.envelope, dict(self.config, launcher_version=1), allow_local=True)
+        for field, value in (("platform", "another-system"), ("schema", self.payload["schema"] + 1)):
+            with self.subTest(field), self.assertRaisesRegex(installer.InstallError, "not compatible with this computer"):
+                installer.validate_manifest(self.sign({**self.payload, field: value}), self.config, allow_local=True)
         self.payload["runtimes"]["core"]["requirements"] = "../outside.txt"
         with self.assertRaises(installer.InstallError):
             installer.validate_manifest(self.sign(self.payload), self.config, allow_local=True)

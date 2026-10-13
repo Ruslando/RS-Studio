@@ -79,6 +79,8 @@ where = ["src"]
 # runtime dependency set.
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
+    "playwright>=1.63.0",
     "pyinstaller>=6.0",
 ]
 # Which PyTorch build to install; exactly one of the two. `cpu` is the default

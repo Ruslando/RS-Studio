@@ -14,7 +14,9 @@ class RemoveModelTests(unittest.TestCase):
             config.with_name("model.yaml.part").write_bytes(b"c")
             catalog = [{"id": "x", "label": "X", "kind": "Stem separation", "url": "https://example.invalid/x",
                         "files": [weights, config]},
-                       {"id": "lib", "label": "Lib", "kind": "Note detection", "bundled": True}]
+                       # With files of its own, so only the bundled rule can refuse it.
+                       {"id": "lib", "label": "Lib", "kind": "Note detection", "bundled": True,
+                        "files": [Path(tmp) / "lib.bin"]}]
             with patch.object(models, "_catalog", return_value=catalog):
                 models.remove("x")
                 self.assertEqual(list(Path(tmp).iterdir()), [])

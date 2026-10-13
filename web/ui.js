@@ -12,10 +12,11 @@ import { draw } from "./repaint.js";
 import { doCopy, doCut, doDelete, doPaste, redo, undo, updateUndoButtons } from "./edit.js";
 import { resetZoom, zoomCenter } from "./geometry.js";
 import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey } from "./keymap.js";
-import { renderLayerSettings, renderTuningManager } from "./lanes.js";
+import { renderLayerSettings } from "./lanes.js";
+import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen } from "./tuning-editor.js";
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
 import { panelMotion } from "./panel-motion.js";
-import { applyCoverChange, clearProjectCover, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { refreshSaveState } from "./project.js";
 import { renderAcceleration } from "./acceleration.js";
 import { renderModels, stopModelPolling } from "./models.js";
@@ -51,7 +52,7 @@ export const settingsModalBackdrop = $("settingsModalBackdrop"), settingsModalCl
 
 export const layerName = $("layerName"), layerColor = $("layerColor");
 
-export const layerInstr = $("layerInstr"), layerTone = $("layerTone"), layerTun = $("layerTun"), layerArrangement = $("layerArrangement");
+export const layerInstr = $("layerInstr"), layerTone = $("layerTone"), layerTun = $("layerTun"), layerCapo = $("layerCapo"), layerArrangement = $("layerArrangement");
 export const spLayerName = $("spLayerName");
 
 export const layerVolume = $("layerVolume"), layerVolumeValue = $("layerVolumeValue");
@@ -84,28 +85,12 @@ export function cancelLayerSettings() {
   actions?.cancel();
 }
 
-// Tuning manager: a separate modal (reached via layerTun's "Manage tunings…"
-// option) for creating/editing/deleting named custom tunings.
-export const tuningManagerBackdrop = $("tuningManagerBackdrop"), tuningManagerClose = $("tuningManagerClose");
-export const tuningListEl = $("tuningList"), tuningAddBtn = $("tuningAdd");
-
-// Staged like the layer editor: a tuning's strings apply as you change them, so
-// Cancel puts them back. Adding and deleting a tuning are actions and stand.
-let tuningSnapshot = null;
-export function openTuningManager() {
-  renderTuningManager();
-  tuningManagerBackdrop.hidden = false;
-  tuningSnapshot = snapshotInputs($("tuningManagerPanel"));
-}
-
-function closeTuningManager() { tuningSnapshot = null; tuningManagerBackdrop.hidden = true; }
-function cancelTuningManager() {
-  revertInputs(tuningSnapshot); tuningSnapshot = null;
-  tuningManagerBackdrop.hidden = true;
-}
+// Tunings live in Settings. A layer's "Manage tunings…" opens that page with the
+// layer's tuning selected.
+export function openTuningManager(selectKey) { openSettingsModal("tunings", selectKey); }
 
 // One modal, panes swapped by `section` ("trace" | "project" | "keys" | "appearance" | "models").
-const SP_TITLES = { trace: "Editor options", project: "Project details", keys: "Keyboard shortcuts", appearance: "Appearance", models: "Models" };
+const SP_TITLES = { trace: "Editor options", project: "Project details", keys: "Keyboard shortcuts", appearance: "Appearance", models: "Models", tunings: "Tunings" };
 // Rule 20: the primary names the work. A settings window applies; an editor saves.
 const SP_PRIMARY = { project: "Save" };
 let spSection = "trace";
@@ -115,8 +100,9 @@ let spSection = "trace";
 // them, which is the only way to judge them — so staging here is a snapshot on
 // open and a revert on Cancel, not a deferred write. Escape, Cancel, the close
 // and a backdrop click are all the same key, and all four take this path.
+// The Tunings page keeps its own draft (tuning-editor.js), so it stays out of this.
 const snapshotInputs = (root) => [...root.querySelectorAll("input, select")]
-  .filter((el) => !el.closest("[hidden]"))
+  .filter((el) => !el.closest("[hidden]") && !el.closest("#spTunings"))
   .map((el) => ({ el, v: el.type === "checkbox" ? el.checked : el.value }));
 
 // Put each value back and re-fire the event that applied it, so persistence and
@@ -150,6 +136,7 @@ function showSettingsPane(section) {
   $("spAppearance").hidden = section !== "appearance";
   $("spModels").hidden = section !== "models";
   $("spAcceleration").hidden = section !== "acceleration";
+  $("spTunings").hidden = section !== "tunings";
   $("settingsModalTitle").textContent = section === "project" ? SP_TITLES.project : "Settings";
   $("settingsApply").textContent = SP_PRIMARY[section] || "Apply";
   $("settingsApply").disabled = false;   // renderProjectSettings disables it with no project open
@@ -166,10 +153,14 @@ function showSettingsPane(section) {
   if (section === "project") renderProjectSettings();
   if (section === "models") renderModels();
   if (section === "acceleration") renderAcceleration();
+  if (section === "tunings" && !tuningDraftOpen()) beginTuningDraft(tuningSelect);
   if (section === "keys") { setKeyTab("edit"); renderKeymap(); }
 }
 
-function openSettingsModal(section = "trace") {
+let tuningSelect = null;   // the tuning the Tunings page opens on
+function openSettingsModal(section = "trace", selectTuning = null) {
+  dropTuningDraft();
+  tuningSelect = selectTuning;
   showSettingsPane(section);
   settingsModalBackdrop.hidden = false;
   snapshotSettings();
@@ -198,11 +189,12 @@ function setKeyTab(name) {
 // Closing stops the Models poll: a closed window that keeps asking the server
 // every second is a window that never actually closed.
 function closeSettingsModal() { spSnapshot = null; stopModelPolling(); settingsModalBackdrop.hidden = true; }
-function cancelSettingsModal() { revertSettings(); stopModelPolling(); settingsModalBackdrop.hidden = true; }
+function cancelSettingsModal() { revertSettings(); dropTuningDraft(); stopModelPolling(); settingsModalBackdrop.hidden = true; }
 // Project details is the one pane whose values live on the server, so its
 // primary is the only one that has work left to do when it is pressed.
-function applySettingsModal() {
+async function applySettingsModal() {
   if (spSection === "project") { saveProjectSettings(); return; }
+  if (!(await saveTuningDraft())) return;   // an unsaved built-in edit made them stay
   closeSettingsModal();
 }
 
@@ -283,7 +275,7 @@ async function saveProjectSettings() {
 
 async function changeProjectSettingsCover(run, working, done) {
   if (!S.state || S.state.job === "tutorial") return;
-  const meta = await applyCoverChange(collectProjectSettingsMeta(), run, setProjectMetaStatus, working, done);
+  const meta = await applyCoverChange(collectProjectSettingsMeta(), run, coverStatus($("projCoverDrop"), setProjectMetaStatus), working, done);
   if (!meta) return;
   S.state.metadata = meta;
   renderProjectSettings();
@@ -394,7 +386,25 @@ export function gridDivLabelFor(value) {
 // Keep the toolbar's read-only tempo/meter/grid readout in sync with grid state.
 export function init_ui() {
   for (const slot of document.querySelectorAll('[data-ui-icon]')) {
-    slot.innerHTML = icon(slot.dataset.uiIcon, 18);
+    slot.innerHTML = icon(slot.dataset.uiIcon, Number(slot.dataset.iconSize) || 16);
+  }
+  // A number field marked data-stepper gets its up/down pair (design.md 4.3). The
+  // field's own min, max and step decide what a press does.
+  for (const input of document.querySelectorAll('.stepper input[data-stepper]')) {
+    const nudge = document.createElement('span');
+    nudge.className = 'stepper-nudge';
+    for (const [name, title, up] of [['chevronUp', 'Increase', true], ['chevronDown', 'Decrease', false]]) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'stepper-btn'; button.tabIndex = -1;   // arrow keys already step the field
+      button.title = title; button.setAttribute('aria-label', title); button.innerHTML = icon(name, 12);
+      button.addEventListener('click', () => {
+        if (up) input.stepUp(); else input.stepDown();
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      nudge.append(button);
+    }
+    input.closest('.stepper').append(nudge);
   }
   document.querySelector('#spKeys .keymap-tabs').addEventListener('keydown', (event) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -410,10 +420,6 @@ export function init_ui() {
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (settingsModalBackdrop.hidden) return false;
     cancelSettingsModal(); return true;   // rule 17: Escape and Cancel are the same key
-  });
-  registerEscapeLayer(ESC_DEPTH.modal, () => {
-    if (tuningManagerBackdrop.hidden) return false;
-    cancelTuningManager(); return true;
   });
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (layerSettingsBackdrop.hidden) return false;
@@ -444,15 +450,9 @@ export function init_ui() {
   wireMenu("menuMarkerLanes", () => setMarkerLanes(!railsHidden()));
   for (const button of panelControls("markers")) button.addEventListener("click", () => setMarkerLanes(!railsHidden()));
   settingsClose.addEventListener("click", cancelLayerSettings);
-  layerSettingsBackdrop.addEventListener("click", (e) => { if (e.target === layerSettingsBackdrop) cancelLayerSettings(); });
   $("layerCancel").addEventListener("click", cancelLayerSettings);
   $("layerSave").addEventListener("click", closeLayerSettings);
-  tuningManagerClose.addEventListener("click", cancelTuningManager);
-  tuningManagerBackdrop.addEventListener("click", (e) => { if (e.target === tuningManagerBackdrop) cancelTuningManager(); });
-  $("tuningCancel").addEventListener("click", cancelTuningManager);
-  $("tuningSave").addEventListener("click", closeTuningManager);
   settingsModalClose.addEventListener("click", cancelSettingsModal);
-  settingsModalBackdrop.addEventListener("click", (e) => { if (e.target === settingsModalBackdrop) cancelSettingsModal(); });
   $("settingsCancel").addEventListener("click", cancelSettingsModal);
   $("settingsApply").addEventListener("click", applySettingsModal);
   wireMenu("menuTraceSettings", () => openSettingsModal("trace"));

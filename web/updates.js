@@ -4,7 +4,7 @@
 
 import { $ } from "./dom.js";
 import { confirmChoice } from "./dialog.js";
-import { toast } from "./notify.js";
+import { progressToast, toast } from "./notify.js";
 
 let latest = null;
 
@@ -46,7 +46,8 @@ async function openUpdate() {
     toast(data.detail || "Could not start the update", 6000, "error");
     return;
   }
-  toast("Updating RS Studio…", 10000);
+  // A job that ends with the app restarting, so its panel is never finished from here.
+  progressToast("Updating RS Studio", `Version ${latest.latest}`).update({ stage: "Downloading", fraction: null });
 }
 
 async function checkNow(button) {
