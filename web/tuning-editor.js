@@ -219,7 +219,7 @@ function renderList() {
 
 const stepBtn = (text, title, on, disabled = false) => {
   const b = document.createElement("button");
-  b.type = "button"; b.className = "tuning-step"; b.innerHTML = text;
+  b.type = "button"; b.className = "stepper-btn"; b.innerHTML = text;
   b.title = title; b.setAttribute("aria-label", title); b.disabled = disabled;
   b.addEventListener("click", on);
   return b;
@@ -309,13 +309,13 @@ function renderEditor() {
     const pick = (v) => { const m = midis.slice(); m[last - i] = Math.max(NOTE_MIN, Math.min(NOTE_MAX, v)); set({ midis: m }); };
     // The note with a slim up/down pair on its right, joined like a spinner.
     const nudge = document.createElement("span");
-    nudge.className = "tuning-nudge";
+    nudge.className = "stepper-nudge";
     nudge.append(
       stepBtn(icon("chevronUp", 12), "Up a semitone", () => pick(p + 1), p >= NOTE_MAX),
       stepBtn(icon("chevronDown", 12), "Down a semitone", () => pick(p - 1), p <= NOTE_MIN),
     );
     const one = document.createElement("span");
-    one.className = "tuning-string";
+    one.className = "stepper";
     one.append(selectOf(NOTE_OPTIONS, p, (v) => pick(Number(v)), "tuning-str"), nudge);
     strings.append(one);
   });

@@ -110,6 +110,21 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .field-pair > .field-group.block { flex: 1; min-width: 0; }
 .field-pair > .field-group.block.is-narrow { flex: none; }
 
+/* Cover art beside the fields it belongs to: the tile left, the fields stacked right. */
+.cover-row { display: flex; align-items: flex-start; gap: var(--s-group); }
+.cover-row > .field-stack { flex: 1; min-width: 0; }
+
+/* Stepper: a field with an up/down pair joined to its right edge (ui.js adds the pair
+   to any input marked data-stepper). The only control below 24 high. */
+.stepper { display: inline-flex; align-items: stretch; }
+.stepper :is(input, select) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.stepper .pop-field { width: auto; }
+.stepper .pop-field > input.num-4 { width: 88px; }
+.stepper-nudge { display: flex; flex-direction: column; width: var(--w-stepper); height: var(--h-control); }
+.stepper-btn { flex: 1; min-height: 0; height: auto; width: 100%; padding: 0; border-left: 0; box-shadow: none; }
+.stepper-btn:first-child { border-radius: 0 var(--r-control) 0 0; border-bottom-width: 0; }
+.stepper-btn:last-child { border-radius: 0 0 var(--r-control) 0; }
+
 .field-inline { display: flex; align-items: center; justify-content: space-between; gap: var(--s-row); }
 .field-inline > :last-child { flex: none; }
 
@@ -120,7 +135,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .field-slider input[type="range"] { flex: 1; min-width: 0; }
 .field-slider > .ro { width: 40px; text-align: right; flex: none; }
 
-.field-group.block > input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .chip {
   --chip-dot: var(--label);

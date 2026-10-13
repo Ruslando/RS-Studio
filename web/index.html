@@ -844,6 +844,20 @@
         <div class="sp-pane" id="spProject" hidden>
           <!-- Rule 27: title and artist are read together, and so are album and
                year; four digits never earn a row of their own. -->
+          <div class="cover-row">
+          <div class="field-group block">
+            <span class="field-label">Cover art</span>
+            <div class="cover-picker" id="projCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
+              <span class="cover-thumb" id="projCoverThumb"></span>
+              <span class="cover-copy">
+                <span class="cover-title" id="projCoverTitle">Choose image</span>
+                <span class="cover-sub" id="projCoverSub"></span>
+              </span>
+              <button type="button" class="cover-clear" id="projCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+              <input type="file" id="projCoverInput" accept="image/*" hidden />
+            </div>
+          </div>
+          <div class="field-stack">
           <div class="field-pair">
             <label class="field-group block"><span class="label" data-required="true">Song title</span>
               <input type="text" id="projTitle" maxlength="180" />
@@ -860,17 +874,7 @@
               <input type="number" id="projYear" class="num-4" min="1000" max="9999" step="1" placeholder="YYYY" />
             </label>
           </div>
-          <div class="field-group block">
-            <span class="field-label">Cover art</span>
-            <div class="cover-picker" id="projCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
-              <span class="cover-thumb" id="projCoverThumb"></span>
-              <span class="cover-copy">
-                <span class="cover-title" id="projCoverTitle">Choose image</span>
-                <span class="cover-sub" id="projCoverSub"></span>
-              </span>
-              <button type="button" class="cover-clear" id="projCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
-              <input type="file" id="projCoverInput" accept="image/*" hidden />
-            </div>
+          </div>
           </div>
           <p id="projMetaStatus" class="sp-note" hidden></p>
         </div>
@@ -931,6 +935,20 @@
           <div class="section np-details">
           <div class="section-head"><span>Project details</span></div>
 
+          <div class="cover-row">
+          <div class="field-group block">
+            <span class="field-label">Cover art</span>
+            <div class="cover-picker" id="npCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
+              <span class="cover-thumb" id="npCoverThumb"></span>
+              <span class="cover-copy">
+                <span class="cover-title" id="npCoverTitle">Choose image</span>
+                <span class="cover-sub" id="npCoverSub"></span>
+              </span>
+              <button type="button" class="cover-clear" id="npCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+              <input type="file" id="npCoverInput" accept="image/*" hidden />
+            </div>
+          </div>
+          <div class="field-stack">
           <div class="field-pair">
             <div class="field-group block">
               <label for="npSongTitle" class="field-label label" data-required="true">Song title</label>
@@ -951,18 +969,7 @@
               <input type="number" id="npYear" class="num-4" min="1000" max="9999" step="1" placeholder="YYYY" />
             </div>
           </div>
-
-          <div class="field-group block">
-            <span class="field-label">Cover art</span>
-            <div class="cover-picker" id="npCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
-              <span class="cover-thumb" id="npCoverThumb"></span>
-              <span class="cover-copy">
-                <span class="cover-title" id="npCoverTitle">Choose image</span>
-                <span class="cover-sub" id="npCoverSub"></span>
-              </span>
-              <button type="button" class="cover-clear" id="npCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
-              <input type="file" id="npCoverInput" accept="image/*" hidden />
-            </div>
+          </div>
           </div>
           </div>
 
@@ -1105,6 +1112,20 @@
           </div>
           <div class="section">
           <div class="section-head"><span>Song</span></div>
+          <div class="cover-row">
+          <div class="field-group block">
+            <span class="field-label">Cover art</span>
+            <div class="cover-picker" id="rsCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
+              <span class="cover-thumb" id="rsCoverThumb"></span>
+              <span class="cover-copy">
+                <span class="cover-title" id="rsCoverTitle">Choose image</span>
+                <span class="cover-sub" id="rsCoverSub"></span>
+              </span>
+              <button type="button" class="cover-clear" id="rsCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+              <input type="file" id="rsCoverInput" accept="image/*" hidden />
+            </div>
+          </div>
+          <div class="field-stack">
           <div class="field-pair">
             <label class="field-group block"><span class="label" data-required="true">Song title</span>
               <input type="text" id="rsTitle" maxlength="180" />
@@ -1121,17 +1142,7 @@
               <input type="number" id="rsYear" class="num-4" min="1000" max="9999" step="1" placeholder="YYYY" />
             </label>
           </div>
-          <div class="field-group block">
-            <span class="field-label">Cover art</span>
-            <div class="cover-picker" id="rsCoverDrop" tabindex="0" role="button" aria-label="Choose cover art">
-              <span class="cover-thumb" id="rsCoverThumb"></span>
-              <span class="cover-copy">
-                <span class="cover-title" id="rsCoverTitle">Choose image</span>
-                <span class="cover-sub" id="rsCoverSub"></span>
-              </span>
-              <button type="button" class="cover-clear" id="rsCoverClear" hidden aria-label="Remove cover art"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
-              <input type="file" id="rsCoverInput" accept="image/*" hidden />
-            </div>
+          </div>
           </div>
           </div>
           <div class="section">
@@ -1141,12 +1152,16 @@
           <div class="section">
           <div class="section-head"><span>Package</span></div>
           <div class="field-pair">
-          <label class="field-group block is-narrow" title="Silence added in front of the song, so the first notes can be seen coming">Leading silence (seconds)
-            <input type="number" id="rsLeadIn" class="num-4" min="0" max="30" step="0.5" value="5" />
-          </label>
-          <label class="field-group block is-narrow" title="Goes into the file name (…_v2_p.psarc) and the package info">Version
-            <input type="number" id="rsVersion" class="num-4" min="1" step="1" value="1" />
-          </label>
+          <!-- A div and a label[for], not a wrapping label: the stepper's buttons sit
+               beside the field, and a click on them must not land on the field. -->
+          <div class="field-group block is-narrow" title="Silence added in front of the song, so the first notes can be seen coming">
+            <label class="label" for="rsLeadIn">Leading silence</label>
+            <span class="stepper"><span class="pop-field"><input type="number" id="rsLeadIn" class="num-4" min="0" max="30" step="0.5" value="5" data-stepper /><span class="pop-unit">s</span></span></span>
+          </div>
+          <div class="field-group block is-narrow" title="Goes into the file name (…_v2_p.psarc) and the package info">
+            <label class="label" for="rsVersion">Version</label>
+            <span class="stepper"><input type="number" id="rsVersion" class="num-4" min="1" step="1" value="1" data-stepper /></span>
+          </div>
           </div>
           </div>
           <p id="rsExportStatus" class="sp-note" hidden></p>

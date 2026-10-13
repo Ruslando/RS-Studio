@@ -388,6 +388,24 @@ export function init_ui() {
   for (const slot of document.querySelectorAll('[data-ui-icon]')) {
     slot.innerHTML = icon(slot.dataset.uiIcon, Number(slot.dataset.iconSize) || 16);
   }
+  // A number field marked data-stepper gets its up/down pair (design.md 4.3). The
+  // field's own min, max and step decide what a press does.
+  for (const input of document.querySelectorAll('.stepper input[data-stepper]')) {
+    const nudge = document.createElement('span');
+    nudge.className = 'stepper-nudge';
+    for (const [name, title, up] of [['chevronUp', 'Increase', true], ['chevronDown', 'Decrease', false]]) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'stepper-btn'; button.tabIndex = -1;   // arrow keys already step the field
+      button.title = title; button.setAttribute('aria-label', title); button.innerHTML = icon(name, 12);
+      button.addEventListener('click', () => {
+        if (up) input.stepUp(); else input.stepDown();
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      nudge.append(button);
+    }
+    input.closest('.stepper').append(nudge);
+  }
   document.querySelector('#spKeys .keymap-tabs').addEventListener('keydown', (event) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();

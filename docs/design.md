@@ -149,6 +149,8 @@ Focus and drop indicators are 2px.
 | `--w-modal-wide` | 720 | Window with a list or a table |
 | `--w-settings` | 860 | Settings |
 | `--w-popover` | 320 | Popovers, tour card, loading card |
+| `--w-cover` | 96 | The cover-art tile |
+| `--w-stepper` | 20 | The up/down pair of a stepper |
 | `--h-modal-max` | 640 | A window is at most this, or 80 % of the viewport |
 | `--w-edge` | 14 | The strip along a panel edge that folds it |
 | `--w-sidebar-mini` / `-peek`, `--h-fretboard-mini` / `-peek` | 28 / 40 | A folded panel, and the same panel under the pointer |
@@ -335,14 +337,17 @@ Class: `input[type=text|number|search]`, `select`, `textarea`, or `.field`.
 32 high, padding `0 12`, radius 6, `--surface-inset`, transparent 1px border,
 13px. Focus per rule 2. Placeholder `--hint`.
 
-- Number: mono 11, right aligned, no spin buttons. A unit sits inside the field
-  on the right in mono `--hint` (`.pop-field` + `.pop-unit`).
+- Number: mono 11, right aligned, no native spin buttons. A unit sits inside the
+  field on the right in mono `--hint` (`.pop-field` + `.pop-unit`); it is never
+  written into the label, in brackets or otherwise.
 - Select: the native control with the drawn chevron; width follows its longest
   option. Inside a row it is 24 high, radius 4.
 - A field inside a row or the stage is 24 high, radius 4.
 - A search field is a text field with a 16px search icon inside its left padding.
-- A stepper is a field with two half-height buttons joined to its right edge,
-  each a 12px chevron (`.tuning-nudge`). It is the only control below 24 high.
+- A stepper (`.stepper`) is a field with two half-height buttons joined to its
+  right edge, each a 12px chevron. A number you count rather than type gets one:
+  wrap the input in `.stepper` and mark it `data-stepper`; its `min`, `max` and
+  `step` decide what a press does. It is the only control below 24 high.
 
 ### 4.4 Slider, checkbox, colour
 
@@ -462,8 +467,13 @@ hover or focus when they are secondary.
 1px dashed `--line-mark`, radius 10, `--control`, padding 12, an upload icon,
 a title (14/600) and at most one line under it. Hover or a file over it:
 border `--accent`. With a file: the file name is the title and a remove button
-sits on the right. The cover picker is a drop zone with a thumbnail as its
-leading mark.
+sits on the right.
+
+Cover art (`.cover-picker`) is the same zone as a square tile, `--w-cover` (96)
+on each side. Empty, it shows a frame mark and "Choose image"; with a picture,
+the picture fills it, the border turns solid and a compact remove button sits
+in its top right corner. It stands left of the fields it belongs to
+(`.cover-row`: the tile, then a `.field-stack`), level with their first row.
 
 ### 4.15 Editor chrome
 
@@ -576,7 +586,7 @@ Remove a line when it is fixed; add one when a deviation is found.
 | Finding | Why it stays |
 |---|---|
 | `height`: launcher actions, library rows, tuning rows, drop zones, cover picker | Rows whose height comes from their content (4.13, 4.14) |
-| `height`: edge strips, stepper halves, the input inside the search field, a layer row's name | Not controls of their own: part of a larger one |
+| `height`: edge strips, stepper halves, the cover tile, the input inside the search field, a layer row's name | Not controls of their own: part of a larger one |
 | `space` 3px in the segmented control | (32 − 24 − 2) / 2: what centres a 24 item in a 32 track |
 | `space` 14px beside the sidebar and above the stage | `--w-edge` |
 | `space` 34px on the right of a select | Room for the drawn chevron: two `--s-row` plus its 10px |

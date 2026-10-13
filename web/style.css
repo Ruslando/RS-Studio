@@ -634,13 +634,6 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 .tuning-strings { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-pair); }
 /* Only the left padding: the right one is the select's own, and it keeps the chevron clear of the note. */
 .tuning-str { width: 72px; padding-left: var(--s-sibling); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
-/* One string: the note select with a slim up/down pair joined on its right. */
-.tuning-string { display: inline-flex; align-items: stretch; }
-.tuning-string .tuning-str { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.tuning-nudge { display: flex; flex-direction: column; width: 20px; height: var(--h-control); }
-.tuning-nudge .tuning-step { flex: 1; min-height: 0; height: auto; width: 100%; padding: 0; border-left: 0; box-shadow: none; }
-.tuning-nudge .tuning-step:first-child { border-radius: 0 var(--r-control) 0 0; border-bottom-width: 0; }
-.tuning-nudge .tuning-step:last-child { border-radius: 0 0 var(--r-control) 0; }
 .tuning-whole { display: flex; gap: var(--s-sibling); }
 .tuning-whole-btn { min-width: 96px; }
 .tuning-actions { display: flex; align-items: center; gap: var(--s-sibling); margin-top: auto; }
@@ -706,26 +699,28 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 
 .field-label { display: block; color: var(--label); font: 400 var(--text-control)/1 var(--font-ui); flex: none; }
 .field-label.label { display: inline-flex; align-items: center; gap: var(--s-pair); }
+/* Cover art: a square drop zone that the picture fills (design.md 4.14). */
 .cover-picker {
-  flex: none; display: flex; align-items: center; gap: var(--s-row);
-  padding: var(--s-row); cursor: default;
+  position: relative; flex: none; width: var(--w-cover); height: var(--w-cover); overflow: hidden; cursor: default;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-sibling); padding: var(--s-sibling);
 }
-.cover-thumb {
-  width: var(--h-list); height: var(--h-list); flex: none; border-radius: var(--r-control); overflow: hidden;
-  background: var(--panel); border: 1px solid var(--line);
-  display: flex; align-items: center; justify-content: center;
-}
+.cover-thumb { display: flex; align-items: center; justify-content: center; }
 .cover-thumb::before {
   content: ""; width: var(--h-compact); height: var(--s-group); border: 1px solid var(--hint);
   border-radius: var(--r-compact);
 }
+.cover-thumb.has-cover { position: absolute; inset: 0; }
 .cover-thumb.has-cover::before { display: none; }
 .cover-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cover-copy { min-width: 0; display: flex; flex-direction: column; gap: var(--s-pair); }
-
-.cover-title { font: 600 var(--text-body)/1.5 var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.cover-sub { color: var(--hint); font: 400 var(--text-body)/1.5 var(--font-ui); }
+.cover-copy { min-width: 0; max-width: 100%; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.cover-picker:has(.has-cover) .cover-copy { display: none; }
+/* With a picture it is no longer asking for one. */
+.cover-picker:has(.has-cover) { border-style: solid; border-color: var(--line); }
+.cover-title { max-width: 100%; color: var(--label); font: 400 var(--text-caption)/1.4 var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cover-sub { color: var(--hint); font: 400 var(--text-caption)/1.4 var(--font-ui); }
+.cover-sub:empty { display: none; }
+/* Over the picture, so it carries its own ground. */
+.cover-picker .cover-clear { position: absolute; top: var(--s-pair); right: var(--s-pair); width: var(--h-compact); height: var(--h-compact); border-radius: var(--r-compact); background: var(--panel); }
 .cover-clear, .np-clear, .sc-remove { margin-left: auto; }
 @media (max-width: 720px) {
   .field-pair { flex-wrap: wrap; }
@@ -1173,16 +1168,14 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 @keyframes processing-activity { to { background-position: -200% 0; } }
 @media (max-width: 760px) {
   .np-details { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-sibling); flex: none; }
-  .np-details > .section-head { grid-column: 1 / -1; }
+  .np-details > .section-head, .np-details > .cover-row { grid-column: 1 / -1; }
   .np-details .field-pair { gap: var(--s-sibling); }
-  .np-details .cover-picker { min-height: 0; padding: var(--s-sibling); }
   .np-audio { flex: 1; }
   .np-audio > .section-head { display: none; }
 }
 
 @media (max-height: 680px) {
   .np-details { gap: var(--s-sibling); }
-  .np-details .cover-picker { padding: var(--s-sibling); }
   .project-create-body { gap: var(--s-row); padding: var(--s-row); }
   .np-audio { gap: var(--s-sibling); }
   .np-audio .stems-section { padding-top: var(--s-sibling); }

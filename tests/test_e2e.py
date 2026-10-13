@@ -136,6 +136,11 @@ class EndToEndTests(unittest.TestCase):
         self.file_menu("#menuExportRocksmith")
         expect(page.locator("#rocksmithExportModal")).to_be_visible()
         expect(page.locator("#rsTitle")).to_have_value("E2E Song")
+        # The stepper beside a number counts it up and down by the field's own step.
+        page.click("#rsVersion ~ .stepper-nudge [aria-label=Increase]")
+        expect(page.locator("#rsVersion")).to_have_value("2")
+        page.click(".stepper:has(#rsLeadIn) [aria-label=Decrease]")
+        expect(page.locator("#rsLeadIn")).to_have_value("4.5")
         row = page.locator(".rs-arr-row")
         expect(row).to_have_count(1)
         expect(row.locator(".rs-arr-on")).to_be_checked()

@@ -45,6 +45,8 @@
   --w-modal-wide: 720px;
   --w-settings:   860px;
   --w-popover:    320px;
+  --w-cover:      96px;     /* the cover-art tile: three control heights */
+  --w-stepper:    20px;     /* the up/down pair joined to a field */
   --h-modal-max:  640px;
   --h-chrome:      48px;
   /* Layers, lowest first. A new layer takes a name here, never a number in between. */
