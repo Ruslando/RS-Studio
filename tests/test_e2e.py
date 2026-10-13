@@ -84,6 +84,9 @@ class EndToEndTests(unittest.TestCase):
                      and self.faults.append(f"console: {message.text}"))
         self.page.on("response", lambda response: response.status >= 500
                      and self.faults.append(f"HTTP {response.status} {response.url}"))
+        # The startup update check asks GitHub, which rate-limits anonymous callers; answer it here.
+        self.page.route("**/api/update", lambda route: route.fulfill(json={
+            "supported": False, "current": "0", "latest": "0", "available": False, "notes": "", "can_install": False}))
         self.page.goto(self.url)
         # Registered last, so it runs first: before the page is closed.
         self.addCleanup(lambda: self.assertEqual(self.faults, [], "the app reported errors during this test"))
