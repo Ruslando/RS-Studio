@@ -55,3 +55,36 @@ export function barStartsFromGrid(grid, duration) {
   }
   return barStartsFrom(segs, duration);
 }
+
+// A tempo marker's BPM changed from `oldBpm` to `newBpm`: everything between it
+// (t0) and the next tempo marker (t1) keeps its bar and beat, so it stretches with
+// the beat. Notes on the old grid land exactly on the new one, no snapping needed.
+// Tempo markers never move. Returns how many notes now start at or past t1.
+export function retimeSpan(lanes, sectionMarkers, dur, minCell, t0, t1, oldBpm, newBpm) {
+  if (!(oldBpm > 0) || !(newBpm > 0) || oldBpm === newBpm) return 0;
+  const ratio = oldBpm / newBpm;
+  const inSpan = (t) => t >= t0 - 1e-9 && t < t1 - 1e-9;
+  const at = (t) => (inSpan(t) ? t0 + (t - t0) * ratio : t);
+  const retimeMarks = (list) => { for (const m of list || []) m.t = at(+m.t); };
+  let spilled = 0;
+  for (const lane of lanes) {
+    for (const group of Object.values(lane.refBoxes || {})) {
+      if (!group || !Array.isArray(group.anchors) || !group.anchors.length || typeof group.rt0 !== "number") continue;
+      if (inSpan(group.anchors[0])) { group.rt0 *= ratio; group.rt1 *= ratio; }
+      group.anchors = group.anchors.map(at);
+    }
+    for (const n of lane.notes) {
+      if (!inSpan(n.start)) continue;
+      // ponytail: a note pushed past the song's end is pinned to its last cell
+      const s = Math.min(at(n.start), dur - minCell);
+      n.end = Math.min(dur, s + (n.end - n.start) * ratio);
+      n.start = s;
+      if (s >= t1 - 1e-9) spilled++;
+    }
+    for (const h of lane.handHolds || []) h.t = at(+h.t);   // same arithmetic as the note starts they sit on
+    retimeMarks(lane.toneMarkers);
+    retimeMarks(lane.phraseBoundaries);
+  }
+  retimeMarks(sectionMarkers);
+  return spilled;
+}

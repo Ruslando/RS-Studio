@@ -68,7 +68,7 @@ export const metroOn = $("metro"), speedSel = $("speed");
 export const bpmInput = $("bpm"), offsetInput = $("offset");
 export const subdivSel = $("subdiv"), subdivCustom = $("subdivCustom"), subdivCustomWrap = $("subdivCustomWrap");
 export const tsNumInput = $("tsNum"), tsDenInput = $("tsDen");
-export const detectBpmBtn = $("detectBpm"), tapBtn = $("tap"), tapInfo = $("tapInfo");
+export const tapBtn = $("tap"), tapInfo = $("tapInfo");
 export const markerPop = $("markerPop"), markerPopTitle = $("markerPopTitle"), markerPopClose = $("markerPopClose");
 export const markerBpm = $("markerBpm"), markerTsNum = $("markerTsNum"), markerTsDen = $("markerTsDen");
 export const markerSubdiv = $("markerSubdiv"), markerSubdivCustom = $("markerSubdivCustom"), markerSubdivCustomWrap = $("markerSubdivCustomWrap");

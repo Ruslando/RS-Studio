@@ -302,7 +302,7 @@ export const TOURS = {
         title: "The flag's settings",
         body: "In this example, the actual tempo is 120 BPM and the first beat starts at 0.35 seconds, so the automatic estimate is a bit off. Use the grid lines in the main view to line them up with the song, and use the metronome to check the alignment.",
         lockApp: true,
-        allow: "#markerBpm, #markerTime, #markerTsNum, #markerTsDen, #markerSubdiv, #markerSubdivCustom, #play, #metroToggle",
+        allow: "#markerBpm, #markerTime, #markerTsNum, #markerTsDen, #markerSubdiv, #markerSubdivCustom, #markerPop .field-revert, #play, #metroToggle",
         back: ACT.tempoPopClose,
       },
     ],

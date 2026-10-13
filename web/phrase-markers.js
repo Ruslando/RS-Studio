@@ -7,6 +7,7 @@ import { placeFloating } from "./floating-position.js";
 import { stageUi } from "./constants.js";
 import { inTourCard, mmctx, phraseMarkerDelete, phraseMarkerPop, phraseMarkerPopClose, phraseMarkerTime, scroll, sctx, stage } from "./dom.js";
 import { draw } from "./repaint.js";
+import { STATE_RESTORED } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
 import { gridSegments, segBeatSec } from "./grid.js";
 import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
@@ -201,6 +202,7 @@ export function drawMinimapPhraseMarkers(scale) {
 }
 
 export function init_phrase_markers() {
+  window.addEventListener(STATE_RESTORED, closePhraseMarkerPop);   // undo replaced the marker it holds
   registerMarkerRail({
     id: "phrase",
     height: PHRASE_MARK_H,

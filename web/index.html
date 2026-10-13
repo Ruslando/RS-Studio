@@ -458,6 +458,7 @@
             <span class="pop-field"><input type="number" id="markerBpm" min="20" max="320" step="any" /><span class="pop-unit">BPM</span></span>
             <button id="tap" type="button" class="icon-btn" title="Tap tempo" aria-label="Tap tempo"><span data-ui-icon="tap" aria-hidden="true"></span></button>
           </span>
+          <button type="button" class="field-revert" data-revert="bpm" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
         </label>
         <label class="field-group block">Time signature
           <div class="sp-row">
@@ -465,6 +466,7 @@
             <span class="sp-slash">/</span>
             <input type="number" id="markerTsDen" min="1" max="64" step="1" />
           </div>
+          <button type="button" class="field-revert" data-revert="ts" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
         </label>
       </div>
       <output id="tapInfo" class="tap-tempo-readout" aria-live="polite" hidden></output>
@@ -478,12 +480,14 @@
           <option value="8">1/32</option>
           <option value="custom">Custom...</option>
         </select>
+          <button type="button" class="field-revert" data-revert="subdiv" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
       </label>
       <label class="field-group block" id="markerSubdivCustomWrap" hidden>Custom (per beat)
         <input type="number" id="markerSubdivCustom" min="1" max="64" step="1" value="2" />
       </label>
       <label class="field-group block">Position
         <span class="pop-field"><input type="number" id="markerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
+          <button type="button" class="field-revert" data-revert="time" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
       </label>
       <span id="markerAt" class="legend"></span>
     </div>
@@ -724,10 +728,7 @@
              meter, division, and offset are edited through the marker popover. -->
         <div class="sp-pane" id="spTempo" hidden>
           <label class="field-group block" hidden>Tempo (BPM)
-            <div class="sp-row">
-              <input type="number" id="bpm" min="20" max="320" step="any" value="120" />
-              <button id="detectBpm" class="ghost-btn">↻ detected</button>
-            </div>
+            <input type="number" id="bpm" min="20" max="320" step="any" value="120" />
           </label>
           <label class="field-group block" hidden>Time signature
             <div class="sp-row">

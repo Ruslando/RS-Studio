@@ -597,6 +597,12 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 .live-editor .pop-head { padding-bottom: var(--s-sibling); border-bottom: 1px solid var(--line); }
 .live-editor .dp-body { gap: var(--s-sibling); }
 .live-editor .pop-pair { display: contents; }
+/* Each tempo-marker field gets a revert slot; the column stays so fields don't shift when it shows. */
+#markerPop .dp-body .field-group.block { grid-template-columns: 96px minmax(0, 1fr) 22px; }
+.field-revert { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--r-control); background: none; color: var(--hint); cursor: pointer; box-shadow: none; }
+.field-revert:hover { color: var(--text); background: var(--control-hover); }
+.field-revert[hidden] { visibility: hidden; }
+.field-revert svg { width: 14px; height: 14px; }
 .live-editor .dp-body .field-group.block { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: var(--s-sibling); font-size: var(--text-control); }
 .live-editor .field-group > :is(input, select, .pop-field, .sp-row, .tempo-input-group) { min-width: 0; width: 100%; }
 .live-editor .sp-row > input { min-width: 0; }

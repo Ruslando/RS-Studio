@@ -73,7 +73,7 @@ export const STATE_RESTORED = "cw-state-restored";
 export function snapshotEdit() {
   const a = activeLane();
   const snap = {
-    lanes: {}, boxes: {}, ui: {}, holds: {}, capo: {},
+    lanes: {}, boxes: {}, ui: {}, holds: {}, capo: {}, marks: {},
     active: a ? a.id : null,
     stem: S.state ? S.state.curStem : null,
     grid: currentGridState(),
@@ -88,6 +88,8 @@ export function snapshotEdit() {
     snap.holds[l.id] = (l.handHolds || []).map((h) => ({ ...h }));
     // The capo too: moving it rewrites every fret, and those frets are undone above.
     snap.capo[l.id] = Number(l.capo) || 0;
+    // Tone and phrase markers: a tempo change re-times them along with the notes.
+    snap.marks[l.id] = { tone: cloneJson(l.toneMarkers), phrase: cloneJson(l.phraseBoundaries) };
     snap.ui[l.id] = { visible: l.visible, muted: l.muted, locked: l.locked,
       tablatureEnabled: l.tablatureEnabled !== false, volume: normLayerVolume(l.volume) };
   }
@@ -150,6 +152,10 @@ function restore(snap) {
     if (snap.boxes) l.refBoxes = JSON.parse(JSON.stringify(snap.boxes[l.id] || {}));
     if (snap.holds) l.handHolds = (snap.holds[l.id] || []).map((h) => ({ ...h }));
     if (snap.capo && snap.capo[l.id] != null) l.capo = snap.capo[l.id];
+    if (snap.marks && snap.marks[l.id]) {
+      l.toneMarkers = cloneJson(snap.marks[l.id].tone);
+      l.phraseBoundaries = cloneJson(snap.marks[l.id].phrase);
+    }
     const ui = snap.ui && snap.ui[l.id];
     if (ui) {
       l.visible = ui.visible; l.muted = ui.muted;
