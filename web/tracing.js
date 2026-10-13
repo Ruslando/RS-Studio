@@ -619,6 +619,7 @@ export function runFindSimilar() {
   clearMatches();
   S.matches = computeSimilarMatches(selNotes, lane);
   if (!S.matches.length) { toast("No similar passages found"); draw(); return; }
+  toast(`Found ${S.matches.length} similar passage${S.matches.length === 1 ? "" : "s"}`);
   draw();
 }
 
@@ -737,7 +738,8 @@ export function drawMatches() {
     sctx.strokeStyle = active ? PAINT.trace : hexA(PAINT.trace, 0.7);
     sctx.strokeRect(bx + 0.5, byTop + 0.5, bw - 1, byBot - byTop - 1);
     sctx.restore();
-    const pct = `${Math.round(m.score * 100)}%`;
+    // "2/5 · 84%": which one this is (left to right), of how many, and how close.
+    const pct = `${i + 1}/${S.matches.length} · ${Math.round(m.score * 100)}%`;
     const tw = sctx.measureText(pct).width;
     const ly = clamp(byTop, vy0, vy0 + S.stageHeight - 13);
     sctx.fillStyle = active ? PAINT.trace : hexA(PAINT.trace, 0.85);

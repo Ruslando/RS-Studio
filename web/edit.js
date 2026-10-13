@@ -19,7 +19,7 @@ import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, tog
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachSelection, nextRef, noteBounds, reconcileReferences, refMenuEntry } from "./references.js";
+import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, refMenuEntry } from "./references.js";
 import { chooseShapePositions, cleanupShapeMembership, shapeGroups, ungroupShape } from "./shapes.js";
 import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
@@ -983,7 +983,8 @@ export function openRefMenu(clientX, clientY, occ) {
     { label: "Delete this occurrence", fn: () => deleteRefOccurrence(occ) },
     { label: "Delete entire reference", fn: () => deleteRefGroup(occ.lane, occ.ref) },
     { sep: true },
-    { label: "Detach (unlink, keep notes)", fn: () => detachSelection() },
+    { label: "Detach this occurrence (keep notes)", fn: () => detachSelection() },
+    { label: "Detach entire reference (keep notes)", fn: () => detachRefGroup(occ.lane, occ.ref) },
   ]);
   markWalkthroughMenu(m);
   menuOpenCount++;

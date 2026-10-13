@@ -538,7 +538,9 @@ export const TOURS = {
         do: ACT.findSimilar,
         spot: "spectrogramArea",
         title: "Find similar",
-        body: "Selected notes of a motif can be used to find similar passages in a song. Right-click to open the context menu and choose Find similar passage.",
+        body: "Selected notes of a motif can be used to find similar passages in a song. The search reads the audio layer you are viewing, so a separated stem of that instrument gives the best results; the full song works, but finds less.
+
+Right-click to open the context menu and choose Find similar passage.",
         until: UNTIL.matches,
         tasks: [
           { label: "Open the context menu", until: UNTIL.menuOpened },
@@ -555,7 +557,7 @@ export const TOURS = {
         do: ACT.prepareMatches,
         spot: "spectrogramArea",
         title: "Similar passages",
-        body: "If similar passages are found, you'll see white outlined boxes with a similarity rating inside the editing area. Hover over a box to preview it; moving away stops the preview. Click a box to paste the selected notes there. When the source notes belong to a reference, choose a linked reference or an independent copy.",
+        body: "If similar passages are found, you'll see outlined boxes inside the editing area. Each label counts them and rates the match: 2/5 · 84% is the second of five, 84% similar. Hover over a box to preview it; moving away stops the preview. Click a box to paste the selected notes there. When the source notes belong to a reference, choose a linked reference or an independent copy.",
         until: UNTIL.notes,
         task: "Paste notes from a similar passage",
         allow: "#pasteBackdrop",
