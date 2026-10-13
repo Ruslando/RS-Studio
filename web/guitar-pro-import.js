@@ -224,7 +224,6 @@ export function init_guitar_pro_import() {
   gpImportCancel.addEventListener("click", closeImport);
   gpImportClose.addEventListener("click", closeImport);
   gpImportConfirm.addEventListener("click", confirmImport);
-  gpImportBackdrop.addEventListener("click", (event) => { if (event.target === gpImportBackdrop) closeImport(); });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !gpImportBackdrop.hidden) closeImport();
   });

@@ -444,15 +444,12 @@ export function init_ui() {
   wireMenu("menuMarkerLanes", () => setMarkerLanes(!railsHidden()));
   for (const button of panelControls("markers")) button.addEventListener("click", () => setMarkerLanes(!railsHidden()));
   settingsClose.addEventListener("click", cancelLayerSettings);
-  layerSettingsBackdrop.addEventListener("click", (e) => { if (e.target === layerSettingsBackdrop) cancelLayerSettings(); });
   $("layerCancel").addEventListener("click", cancelLayerSettings);
   $("layerSave").addEventListener("click", closeLayerSettings);
   tuningManagerClose.addEventListener("click", cancelTuningManager);
-  tuningManagerBackdrop.addEventListener("click", (e) => { if (e.target === tuningManagerBackdrop) cancelTuningManager(); });
   $("tuningCancel").addEventListener("click", cancelTuningManager);
   $("tuningSave").addEventListener("click", closeTuningManager);
   settingsModalClose.addEventListener("click", cancelSettingsModal);
-  settingsModalBackdrop.addEventListener("click", (e) => { if (e.target === settingsModalBackdrop) cancelSettingsModal(); });
   $("settingsCancel").addEventListener("click", cancelSettingsModal);
   $("settingsApply").addEventListener("click", applySettingsModal);
   wireMenu("menuTraceSettings", () => openSettingsModal("trace"));

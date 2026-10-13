@@ -117,7 +117,6 @@ function confirmDetectMerge(count, laneName, scoped) {
       confirmReplaceBtn.removeEventListener("click", onReplace);
       confirmAppendBtn.removeEventListener("click", onAppend);
       confirmCancelBtn.removeEventListener("click", onCancel);
-      confirmBackdrop.removeEventListener("mousedown", onBackdrop);
       window.removeEventListener("keydown", onKey, true);
       resolve(v);
     };
@@ -125,12 +124,10 @@ function confirmDetectMerge(count, laneName, scoped) {
     const onAppend = () => finish("append");
     const onCancel = () => finish(null);
     cancelMerge = onCancel;
-    const onBackdrop = (e) => { if (e.target === confirmBackdrop) onCancel(); };
     const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } };
     confirmReplaceBtn.addEventListener("click", onReplace);
     confirmAppendBtn.addEventListener("click", onAppend);
     confirmCancelBtn.addEventListener("click", onCancel);
-    confirmBackdrop.addEventListener("mousedown", onBackdrop);
     window.addEventListener("keydown", onKey, true);   // capture so it beats the global Esc handlers
     confirmReplaceBtn.focus();
   });

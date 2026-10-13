@@ -271,7 +271,6 @@ export function confirmPasteMode({ signal } = {}) {
       pasteCopyBtn.removeEventListener("click", onCopy);
       pasteAsRefBtn.removeEventListener("click", onRef);
       pasteCancelBtn.removeEventListener("click", onCancel);
-      pasteBackdrop.removeEventListener("mousedown", onBackdrop);
       window.removeEventListener("keydown", onKey, true);
       signal?.removeEventListener("abort", onCancel);
       resolve(v);
@@ -279,12 +278,10 @@ export function confirmPasteMode({ signal } = {}) {
     const onCopy = () => finish("copy");
     const onRef = () => finish("reference");
     const onCancel = () => finish(null);
-    const onBackdrop = (e) => { if (e.target === pasteBackdrop) onCancel(); };
     const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } };
     pasteCopyBtn.addEventListener("click", onCopy);
     pasteAsRefBtn.addEventListener("click", onRef);
     pasteCancelBtn.addEventListener("click", onCancel);
-    pasteBackdrop.addEventListener("mousedown", onBackdrop);
     window.addEventListener("keydown", onKey, true);   // capture so it beats the global Esc handlers
     signal?.addEventListener("abort", onCancel, { once: true });
     pasteAsRefBtn.focus();

@@ -614,10 +614,6 @@ export async function exportModernGp() {
 
 export function init_tablature() {
   tabViewCloseEl?.addEventListener("click", () => setView("spec"));
-  // Click-away on the scrim closes it, like every other window over the editor.
-  tabViewBackdropEl?.addEventListener("mousedown", (event) => {
-    if (event.target === tabViewBackdropEl) setView("spec");
-  });
   // Keep alphaTab's player state and cursor in step with the app transport. In
   // external-media mode play()/pause() round-trip through our handler back to the
   // same <audio> element, where they are no-ops — no feedback loop. The echo()

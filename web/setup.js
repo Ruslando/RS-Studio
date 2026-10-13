@@ -106,9 +106,6 @@ export async function init_setup() {
   $("setupAudioRecheck").addEventListener("click", refreshRocksmithReadiness);
   $("setupSkip").addEventListener("click", finishSetup);
   $("setupClose").addEventListener("click", finishSetup);
-  $("setupBackdrop").addEventListener("click", (event) => {
-    if (event.target === $("setupBackdrop")) finishSetup();
-  });
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if ($("setupBackdrop").hidden) return false;
     finishSetup();

@@ -542,7 +542,6 @@ export function initNewProject({ onCreated, onClosed, canLeave }) {
   newProjBtn.addEventListener("click", openNewProject);
   npCancelBtn.addEventListener("click", closeNewProject);
   $("npClose").addEventListener("click", closeNewProject);
-  modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop) closeNewProject(); });
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (modalBackdrop.hidden) return false;
     closeNewProject(); return true;

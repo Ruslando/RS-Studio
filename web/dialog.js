@@ -43,7 +43,6 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
       actionConfirmAccept.removeEventListener("click", onConfirm);
       actionConfirmCancel.removeEventListener("click", onCancel);
       actionConfirmDiscard.removeEventListener("click", onDiscard);
-      actionConfirmBackdrop.removeEventListener("mousedown", onBackdrop);
       window.removeEventListener("keydown", onKey, true);
       signal?.removeEventListener("abort", onAbort);
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected)
@@ -54,7 +53,6 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
     const onCancel = () => finish("cancel");
     const onDiscard = () => finish(discardLabel ? "discard" : "alternative");
     const onAbort = () => finish("cancel");
-    const onBackdrop = (event) => { if (event.target === actionConfirmBackdrop) onCancel(); };
     const onKey = (event) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -66,7 +64,6 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
     actionConfirmAccept.addEventListener("click", onConfirm);
     actionConfirmCancel.addEventListener("click", onCancel);
     actionConfirmDiscard.addEventListener("click", onDiscard);
-    actionConfirmBackdrop.addEventListener("mousedown", onBackdrop);
     window.addEventListener("keydown", onKey, true);
     signal?.addEventListener("abort", onAbort, { once: true });
     actionConfirmCancel.focus();

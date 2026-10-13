@@ -324,7 +324,6 @@ export function initStemSettings({ onRename, onRemove, onReplaced }) {
   onStemReplaced = onReplaced;
 
   stemSettingsClose.addEventListener("click", closeStemSettings);
-  stemSettingsBackdrop.addEventListener("click", (e) => { if (e.target === stemSettingsBackdrop) closeStemSettings(); });
   $("stemCancel").addEventListener("click", closeStemSettings);
   $("stemSave").addEventListener("click", saveStemSettings);
   $("stemRemove").addEventListener("click", requestStemRemoval);
