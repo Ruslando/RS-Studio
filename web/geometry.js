@@ -45,8 +45,16 @@ export function pitchAt(y) {
 let viewerInset = -1;
 export function stageRoom() {
   if (viewerInset < 0 && viewer.clientHeight > 0) viewerInset = parseFloat(getComputedStyle(viewer).paddingTop) || 0;
-  return viewer.clientHeight - Math.max(0, viewerInset);
+  return viewer.clientHeight - Math.max(0, viewerInset) - hBarHeight();
 }
+
+// The horizontal scrollbar gets its own strip under the stage instead of covering
+// the lowest rows. #scroll always shows it (overflow-x: scroll), so the strip never
+// changes with zoom. Chromium draws the styled 12px bar in that room; Firefox's
+// overlay bar takes none (measures 0) and floats over the same reserved strip.
+const H_BAR = 12;
+const hBarTaken = () => scroll.offsetHeight - scroll.clientHeight;
+export const hBarHeight = () => Math.max(H_BAR, hBarTaken());
 
 export function layout() {
   // A hidden spectrogram reports a zero-sized viewport while tablature is open.
@@ -88,8 +96,10 @@ export function layout() {
   // visible stage height so the vertical scrollbar appears.
   // Only enable vertical overflow when actually zoomed, else the horizontal
   // scrollbar's height would force a spurious vertical bar at 100% pitch zoom.
-  stageSpacer.style.height = Math.max(contentH(), S.stageHeight) + "px";
-  scroll.style.height = S.stageHeight + "px";
+  // An overlay bar leaves the strip inside the scroll range: pad the content by it
+  // so a pitch-zoomed view still scrolls down to the lowest row.
+  stageSpacer.style.height = Math.max(contentH(), S.stageHeight) + hBarHeight() - hBarTaken() + "px";
+  scroll.style.height = S.stageHeight + hBarHeight() + "px";
   scroll.style.overflowY = S.zoomY > 1 ? "auto" : "hidden";
   const rulerW = Math.round(scaleWidth * dp), rulerH = Math.round(S.stageHeight * dp);
   for (const scale of [ruler, rulerRight]) {
