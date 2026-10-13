@@ -552,12 +552,17 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 .dp-body { padding: var(--s-row); display: flex; flex-direction: column; gap: var(--s-row); }
 .dp-body .field-group.block { width: 100%; min-width: 0; align-items: stretch; }
 #detectModel { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
-.dp-on { margin: 0; color: var(--label); font: 400 var(--text-body)/1.5 var(--font-ui); }
-.dp-scope { color: var(--label); font: 400 var(--text-body)/1.5 var(--font-ui); }
+/* A value that is shown, not edited, keeps its own width in the field column. */
+.live-editor .field-group > :is(.chip, .dp-range) { justify-self: start; }
+.dp-range { display: inline-flex; align-items: center; height: var(--h-compact); color: var(--text); font: 400 var(--text-control)/1 var(--font-ui); }
+.dp-range.is-range { font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+/* A popover that starts a job ends in its one primary, on the right like a window's;
+   what the last run did is said beside it. */
+.dp-actions { display: flex; align-items: center; gap: var(--s-row); margin-top: var(--s-pair); }
+.dp-result { flex: 1; min-width: 0; color: var(--label); font: 400 var(--text-caption)/1.4 var(--font-ui); overflow-wrap: anywhere; }
 
-.dp-scope #detectStatus { color: var(--text); }
 
-.dp-run { align-self: flex-start; }
+.dp-run { flex: none; margin-left: auto; }
 
 
 

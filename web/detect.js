@@ -89,9 +89,13 @@ async function loadDetectors() {
 // Reflect what Detect will run on (whole stem, or the Alt-dragged frame) while
 // idle. Result/error text overwrites this until the next frame change.
 export function updateDetectStatus() {
-  if (detectStatus) detectStatus.textContent = S.detectRegion
-    ? `range ${fmtTime(S.detectRegion.t0)}–${fmtTime(S.detectRegion.t1)}`
-    : "whole stem";
+  const range = document.getElementById("detectRange");
+  if (range) {
+    // Two times are values, so they are set as values; "Whole song" is a word.
+    range.textContent = S.detectRegion ? `${fmtTime(S.detectRegion.t0)} – ${fmtTime(S.detectRegion.t1)}` : "Whole song";
+    range.classList.toggle("is-range", !!S.detectRegion);
+  }
+  if (detectStatus) detectStatus.textContent = "";
   if (detectTargetLayer) {
     const lane = targetLane();
     detectTargetLayer.textContent = lane ? lane.name : "—";

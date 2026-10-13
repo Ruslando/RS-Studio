@@ -410,6 +410,10 @@ it edits, kept 8 inside the viewport.
   buttons: delete (if any) and close.
 - Body: padding 12, rows 8 apart, each row a 96-wide label and its field.
 - No footer, no scrim; a primary only when the popover starts a job (rules 7 and 9).
+- A value that is shown and not edited is a row like any other: its label, then
+  a chip for a layer or audio source, or plain text; times in mono.
+- A popover that starts a job ends in `.dp-actions`: what the last run did on
+  the left (12, `--label`), the primary on the right.
 
 ### 4.10 Status
 
@@ -579,7 +583,7 @@ Remove a line when it is fixed; add one when a deviation is found.
 |---|---|---|
 | D31 | The UI still runs on alias class names (`.sp-head`, `.op-head`, `.modal-footer`, `.view-switch`, `.menu-list`, `.sp-x`, `.pop-x`) that share their rules with the names in section 4. New markup uses the names in section 4; the aliases go when their markup is next touched | `components.css` |
 | D35 | Three status lines are still written out on their own: `#tabWarn`, `.np-drop.error .np-title`, `.setup-readiness` | `style.css` |
-| D36 | Popovers are consistent but plain; Detect notes and the marker editors are due a redesign as one family | `#detectPanel`, `.live-editor` |
+| D36 | The marker editors are consistent but plain; Detect notes has been redrawn, they have not | `.live-editor` |
 
 **Findings the audit reports that are deliberate**
 

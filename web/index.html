@@ -427,12 +427,25 @@
       <button id="detectClose" class="pop-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
     </div>
     <div class="dp-body">
-      <p class="dp-on">On <span class="chip"><span class="chip-dot"></span><span id="detectStemName">stem</span></span> → note layer <span class="chip" id="detectTargetLayerChip"><span class="chip-dot"></span><span id="detectTargetLayer">—</span></span></p>
+      <!-- The marker editors' rows: what it reads, where the notes go, with what,
+           and over which stretch of the song. The result of a run is a line beside
+           the button, not a value in the form. -->
+      <div class="field-group block"><span class="label">Audio</span>
+        <span class="chip"><span class="chip-dot"></span><span id="detectStemName">stem</span></span>
+      </div>
+      <div class="field-group block"><span class="label">Note layer</span>
+        <span class="chip" id="detectTargetLayerChip"><span class="chip-dot"></span><span id="detectTargetLayer">—</span></span>
+      </div>
       <label class="field-group block"><span class="label">Model <span class="info" role="img" tabindex="0" title="Detection model" aria-label="Detection model">i</span></span>
         <select id="detectModel"></select>
       </label>
-      <div class="dp-scope">Scope <span id="detectStatus" class="legend">whole source</span></div>
-      <button id="detectBtn" class="primary dp-run"><span id="detectButtonLabel">Detect</span></button>
+      <div class="field-group block"><span class="label">Range <span class="info" role="img" tabindex="0" title="Hold Alt and drag on the spectrogram to detect only that part of the song." aria-label="Hold Alt and drag on the spectrogram to detect only that part of the song.">i</span></span>
+        <span id="detectRange" class="dp-range">Whole song</span>
+      </div>
+      <div class="dp-actions">
+        <span id="detectStatus" class="dp-result" role="status"></span>
+        <button id="detectBtn" class="primary dp-run"><span id="detectButtonLabel">Detect</span></button>
+      </div>
     </div>
   </div>
 
