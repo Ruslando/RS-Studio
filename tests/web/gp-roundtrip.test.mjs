@@ -1,6 +1,6 @@
 // Run: node tests/web/gp-roundtrip.test.mjs
 // Import a Guitar Pro file, add a note, export: every original note keeps its string
-// and fret, and the added note is fingered around them.
+// and fret, and the added note is fingered around them. With and without a capo.
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { convertGpScore } from "../../web/guitar-pro-core.js";
@@ -9,47 +9,60 @@ import { voiceNotes } from "../../web/voicing-core.js";
 
 const alphaTab = createRequire(import.meta.url)("../../web/vendor/alphatab/alphaTab.min.js");
 const settings = new alphaTab.Settings();
-const pin = (string, fret) => ({ string, fret, scope: "local" });
-
-// The source file: positions the automatic fingering would not pick on its own.
-const source = new alphaTab.model.Score();
-for (let i = 0; i < 2; i++) source.addMasterBar(new alphaTab.model.MasterBar());
-appendCreatedLanes(alphaTab, source, [{
-  name: "Guitar", tuning: "standard", customTuning: "E2 A2 D3 G3 B3 E4", gmProgram: 29, notes: [
-    { id: 1, start: 0.0, end: 0.5, pitch: 45, pos: pin(5, 5) },   // A2 on low E, 5
-    { id: 2, start: 0.0, end: 0.5, pitch: 52, pos: pin(4, 7) },   // E3 on A, 7
-    { id: 3, start: 0.5, end: 1.0, pitch: 48, pos: pin(5, 8) },   // C3 on low E, 8
-    { id: 4, start: 1.0, end: 1.5, pitch: 50, pos: pin(4, 5) },   // D3 on A, 5
-    { id: 5, start: 2.0, end: 2.5, pitch: 55, pos: pin(3, 5) },   // G3 on D, 5
-  ],
-}], [0, 2, 4]);
-const bytes = new alphaTab.exporter.Gp7Exporter().export(source, settings);
+const open = [64, 59, 55, 50, 45, 40];                // app order: string 0 = high E
 const load = (data) => alphaTab.importer.ScoreLoader.loadScoreFromBytes(data, settings);
-
-const imported = convertGpScore(load(bytes), [0]);
-const lane = imported.editLanes[0];
-const tuning = imported.guitarPro.selectedTracks[0].staves[0].tuning;
+const write = (score) => new alphaTab.exporter.Gp7Exporter().export(score, settings);
 const key = (n) => `${n.start.toFixed(3)}:${n.pitch}`;
-const original = new Map(lane.notes.map((n) => [key(n), `${n.pos.string}:${n.pos.fret}`]));
-assert.equal(original.size, 5);
+const at = (p) => `${p.string}:${p.fret}`;
 
-// Add A3 into the opening chord, then finger the lane the way the app does.
-const added = { id: "added", start: lane.notes[0].start, end: lane.notes[0].end, pitch: 57 };
-lane.notes.push(added);
-const voiced = voiceNotes(lane.notes, tuning);
-for (const n of lane.notes) if (n !== added)
-  assert.equal(`${voiced.get(n).string}:${voiced.get(n).fret}`, original.get(key(n)), `imported ${key(n)} kept`);
-assert.ok(voiced.get(added), "the added note is placed");
-const played = { ...lane, notes: lane.notes.map((n) => ({ ...n, pos: { ...n.pos, ...voiced.get(n), scope: "local" } })) };
+function roundTrip(capo) {
+  // Frets count from the capo; positions the automatic fingering would not pick.
+  const note = (id, start, string, fret) =>
+    ({ id, start, end: start + 0.5, pitch: open[string] + capo + fret, pos: { string, fret, scope: "local" } });
+  const source = new alphaTab.model.Score();
+  for (let i = 0; i < 2; i++) source.addMasterBar(new alphaTab.model.MasterBar());
+  appendCreatedLanes(alphaTab, source, [{
+    name: "Guitar", customTuning: "E4 B3 G3 D3 A2 E2", gmProgram: 25, capo, notes: [
+      note(1, 0.0, 5, 5), note(2, 0.0, 4, 7),           // power chord at 5/7
+      note(3, 0.5, 5, 8), note(4, 1.0, 4, 5), note(5, 2.0, 3, 5),
+    ],
+  }], [0, 2, 4]);
+  const bytes = write(source);
 
-const out = applyImportedProjection(alphaTab, load(bytes), [played], [0]);
-const again = convertGpScore(load(new alphaTab.exporter.Gp7Exporter().export(out, settings)), [0]).editLanes[0];
-for (const [k, pos] of original) {
-  const n = again.notes.find((m) => key(m) === k);
-  assert.ok(n, `exported ${k} exists`);
-  assert.equal(`${n.pos.string}:${n.pos.fret}`, pos, `exported ${k} keeps its string and fret`);
+  const imported = convertGpScore(load(bytes), [0]);
+  const lane = imported.editLanes[0];
+  assert.equal(lane.capo, capo);
+  const tuning = open.map((pitch) => pitch + capo);     // laneFretTuning
+  const original = new Map(lane.notes.map((n) => [key(n), at(n.pos)]));
+  assert.equal(original.size, 5);
+  for (const n of lane.notes) assert.equal(tuning[n.pos.string] + n.pos.fret, n.pitch, "imported pitch = open + capo + fret");
+
+  // Add a note into the opening chord, then finger the lane the way the app does.
+  const added = { id: "added", start: lane.notes[0].start, end: lane.notes[0].end, pitch: open[2] + capo + 7 };
+  lane.notes.push(added);
+  const voiced = voiceNotes(lane.notes, tuning, Infinity, { capo });
+  for (const n of lane.notes) if (n !== added) assert.equal(at(voiced.get(n)), original.get(key(n)), `capo ${capo}: imported ${key(n)} kept`);
+  assert.ok(voiced.get(added), "the added note is placed");
+  const played = { ...lane, notes: lane.notes.map((n) => ({ ...n, pos: { ...n.pos, ...voiced.get(n), scope: "local" } })) };
+
+  const again = convertGpScore(load(write(applyImportedProjection(alphaTab, load(bytes), [played], [0]))), [0]).editLanes[0];
+  assert.equal(again.capo, capo, "the export keeps the capo");
+  for (const [k, pos] of original) {
+    const n = again.notes.find((m) => key(m) === k);
+    assert.ok(n, `exported ${k} exists`);
+    assert.equal(at(n.pos), pos, `capo ${capo}: exported ${k} keeps its string and fret`);
+  }
+  assert.equal(at(again.notes.find((m) => key(m) === key(added)).pos), at(voiced.get(added)),
+    "the export writes the added note where the fretboard shows it");
 }
-const back = again.notes.find((m) => key(m) === key(added));
-assert.equal(`${back.pos.string}:${back.pos.fret}`, `${voiced.get(added).string}:${voiced.get(added).fret}`,
-  "the export writes the added note where the fretboard shows it");
+
+roundTrip(0);
+roundTrip(2);
+
+// A capo shortens the neck: on capo 5, fret 18 above it is the 23rd fret — off a 22.
+{
+  const high = { start: 0, end: 0.5, pitch: open[0] + 5 + 18 };
+  assert.equal(voiceNotes([high], open.map((p) => p + 5), Infinity, { capo: 5 }).get(high), undefined);
+  assert.ok(voiceNotes([high], open.map((p) => p + 5), Infinity, { capo: 0 }).get(high), "without the capo it fits");
+}
 console.log("gp-roundtrip: ok");

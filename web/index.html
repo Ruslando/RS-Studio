@@ -615,6 +615,9 @@
             <label class="field-group block"><span class="label">Tuning <span class="info" role="img" tabindex="0" title="String tuning used for the tab" aria-label="String tuning used for the tab">i</span></span>
               <select id="layerTun"></select>
             </label>
+            <label class="field-group block"><span class="label">Capo <span class="info" role="img" tabindex="0" title="Capo fret. Tab frets count from the capo, as in Guitar Pro; changing it keeps each note on its string" aria-label="Capo fret. Tab frets count from the capo, as in Guitar Pro; changing it keeps each note on its string">i</span></span>
+              <select id="layerCapo"></select>
+            </label>
             <!-- The paragraph that used to explain this checkbox is its tooltip
                  now (rule 24): a sentence a control needs belongs to that control. -->
             <label class="field-group block"><span class="label">Rocksmith arrangement <span class="info" role="img" tabindex="0" title="Assigns this note layer's role in a Rocksmith export. Auto chooses from the tuning; None excludes it from tablature." aria-label="Assigns this note layer's role in a Rocksmith export. Auto chooses from the tuning; None excludes it from tablature.">i</span></span>
@@ -796,6 +799,15 @@
                matter of taste rather than a fact about the board, which is why it is
                a setting at all, and the two sides are separate because the one you
                are working against is usually one of them. -->
+          <div class="section">
+            <div class="section-head"><span>Fret numbers</span></div>
+            <label class="field-group block"><span class="label">With a capo <span class="info" role="img" tabindex="0" title="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo." aria-label="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo.">i</span></span>
+              <select id="fretNumbering">
+                <option value="capo">Count from the capo</option>
+                <option value="nut">Count from the nut</option>
+              </select>
+            </label>
+          </div>
           <div class="section">
             <div class="section-head"><span>Onion skin</span></div>
             <label class="chk"><input type="checkbox" id="fretboardOnionEnabled" /> Show neighbouring chords in fretboard edit mode</label>

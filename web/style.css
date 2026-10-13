@@ -711,7 +711,7 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 }
 @media (max-width: 720px) {
   .rs-arr-row { grid-template-columns: auto 1fr; }
-  .rs-arr-kind, .rs-arr-tuning { grid-column: 2; }
+  .rs-arr-kind, .rs-arr-tuning, .rs-arr-capo { grid-column: 2; }
 }
 
 #modalBackdrop { z-index: 100; }
@@ -911,7 +911,7 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 
 .rs-arr-row {
   display: grid; align-items: center;
-  grid-template-columns: auto minmax(80px, 1fr) 16px 48px minmax(104px, 132px) minmax(180px, 1.4fr);
+  grid-template-columns: auto minmax(80px, 1fr) 16px 48px minmax(104px, 132px) minmax(180px, 1.4fr) minmax(84px, 96px);
 }
 .rs-arr-row > .rs-arr-on     { grid-column: 1; }
 .rs-arr-row > .rs-arr-name   { grid-column: 2; }
@@ -919,6 +919,7 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 .rs-arr-row > .count         { grid-column: 4; }
 .rs-arr-row > .rs-arr-kind   { grid-column: 5; }
 .rs-arr-row > .rs-arr-tuning { grid-column: 6; }
+.rs-arr-row > .rs-arr-capo   { grid-column: 7; }
 .rs-arr-name {
   min-width: 0; color: var(--text); font: 400 var(--text-control)/1 var(--font-ui);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

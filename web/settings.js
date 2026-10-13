@@ -67,6 +67,7 @@ export function init_settings() {
   // the voicing engine reads its own preferences — so persisting them and repainting
   // is the whole wiring. These controls live in Editor options.
   persistSetting($("fretboardOnionEnabled"), { bool: true });
+  persistSetting($("fretNumbering"));
   for (const id of ["onionAlphaPrev", "onionAlphaNext"]) {
     persistSetting($(id));
     const show = () => {

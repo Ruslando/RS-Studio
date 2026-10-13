@@ -1070,6 +1070,25 @@ export function pinnedPositions(notes, tuning) {
   return shape;
 }
 
+// Frets count from the capo, so moving it keeps every note on its string and moves
+// its fret by the difference. A pin that lands behind the capo is kept, not deleted:
+// it lapses (pinnedPositions rejects a negative fret), the note is fingered like any
+// other, and moving the capo back — Cancel does exactly that — restores it.
+// Returns whether anything changed.
+export function moveCapo(lane, capo) {
+  const delta = capo - (Number(lane.capo) || 0);
+  if (!delta) return false;
+  lane.capo = capo;
+  const shift = (p) => (Number.isInteger(p?.fret) ? { ...p, fret: p.fret - delta } : p);
+  for (const note of lane.notes) {
+    if (note.pos) note.pos = shift(note.pos);
+    if (note.arrangement?.notes) note.arrangement = { ...note.arrangement, notes: note.arrangement.notes.map(shift) };
+  }
+  // Where the player put the hand moves with it, so it stays on the same wood.
+  if (Array.isArray(lane.handHolds)) lane.handHolds = lane.handHolds.map((h) => ({ ...h, fret: h.fret - delta }));
+  return true;
+}
+
 // A column is "locked" to an explicit voicing when EVERY note in it is pinned.
 // Returns that pinned shape (Map note -> {string, fret}) or null. A column where
 // only some notes are pinned is voiced around them — see `pinned` in registerColumns.
@@ -1151,8 +1170,8 @@ export function enumerateShapes(notes, tuning) {
 // The pitches a tuning can actually produce: lowest open string up to the
 // highest string's last fret. A note outside it gets no position anywhere, so
 // it drops out of every shape silently — the caller has to say so.
-export const outOfFretboardRange = (pitch, tuning) =>
-  pitch < Math.min(...tuning) || pitch > Math.max(...tuning) + MAX_FRET;
+export const outOfFretboardRange = (pitch, tuning, maxFret = MAX_FRET) =>
+  pitch < Math.min(...tuning) || pitch > Math.max(...tuning) + maxFret;
 
 // enumerateShapes always returns something — a greedy last resort with no
 // playable fingering — so "these notes cannot be played together" is otherwise
@@ -1902,7 +1921,8 @@ function holdsByColumn(columns, holds) {
   const out = new Array(columns.length).fill(null);
   for (const h of Array.isArray(holds) ? holds : []) {
     const t = Number(h?.t), fret = Number(h?.fret);
-    if (!Number.isFinite(t) || !Number.isFinite(fret) || fret < 0) continue;
+    // At or behind the capo (moveCapo shifted it there) a hold has lapsed, like a pin.
+    if (!Number.isFinite(t) || !Number.isFinite(fret) || fret < 1) continue;
     const i = columns.findIndex((c) => Number(c.t0) >= t - 1e-6);
     if (i >= 0 && out[i] == null) out[i] = { fret };
   }
@@ -1915,7 +1935,7 @@ function registerColumns(columns, tuning, options = {}) {
   const seat = new Map(order.map((appIndex, leanIndex) => [appIndex, leanIndex]));
 
   const holds = holdsByColumn(columns, options.holds);
-  const frets = fretboardFor(options.instrument).frets;
+  const frets = fretboardFor(options.instrument).frets - (Number(options.capo) || 0);
   const pins = columns.map(({ notes }) => lockedShape(notes, tuning));
   const spread = spreadPins(columns, pins);
   const input = columns.map(({ notes, t0 }, i) => {

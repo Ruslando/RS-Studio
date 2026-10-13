@@ -173,9 +173,14 @@ export const dotCentre = (n, s = GUITAR) =>
 
 // ---- where the hand is ----
 // A fingertip presses in the space behind the wire, which is where an inlay is
-// too. Fret 0 is not pressed at all, so it reads on the nut.
+// too. Fret 0 is not pressed at all, so it reads on the nut — or on the capo, when
+// the neck carries one (`s.capo`, see laneSpec). Frets count from the capo, as the
+// tab does, so a fretted note sits `capo` spaces further up the wood.
 export const fretCentre = (fret, s = GUITAR) =>
-  fret <= 0 ? -s.nutDepth / 2 : dotCentre(fret, s);
+  fret <= 0 ? (s.capo ? capoLine(s) : -s.nutDepth / 2) : dotCentre(fret + (s.capo || 0), s);
+
+// Where a capo clamps: just behind its fret's wire, where a finger would press.
+export const capoLine = (s) => fretDistance(s.capo, s.scale) - 3;
 
 // A hand is one grip at a time, not six independent strings.
 //

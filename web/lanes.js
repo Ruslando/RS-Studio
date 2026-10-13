@@ -12,9 +12,10 @@ import { ungroupShape } from "./shapes.js";
 import { refreshSaveState } from "./project.js";
 import { S, setSelection } from "./store.js";
 import { TUNINGS, addCustomTuning, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, removeCustomTuning, tuningToNames, updateCustomTuning } from "./tablature.js";
-import { closeLayerSettings, layerArrangement, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName, tuningAddBtn, tuningListEl } from "./ui.js";
+import { closeLayerSettings, layerArrangement, layerCapo, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName, tuningAddBtn, tuningListEl } from "./ui.js";
 import { clamp, layerVolumePercent, normLayerVolume, noteName, volumeToDb } from "./util.js";
 import { withStartTone } from "./tone-marker-core.js";
+import { moveCapo } from "./voicing-core.js";
 
 // ---- lane / stem helpers ----
 // Edit lanes are the only lanes and are GLOBAL (shared across every stem view).
@@ -36,6 +37,13 @@ export function setLaneNotePitch(lane, note, desiredPitch) {
   if (desiredPitch !== note.pitch && note.shapeId) ungroupShape(lane.notes, note.shapeId);
   if (Number.isFinite(note.soundingPitch)) note.soundingPitch += desiredPitch - note.pitch;
   note.pitch = desiredPitch;
+}
+
+// The highest capo offered: past the 12th the neck left is shorter than a ukulele's.
+export const MAX_CAPO = 12;
+
+export function setLaneCapo(lane, capo) {
+  if (moveCapo(lane, capo)) S.voicingRevision++;
 }
 
 function clearLaneShapes(lane) {
@@ -119,7 +127,7 @@ export function renderLayerSettings() {
   // The chip carries the layer's own identity dot — the same colour the stage
   // draws it in, so the dialog names the object the way the sidebar does.
   spLayerName.parentElement?.style.setProperty("--chip-dot", lane?.color || "");
-  for (const el of [layerName, layerColor, layerInstr, layerTone, layerTun, layerArrangement, layerVolume]) if (el) el.disabled = !lane;
+  for (const el of [layerName, layerColor, layerInstr, layerTone, layerTun, layerCapo, layerArrangement, layerVolume]) if (el) el.disabled = !lane;
   buildTuningOptions(lane);
   if (!lane) return;
   if (layerName && document.activeElement !== layerName) layerName.value = lane.name || "";
@@ -130,6 +138,13 @@ export function renderLayerSettings() {
   layerInstr.value = instrKey(lane.instrument);
   layerTone.value = toneKey(lane.tone);
   layerTun.value = isValidTuningKey(lane.tuning) ? lane.tuning : INSTRUMENTS[layerInstr.value].tuning;
+  if (layerCapo) {
+    // Rebuilt each time so a higher capo from an imported file still shows.
+    layerCapo.replaceChildren();
+    for (let fret = 0; fret <= Math.max(MAX_CAPO, Number(lane.capo) || 0); fret++)
+      layerCapo.append(new Option(fret ? `Fret ${fret}` : "No capo", String(fret)));
+    layerCapo.value = String(Number(lane.capo) || 0);
+  }
   if (layerArrangement) {
     const value = lane.rocksmithArrangement;
     layerArrangement.value = ["none", "lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm", "bass", "alt_bass", "bonus_bass"].includes(value)
@@ -584,6 +599,12 @@ export function init_lanes() {
       lane.customTuning = tuningToNames(laneTuning(lane));
       clearLaneShapes(lane);
       renderLayerSettings(); refreshTabIfOpen();
+      refreshSaveState();
+    });
+    if (layerCapo) layerCapo.addEventListener("change", () => {
+      const lane = settingsLane(); if (!lane) return;
+      setLaneCapo(lane, Number(layerCapo.value) || 0);
+      renderLayerSettings(); draw(); refreshTabIfOpen();
       refreshSaveState();
     });
     if (layerArrangement) layerArrangement.addEventListener("change", () => {

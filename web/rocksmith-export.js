@@ -3,7 +3,7 @@
 // other exports.
 
 import { $ } from "./dom.js";
-import { editLanes } from "./lanes.js";
+import { MAX_CAPO, editLanes } from "./lanes.js";
 import { isTablatureLane } from "./layer-role.js";
 import { applyCoverChange, clearProjectCover, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { downloadProjectBlob, toast } from "./notify.js";
@@ -183,6 +183,16 @@ function renderRsArrangements(lanes) {
     row.querySelector(".rs-arr-kind").addEventListener("change", () =>
       updateRsTuningSelect(row, rsTuningFromSelect(row.querySelector(".rs-arr-tuning"))));
     updateRsTuningSelect(row, row._trackTuning);
+    // The layer's capo, overridable here like the tuning. Frets count from it, so a
+    // different capo keeps the shapes and moves where they sit on the neck.
+    const capo = document.createElement("select");
+    capo.className = "rs-arr-capo";
+    capo.title = "Capo fret in Rocksmith";
+    capo.setAttribute("aria-label", `Capo for ${trackName}`);
+    const own = Number(lane.capo) || 0;
+    for (let fret = 0; fret <= Math.max(MAX_CAPO, own); fret++) capo.append(new Option(fret ? `Capo ${fret}` : "No capo", String(fret)));
+    capo.value = String(own);
+    row.append(capo);
     wrap.append(row);
   });
 }
@@ -310,7 +320,7 @@ async function submitRocksmithExport() {
       setRsStatus("Bass arrangements need 4 strings; guitar arrangements need 6.", true);
       return;
     }
-    picks.push({ lane, kind, tuning });
+    picks.push({ lane, kind, tuning, capo: Number(row.querySelector(".rs-arr-capo").value) || 0 });
   }
   if (!picks.length) { setRsStatus("Select at least one arrangement.", true); return; }
 
@@ -331,7 +341,7 @@ async function submitRocksmithExport() {
   spec.metadata = metadataPayload(S.state.metadata);
   const leadingSilence = leadIn($("rsLeadIn").value);
   rememberPref(LS_LEAD_IN, leadingSilence);
-  spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning })), leadingSilence };
+  spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo })), leadingSilence };
 
   $("rsExportGo").disabled = true;
   setRsStatus("Building CDLC…");

@@ -149,6 +149,9 @@ def build_attributes(ctx, header: bool) -> dict:
         "SongYear": ctx.year,
         "Tuning": {f"string{i}": int(v) for i, v in enumerate(sng.metadata.tuning)},
     }
+    # Left out entirely without a capo, as Rocksmith2014.NET writes it.
+    if sng.metadata.capo_fret_id > 0:
+        attrs["CapoFret"] = float(sng.metadata.capo_fret_id)
     if header:
         attrs["Representative"] = 1 if ctx.representative else 0
         attrs["RouteMask"] = route

@@ -13,7 +13,7 @@ import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapNote 
 import { nid, shapeId } from "./ids.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addMarkerAtTime } from "./markers.js";
-import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, targetLane, toggleLaneMute } from "./lanes.js";
+import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, targetLane, toggleLaneMute } from "./lanes.js";
 import { FX_KEYS, FX_LABELS, copyEffects } from "./note-effects.js";
 import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, togglePlay } from "./playback.js";
 import { toast } from "./notify.js";
@@ -73,7 +73,7 @@ export const STATE_RESTORED = "cw-state-restored";
 export function snapshotEdit() {
   const a = activeLane();
   const snap = {
-    lanes: {}, boxes: {}, ui: {}, holds: {},
+    lanes: {}, boxes: {}, ui: {}, holds: {}, capo: {},
     active: a ? a.id : null,
     stem: S.state ? S.state.curStem : null,
     grid: currentGridState(),
@@ -86,6 +86,8 @@ export function snapshotEdit() {
     // Where the hand was put. Not a note field, so nothing above captures it, and a
     // hold that undo cannot reach is an edit with no way back.
     snap.holds[l.id] = (l.handHolds || []).map((h) => ({ ...h }));
+    // The capo too: moving it rewrites every fret, and those frets are undone above.
+    snap.capo[l.id] = Number(l.capo) || 0;
     snap.ui[l.id] = { visible: l.visible, muted: l.muted, locked: l.locked,
       tablatureEnabled: l.tablatureEnabled !== false, volume: normLayerVolume(l.volume) };
   }
@@ -147,6 +149,7 @@ function restore(snap) {
     if (snap.lanes && snap.lanes[l.id]) l.notes = snap.lanes[l.id].map((n) => ({ ...n }));
     if (snap.boxes) l.refBoxes = JSON.parse(JSON.stringify(snap.boxes[l.id] || {}));
     if (snap.holds) l.handHolds = (snap.holds[l.id] || []).map((h) => ({ ...h }));
+    if (snap.capo && snap.capo[l.id] != null) l.capo = snap.capo[l.id];
     const ui = snap.ui && snap.ui[l.id];
     if (ui) {
       l.visible = ui.visible; l.muted = ui.muted;
@@ -779,13 +782,21 @@ export function setColumnShape(colNotes, shape, limits = null, maxFret = undefin
 // The rest of the column is written out with it, so the whole column is one override
 // with one set of reach switches. The others keep exactly the places they already
 // had, so the change on screen is the one note that moved.
+// The fretboard's capo drag: one undo step, like every other edit made on the neck.
+export function moveLaneCapo(lane, capo) {
+  if (!canEditLane(lane) || (Number(lane.capo) || 0) === capo) return;
+  const prev = snapshotEdit();
+  setLaneCapo(lane, capo);
+  commit(prev); draw(); refreshTabIfOpen();
+}
+
 export function setNotePosition(note, string, fret) {
   const ctx = columnOf(note);
   if (!ctx) return;
   // The same solve the tab was voiced under, so "where the others already are" is
   // what is on screen and not a second engine's answer.
   const voiced = voiceNotes(ctx.lane.notes, ctx.tuning, Infinity,
-    { bars: songBarStarts(), instrument: ctx.lane.instrument, holds: ctx.lane.handHolds });
+    { bars: songBarStarts(), instrument: ctx.lane.instrument, capo: ctx.lane.capo, holds: ctx.lane.handHolds });
   const shape = new Map();
   for (const n of ctx.col.notes) {
     const p = n === note ? { string, fret } : voiced.get(n);

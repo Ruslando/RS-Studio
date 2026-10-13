@@ -401,6 +401,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             track = dict(base_track)
             if req.get("tuning"):
                 track["tuning"] = req["tuning"]
+            if req.get("capo") is not None:
+                track["capo"] = int(req["capo"])
             offsets, is_bass = _tuning_offsets(track.get("tuning") or [], warnings)
             arr = ARRANGEMENTS[req["kind"]]
             if arr["is_bass"] != is_bass:

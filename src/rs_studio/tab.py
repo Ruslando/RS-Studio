@@ -650,14 +650,18 @@ def build_gp5(spec: dict) -> tuple[bytes, list[str]]:
 
     for ti, (tspec, q) in enumerate(quantized, start=1):
         tuning = [int(v) for v in tspec["tuning"]]
+        # Frets count from the capo (Guitar Pro's own convention: the track offset), so
+        # positions are checked and placed against the capo'd open strings.
+        capo = max(0, int(tspec.get("capo") or 0))
         track = M.Track(song, number=ti)
         track.name = tspec.get("name") or f"Track {ti}"
         track.strings = [M.GuitarString(i + 1, v) for i, v in enumerate(tuning)]
         gm = tspec.get("instrument")  # General-MIDI program from the lane's instrument
         track.channel.instrument = int(gm) if gm is not None else (_GM_BASS if _is_bass(tuning) else _GM_GUITAR)
         track.measures = []
+        track.offset = capo
         # Only track 1 carries the tempo automations (allTracks=True applies them globally).
-        _build_track_measures(track, q, bounds, tuning, figs, warnings, tempo_marks if ti == 1 else None)
+        _build_track_measures(track, q, bounds, [v + capo for v in tuning], figs, warnings, tempo_marks if ti == 1 else None)
         song.tracks.append(track)
 
     buf = io.BytesIO()

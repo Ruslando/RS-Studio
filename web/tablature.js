@@ -4,6 +4,7 @@
 // the app's own transport (song audio + lane synths) remains the sound engine.
 
 import { INSTRUMENTS, TONES, instrKey, toneKey } from "./constants.js";
+import { fretboardFor } from "./fretboard-core.js";
 import { audio, tabRenderEl, tabScrollEl, tabViewBackdropEl, tabViewCloseEl, tabWarnEl, tsDenInput } from "./dom.js";
 import { copyEffects } from "./note-effects.js";
 import { beatsPerBar, exportResolution, gridBpm, gridOffset, gridSubdiv, minDur } from "./grid.js";
@@ -93,12 +94,15 @@ export function laneTuning(lane) {
 }
 
 // The tuning positions are counted against: a note's pitch is this open pitch plus
-// its fret. Differs from laneTuning only on a staff a Guitar Pro file transposes,
-// where alphaTab's pitch is fret + open - transposition.
+// its fret. Frets count from the capo, as in Guitar Pro (alphaTab's pitch is
+// fret + open + capo - transposition), so fret 0 is the capo itself.
 export function laneFretTuning(lane) {
-  const transposition = Number(lane.transpositionPitch) || 0;
-  return laneTuning(lane).map((open) => open - transposition);
+  const shift = (Number(lane.capo) || 0) - (Number(lane.transpositionPitch) || 0);
+  return laneTuning(lane).map((open) => open + shift);
 }
+
+// How many frets there are above the capo: the neck's own, minus the capo's.
+export const laneFretCount = (lane) => fretboardFor(lane.instrument).frets - (Number(lane.capo) || 0);
 
 // General-MIDI program for a lane's tone (the exported track's sound). A sound, so
 // it comes off the tone and not off the neck.
@@ -172,7 +176,7 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
   // Headless callers and older embedded browsers retain the synchronous path.
   if (typeof Worker === "undefined") {
     const { voiced, fingers, seats } = voiceNotesFingered(notes, tuning, Infinity,
-      { bars: songBarStarts(), instrument: lane.instrument,
+      { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo,
         holds: lane.handHolds });
     const got = {
       positions: notes.map((note) => voiced.get(note) || null),
@@ -204,7 +208,7 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
     };
     worker.onerror = () => finish(reject, new Error("automatic fingering worker failed"));
     worker.postMessage({ task: "voice", notes, tuning, bars: songBarStarts(),
-      instrument: lane.instrument, holds: lane.handHolds });
+      instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
   });
   if (signal?.aborted || laneVoicingKey(lane, tuning) !== key) throw aborted();
   laneVoicingCache.set(lane, { key, ...got });
@@ -245,6 +249,8 @@ function buildSpecFromPrepared(prepared) {
         ...normalizedLaneFields(l),
         instrument: laneGm(l),
         tuning,
+        // Frets below count from it; the .gp5 writer and Rocksmith both need it.
+        capo: Number(l.capo) || 0,
         notes: representPickedOpenSlides(exportNotes.map((n) => {
           const pos = voiced.get(n);
           return copyEffects(n, {

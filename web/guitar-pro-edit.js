@@ -49,7 +49,7 @@ function tuningFromLane(lane) {
 export function validateImportedProjection(lanes) {
   for (const lane of lanes) {
     const tuning = tuningFromImportedLane(lane);
-    const transposition = Number(lane.transpositionPitch) || 0;
+    const transposition = pitchOffset(lane);
     const ids = new Set();
     for (const note of lane.notes) {
       const sourceId = note.gp?.noteId;
@@ -64,6 +64,10 @@ export function validateImportedProjection(lanes) {
     }
   }
 }
+
+// What a fret's pitch is short of open string + fret: alphaTab's pitch is
+// fret + open + capo - transposition, and frets count from the capo.
+const pitchOffset = (lane) => (Number(lane.transpositionPitch) || 0) - (Number(lane.capo) || 0);
 
 function resolvedPosition(note, tuning, transposition = 0) {
   const string = Number(note.pos?.string), fret = Number(note.pos?.fret), pitch = Number(note.pitch);
@@ -461,7 +465,7 @@ export function applyImportedProjection(alphaTab, score, lanes, selectedTrackInd
     // Positions come in from laneFingering (guitar-pro-score.js), so this only
     // covers a headless caller. On COPIES: export must never edit the project.
     const laneNotes = unstacked(lane.notes || []).map((note) => {
-      const pos = resolvedPosition(note, tuning, Number(lane.transpositionPitch) || 0);
+      const pos = resolvedPosition(note, tuning, pitchOffset(lane));
       return pos ? { ...note, pos: { ...note.pos, ...pos, scope: "local" } } : note;
     });
     const sourceTuning = [...(staff.stringTuning?.tunings || [])];
@@ -592,7 +596,7 @@ export function appendCreatedLanes(alphaTab, score, lanes, bars = []) {
     // so the file says what the fretboard shows. Voicing here is the headless fallback.
     const positions = sourceNotes.every((note) => note.pos)
       ? new Map(sourceNotes.map((note) => [note, note.pos]))
-      : voiceNotes(sourceNotes, tuning, Infinity, { bars, instrument: lane.instrument, holds: lane.handHolds });
+      : voiceNotes(sourceNotes, tuning, Infinity, { bars, instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
     const missing = sourceNotes.filter((note) => !positions.get(note));
     if (missing.length) {
       score.cwWarnings ||= [];

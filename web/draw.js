@@ -21,7 +21,7 @@ import { shapeGroups } from "./shapes.js";
 import { songBarStarts } from "./song-bars.js";
 import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
-import { laneFretTuning } from "./tablature.js";
+import { laneFretCount, laneFretTuning } from "./tablature.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, hexA, noteName } from "./util.js";
 import { moveViewportTo } from "./viewport-motion.js";
@@ -91,7 +91,7 @@ function overrideEffectsForLane(lane) {
       notes: sourceNotes,
       tuning,
       bars: songBarStarts(),
-      instrument: lane.instrument,
+      instrument: lane.instrument, capo: lane.capo,
       holds: lane.handHolds,
     });
   } catch {
@@ -491,7 +491,7 @@ function paintFrame() {
         const crossY = drop ? y - drop : y;
         omittedCrosses.push({ x, y: crossY, w, h: rowH + drop, alpha: laneAlpha });
       }
-      if (outOfFretboardRange(n.pitch, tuning))
+      if (outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)))
         outOfRange.push({ x, y: drop ? y - drop : y, w, h: rowH + drop, alpha: laneAlpha });
       sctx.restore();
     }

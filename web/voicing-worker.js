@@ -23,6 +23,8 @@ self.onmessage = (ev) => {
   // Which instrument, so the engine and the drawn neck agree on how many frets
   // there are. fretboardFor falls back to the electric when it is absent.
   const instrument = ev.data.instrument;
+  // Frets above the capo are all the engine may use (registerColumns).
+  const capo = ev.data.capo;
   // Where the player put the fretting hand, in seconds. Times and not notes, so a
   // hold survives retracing the passage under it — see holdsByColumn.
   const holds = ev.data.holds;
@@ -31,7 +33,7 @@ self.onmessage = (ev) => {
     // The hand rides along with the positions: which finger took each note and which
     // fret it was anchored on. Same pass, so it costs nothing, and the board needs it
     // to say anything about WHY a position was chosen.
-    const { voiced, fingers, seats } = voiceNotesFingered(notes, tuning, Infinity, { bars, instrument, holds });
+    const { voiced, fingers, seats } = voiceNotesFingered(notes, tuning, Infinity, { bars, instrument, capo, holds });
     self.postMessage({
       task,
       positions: notes.map((note) => voiced.get(note) || null),
@@ -48,8 +50,8 @@ self.onmessage = (ev) => {
     // offer. Two jobs would mean two passes over the same lane.
     self.postMessage({
       task,
-      kinds: overrideEffectKinds(notes, tuning, { bars, instrument, holds }),
-      review: voicingReviewMarks(notes, tuning, { bars, instrument, holds }),
+      kinds: overrideEffectKinds(notes, tuning, { bars, instrument, capo, holds }),
+      review: voicingReviewMarks(notes, tuning, { bars, instrument, capo, holds }),
     });
     return;
   }
@@ -112,7 +114,7 @@ self.onmessage = (ev) => {
   // phrase boundary handed to it. Both stay in the message because they are part of
   // the cache key on the other side.
   const profile = handProfileForTuning(tuning);
-  const priced = scoreShapesAsDecided(pool.map((choice) => choice.shape), columns, focusIdx, tuning, { bars, instrument, holds });
+  const priced = scoreShapesAsDecided(pool.map((choice) => choice.shape), columns, focusIdx, tuning, { bars, instrument, capo, holds });
   const choices = pool
     .map((choice, i) => ({ choice, priced: priced[i] }))
     .filter((x) => Number.isFinite(x.priced.cost))
