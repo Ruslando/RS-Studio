@@ -4,6 +4,7 @@
 // The server owns the answer (updates.py runtime); installing hands over to
 // the launcher, which closes the app, installs and reopens it — like an update.
 
+import { loadWithScreen } from "./project-loading.js";
 import { confirmAction } from "./dialog.js";
 import { $ } from "./dom.js";
 
@@ -33,13 +34,14 @@ async function install(state) {
     message: `RS Studio closes, downloads about ${gb(state.cuda.extra_bytes)} and reopens. Save your project first.`,
     confirmLabel: "Install" })) return;
   setStatus("");
-  try {
+  // The loading screen (design.md 4.17): RS Studio is about to close, so nothing
+  // else may be started. If it is still here after half a minute, that is the failure.
+  await loadWithScreen(async () => {
     const res = await fetch("/api/runtime/cuda", { method: "POST" });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Could not start the installation");
-    setStatus("Closing RS Studio to install…");
-  } catch (error) {
-    setStatus(error.message, true);
-  }
+    await new Promise((resolve) => setTimeout(resolve, 30000));
+    throw new Error("RS Studio did not close. Close it yourself and the installation starts.");
+  }, { title: "Closing RS Studio to install", failureTitle: "Could not install acceleration" });
 }
 
 export async function renderAcceleration() {

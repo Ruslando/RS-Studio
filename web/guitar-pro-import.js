@@ -7,6 +7,7 @@ import { convertGpScore, inspectGpScore } from "./guitar-pro-core.js";
 import { currentGridState, setSubdiv } from "./grid.js";
 import { rebuildLanes, refreshCounts, renderLanes } from "./lanes.js";
 import { toast } from "./notify.js";
+import { loadWithScreen } from "./project-loading.js";
 import { applyProject, markSaved, mapLane, refreshSaveState, saveToServer } from "./project.js";
 import { S } from "./store.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
@@ -137,70 +138,70 @@ async function confirmImport() {
   gpImportConfirm.disabled = true;
   gpImportCancel.disabled = true;
   gpImportClose.disabled = true;
-  setImportStatus("Converting the selected tracks…");
+  setImportStatus();
+  // The loading screen (design.md 4.17): the window cannot be used while this
+  // runs, and for a new project it ends in the project opening. A failure is
+  // said there, and Back returns to this window.
   try {
-    const converted = convertGpScore(pending.score, selected, pending.version);
-    const standalone = !S.state;
-    let job = S.state?.job;
-    if (standalone) {
-      setImportStatus("Creating project…");
-      const created = await fetch("/api/projects/new", { method: "POST" });
-      if (!created.ok) throw new Error("Could not create the project");
-      job = (await created.json()).job;
-    }
-    const body = new FormData();
-    body.append("file", pending.file);
-    body.append("summary", JSON.stringify(converted.guitarPro));
-    setImportStatus("Saving the original Guitar Pro file…");
-    const response = await fetch(`/api/projects/${job}/guitar-pro`, { method: "POST", body });
-    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "source upload failed");
-    const stored = await response.json();
+    await loadWithScreen(async () => {
+      const converted = convertGpScore(pending.score, selected, pending.version);
+      const standalone = !S.state;
+      let job = S.state?.job;
+      if (standalone) {
+        const created = await fetch("/api/projects/new", { method: "POST" });
+        if (!created.ok) throw new Error("Could not create the project");
+        job = (await created.json()).job;
+      }
+      const body = new FormData();
+      body.append("file", pending.file);
+      body.append("summary", JSON.stringify(converted.guitarPro));
+      const response = await fetch(`/api/projects/${job}/guitar-pro`, { method: "POST", body });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "source upload failed");
+      const stored = await response.json();
 
-    if (standalone) {
-      const title = converted.guitarPro.score?.title || pending.file.name.replace(/\.(?:gp|gpx|gp[345])$/i, "");
-      const finalized = await fetch(`/api/projects/${job}/finalize`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: title }),
-      });
-      if (!finalized.ok) throw new Error((await finalized.json().catch(() => ({}))).detail || "Could not finalize the project");
-      applyProject(await finalized.json());
-      S.state.metadata = { ...S.state.metadata, ...(converted.metadata || {}) };
-    }
+      if (standalone) {
+        const title = converted.guitarPro.score?.title || pending.file.name.replace(/\.(?:gp|gpx|gp[345])$/i, "");
+        const finalized = await fetch(`/api/projects/${job}/finalize`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: title }),
+        });
+        if (!finalized.ok) throw new Error((await finalized.json().catch(() => ({}))).detail || "Could not finalize the project");
+        applyProject(await finalized.json());
+        S.state.metadata = { ...S.state.metadata, ...(converted.metadata || {}) };
+      }
 
-    const retained = S.state.editLanes.filter((lane) => !importedLane(lane));
-    const retainedHaveNotes = retained.some((lane) => lane.notes.length);
-    // Remove only the untouched initial placeholder. Empty user-created/configured
-    // lanes are real project content and should survive an import.
-    const lonePlaceholder = retained.length === 1 && !retained[0].notes.length
-      && /^Layer 1$/i.test(retained[0].name || "") && /^edit(?:_|$)/.test(retained[0].id || "");
-    const base = lonePlaceholder ? [] : retained;
-    for (const lane of base) lane.active = false;
-    const imported = converted.editLanes.map(mapLane);
-    if (imported[0]) imported[0].active = true;
-    S.state.editLanes = [...base, ...imported];
-    S.state.guitarPro = stored.guitarPro;
-    installImportedScoreBars(converted);
-    if (!retainedHaveNotes) applyImportedGrid(converted.grid);
+      const retained = S.state.editLanes.filter((lane) => !importedLane(lane));
+      const retainedHaveNotes = retained.some((lane) => lane.notes.length);
+      // Remove only the untouched initial placeholder. Empty user-created/configured
+      // lanes are real project content and should survive an import.
+      const lonePlaceholder = retained.length === 1 && !retained[0].notes.length
+        && /^Layer 1$/i.test(retained[0].name || "") && /^edit(?:_|$)/.test(retained[0].id || "");
+      const base = lonePlaceholder ? [] : retained;
+      for (const lane of base) lane.active = false;
+      const imported = converted.editLanes.map(mapLane);
+      if (imported[0]) imported[0].active = true;
+      S.state.editLanes = [...base, ...imported];
+      S.state.guitarPro = stored.guitarPro;
+      installImportedScoreBars(converted);
+      if (!retainedHaveNotes) applyImportedGrid(converted.grid);
 
-    S.selection = new Set();
-    S.voicingRevision++;
-    rebuildLanes();
-    renderLanes();
-    refreshCounts();
-    draw();
-    refreshSaveState();
-    setImportStatus("Saving imported notes…");
-    await saveToServer();
-    markSaved();
-    gpImportBackdrop.hidden = true;
-    pending = null;
-    if (retainedHaveNotes) toast("Imported with the existing project tempo grid", 3200);
-    else toast(`Imported ${selected.length} Guitar Pro track${selected.length === 1 ? "" : "s"}`);
-    if (S.state.editLanes.some((lane) => lane.notes.length)) {
-      if (tabViewOn()) refreshTabIfOpen();
-      else setView("tab");
-    }
-  } catch (error) {
-    setImportStatus(`Import failed: ${error.message}`, true);
+      S.selection = new Set();
+      S.voicingRevision++;
+      rebuildLanes();
+      renderLanes();
+      refreshCounts();
+      draw();
+      refreshSaveState();
+      await saveToServer();
+      markSaved();
+      gpImportBackdrop.hidden = true;
+      pending = null;
+      if (retainedHaveNotes) toast("Imported with the existing project tempo grid", 3200);
+      else toast(`Imported ${selected.length} Guitar Pro track${selected.length === 1 ? "" : "s"}`);
+      if (S.state.editLanes.some((lane) => lane.notes.length)) {
+        if (tabViewOn()) refreshTabIfOpen();
+        else setView("tab");
+      }
+    }, { title: "Importing Guitar Pro", failureTitle: "Could not import the file" });
   } finally {
     importing = false;
     gpImportConfirm.disabled = false;

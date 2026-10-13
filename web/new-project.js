@@ -19,8 +19,9 @@
 import { $, addStemBtn, fileInput, form, goBtn, modalBackdrop, newProjBtn, npCancelBtn, npClear, npDrop, npDropSub, npDropTitle, stemBulkBrowseBtn, stemBulkInput, stemsAddEl, stemsListEl, warnEl } from "./dom.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { UPLOAD_ARROW_ICON } from "./icons.js";
-import { applyCoverChange, clearProjectCover, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { toast } from "./notify.js";
+import { loadWithScreen } from "./project-loading.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { DEFAULT_PART_ORDER, backendLabel, separators } from "./separators.js";
 import { previewIcon, syncScrub, wireScrub } from "./stem-preview.js";
@@ -34,16 +35,6 @@ let onProjectCreated = () => {};
 let onModalClosed = () => {};
 let canLeaveOpenProject = async () => true;
 
-const npStatusEl = $("npStatus");
-
-function setNpStatus(msg, busy) {
-  npStatusEl.textContent = "";
-  npStatusEl.classList.toggle("busy", !!busy);
-  if (busy) npStatusEl.append(Object.assign(document.createElement("span"), { className: "spinner" }));
-  if (msg) npStatusEl.append(document.createTextNode(msg));
-  npStatusEl.hidden = !msg && !busy;
-  goBtn.disabled = !!busy;
-}
 
 let draftJob = null;
 let draftJobPromise = null;
@@ -127,9 +118,8 @@ const setNewProjectCoverFromDrop = (dataTransfer) =>
 // where both progress and errors go.
 async function changeNewProjectCover(run) {
   const before = collectNewProjectMetadata();
-  const status = (msg, error) => { if (error || msg !== "Uploaded") npCoverSub.textContent = msg; };
   const meta = await applyCoverChange(before, async () => run(await ensureDraftJob()),
-    status, "Uploading...", "Uploaded");
+    coverStatus(npCoverDrop, (message) => { npCoverSub.textContent = message; }), "Uploading...", "Uploaded");
   draftMetadata = meta || before;
   renderNewProjectCover();
 }
@@ -201,7 +191,7 @@ function createStemCard() {
       `;
     } else if (state === "working") {
       body = `
-        <div class="sc-working">
+        <div class="sc-working busy">
           <span class="sc-work-copy">
             <span class="sc-work-label"></span>
           </span>
@@ -426,7 +416,7 @@ export async function setMainFile(file) {
   npDrop.classList.remove("error");
   npDrop.classList.add("has-file");
   npDropTitle.textContent = file.name;
-  npDropSub.textContent = "Uploading…";
+  npDropSub.textContent = "";   // the progress panel says it, with the bytes sent
   npClear.hidden = false;
   npClear.disabled = true;
   if (npSongTitleInput && !npSongTitleInput.value) npSongTitleInput.value = file.name.replace(/\.[^.]+$/, "");
@@ -437,9 +427,7 @@ export async function setMainFile(file) {
     const job = await ensureDraftJob();
     const fd = new FormData();
     fd.append("audio", file);
-    const res = await fetch(`/api/projects/${job}/mix`, { method: "POST", body: fd });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Upload failed");
-    const data = await res.json();
+    const data = await uploadRequest(`/api/projects/${job}/mix`, fd, "Uploading song", file.name);
     npDropSub.textContent = data.tempo ? `${Math.round(data.tempo)} BPM detected` : "Ready";
   } catch (err) {
     npDrop.classList.remove("has-file"); npDrop.classList.add("error");
@@ -485,7 +473,6 @@ export async function openNewProject() {
   disposeStemCards();
   stemSeq = 0;
   draftJob = null; draftJobPromise = null;
-  setNpStatus("", false);
   modalBackdrop.hidden = false;
   refreshCreateEnabled();
   if (npSongTitleInput) npSongTitleInput.focus();
@@ -508,9 +495,12 @@ export function closeNewProject() {
 
 async function createProject() {
   if (!hasFullSong() && !stemsListEl.querySelector(".stem-card[data-state='ready']")) return;
-  setNpStatus("Creating project…", true);
   warnEl.innerHTML = "";   // a previous project's warnings must not survive the wait
-  try {
+  goBtn.disabled = true;
+  // The loading screen (design.md 4.17): this ends in the project opening, and
+  // nothing can be done until it has. A failure is said there, and Back returns
+  // to this window with everything still in it.
+  await loadWithScreen(async () => {
     const job = await ensureDraftJob();
     draftMetadata = collectNewProjectMetadata();
     const res = await fetch(`/api/projects/${job}/finalize`, {
@@ -522,13 +512,11 @@ async function createProject() {
       throw new Error(err.detail || "Request failed");
     }
     const data = await res.json();
-    setNpStatus("", false);
     draftJob = null; draftJobPromise = null;   // it's a real project now — closeNewProject must not delete it
     closeNewProject();
-    onProjectCreated(data);
-  } catch (err) {
-    setNpStatus("Error: " + err.message, false);
-  }
+    await onProjectCreated(data);
+  }, { title: "Creating project", failureTitle: "Could not create the project" });
+  refreshCreateEnabled();
 }
 
 /**

@@ -11,7 +11,7 @@
 //   new-project.js       the New Project modal (it owns its own draft)
 //   stem-settings.js     the stem panel (its buttons call the ops below)
 
-import { operationRequest } from "./operation-progress.js";
+import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { INSTRUMENTS, PX_PER_SEC, ZOOM_MAX_X, ZOOM_MAX_Y, ZOOM_MIN_X, ZOOM_MIN_Y, instrKey, toneKey } from "./constants.js";
 import { confirmChoice } from "./dialog.js";
 import { updateDetectStatus } from "./detect.js";
@@ -42,8 +42,6 @@ import { defaultPinFlags } from "./voicing-core.js";
 import { isValidTuningKey, parseTuning, setView } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
-
-function setStatus(msg, busy) { statusEl.textContent = msg || ""; goBtn.disabled = !!busy; }
 
 // ---- project save / open (self-contained .chart files) ----
 // Snapshot the editor state in the shape the server merges into the manifest.
@@ -177,7 +175,6 @@ export async function saveProject({ saveAs = false } = {}) {
     toast("Walkthrough changes are temporary", 2200);
     return false;
   }
-  setStatus(saveAs ? "exporting…" : "saving…", true);
   try {
     if (saveAs) {
       const { blob, name } = await projectBundle();
@@ -187,11 +184,9 @@ export async function saveProject({ saveAs = false } = {}) {
       await saveToServer();
       toast("Saved", 2200, "ok");
     }
-    setStatus("", false);   // save feedback is the (auto-fading) toast, not a lingering status line
     markSaved();
     return true;
   } catch (e) {
-    setStatus("save error: " + e.message, false);
     toast("Couldn't save: " + e.message, 2200, "error");
     return false;
   }
@@ -220,17 +215,14 @@ export async function openProject() {
 
 async function attachAudio(file) {
   if (!S.state || S.state.stems.length || !file) return;
-  setStatus(`attaching ${file.name}...`, true);
   try {
     await saveToServer();
     const body = new FormData();
     body.append("audio", file);
-    const response = await fetch(`/api/projects/${S.state.job}/audio`, { method: "POST", body });
-    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "attach failed");
-    applyProject(await response.json());
-    toast("Audio attached");
+    applyProject(await uploadRequest(`/api/projects/${S.state.job}/audio`, body, "Attaching audio", file.name));
+    toast("Audio attached", 2200, "ok");
   } catch (error) {
-    setStatus(`attach error: ${error.message}`, false);
+    toast("Couldn't attach the audio: " + error.message, 6000, "error");
   }
 }
 
@@ -414,7 +406,6 @@ export function applyProject(data) {
   S.appliedGrid = currentGridState();
   S.appliedOffset = S.appliedGrid.offset;   // baseline so the first offset tweak shifts notes by the delta, not the absolute value
 
-  setStatus("", false);
   const warnings = [...(data.warnings || [])];
   if (idsRepaired) warnings.unshift(
     `Repaired ${idsRepaired} duplicate id${idsRepaired === 1 ? "" : "s"} from an older save.`);
@@ -489,7 +480,6 @@ export async function closeProject(options = {}) {
   S.undoStack = []; S.redoStack = []; updateUndoButtons();
   clearMatches();
   warnEl.replaceChildren();
-  setStatus("", false);
   saveBtn.disabled = true;
   saveAsBtn.disabled = true;
   appshell.hidden = true;
@@ -663,7 +653,7 @@ export function renderStemTabs() {
   // deliberately non-interactive until its audio and spectrogram are ready.
   if (pendingStem) {
     const row = document.createElement("div");
-    row.className = "stem-row stem-pending";
+    row.className = "stem-row stem-pending busy";
     row.setAttribute("aria-label", `${pendingStem.label} is being separated`);
 
     const name = document.createElement("span");
@@ -738,8 +728,8 @@ export function addStemMenuMode(mode) {
 async function openAddStemMenu(anchor) {
   closeAddStemMenu();
   const menu = document.createElement("div");
-  menu.className = "menu-list stem-add-menu";
-  menu.textContent = "Loading…";
+  menu.className = "menu-list stem-add-menu busy";
+  menu.textContent = "Loading separators";
   document.body.append(menu);
   addStemMenuEl = menu;
   const r = anchor.getBoundingClientRect();
@@ -748,6 +738,7 @@ async function openAddStemMenu(anchor) {
 
   if (!separators.length) await loadSeparators();
   if (addStemMenuEl !== menu) return;  // closed while separator metadata was loading
+  menu.classList.remove("busy");
 
   // Separating a part and bringing your own file are one question — where does
   // this audio come from — and the audio editor already answers it with a switch.
@@ -866,9 +857,7 @@ async function uploadStem(file) {
     const body = new FormData();
     body.append("file", file);
     body.append("name", label);
-    const res = await fetch(`/api/projects/${state.job}/stems/upload`, { method: "POST", body });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "upload failed");
-    const s = (await res.json()).stem;
+    const s = (await uploadRequest(`/api/projects/${state.job}/stems/upload`, body, "Adding audio", file.name)).stem;
     if (S.state !== state) return;   // project switched while it was transcoding
     S.state.stems.push({
       id: s.id, name: s.name, spec: s.spectrogram, audioUrl: s.audio_url,
@@ -1042,7 +1031,7 @@ export function init_project() {
     onPick: loadCached,
   });
   initNewProject({
-    onCreated: applyProject,
+    onCreated: async (data) => { applyProject(data); await waitForProjectVisuals(); },
     onClosed: () => { if (!S.state) showWelcome(); },   // cancelled with nothing open
     canLeave: confirmLeave,   // the modal ends in a project swap, so ask before it opens
   });

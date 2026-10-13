@@ -870,6 +870,7 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   status.hidden = false;
   const at = resetPreview.columns && handAt(resetPreview.columns, grip?.start ?? focus?.start ?? boardTime(), 0, s);
   status.textContent = resetPreview.pending ? "Calculating preview" : at ? "Reset preview" : "Preview unavailable";
+  status.classList.toggle("busy", !!resetPreview.pending);
   if (at) {
     ctx.save();
     ctx.setLineDash([3, 2]);

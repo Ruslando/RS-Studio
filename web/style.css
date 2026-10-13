@@ -404,6 +404,7 @@ body.row-resizing { cursor: row-resize; user-select: none; }
 
 .stem-add-menu { position: fixed; min-width: 300px; z-index: var(--z-flyout); }
 .stem-add-menu { display: flex; flex-direction: column; gap: var(--s-sibling); padding: var(--s-group); }
+.stem-add-menu.busy { flex-direction: row; align-items: center; color: var(--label); font: 400 var(--text-control)/1 var(--font-ui); }
 
 .stem-add-menu .sc-source-row { margin-top: 0; }
 .stem-add-menu .view-switch .mode { flex: 1; min-width: 0; }
@@ -496,6 +497,7 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 /* Two pairs and the way back: same notes | other notes | reset. */
 #fretboardAdaptPrev, #fretboardAuto { margin-left: var(--s-sibling); }
 #fretboardName { padding: 0 var(--s-pair); font: 600 var(--text-body)/1 var(--font-mono); color: var(--stage-text); }
+#fretboardResetStatus.busy::before { border-color: var(--stage-hint); border-top-color: var(--stage-text); }
 #fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
 
 #fretboardStage { opacity: 1; transform: translateY(0); transition: opacity var(--dur-panel) var(--ease-panel), transform var(--dur-panel) var(--ease-panel); }
@@ -724,6 +726,9 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 .cover-title { max-width: 100%; color: var(--label); font: 400 var(--text-caption)/1.4 var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cover-sub { color: var(--hint); font: 400 var(--text-caption)/1.4 var(--font-ui); }
 .cover-sub:empty { display: none; }
+/* While a picture is on its way the tile holds the spinner and nothing else. */
+.cover-picker.busy > :is(.cover-thumb, .cover-copy, .cover-clear) { display: none; }
+.cover-picker.busy::before { margin-right: 0; width: var(--s-group); height: var(--s-group); }
 /* Over the picture, so it carries its own ground. */
 .cover-picker .cover-clear { position: absolute; top: var(--s-pair); right: var(--s-pair); width: var(--h-compact); height: var(--h-compact); border-radius: var(--r-compact); background: var(--panel); }
 .cover-clear, .np-clear, .sc-remove { margin-left: auto; }
@@ -902,13 +907,16 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 
 #tabScroll { flex: 1; min-height: 0; overflow: auto; background: #fff; position: relative; }
 #tabRender { padding: var(--s-row); position: relative; }
+/* On the white page, so it brings its own ground. */
+#tabBusy { position: absolute; top: var(--s-group); left: 50%; transform: translateX(-50%); z-index: 1; padding: var(--s-sibling) var(--s-row);
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--e1);
+  font: 400 var(--text-control)/1 var(--font-ui); white-space: nowrap; }
 #tabRender:empty::before { content: "No notes to render."; color: #555; }
 
 #tabRender .at-cursor-bar { background: rgba(255, 168, 0, 0.16); }
 #tabRender .at-cursor-beat { background: rgba(232, 90, 20, 0.85); width: 3px; }
 #tabRender .at-highlight * { fill: #e85a14; stroke: #e85a14; }
 
-#npStatus.busy { color: var(--text); display: flex; align-items: center; gap: var(--s-sibling); }
 
 .spinner, .project-loading-spinner, .tour-task-icon {
   box-sizing: border-box; width: var(--s-row); height: var(--s-row); flex: none; border-radius: 999px;

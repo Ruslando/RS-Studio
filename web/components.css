@@ -329,6 +329,17 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .list-row .drag { color: transparent; }
 .list-row:hover .drag { color: var(--hint); }
 
+/* Waiting in place: add .busy to the thing that is waiting and it leads with the
+   spinner (design.md 4.17). An element may also hold a .spinner of its own. */
+.busy::before {
+  content: ""; display: inline-block; box-sizing: border-box; flex: none; vertical-align: -2px;
+  width: var(--s-row); height: var(--s-row); margin-right: var(--s-sibling); border-radius: 999px;
+  border: 2px solid var(--hint); border-top-color: var(--text); animation: spin var(--dur-spin) linear infinite;
+}
+/* A flex row already has its own gap. */
+:is(.stem-row, .sc-working, .setup-readiness, .menu-list).busy::before { margin-right: 0; }
+@media (prefers-reduced-motion: reduce) { .busy::before { animation: none; } }
+
 .dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
 /* A dot and its sentence: a problem or a state, said where it is. */
 .status-line, .warn, .sp-note.error, .keymap-clash, .sc-error, .gp-import-status.error {

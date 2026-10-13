@@ -421,7 +421,7 @@ it edits, kept 8 inside the viewport.
 |---|---|
 | `.dot` + `.dot--ok` / `--warn` / `--error` | 8px round mark |
 | `.status-line` (`.status-line--warn` for a warning) | A dot, then the sentence in `--text` 14/1.5. A problem or state in place: failed import, missing tool, shortcut clash |
-| `.spinner` | 12px ring, 2px, `--hint` with a `--text` head, one turn per `--dur-spin`; 16 beside a heading, 24 alone on the stage; with a label beside it |
+| `.spinner`, or class `busy` on the element that waits | 12px ring, 2px, `--hint` with a `--text` head, one turn per `--dur-spin`; 16 beside a heading, 24 alone on the stage; with a label beside it |
 | Progress bar | 4 high track in `--line`, fill `--accent`, radius 999 |
 | `.pt-dot` | The unsaved-changes dot beside the project title, `--warn` |
 
@@ -430,8 +430,9 @@ it edits, kept 8 inside the viewport.
 Class: `.toast` in `.toasts` (bottom centre, 24 from the edge, stacked 8 apart).
 Min-height 44, padding `8 12`, radius 6, `--panel`, `--line`, `--e1`, 13px. A
 status dot first; one compact button at most ("Copy", "Undo", "Cancel"). A
-progress toast adds a title (600), one detail line (`--label`, 12) and a
-progress bar, and stays until the job ends.
+progress toast (the progress panel) adds a title (600), one detail line
+(`--label`, 12), the current stage and a progress bar, and stays until the job
+ends. When to use it: 4.17.
 
 ### 4.12 Window
 
@@ -498,6 +499,38 @@ leading mark of a launcher action or drop zone, 22–24 only in an empty state
 or a cover placeholder. An icon used by two modules lives in
 `icons.js` and is placed with `data-ui-icon` (16, or `data-icon-size`) or
 `icon(name, size)`; markup is never pasted twice. A character (✓, ▸, ▲) is not an icon.
+
+### 4.17 Waiting and loading
+
+Every wait is one of five kinds. Which one follows from a single question: what
+can the user do meanwhile?
+
+| Kind | When | How it is shown | In code |
+|---|---|---|---|
+| **Job** | Takes noticeable time; the user can keep working | The progress panel (4.11): title, one detail line, the stage it is in, a bar, Cancel where the server supports it. The window or popover that started it closes | `operationRequest`, `uploadRequest`, `jobRequest` in `operation-progress.js` |
+| **Blocking load** | Nothing can be done until it ends, usually because a project is about to open | The loading screen: scrim, spinner, title, a running bar. A failure is said there, with Back | `loadWithScreen` |
+| **In place** | One part of the screen waits for its own content | The spinner and a label where the content will appear | class `busy` on the waiting element |
+| **Row** | A list entry is being made or fetched | The row itself leads with the spinner, or shows its percentage in its second line | class `busy` on the row |
+| **Short request** | Under about a second | The button that started it is disabled | `disabled` |
+
+- The result of any of them is a toast: `ok` when it worked, `error` when it did
+  not. A sentence in a window is only for a problem with what the user entered,
+  in a form that stays open.
+- No status text in the toolbar, and no "…ing" lines in windows.
+- A percentage is shown only when it is measured. The panel never invents one
+  from elapsed time.
+- A job names its stages in plain words ("Calculating fingerings", "Building
+  the package"), without an ellipsis: the bar already says it is running.
+- One wait, one place: a card or row that belongs to a running job shows the
+  spinner, and the bar lives in the panel.
+
+| Wait | Kind |
+|---|---|
+| Detect notes, separate audio, every audio upload, attach audio, Rocksmith export, Guitar Pro export, update | Job |
+| Open a project, import a .chart, load the walkthrough, create a project, import Guitar Pro, install acceleration | Blocking load |
+| Fingering on the fretboard, reset preview, building the tablature, the add-audio menu, checking the audio converter | In place |
+| Model download, an audio layer being added, a stem card being separated or uploaded, the cover tile | Row |
+| Save, export .chart, check for updates, check again, remove a model, delete a project | Short request |
 
 ---
 

@@ -16,7 +16,7 @@ import { renderLayerSettings } from "./lanes.js";
 import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen } from "./tuning-editor.js";
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
 import { panelMotion } from "./panel-motion.js";
-import { applyCoverChange, clearProjectCover, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { refreshSaveState } from "./project.js";
 import { renderAcceleration } from "./acceleration.js";
 import { renderModels, stopModelPolling } from "./models.js";
@@ -275,7 +275,7 @@ async function saveProjectSettings() {
 
 async function changeProjectSettingsCover(run, working, done) {
   if (!S.state || S.state.job === "tutorial") return;
-  const meta = await applyCoverChange(collectProjectSettingsMeta(), run, setProjectMetaStatus, working, done);
+  const meta = await applyCoverChange(collectProjectSettingsMeta(), run, coverStatus($("projCoverDrop"), setProjectMetaStatus), working, done);
   if (!meta) return;
   S.state.metadata = meta;
   renderProjectSettings();

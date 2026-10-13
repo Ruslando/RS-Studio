@@ -14,6 +14,7 @@ import { editLanes } from "./lanes.js";
 import { exportSongName, metadataFromState, metadataPayload } from "./metadata.js";
 import { ensureTone, pauseTransport, playbackTime, playTransport, revealPlaybackPosition, seekPlayback, transportPlaying } from "./playback.js";
 import { downloadProjectBlob, toast } from "./notify.js";
+import { jobRequest } from "./operation-progress.js";
 import { S } from "./store.js";
 import { scoreProjectionSignature } from "./guitar-pro-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
@@ -522,7 +523,8 @@ async function refreshTab() {
       grid: S.appliedGrid || S.state.baseGrid || {} };
     const marker = `projected:${S.state.job}:${lane.id}:${scoreProjectionSignature([lane])}:${JSON.stringify(timing)}`;
     if (marker === tabSpecJson && tabApi) return;
-    tabWarnEl.textContent = "building selected note layer…";
+    tabWarnEl.textContent = "";
+    document.getElementById("tabBusy").hidden = false;
     await loadAlphaTab();
     const score = await projectedGpLaneScore(alphaTab, lane, controller.signal);
     if (controller.signal.aborted) return;
@@ -538,16 +540,21 @@ async function refreshTab() {
     tabLoadGuard = null;
     if (e?.name !== "AbortError") tabWarnEl.textContent = "error: " + e.message;
   } finally {
-    if (tabBuildController === controller) tabBuildController = null;
+    if (tabBuildController === controller) { tabBuildController = null; document.getElementById("tabBusy").hidden = true; }
   }
 }
 
 // Build and download the .gp5 immediately, without opening the tab view.
 export async function exportTab() {
   if (!S.state) return;
-  try {
+  const name = (S.state.name || S.state.filename || "tab").replace(/[^A-Za-z0-9._ -]+/g, "_");
+  // A job (design.md 4.17): fingering a long song takes a while, and until now
+  // nothing on screen said the export had started.
+  await jobRequest("Exporting Guitar Pro", name + ".gp5", async (panel) => {
+    panel.update({ stage: "Calculating fingerings", fraction: null });
     const spec = await buildTabSpecAsync();
     if (!spec.tracks.length) { toast("No tablature notes to export"); return; }
+    panel.update({ stage: "Writing the file", fraction: null });
     const res = await fetch("/api/tab", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec),
     });
@@ -556,13 +563,10 @@ export async function exportTab() {
     // The warning header is advisory; a malformed one must not fail the export
     // the user is already downloading.
     let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
-    const name = (S.state.name || S.state.filename || "tab").replace(/[^A-Za-z0-9._ -]+/g, "_");
     downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name + ".gp5");
     toast(warns.length ? `Exported ${name}.gp5 · ${warns.length} warning${warns.length === 1 ? "" : "s"}` : `Exported ${name}.gp5`,
           2200, warns.length ? "warn" : "ok");
-  } catch (e) {
-    toast("Export failed: " + e.message, 2200, "error");
-  }
+  }).catch(() => { /* the panel's toast has said what failed */ });
 }
 
 // Modern GP7+ export starts from the selected source hierarchy and applies the
@@ -571,17 +575,15 @@ export async function exportModernGp() {
   if (!S.state) return;
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) { toast(status.reason, 4200); return; }
-  try {
+  const name = exportSongName(metadataFromState(S.state), S.state.name || S.state.filename || "score");
+  await jobRequest("Exporting Guitar Pro", name + ".gp", async (panel) => {
+    panel.update({ stage: "Writing the file", fraction: null });
     await loadAlphaTab();
     const { bytes, warnings } = await modernGpResult(alphaTab);
-    const meta = metadataFromState(S.state);
-    const name = exportSongName(meta, S.state.name || S.state.filename || "score");
     downloadProjectBlob(new Blob([bytes], { type: "application/octet-stream" }), name + ".gp");
     toast(warnings.length ? `Exported ${name}.gp · ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : `Exported ${name}.gp`,
           2200, warnings.length ? "warn" : "ok");
-  } catch (e) {
-    toast("Modern Guitar Pro export failed: " + e.message, 4500, "error");
-  }
+  }).catch(() => { /* the panel's toast has said what failed */ });
 }
 
 export function init_tablature() {

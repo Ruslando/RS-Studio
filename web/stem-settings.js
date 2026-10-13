@@ -122,7 +122,7 @@ function renderStemEditCard() {
   let body = "";
   if (stemEditState === "working") {
     body = `
-      <div class="sc-working">
+      <div class="sc-working busy">
         <span class="sc-work-copy">
           <span class="sc-work-label">${stemEditWorkLabel}</span>
         </span>

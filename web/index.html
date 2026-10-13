@@ -116,9 +116,9 @@
         <div id="setupStepAudio" class="sp-pane">
           <h2 class="setup-heading">Rocksmith audio export</h2>
           <p class="sp-note" id="setupAudioIntro">Checking the audio converter…</p>
-          <div class="setup-readiness" role="status">
-            <span id="setupAudioDot" class="dot dot--warn" aria-hidden="true"></span>
-            <span id="setupAudioStatus">Checking…</span>
+          <div class="setup-readiness busy" id="setupAudioRow" role="status">
+            <span id="setupAudioDot" class="dot" aria-hidden="true" hidden></span>
+            <span id="setupAudioStatus">Checking the audio converter</span>
           </div>
           <p class="sp-note" id="setupAudioDetail"></p>
           <div class="setup-audio-actions">
@@ -412,7 +412,7 @@
       </div>
       <!-- Scroll wrapper ≠ render element: alphaTab's auto-scroll math assumes the
            scroll container is an ancestor of the render container. -->
-      <div id="tabScroll"><div id="tabRender"></div></div>
+      <div id="tabScroll"><div id="tabBusy" class="busy" role="status" hidden>Building tablature</div><div id="tabRender"></div></div>
     </div>
   </div>
 
@@ -1025,7 +1025,6 @@
 
         </div>
         <div class="modal-footer">
-          <p id="npStatus" class="hint" hidden></p>
           <div class="modal-actions">
             <button type="button" id="npCancel">Cancel</button>
             <button type="submit" id="go" class="primary">Create</button>

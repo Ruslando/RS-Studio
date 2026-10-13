@@ -123,8 +123,15 @@ export function exportSongName(meta, fallback = "Untitled") {
 //
 // Returns the merged metadata, or null if it failed; `status` has already been
 // told either way.
+// Where a cover change reports (design.md 4.17): the tile spins while it runs, and
+// only a failure is a sentence, said by `say`.
+export const coverStatus = (tile, say) => (message, error = false, busy = false) => {
+  tile.classList.toggle("busy", busy);
+  say(error ? message : "", error);
+};
+
 export async function applyCoverChange(textMeta, run, status, working, done) {
-  status(working);
+  status(working, false, true);
   try {
     const result = await run();
     status(done);
