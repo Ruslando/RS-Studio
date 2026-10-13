@@ -538,9 +538,7 @@ export const TOURS = {
         do: ACT.findSimilar,
         spot: "spectrogramArea",
         title: "Find similar",
-        body: "Selected notes of a motif can be used to find similar passages in a song. The search reads the audio layer you are viewing, so a separated stem of that instrument gives the best results; the full song works, but finds less.
-
-Right-click to open the context menu and choose Find similar passage.",
+        body: "Selected notes of a motif can be used to find similar passages in a song. The search reads the audio layer you are viewing, so a separated stem of that instrument gives the best results; the full song works, but finds less.\n\nRight-click to open the context menu and choose Find similar passage.",
         until: UNTIL.matches,
         tasks: [
           { label: "Open the context menu", until: UNTIL.menuOpened },
