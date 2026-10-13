@@ -381,11 +381,13 @@ body.row-resizing { cursor: row-resize; user-select: none; }
 }
 .lane-row .lane-dot { grid-column: 1; grid-row: 1; }
 .lane-row .lane-name, .lane-row .lane-name-input { grid-column: 2; grid-row: 1; }
-.lane-row .count { grid-column: 2; grid-row: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lane-row .lane-ctrls { grid-column: 3; grid-row: 1 / 3; }
+/* The summary line (arrangement · tuning · notes) runs under the buttons too. */
+.lane-row .count { grid-column: 2 / 4; grid-row: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lane-row .lane-ctrls { grid-column: 3; grid-row: 1; }
 @container layers (max-width: 280px) {
   .lane-row .lane-name, .lane-row .lane-name-input { grid-column: 2 / 4; }
   .lane-row .lane-ctrls { grid-row: 2; }
+  .lane-row .count { grid-column: 2; }
   .lane-row:not(#addLane) { row-gap: var(--s-pair); }
 }
 .stem-ctrls { display: grid; grid-template-columns: repeat(3, var(--h-compact)); gap: var(--s-pair); }

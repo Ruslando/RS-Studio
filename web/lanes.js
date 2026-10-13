@@ -15,6 +15,7 @@ import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refr
 import { closeLayerSettings, layerArrangement, layerCapo, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
 import { layerVolumePercent, normLayerVolume, notesLowToHigh, volumeToDb } from "./util.js";
 import { withStartTone } from "./tone-marker-core.js";
+import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane } from "./layer-role.js";
 import { moveCapo } from "./voicing-core.js";
 
 // ---- lane / stem helpers ----
@@ -119,6 +120,7 @@ function buildTuningOptions(lane) {
 
 export function renderLayerSettings() {
   if (!layerInstr || !S.state) return;
+  refreshCounts();   // tuning, capo and arrangement all show in the layer rows
   buildLayerOptions();
   const lane = settingsLane();
   if (layerDeleteBtn) layerDeleteBtn.hidden = !!newLaneDraft;
@@ -234,9 +236,8 @@ export function renderLanes() {
     name.addEventListener("dblclick", (e) => { e.stopPropagation(); beginRename(lane, row, name); });
 
     const count = document.createElement("span");
-    count.className = "count"; count.textContent = `${lane.notes.length.toLocaleString()} note${lane.notes.length === 1 ? '' : 's'}`;
-    count.title = `${lane.notes.length} note${lane.notes.length === 1 ? "" : "s"}`;
-    lane._count = count;
+    count.className = "count";
+    lane._count = count;   // filled by refreshCounts below
 
     // An eye, struck through (via CSS) when the layer is hidden.
     const vis = laneBtn("lane-btn vis-btn" + (lane.visible ? "" : " off"), ICON.eye,
@@ -283,6 +284,7 @@ export function renderLanes() {
   // they arrive with their transitions suppressed and settle two frames later.
   clearArriving(lanesEl);
 
+  refreshCounts();
   renderLayerSettings();   // keep Settings → Layer in sync with the active lane
 }
 
@@ -394,10 +396,30 @@ function toggleLaneLock(lane) {
   refreshSaveState();
 }
 
+// The row's second line: "Lead · Eb Standard · Capo 2 · 124 notes". Auto
+// arrangements resolve exactly as the Rocksmith export dialog pre-selects them.
+function tuningLabel(lane) {
+  if (TUNINGS[lane.tuning]) {
+    // The notes are in Settings; the presets' plain "Standard" needs its root back.
+    const name = TUNINGS[lane.tuning].label.replace(/\s*\(.*\)$/, "");
+    return name === "Standard" ? `${notesLowToHigh(laneTuning(lane)).split(" ")[0]} Standard` : name;
+  }
+  const custom = customTunings.find((t) => t.id === lane.tuning);
+  return custom ? custom.name : notesLowToHigh(laneTuning(lane));
+}
+
 export function refreshCounts() {
-  for (const lane of S.state.lanes) if (lane._count) {
-    lane._count.textContent = `${lane.notes.length.toLocaleString()} note${lane.notes.length === 1 ? '' : 's'}`;
-    lane._count.title = `${lane.notes.length} note${lane.notes.length === 1 ? "" : "s"}`;
+  const used = new Set();
+  for (const lane of editLanes()) {
+    const kind = defaultRsKind({ tuning: laneTuning(lane), arrangement: lane.rocksmithArrangement }, used);
+    if (!lane._count) continue;
+    const parts = [
+      isTablatureLane(lane) ? RS_KIND_OPTIONS.find(([k]) => k === kind)[1] : "No export",
+      tuningLabel(lane),
+      ...(Number(lane.capo) > 0 ? [`Capo ${lane.capo}`] : []),
+      `${lane.notes.length.toLocaleString()} note${lane.notes.length === 1 ? "" : "s"}`,
+    ];
+    lane._count.textContent = lane._count.title = parts.join(" · ");
   }
 }
 

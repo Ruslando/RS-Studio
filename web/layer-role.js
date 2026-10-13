@@ -28,3 +28,33 @@ export function selectedTablatureLane(lanes) {
   const selected = (lanes || []).find((lane) => lane.active) || null;
   return isTablatureLane(selected) ? selected : null;
 }
+
+export const RS_KIND_OPTIONS = [
+  ["lead", "Lead"],
+  ["rhythm", "Rhythm"],
+  ["alt_lead", "Alt Lead"],
+  ["alt_rhythm", "Alt Rhythm"],
+  ["bonus_lead", "Bonus Lead"],
+  ["bonus_rhythm", "Bonus Rhythm"],
+  ["bass", "Bass"],
+  ["alt_bass", "Alt Bass"],
+  ["bonus_bass", "Bonus Bass"],
+];
+
+// What an "Auto" layer exports as: the first free kind for its neck, in layer
+// order. The export dialog pre-selects this and the sidebar row shows it, so the
+// two walk the same layers through the same `used` set.
+export function defaultRsKind(track, used) {
+  if (RS_KIND_OPTIONS.some(([kind]) => kind === track.arrangement)) {
+    used.add(track.arrangement);
+    return track.arrangement;
+  }
+  const tuning = track.tuning || [];
+  const isBass = tuning.length === 4 || (tuning.length === 5 && Math.max(...tuning) < 52);
+  const order = isBass
+    ? ["bass", "alt_bass", "bonus_bass"]
+    : ["lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm"];
+  const kind = order.find((k) => !used.has(k)) || order[0];
+  used.add(kind);
+  return kind;
+}
