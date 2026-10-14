@@ -206,9 +206,9 @@ let alts = null;      // { note, rev, t0, notes, influence, ranked, boxes, hover
 // panel's width while you are only watching the song go past.
 let editing = false;
 // THE WAY IN IS THE GRIP ITSELF. Outside the mode the board is a picture, and the one
-// thing on it you can point at is what the hand is holding: double-click the note,
-// the chord or the hand's fret to edit it, or click it once and the bundle under it
-// offers Edit. It replaced a pencil in a side strip, which was a control about the
+// thing on it you can point at is what the hand is holding: click the note, the
+// chord or the hand's fret, and the bundle under it offers Edit. One way in, so the
+// walkthrough and the board teach the same gesture. It replaced a pencil in a side strip, which was a control about the
 // grip placed as far from the grip as the panel allowed.
 let armed = false;
 let altsJob = null;   // the note a request is out for, so one column is asked once
@@ -1578,14 +1578,9 @@ export function init_fretboard() {
   // The board is a control only while the mode says so. Anywhere on the wood, not
   // only off a candidate box: a box is a drawing of a place the notes could go, and
   // wanting the hand there is the commonest reason to be pointing at one.
-  fretboardEl.addEventListener("dblclick", (e) => {
-    if (!editing && gripUnder(e)) setFretboardEdit(true);
-  });
   fretboardEl.addEventListener("click", (e) => {
     if (capoDragged) { capoDragged = false; return; }
     if (!editing) {
-      // The second click of a double-click lands here too and changes nothing: the
-      // grip is already armed, and dblclick takes it from there.
       const on = !transportPlaying() && gripUnder(e);
       if (on !== armed) { armed = on; drawFretboard(); }
       return;
