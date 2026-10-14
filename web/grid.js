@@ -125,8 +125,8 @@ export const segStep = (seg) => segBeatSec(seg) / segSubdiv(seg);        // one 
 
 // Add a marker at time t (placed freely — by ear against the audio, no snapping;
 // the export quantizes the seam later). Inherits whatever tempo/meter is in force
-// there so dropping it changes nothing until you edit it. Returns the marker, or
-// null if it can't sit here.
+// there, so dropping it moves no beat; its grid division starts at 1/32. Returns
+// the marker, or null if it can't sit here.
 export function addMarker(t) {
   if (!S.state) return null;
   if (!S.state.tempoMap) S.state.tempoMap = [];
@@ -134,7 +134,7 @@ export function addMarker(t) {
   const mt = Math.max(gridOffset() + 1e-3, t);
   if (mt >= S.state.duration || map.some((m) => Math.abs(+m.t - mt) < 1e-4)) return null;
   const seg = gridAt(mt);
-  const m = { t: mt, bpm: seg.bpm || gridBpm() || 120, tsNum: seg.tsNum, tsDen: seg.tsDen, subdiv: seg.subdiv || gridSubdiv() };
+  const m = { t: mt, bpm: seg.bpm || gridBpm() || 120, tsNum: seg.tsNum, tsDen: seg.tsDen, subdiv: FINE_SUBDIV };   // new markers start on the 1/32 grid
   map.push(m);
   return m;
 }
@@ -198,6 +198,28 @@ export function snapNote(start, end) {
   const s = Math.max(0, Math.round((start - seg.t) / step) * step + seg.t);
   const cells = Math.max(1, Math.round((end - start) / step));
   return { start: s, end: S.state ? Math.min(S.state.duration, s + cells * step) : s + cells * step };
+}
+
+// After every committed edit: a note whose start fell off its grid — a tempo flag
+// dragged it into another tempo's span, an offset change slid it, a meter change
+// moved the lines under it — is pulled back on exactly as touching it would. A
+// start on the 1/32 grid counts as on-grid, so detected notes keep their rhythm.
+// Hand holds on a snapped note's start follow it. Returns how many notes moved.
+// ponytail: start-only check, a note whose end alone is off is left as it is
+export function snapStrayNotes(lanes) {
+  const on = (t, seg, step) => { const k = (t - seg.t) / step; return Math.abs(k - Math.round(k)) * step < 1e-4; };
+  let moved = 0;
+  for (const lane of lanes) {
+    for (const n of lane.notes) {
+      const seg = gridAt(n.start);
+      if (!seg.bpm || on(n.start, seg, segStep(seg)) || on(n.start, seg, 60 / seg.bpm / FINE_SUBDIV)) continue;
+      const q = snapNote(n.start, n.end);
+      for (const h of lane.handHolds || []) if (Math.abs(+h.t - n.start) < 1e-6) h.t = q.start;
+      n.start = q.start; n.end = q.end;
+      moved++;
+    }
+  }
+  return moved;
 }
 
 // Pull a detected note onto the 1/32 grid (the finest division): snap its

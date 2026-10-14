@@ -6,7 +6,7 @@ import { placeFloating } from "./floating-position.js";
 // A marker starts a new bar at its own tempo/meter, tiling forward to the next.
 
 import { MM_HEAD, stageMono, stageUi } from "./constants.js";
-import { bpmInput, inTourCard, markerAtEl, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
+import { bpmInput, inTourCard, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
 import { addMarker, currentGridState, gridOffset, gridSegments, removeMarker, retimeTempoSpan, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid.js";
@@ -15,7 +15,9 @@ import { refreshTabIfOpen } from "./tablature.js";
 import { timeAt, xOf } from "./geometry.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
-import { railScale, railsHidden } from "./marker-rails.js";
+import { railScale, railsHidden, timedLaneMarkers } from "./marker-rails.js";
+import { editLanes } from "./lanes.js";
+import { sectionMarkersChanged } from "./section-markers.js";
 import { gridDivLabelFor } from "./ui.js";
 import { refreshSaveState } from "./project.js";
 
@@ -30,13 +32,15 @@ let editSeg = null;         // the segment currently open in the popover
 // closes, and drop it uncommitted when undo is what closed it.
 let popSnapshot = null;
 let popSeg = null;          // the segment as it was when the session began: its bpm is the old tempo
+let popRiders = null;       // what a time edit carries along (spanRiders), taken at the session's first one
 const beginPopEdit = () => { if (!popSnapshot) { popSnapshot = snapshotEdit(); popSeg = editSeg; } };
 const endPopEdit = () => {
   const prev = popSnapshot, seg = popSeg;
-  popSnapshot = popSeg = null;
+  popSnapshot = popSeg = popRiders = null;
   if (!prev) return;
   retimeSession(seg);
   commitStructure(prev);
+  refreshTabIfOpen();
 };
 
 // A BPM change re-times what sits under the marker, once, when the session ends —
@@ -48,6 +52,7 @@ function retimeSession(seg) {
   const t1 = gridSegments().find((s) => s.t > t0 + 1e-6)?.t ?? Infinity;
   if (bpm === seg.bpm) return;
   const spilled = retimeTempoSpan(t0, t1, seg.bpm, bpm);
+  sectionMarkersChanged();   // the retime moved section flags in place
   draw(); refreshTabIfOpen();   // the notes moved; nothing else repaints until the next mouse move
   if (spilled) toast(`${spilled} note${spilled === 1 ? "" : "s"} moved past the next tempo marker — check them`, 6000, "warn");
 }
@@ -139,10 +144,36 @@ export function markerCursorAt(x, y) {
   return null;
 }
 
+// Everything from a tempo flag up to the next one — notes, hand holds, reference
+// boxes and section/phrase/tone markers — as closures that put it at its original
+// time plus `delta`. Content past the next flag belongs to that one and stays put.
+function spanRiders(seg) {
+  const t1 = gridSegments().find((s) => s.t > seg.t + 1e-6)?.t ?? Infinity;
+  const inSpan = (t) => t >= seg.t - 1e-6 && t < t1 - 1e-6;
+  const dur = S.state.duration, clamp = (t) => Math.max(0, Math.min(dur, t));
+  const lanes = editLanes(), riders = [];
+  const marks = [...(S.state.sectionMarkers || []), ...timedLaneMarkers(lanes), ...lanes.flatMap((l) => l.handHolds || [])];
+  for (const m of marks) {
+    const t = +m.t;
+    if (inSpan(t)) riders.push((d) => { m.t = clamp(t + d); });
+  }
+  for (const lane of lanes) {
+    for (const n of lane.notes) {
+      const { start, end } = n;
+      if (inSpan(start)) riders.push((d) => { n.start = clamp(start + d); n.end = clamp(end + d); });
+    }
+    for (const g of Object.values(lane.refBoxes || {})) {
+      const anchors = g?.anchors;
+      if (Array.isArray(anchors) && inSpan(anchors[0])) riders.push((d) => { g.anchors = anchors.map((a) => a + d); });
+    }
+  }
+  return riders;
+}
+
 // Called first from the stage mousedown. Only the flag (top rail) is a handle, so
 // clicks below it fall through to the normal playhead/note editing. Drag a flag to
-// move it — the start flag drags the grid origin (offset), others move freely; a
-// plain click opens the editor. Set a marker's exact time in that editor instead.
+// move it, carrying its span along (see spanRiders) — the start flag drags the grid
+// origin (offset); a plain click opens the editor. Set a marker's exact time in that editor instead.
 export function markerMouseDown(e) {
   if (!S.state || e.button !== 0) return false;
   const [x, y] = toCanvas(e.clientX, e.clientY);
@@ -153,24 +184,45 @@ export function markerMouseDown(e) {
   const seg = hit.seg;
   const grabDT = timeAt(x) - seg.t;
   let moved = null;   // the pre-drag snapshot, taken lazily: a click must not pay for one
+  let riders = null;  // (delta) => void, one per thing inside this tempo span: it moves with the flag
+  // This flag's popover is open: the drag is that session typing into its
+  // Position field — live readout, one undo step at close, revert still works.
+  const viaPop = !markerPop.hidden && editSeg && (seg.seg0 ? editSeg.seg0 : editSeg.ref === seg.ref);
   const onMove = (ev) => {
-    if (!moved) moved = snapshotEdit();   // before the first write, so it captures the original time
     const [mx] = toCanvas(ev.clientX, ev.clientY);
     const nt = timeAt(mx) - grabDT;
+    if (viaPop) {
+      moved = true;
+      markerTime.value = Math.max(0, nt).toFixed(3);
+      applyMarkerTime(); syncReverts();
+      return;
+    }
+    if (!moved) {
+      endPopEdit();             // another marker's open session ends before this edit
+      moved = snapshotEdit();   // before the first write, so it captures the original time
+      riders = spanRiders(seg);
+    }
     if (seg.seg0)   // dragging the start flag moves the grid origin (the offset)
       offsetInput.value = Math.max(0, Math.min(S.state.duration - 1e-3, nt)).toFixed(3);
     else
       seg.ref.t = Math.max(gridOffset() + 1e-3, Math.min(S.state.duration - 1e-3, nt));
+    const delta = (seg.seg0 ? gridOffset() : seg.ref.t) - seg.t;
+    for (const ride of riders) ride(delta);
+    sectionMarkersChanged();
     draw();
   };
   const onUp = (ev) => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
-    if (!moved) openMarkerPop(ev.clientX, ev.clientY, seg);   // a click (no drag) edits
-    // seg0's time IS the grid offset, and the offset input's change handler does
-    // its own snapshot + note shift — so hand it over rather than commit twice.
-    else if (seg.seg0) offsetInput.dispatchEvent(new Event("change"));
-    else { commitStructure(moved); draw(); refreshSaveState(); }
+    if (!moved) { openMarkerPop(ev.clientX, ev.clientY, seg); return; }   // a click (no drag) edits
+    if (viaPop) { refreshTabIfOpen(); return; }   // the popover session commits when it closes
+    // The notes already rode along, so the offset's own change handler (which
+    // shifts every note in the song) must not run — just re-baseline it.
+    if (seg.seg0) {
+      S.appliedOffset = gridOffset();
+      if (S.appliedGrid) S.appliedGrid.offset = S.appliedOffset;
+    }
+    commitStructure(moved); draw(); refreshTabIfOpen(); refreshSaveState();
   };
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
@@ -214,7 +266,6 @@ function openMarkerPop(clientX, clientY, seg) {
   markerTsDen.value = seg.tsDen;
   setSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, seg.subdiv || 1);
   markerTime.value = String(+seg.t.toFixed(3));   // exact seconds, not a rounded m:ss
-  markerAtEl.textContent = seg.seg0 ? "start marker" : "";
   markerDeleteBtn.hidden = !!seg.seg0;   // the anchor can't be deleted (it's the base grid)
   markerPop.hidden = false;
   syncReverts();
@@ -251,7 +302,7 @@ function revertField(k) {
   if (k === "bpm") markerBpm.value = String(seg.bpm);
   if (k === "ts") { markerTsNum.value = seg.tsNum; markerTsDen.value = seg.tsDen; }
   if (k === "subdiv") setSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, seg.subdiv || 1);
-  if (k === "time") { markerTime.value = String(+seg.t.toFixed(3)); applyMarkerTime(true); }
+  if (k === "time") { markerTime.value = String(+seg.t.toFixed(3)); applyMarkerTime(); }
   else applyPop();
   syncReverts();
 }
@@ -292,33 +343,59 @@ function applyPop() {
   refreshSaveState();
 }
 
-// Set a marker's exact time from the popover. For an extra marker this is a live
-// nudge (cheap, no retiming). seg0's time IS the global grid offset, which shifts
-// placed notes — so that runs only on commit (change/blur), reusing the offset
-// input's own handler rather than duplicating its note-shift + undo logic.
-function applyMarkerTime(commit) {
+// Set a marker's exact time from the popover — the same move as dragging its flag:
+// what sits in its span rides along (spanRiders), live while typing. Every value
+// is measured from where the session began, so "1" on the way to "1.5" is harmless.
+function applyMarkerTime() {
   if (!editSeg) return;
-  let t = parseFloat(markerTime.value);
+  const t = parseFloat(markerTime.value);
   if (!Number.isFinite(t)) return;
+  beginPopEdit();
+  if (!popRiders) popRiders = spanRiders(editSeg);
   if (editSeg.seg0) {
-    const bounded = Math.max(0, Math.min(S.state.duration - 1e-3, t));
-    if (!commit) {
-      // Preview the new grid origin while typing. The committed offset remains
-      // untouched until change/blur, when the existing handler shifts notes and
-      // records the edit for undo.
-      offsetInput.value = String(+bounded.toFixed(3));
-      draw();
-      return;
-    }
-    offsetInput.value = bounded.toFixed(3);
-    offsetInput.dispatchEvent(new Event("change"));   // shifts notes, updates the grid + undo
-    draw();
+    offsetInput.value = Math.max(0, Math.min(S.state.duration - 1e-3, t)).toFixed(3);
+    // The notes ride here, so the offset's own change handler (which shifts every
+    // note in the song) must see nothing left to do.
+    S.appliedOffset = gridOffset();
+    if (S.appliedGrid) S.appliedGrid.offset = S.appliedOffset;
   } else {
-    beginPopEdit();
     editSeg.ref.t = Math.max(gridOffset() + 1e-3, Math.min(S.state.duration - 1e-3, t));
-    draw();
-    refreshSaveState();
   }
+  const delta = (editSeg.seg0 ? gridOffset() : editSeg.ref.t) - editSeg.t;
+  for (const ride of popRiders) ride(delta);
+  sectionMarkersChanged();
+  draw();
+  refreshSaveState();
+}
+
+// DAW-style scrub: press on a number field and drag sideways to change it —
+// 10 ms per pixel, 1 ms with Shift. A press without a drag still focuses it for typing.
+function scrubField(input, apply) {
+  input.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    const x0 = e.clientX, v0 = parseFloat(input.value) || 0;
+    let scrubbing = false;
+    const onMove = (ev) => {
+      if (!scrubbing) {
+        if (Math.abs(ev.clientX - x0) < 3) return;
+        scrubbing = true;
+        input.blur();
+        document.body.classList.add("scrubbing");
+      }
+      const v = Math.max(0, v0 + (ev.clientX - x0) * (ev.shiftKey ? 0.001 : 0.01));
+      input.value = v.toFixed(3);
+      apply();
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      document.body.classList.remove("scrubbing");
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
 }
 
 export function init_markers() {
@@ -333,8 +410,8 @@ export function init_markers() {
   [markerBpm, markerTsNum, markerTsDen].forEach((el) => el.addEventListener("input", applyPop));
   markerSubdiv.addEventListener("change", () => { syncSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap); applyPop(); });
   markerSubdivCustom.addEventListener("input", applyPop);
-  markerTime.addEventListener("input", () => applyMarkerTime(false));
-  markerTime.addEventListener("change", () => applyMarkerTime(true));
+  markerTime.addEventListener("input", applyMarkerTime);
+  scrubField(markerTime, () => { applyMarkerTime(); syncReverts(); });
   markerPop.addEventListener("input", syncReverts);
   markerPop.addEventListener("change", syncReverts);
   for (const b of revertBtns()) b.addEventListener("click", (e) => { e.preventDefault(); revertField(b.dataset.revert); });
@@ -342,6 +419,6 @@ export function init_markers() {
   markerPopClose.addEventListener("click", closeMarkerPop);
   // Undo replaced S.state.tempoMap, so editSeg.ref points at an object no longer
   // in it. Drop the session without committing and shut the popover.
-  window.addEventListener(STATE_RESTORED, () => { popSnapshot = null; closeMarkerPop(); });
+  window.addEventListener(STATE_RESTORED, () => { popSnapshot = popRiders = null; closeMarkerPop(); });
   // Marker editors stay open until their close button is pressed.
 }

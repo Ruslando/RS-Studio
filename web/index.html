@@ -501,7 +501,6 @@
         <span class="pop-field"><input type="number" id="markerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
           <button type="button" class="field-revert" data-revert="time" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
       </label>
-      <span id="markerAt" class="legend"></span>
     </div>
   </div>
 
@@ -738,11 +737,11 @@
           <label class="field-group block" hidden>Grid division
             <select id="subdiv">
               <option value="1">1/4 (beat)</option>
-              <option value="2" selected>1/8</option>
+              <option value="2">1/8</option>
               <option value="3">1/8T (triplet)</option>
               <option value="4">1/16</option>
               <option value="6">1/16T (triplet)</option>
-              <option value="8">1/32</option>
+              <option value="8" selected>1/32</option>
               <option value="custom">Custom…</option>
             </select>
           </label>

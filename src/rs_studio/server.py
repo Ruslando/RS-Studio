@@ -593,7 +593,7 @@ def _blank_manifest(job_id: str) -> dict:
                 "tablatureEnabled": True, "notes": [],
             },
         ],
-        "grid": {"bpm": 120, "offset": 0.0, "subdiv": 2, "tsNum": 4, "tsDen": 4, "snap": True, "showGrid": True},
+        "grid": {"bpm": 120, "offset": 0.0, "subdiv": 8, "tsNum": 4, "tsDen": 4, "snap": True, "showGrid": True},
         "warnings": [],
         "sectionMarkers": [],
         "scoreBars": [],

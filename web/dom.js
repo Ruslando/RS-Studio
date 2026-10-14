@@ -72,7 +72,7 @@ export const tapBtn = $("tap"), tapInfo = $("tapInfo");
 export const markerPop = $("markerPop"), markerPopTitle = $("markerPopTitle"), markerPopClose = $("markerPopClose");
 export const markerBpm = $("markerBpm"), markerTsNum = $("markerTsNum"), markerTsDen = $("markerTsDen");
 export const markerSubdiv = $("markerSubdiv"), markerSubdivCustom = $("markerSubdivCustom"), markerSubdivCustomWrap = $("markerSubdivCustomWrap");
-export const markerAtEl = $("markerAt"), markerDeleteBtn = $("markerDelete"), markerTime = $("markerTime");
+export const markerDeleteBtn = $("markerDelete"), markerTime = $("markerTime");
 export const sectionMarkerPop = $("sectionMarkerPop"), sectionMarkerPopClose = $("sectionMarkerPopClose");
 export const sectionMarkerKind = $("sectionMarkerKind"), sectionMarkerName = $("sectionMarkerName");
 export const sectionMarkerNameWrap = $("sectionMarkerNameWrap"), sectionMarkerType = $("sectionMarkerType");

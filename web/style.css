@@ -590,6 +590,10 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 .live-editor .sp-row { display: flex; gap: var(--s-sibling); align-items: center; }
 #markerPop .sp-slash { color: var(--hint); }
 .live-editor input[type="number"] { width: 100%; }
+/* Position scrubs sideways (DAW-style); once focused it is a text field again. */
+#markerTime { cursor: ew-resize; }
+#markerTime:focus { cursor: text; }
+body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none; }
 .live-editor { width: min(var(--w-popover), calc(100vw - 16px)); }
 .live-editor .pop-title { font-size: var(--text-body); }
 .live-editor .pop-head { padding-bottom: var(--s-sibling); border-bottom: 1px solid var(--line); }
@@ -606,7 +610,6 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 .tempo-input-group .pop-field { min-width: 0; }
 .tempo-input-group #tap { flex: none; width: var(--h-control); }
 .live-editor .tap-tempo-readout { text-align: right; font-size: var(--text-data); }
-.live-editor #markerAt { font-size: var(--text-data); text-align: right; }
 
 #layerSettingsBackdrop, #stemSettingsBackdrop { z-index: var(--z-window-editor); }
 

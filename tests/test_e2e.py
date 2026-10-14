@@ -221,6 +221,14 @@ class EndToEndTests(unittest.TestCase):
         self.new_audio_project()
         page.dblclick("#stage", position={"x": 300, "y": 300})
         notes(1)
+        # A new note is a quarter long, whatever the grid division.
+        quarter, length = page.evaluate("""async () => {
+            const { S } = await import("./store.js");
+            const { gridAt } = await import("./grid.js");
+            const n = S.state.editLanes.flatMap((l) => l.notes)[0];
+            return [60 / gridAt(n.start).bpm, n.end - n.start];
+        }""")
+        self.assertAlmostEqual(length, quarter, places=6)
         page.dblclick("#stage", position={"x": 500, "y": 400})
         notes(2)
         page.keyboard.press("Control+z")
@@ -244,6 +252,131 @@ class EndToEndTests(unittest.TestCase):
         page.get_by_role("button", name="Open E2E Audio").first.click()
         expect(page.locator("#appshell")).to_be_visible()
         notes(2)
+
+    def test_dragging_a_tempo_marker_carries_what_is_in_its_span(self):
+        page = self.page
+        self.new_audio_project()
+        # Tempo markers at 2 s and 4 s; a section flag and a note before, inside and
+        # after the first span, and a tone marker inside it.
+        page.evaluate("""async () => {
+            const { S } = await import("./store.js");
+            const { addMarker, snap } = await import("./grid.js");
+            const { draw } = await import("./repaint.js");
+            addMarker(2); addMarker(4);
+            S.state.sectionMarkers = [1, 3, 5].map((t) => ({ id: "s" + t, t, type: "verse", name: "" }));
+            const lane = S.state.editLanes[0];
+            lane.toneMarkers = [{ id: "tone1", t: 3, tone: "A" }];
+            lane.notes = [1, 3, 5].map((t) => ({ start: snap(t), end: t + 0.25, pitch: 45, string: 5, fret: 0 }));
+            draw();
+        }""")
+        times = lambda: page.evaluate("""async () => {
+            const { S } = await import("./store.js");
+            const lane = S.state.editLanes[0];
+            return [S.state.sectionMarkers.map((m) => m.t), lane.notes.map((n) => n.start).sort((a, b) => a - b),
+                    lane.toneMarkers[0].t];
+        }""")
+        px = page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
+        stage = page.locator("#stage").bounding_box()
+        scroll = page.evaluate("document.getElementById('scroll').scrollLeft")
+
+        def drag(t, by, then=None):
+            x = stage["x"] + t * px - scroll + 5
+            page.mouse.move(x, stage["y"] + 10)
+            page.mouse.down()
+            page.mouse.move(x + px * by, stage["y"] + 10, steps=6)
+            if then: then()
+            page.mouse.up()
+
+        def near(got, want):
+            for g, w in zip(got, want):
+                self.assertAlmostEqual(g, w, delta=0.02)
+
+        on_grid = times()[1]   # each note sits on its own span's gridline
+
+        def moved_while_dragging():   # live, not on release
+            sections, notes, tone = times()
+            a, b, c = on_grid
+            near(sections + notes + [tone], [1, 3.5, 5, a, b + 0.5, c, 3.5])
+
+        drag(2, 0.5, then=moved_while_dragging)
+        moved_while_dragging()
+        page.keyboard.press("Control+z")
+        self.assertEqual(times(), [[1, 3, 5], on_grid, 3])
+        # The start flag carries only its own span (up to 2 s), not the whole song.
+        drag(float(page.input_value("#offset")), 0.5)
+        sections, notes, tone = times()
+        a, b, c = on_grid
+        near(sections + notes + [tone], [1.5, 3, 5, a + 0.5, b, c, 3])
+        page.keyboard.press("Control+z")
+        # Typing a marker's time is the same move as dragging its flag.
+        page.mouse.click(stage["x"] + 2 * px - scroll + 5, stage["y"] + 10)
+        page.fill("#markerTime", "2.5")
+        page.click("#markerPopClose")
+        sections, notes, tone = times()
+        near(sections + notes + [tone], [1, 3.5, 5, a, b + 0.5, c, 3.5])
+        page.keyboard.press("Control+z")
+        self.assertEqual(times(), [[1, 3, 5], on_grid, 3])
+
+    def test_a_note_dragged_into_another_tempo_lands_on_its_grid(self):
+        page = self.page
+        self.new_audio_project()
+        page.evaluate("""async () => {
+            const { S } = await import("./store.js");
+            const { addMarker } = await import("./grid.js");
+            const { draw } = await import("./repaint.js");
+            addMarker(2); addMarker(4).bpm = 90;
+            S.state.editLanes[0].notes = [{ start: 3, end: 3.25, pitch: 45, string: 5, fret: 0 }];
+            draw();
+        }""")
+        px = page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
+        stage = page.locator("#stage").bounding_box()
+        x = stage["x"] + 2 * px - page.evaluate("document.getElementById('scroll').scrollLeft") + 5
+        page.mouse.move(x, stage["y"] + 10)
+        page.mouse.down()
+        page.mouse.move(x + px * 1.3, stage["y"] + 10, steps=6)   # the note crosses the 90 BPM flag at 4 s
+        page.mouse.up()
+        start, cells = page.evaluate("""async () => {
+            const { S } = await import("./store.js");
+            const { gridAt, segStep } = await import("./grid.js");
+            const n = S.state.editLanes[0].notes[0], seg = gridAt(n.start);
+            return [n.start, (n.start - seg.t) / segStep(seg)];
+        }""")
+        self.assertGreater(start, 4)
+        self.assertAlmostEqual(cells, round(cells), places=6)
+
+    def test_tempo_marker_position_follows_the_flag_and_scrubs(self):
+        page = self.page
+        self.new_audio_project()
+        page.evaluate("""async () => {
+            const { addMarker } = await import("./grid.js");
+            const { draw } = await import("./repaint.js");
+            addMarker(2); draw();
+        }""")
+        marker_t = lambda: page.evaluate("async () => (await import('./store.js')).S.state.tempoMap[0].t")
+        px = page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
+        stage = page.locator("#stage").bounding_box()
+        x = stage["x"] + 2 * px - page.evaluate("document.getElementById('scroll').scrollLeft") + 5
+        page.mouse.click(x, stage["y"] + 10)                  # open its popover
+        expect(page.locator("#markerPop")).to_be_visible()
+        page.mouse.move(x, stage["y"] + 10)
+        page.mouse.down()
+        page.mouse.move(x + px * 0.5, stage["y"] + 10, steps=6)
+        self.assertAlmostEqual(float(page.input_value("#markerTime")), marker_t(), places=3)   # live
+        self.assertAlmostEqual(marker_t(), 2.5, delta=0.02)
+        page.mouse.up()
+        # Drag sideways on the Position field: 10 ms per pixel.
+        before = marker_t()
+        field = page.locator("#markerTime").bounding_box()
+        fx, fy = field["x"] + field["width"] / 2, field["y"] + field["height"] / 2
+        page.mouse.move(fx, fy)
+        page.mouse.down()
+        page.mouse.move(fx + 50, fy, steps=5)
+        page.mouse.up()
+        self.assertAlmostEqual(marker_t(), before + 0.5, delta=0.011)
+        self.assertAlmostEqual(float(page.input_value("#markerTime")), marker_t(), places=3)
+        page.click("#markerPopClose")
+        page.keyboard.press("Control+z")                     # the popover session is one step
+        self.assertEqual(marker_t(), 2)
 
     def test_layer_settings_reach_the_layer_row_and_the_export_window(self):
         page = self.page

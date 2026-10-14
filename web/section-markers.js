@@ -212,6 +212,8 @@ function sectionMarkerMouseDown(event) {
 // you add one, call it there too or the rail draws the old positions.
 let normalizedCache = null;
 const markersChanged = () => { normalizedCache = null; };
+// Tempo markers move section flags too (drag, BPM retime) — they call this.
+export const sectionMarkersChanged = markersChanged;
 
 function normalizedMarkers() {
   if (normalizedCache) return normalizedCache;

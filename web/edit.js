@@ -10,7 +10,7 @@ import { icon } from "./icons.js";
 import { $, inTourCard, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopyBtn, redoMI, scroll, stage, undoMI } from "./dom.js";
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
-import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapNote } from "./grid.js";
+import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapNote, snapStrayNotes } from "./grid.js";
 import { nid, shapeId } from "./ids.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addMarkerAtTime } from "./markers.js";
@@ -118,6 +118,7 @@ export function commitStructure(prev) {
 }
 
 function recordUndo(prev) {
+  if (S.state) snapStrayNotes(editLanes());   // whatever the edit was, no note stays off its grid
   S.voicingRevision++;
   S.undoStack.push(prev);
   if (S.undoStack.length > MAX_UNDO) S.undoStack.shift();

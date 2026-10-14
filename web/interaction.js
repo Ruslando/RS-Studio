@@ -10,7 +10,7 @@ import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
 import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { pitchAt, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
-import { minDur, snap, snapNote } from "./grid.js";
+import { gridAt, minDur, snap, snapNote } from "./grid.js";
 import { markerMouseDown } from "./markers.js";
 import { markerRails, railsBottom } from "./marker-rails.js";
 import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes, setLaneNotePitch, targetLane } from "./lanes.js";
@@ -434,7 +434,9 @@ export function init_interaction() {
       const lane = targetLane(), step = minDur();
       if (!canEditLane(lane) || !step) return;
       const start = Math.max(0, Math.min(snap(timeAt(x)), S.state.duration - step));
-      const end = Math.min(S.state.duration, start + step);
+      // A new note is a quarter long, whatever the grid division (bpm counts quarters).
+      const bpm = gridAt(start).bpm;
+      const end = Math.min(S.state.duration, start + (bpm ? 60 / bpm : step));
       if (end - start < MIN_DUR) return;
       const note = { id: nid(), start, end, pitch: pitchAt(y), confidence: 1 };
       const prev = snapshotEdit();
