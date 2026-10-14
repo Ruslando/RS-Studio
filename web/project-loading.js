@@ -9,11 +9,9 @@ export async function loadWithScreen(operation, { title = "Loading project", fai
   backdrop.innerHTML = `
     <section class="project-loading" role="dialog" aria-modal="true" aria-busy="true"
              aria-labelledby="projectLoadingTitle" tabindex="-1">
-      <div class="project-loading-head">
-        <span class="project-loading-spinner" aria-hidden="true"></span>
-        <h2 id="projectLoadingTitle"></h2>
-      </div>
-      <div class="project-loading-bar" role="progressbar"><span></span></div>
+      <h2 id="projectLoadingTitle"></h2>
+      <p class="project-loading-stage" aria-live="polite" hidden></p>
+      <div class="project-loading-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><span></span></div>
       <p class="project-loading-error" role="alert" hidden></p>
       <button type="button" class="project-loading-dismiss" hidden>Back</button>
     </section>`;
@@ -27,8 +25,17 @@ export async function loadWithScreen(operation, { title = "Loading project", fai
   window.addEventListener("keydown", blockKeys, true);
   document.body.append(backdrop);
   dialog.focus();
+  // Operations that know their steps report them: a label and how far along (0..1).
+  const progress = (stage, fraction) => {
+    const line = backdrop.querySelector(".project-loading-stage");
+    line.textContent = stage; line.hidden = false;
+    const bar = backdrop.querySelector('[role="progressbar"]');
+    bar.classList.add("measured");
+    bar.setAttribute("aria-valuenow", Math.round(fraction * 100));
+    bar.firstElementChild.style.width = `${fraction * 100}%`;
+  };
   try {
-    await operation();
+    await operation(progress);
     return true;
   } catch (error) {
     window.removeEventListener("keydown", blockKeys, true);
@@ -37,7 +44,7 @@ export async function loadWithScreen(operation, { title = "Loading project", fai
     const message = backdrop.querySelector(".project-loading-error");
     message.textContent = error.message || String(error); message.hidden = false;
     backdrop.querySelector('[role="progressbar"]').hidden = true;
-    backdrop.querySelector(".project-loading-spinner").hidden = true;
+    backdrop.querySelector(".project-loading-stage").hidden = true;
     const dismiss = backdrop.querySelector("button"); dismiss.hidden = false; dismiss.focus();
     await new Promise((resolve) => dismiss.addEventListener("click", resolve, { once: true }));
     return false;

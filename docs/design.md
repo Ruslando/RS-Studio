@@ -510,7 +510,7 @@ can the user do meanwhile?
 | Kind | When | How it is shown | In code |
 |---|---|---|---|
 | **Job** | Takes noticeable time; the user can keep working | The progress panel (4.11): title, one detail line, the stage it is in, a bar, Cancel where the server supports it. The window or popover that started it closes | `operationRequest`, `uploadRequest`, `jobRequest` in `operation-progress.js` |
-| **Blocking load** | Nothing can be done until it ends, usually because a project is about to open | The loading screen: scrim, spinner, title, a running bar. A failure is said there, with Back | `loadWithScreen` |
+| **Blocking load** | Nothing can be done until it ends, usually because a project is about to open | The loading screen: scrim, title, a running bar — or, when the operation reports its steps, the current step and a measured bar. A failure is said there, with Back | `loadWithScreen` |
 | **In place** | One part of the screen waits for its own content | The spinner and a label where the content will appear | class `busy` on the waiting element |
 | **Row** | A list entry is being made or fetched | The row itself leads with the spinner, or shows its percentage in its second line | class `busy` on the row |
 | **Short request** | Under about a second | The button that started it is disabled | `disabled` |

@@ -912,7 +912,7 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 #tabRender .at-highlight * { fill: #e85a14; stroke: #e85a14; }
 
 
-.spinner, .project-loading-spinner, .tour-task-icon {
+.spinner, .tour-task-icon {
   box-sizing: border-box; width: var(--s-row); height: var(--s-row); flex: none; border-radius: 999px;
   border: 2px solid var(--hint); border-top-color: var(--text); animation: spin var(--dur-spin) linear infinite;
 }
@@ -955,9 +955,11 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
   border-radius: var(--r-container); box-shadow: var(--e1);
   outline: none;
 }
-.project-loading-head { display: flex; align-items: center; gap: var(--s-row); }
-.project-loading-head h2 { margin: 0; color: var(--text); font: 600 var(--text-heading)/1.2 var(--font-ui); }
-.project-loading-spinner { width: var(--s-group); height: var(--s-group); }
+.project-loading h2 { margin: 0; color: var(--text); font: 600 var(--text-heading)/1.2 var(--font-ui); }
+.project-loading-stage {
+  margin: 0; color: var(--label); font: 400 var(--text-control)/1.5 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
 .project-loading-bar {
   height: var(--s-pair); overflow: hidden;
   background: var(--line); border-radius: 999px;
@@ -968,12 +970,13 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
   animation: project-loading-slide var(--dur-sweep) ease-in-out infinite alternate;
 }
 @keyframes project-loading-slide { to { transform: translateX(150%); } }
+.project-loading-bar.measured span { animation: none; transition: width var(--dur-sweep) ease-out; }
 .project-loading-error {
   margin: 0; color: var(--label); font: 400 var(--text-control)/1.5 var(--font-ui);
 }
 .project-loading-dismiss { justify-self: end; }
 @media (prefers-reduced-motion: reduce) {
-  .project-loading-spinner, .project-loading-bar span { animation: none; }
+  .project-loading-bar span { animation: none; }
 }
 
 .tour-spot {

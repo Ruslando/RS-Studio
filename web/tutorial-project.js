@@ -16,6 +16,15 @@ import { S } from "./store.js";
 
 let preparing = false;
 
+// The server's rebuild stages (server.py api_project_tutorial), as step label and bar position.
+const STAGES = {
+  audio: ["Step 1 of 5 · Writing the demo song", 0.05],
+  mix: ["Step 2 of 5 · Analysing the full song", 0.15],
+  bass: ["Step 3 of 5 · Analysing the bass part", 0.6],
+  finalize: ["Step 4 of 5 · Saving the project", 0.85],
+  visuals: ["Step 5 of 5 · Drawing the spectrogram", 0.92],
+};
+
 /**
  * Open the tutorial project, rebuilt from scratch.
  * @returns {Promise<boolean>} false when the reader kept unsaved work instead.
@@ -30,11 +39,30 @@ export async function openTutorialProject() {
   if (!inTutorialProject() && !await confirmLeave()) return false;
   preparing = true;
   try {
-    return await loadWithScreen(async () => {
-      const res = await fetch("/api/projects/tutorial/rebuild", { method: "POST" });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Could not prepare walkthrough");
-      applyProject(await res.json());
-      await waitForProjectVisuals();
+    return await loadWithScreen(async (progress) => {
+      // Without a CUDA card the analysis takes a while; name each step so the wait reads as moving.
+      const id = crypto.randomUUID().replaceAll("-", "");
+      let reached = -1;   // a late poll answer must not move the bar backwards
+      const report = (stage) => {
+        if (!STAGES[stage] || STAGES[stage][1] <= reached) return;
+        reached = STAGES[stage][1];
+        progress(...STAGES[stage]);
+      };
+      report("audio");
+      const poll = setInterval(async () => {
+        const res = await fetch(`/api/projects/tutorial/progress?progress_id=${id}`).catch(() => null);
+        if (res?.ok) report((await res.json()).stage);
+      }, 400);
+      try {
+        const res = await fetch(`/api/projects/tutorial/rebuild?progress_id=${id}`, { method: "POST" });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Could not prepare walkthrough");
+        clearInterval(poll);
+        report("visuals");
+        applyProject(await res.json());
+        await waitForProjectVisuals();
+      } finally {
+        clearInterval(poll);
+      }
     }, { title: "Loading walkthrough", failureTitle: "Could not prepare walkthrough" });
   } finally {
     preparing = false;
