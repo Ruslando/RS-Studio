@@ -78,7 +78,6 @@ const ACTIONS = {
     setFretboardVisible(false);
   },
   [ACT.lanes]: () => { if (railsHidden()) click("markerLanesToggle"); },
-  [ACT.fretboardShow]: () => setFretboardVisible(true),
   [ACT.audioReady]: () => {
     setFretboardVisible(false);
     if (document.getElementById("appshell")?.classList.contains("side-collapsed")) click("sidebarToggle");
@@ -247,9 +246,6 @@ const ACTIONS = {
     if (!document.getElementById("stemSettingsBackdrop")?.hidden) click("stemCancel");
     if (!document.getElementById("layerSettingsBackdrop")?.hidden) click("layerCancel");
   },
-  [ACT.sidebarOpen]: () => {
-    if (document.getElementById("appshell")?.classList.contains("side-collapsed")) click("sidebarToggle");
-  },
   [ACT.options]: () => click("menuTraceSettings"),
   [ACT.optionsClose]: () => click("settingsCancel"),
   [ACT.fbEdit]: () => {
@@ -276,6 +272,7 @@ const ACTIONS = {
     if (metro && !metro.checked) click("metroToggle");
   },
   [ACT.tempoReady]: () => {
+    ACTIONS[ACT.closeWindows]();
     if (transportPlaying()) click("play");
     seekPlayback(0);
     if (railsHidden()) click("markerLanesToggle");

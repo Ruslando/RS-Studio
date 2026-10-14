@@ -331,6 +331,9 @@ class EndToEndTests(unittest.TestCase):
             card.locator(".tour-next").click()          # "Next", or "Skip" on a card that waits for a task
             expect(head).not_to_have_text(seen[-1])
         self.assertGreater(len(seen), 20, seen)
+        self.assertIn("Introduction", seen[0])
+        self.assertIn("RS Studio", seen[1])
+        self.assertNotIn("Introduction", seen[2])   # the chapter is just the two cards
 
 if __name__ == "__main__":
     unittest.main()
