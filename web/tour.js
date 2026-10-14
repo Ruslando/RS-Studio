@@ -20,6 +20,7 @@ import { refMenuEntry } from "./references.js";
 import { addStemMenuMode, closeAddStemMenu, closeProject } from "./project.js";
 import { ACT, FIRST, TOURS, UNTIL, previousTourStep } from "./tour-core.js";
 import { renderInstruction } from "./tour-text.js";
+import { attachCritique } from "./tour-critique.js";   // TEMP critique
 import { addTutorialBass, clearTutorialNotes, openTutorialProject, removeTutorialBass, seedTutorialNotes, showBassStem } from "./tutorial-project.js";
 import { bpmInput, detectPanel, offsetInput, scroll, stage } from "./dom.js";
 import { currentGridState, gridBpm, gridOffset, gridSegments, gridStep, retimeTempoSpan, setSubdiv } from "./grid.js";
@@ -472,6 +473,7 @@ let spot = null, extraSpot = null, card = null, els = null;
 let steps = [], at = 0, doneLabel = "", tracking = 0, waiting = 0, nextChapter = "", currentChapter = "";
 // Async project preparation and chapter handoffs must not reopen a card after exit.
 let tourGeneration = 0;
+let showCritique = null;   // TEMP critique
 let taskTransitionPending = false;
 let manualCard = null, cardPlaced = false, dragging = null, confirmingClose = false;
 const stepStates = new Map();
@@ -911,6 +913,7 @@ async function go(i, dir = 1, departingStep = steps[at]) {
   showTasks(step);
   els.count.textContent = `${at + 1} / ${steps.length}`;
   renderInstruction(els.body, step.body);
+  showCritique?.(`${currentChapter}:${step.title}`, `${TOURS[currentChapter].label} · ${step.title}`, step.body);   // TEMP critique
   els.back.disabled = !previousTourStep(currentChapter, at);
   const last = at === steps.length - 1;
   // The last card names its destination. Close and section jumps remain available
@@ -1076,6 +1079,8 @@ export async function startTour(name, continueProject = false, initialStep = 0, 
   doneLabel = chapter.done;
   nextChapter = TOURS[chapter.next] ? chapter.next : "";
   build();
+  showCritique = await attachCritique(card);   // TEMP critique
+  if (!active() || generation !== tourGeneration) return;
   // Capture, and registered before any panel of the app's own opens one: the
   // walkthrough is the topmost thing on screen, so it sees every event first and
   // decides whether the app hears it at all.

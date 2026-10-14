@@ -975,6 +975,28 @@ TUTORIAL_JOB = "tutorial"
 _TUTORIAL_PROGRESS: dict[str, str] = {}
 
 
+# TEMP critique: walkthrough text edits and comments while the copy is reviewed. Remove with web/tour-critique.js.
+WALKTHROUGH_CRITIQUE = _DATA_ROOT / ".walkthrough-critique.json"
+
+
+@app.get("/api/walkthrough/critique")
+def api_walkthrough_critique_get() -> dict:
+    try:
+        return json.loads(WALKTHROUGH_CRITIQUE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"entries": {}}
+
+
+@app.post("/api/walkthrough/critique")
+def api_walkthrough_critique_save(payload: dict = Body(...)) -> dict:
+    if not isinstance(payload.get("entries"), dict) or len(json.dumps(payload)) > 1_000_000:
+        raise HTTPException(status_code=400, detail="Bad critique")
+    WALKTHROUGH_CRITIQUE.parent.mkdir(parents=True, exist_ok=True)
+    WALKTHROUGH_CRITIQUE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True}
+# /TEMP critique
+
+
 @app.get("/api/projects/tutorial/progress")
 def api_tutorial_progress(progress_id: str) -> dict:
     if not re.fullmatch(r"[a-f0-9]{32}", progress_id):

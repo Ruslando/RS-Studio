@@ -1190,3 +1190,15 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
   .np-audio { gap: var(--s-sibling); }
   .np-audio .stems-section { padding-top: var(--s-sibling); }
 }
+
+/* TEMP critique: the card's text as an editable field, and a comment box. Remove with web/tour-critique.js. */
+.tour-card .tour-body { display: none; }
+.tour-critique { display: grid; gap: var(--s-sibling); min-width: 0; }
+.tour-critique label { display: grid; gap: var(--s-pair); color: var(--hint); font: 500 var(--text-caption)/1.3 var(--font-ui); }
+.tour-critique textarea {
+  box-sizing: border-box; width: 100%; min-width: 0; resize: vertical;
+  padding: 7px; border: 1px solid var(--line); border-radius: var(--r-control);
+  background: var(--control); color: var(--label); font: 400 var(--text-body)/1.5 var(--font-ui);
+}
+.tour-critique-status { min-height: 1em; color: var(--hint); font: 400 var(--text-caption)/1 var(--font-ui); }
+/* /TEMP critique */
