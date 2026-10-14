@@ -15,14 +15,15 @@ import { fretboardVisible, setFretboardVisible } from "./fretboard.js";
 import { railBand, railsBottom, railsHidden } from "./marker-rails.js";
 import { firstMarkerViewportRect, openFirstMarkerPop } from "./markers.js";
 import { cancelPendingDetection, detectCompletionCount, openDetectPanel, requireDetectModel, updateDetectStatus } from "./detect.js";
-import { restoreEditSnapshot, restrictContextMenuTo, snapshotEdit, updateUndoButtons, walkthroughMenuOpenCount } from "./edit.js";
+import { doCopy, doPaste, restoreEditSnapshot, restrictContextMenuTo, snapshotEdit, updateUndoButtons, walkthroughMenuOpenCount } from "./edit.js";
 import { refMenuEntry } from "./references.js";
 import { addStemMenuMode, closeAddStemMenu, closeProject } from "./project.js";
 import { ACT, FIRST, TOURS, UNTIL, previousTourStep } from "./tour-core.js";
 import { renderInstruction } from "./tour-text.js";
 import { addTutorialBass, clearTutorialNotes, openTutorialProject, removeTutorialBass, seedTutorialNotes, showBassStem } from "./tutorial-project.js";
 import { bpmInput, detectPanel, offsetInput, scroll, stage } from "./dom.js";
-import { currentGridState, gridBpm, gridOffset, gridSegments, minDur, retimeTempoSpan } from "./grid.js";
+import { currentGridState, gridBpm, gridOffset, gridSegments, gridStep, retimeTempoSpan, setSubdiv } from "./grid.js";
+import { closeMenus } from "./menus.js";
 import { xOf, yOf } from "./geometry.js";
 import { playbackTime, seekPlayback, transportPlaying } from "./playback.js";
 import { S, setSelection } from "./store.js";
@@ -67,6 +68,10 @@ function focusTutorialNote(note) {
   draw();
 }
 
+// The fifth note of the demo phrase, a D3: open D string, 5th fret on A, 10th on
+// low E. The notes before it sit low on the E string and have nowhere else to go.
+const ALTERNATIVE_AT = 2.5;
+
 const ACTIONS = {
   [ACT.tutorial]: () => openTutorialProject(),
   [ACT.fretboard]: () => {
@@ -78,6 +83,32 @@ const ACTIONS = {
     setFretboardVisible(false);
   },
   [ACT.lanes]: () => { if (railsHidden()) click("markerLanesToggle"); },
+  [ACT.fretboardShow]: () => setFretboardVisible(true),
+  [ACT.sidebarOpen]: () => {
+    if (document.getElementById("appshell")?.classList.contains("side-collapsed")) click("sidebarToggle");
+  },
+  [ACT.prepareChord]: () => {
+    const lane = tutorialEditLane();
+    if (!lane) return;
+    if (!lane.notes.length) {
+      seedTutorialNotes(1);
+      lane.notes = lane.notes.slice(0, 1);
+      refreshCounts(); renderLanes();
+    }
+    focusTutorialNote(lane.notes[0]);
+  },
+  [ACT.prepareDraw]: () => {
+    setSelection(new Set());
+    scroll.scrollLeft = 0;
+    scroll.scrollTop = Math.max(0, yOf(45) - scroll.clientHeight / 2);
+    draw();
+  },
+  [ACT.prepareSelect]: () => {
+    if ((tutorialEditLane()?.notes?.length || 0) < 2) seedTutorialNotes(1);
+    setSelection(new Set());
+    scroll.scrollLeft = 0;
+    draw();
+  },
   [ACT.audioReady]: () => {
     setFretboardVisible(false);
     if (document.getElementById("appshell")?.classList.contains("side-collapsed")) click("sidebarToggle");
@@ -114,18 +145,15 @@ const ACTIONS = {
     if (!tutorialEditLane()?.notes?.length) seedTutorialNotes(1);
     focusTutorialNote(tutorialEditLane()?.notes?.[0]);
   },
+  // The phrase as it was before the reader moved things, its first note held into the second.
   [ACT.prepareSliceNote]: () => {
     if (card?.contains(document.activeElement)) document.activeElement.blur();
-    const lane = tutorialEditLane();
-    if (!lane?.notes?.length) seedTutorialNotes(1);
+    seedTutorialNotes(1);
     const notes = tutorialEditLane()?.notes || [];
-    const note = notes.find((item) => item.end - item.start >= 4 * minDur()) || notes[0];
-    if (!note) return;
-    if (note.end - note.start < 4 * minDur()) {
-      note.end = Math.min(S.state.duration, note.start + 4 * minDur());
-      S.voicingRevision++;
-    }
-    focusTutorialNote(note);
+    if (notes.length < 2) return;
+    notes[0].end = notes[1].start;
+    S.voicingRevision++;
+    focusTutorialNote(notes[0]);
   },
   [ACT.prepareEffectNote]: () => {
     const lane = tutorialEditLane();
@@ -136,6 +164,7 @@ const ACTIONS = {
     if (!detectPanel?.hidden) click("detectClose");
   },
   [ACT.seedFirstPhrase]: () => {
+    if (!detectPanel?.hidden) click("detectClose");
     scroll.scrollLeft = 0;
     scroll.scrollTop = 0;
     S.detectRegion = null;
@@ -145,6 +174,20 @@ const ACTIONS = {
     if (S.selection.size >= 2) return;
     const lane = S.state?.editLanes?.find((item) => item.active) || S.state?.editLanes?.[0];
     if (lane) setSelection(new Set(lane.notes.slice(0, 8)));
+  },
+  // A second, linked occurrence right after the first, for a reader who skipped making one.
+  [ACT.ensureLinkedCopy]: async () => {
+    if (refCopyCount() < 2) {
+      ACTIONS[ACT.ensureReference]();
+      const lane = tutorialEditLane();
+      setSelection(new Set(lane?.notes?.slice(0, 8) || []));
+      doCopy();
+      seekPlayback(4.35);
+      await doPaste({ mode: "reference" });
+    }
+    setSelection(new Set());
+    scroll.scrollLeft = 0;
+    draw();
   },
   [ACT.findSimilar]: () => {
     clearMatches();
@@ -164,7 +207,7 @@ const ACTIONS = {
   [ACT.focusAlternative]: () => {
     setFretboardVisible(true);
     setSelection(new Set());
-    seekPlayback(0.86);
+    seekPlayback(ALTERNATIVE_AT);
     draw();
   },
   [ACT.demoSections]: () => {
@@ -246,11 +289,13 @@ const ACTIONS = {
     if (!document.getElementById("stemSettingsBackdrop")?.hidden) click("stemCancel");
     if (!document.getElementById("layerSettingsBackdrop")?.hidden) click("layerCancel");
   },
+  [ACT.fileMenuOpen]: () => { if (document.getElementById("fileMenu")?.hidden) click("fileMenuBtn"); },
+  [ACT.fileMenuClose]: () => closeMenus(),
   [ACT.options]: () => click("menuTraceSettings"),
   [ACT.optionsClose]: () => click("settingsCancel"),
   [ACT.fbEdit]: () => {
     setFretboardVisible(true);
-    seekPlayback(0.86);
+    seekPlayback(ALTERNATIVE_AT);
     if (document.getElementById("fretboardEdit")?.getAttribute("aria-pressed") !== "true") click("fretboardEdit");
   },
   [ACT.fbEditClose]: () => {
@@ -311,8 +356,16 @@ const WAITS = {
   [UNTIL.notes]: () => (S.state?.editLanes || []).reduce((n, lane) => n + (lane.notes?.length || 0), 0),
   [UNTIL.notePosition]: () => JSON.stringify((tutorialEditLane()?.notes || [])
     .map((note) => [note.id, note.start, note.pitch])),
+  // In grid cells: a move snaps both edges and nudges an off-grid length, which is not a resize.
   [UNTIL.noteLength]: () => JSON.stringify((tutorialEditLane()?.notes || [])
-    .map((note) => [note.id, note.end - note.start])),
+    .map((note) => [note.id, Math.round((note.end - note.start) / gridStep())])),
+  [UNTIL.chord]: () => {
+    const notes = tutorialEditLane()?.notes || [];
+    return notes.filter((n) => notes.some((m) => m !== n && Math.abs(m.start - n.start) < 1e-6)).length;
+  },
+  [UNTIL.clipboard]: () => S.clipboard,
+  [UNTIL.refCopies]: () => refCopyCount(),
+  [UNTIL.capo]: () => Number(tutorialEditLane()?.capo) || 0,
   [UNTIL.noteEffects]: () => JSON.stringify((tutorialEditLane()?.notes || [])
     .map((note) => [note.id, effectSignatureFields(note)])),
   [UNTIL.menuOpened]: () => walkthroughMenuOpenCount(),
@@ -340,6 +393,10 @@ const WAITS = {
   [UNTIL.layerEditor]: () => !document.getElementById("layerSettingsBackdrop")?.hidden,
 };
 const WAIT_MS = 250;
+function refCopyCount() {
+  return (S.state?.editLanes || []).reduce((n, lane) =>
+    n + Object.values(lane.refBoxes || {}).reduce((m, group) => m + (group?.anchors?.length || 0), 0), 0);
+}
 const TASK_COMPLETE_DELAY_MS = 2000;
 
 // Where a step points when the thing it is about is drawn on the canvas and is
@@ -370,6 +427,14 @@ const SPOTS = {
   tempoMarker: () => firstMarkerViewportRect(),
   spectrogramArea: () => stage.getBoundingClientRect(),
   stage: () => stage.getBoundingClientRect(),
+  // The timeline and the editing panel, as one: they are two panels with a splitter between.
+  editorArea: () => {
+    const top = document.getElementById("playbackPanel")?.getBoundingClientRect();
+    const bottom = document.getElementById("editingWorkspace")?.getBoundingClientRect();
+    return top && bottom ? { left: Math.min(top.left, bottom.left), top: top.top,
+      width: Math.max(top.right, bottom.right) - Math.min(top.left, bottom.left),
+      height: bottom.bottom - top.top } : null;
+  },
   layerBasics: () => {
     const first = document.querySelector("#spLayer .section:nth-child(1)")?.getBoundingClientRect();
     const second = document.querySelector("#spLayer .section:nth-child(2)")?.getBoundingClientRect();
@@ -378,6 +443,14 @@ const SPOTS = {
       width: Math.max(first.right, second.right) - Math.min(first.left, second.left),
       height: second.bottom - first.top,
     } : null;
+  },
+  // The demo bass line's rows, across the visible song: the bright lines to trace.
+  phraseArea: () => {
+    if (!S.state?.rowH) return null;
+    const box = stage.getBoundingClientRect();
+    const top = Math.max(box.top, box.top + yOf(52) - scroll.scrollTop);
+    const bottom = Math.min(box.bottom, box.top + yOf(38) + S.state.rowH - scroll.scrollTop);
+    return bottom > top ? { left: box.left, top, width: box.width, height: bottom - top } : null;
   },
   sectionFlags: () => markerBandRect("section"),
   phraseFlags: () => markerBandRect("phrase"),
@@ -753,6 +826,7 @@ function startWaiting(step) {
     }
     if (!states.every((task) => task.complete)) return;
     stopWaiting();
+    if (step.stay) { els.next.textContent = at === steps.length - 1 ? doneLabel : "Next"; return; }
     // The completed card stays up for two seconds. Do not let its old allow
     // rules start another gesture that will still be active on the next card.
     taskTransitionPending = true;
@@ -908,9 +982,11 @@ function guard(e) {
     const buttonMatches = !allowedButtons || allowedButtons.some((button) =>
       e.type === "mousemove" ? !!(e.buttons & (1 << button)) : e.button === button);
     if (step.allowSpot && e.target === stage && e.clientX !== undefined && buttonMatches) {
-      if (step.requireModifier === "Shift" && !e.shiftKey) return blockTourEvent(e);
-      if (step.requireModifier === "Alt" && !e.altKey) return blockTourEvent(e);
-      if (step.requireModifier === "S" && !S.sliceHeld) return blockTourEvent(e);
+      // The modifier is for the left button; a right-click on the same card opens the menu.
+      const modifier = e.button === 2 ? null : step.requireModifier;
+      if (modifier === "Shift" && !e.shiftKey) return blockTourEvent(e);
+      if (modifier === "Alt" && !e.altKey) return blockTourEvent(e);
+      if (modifier === "S" && !S.sliceHeld) return blockTourEvent(e);
       const r = SPOTS[step.allowSpot]?.();
       if (r && e.clientX >= r.left && e.clientX <= r.left + r.width &&
           e.clientY >= r.top && e.clientY <= r.top + r.height) return;
@@ -971,15 +1047,17 @@ export async function startTour(name, continueProject = false, initialStep = 0, 
   // the current tutorial song so work such as stem separation and tempo survives.
   if (chapter.project && !continueProject && await ACTIONS[chapter.project]() === false) return;
   if (generation !== tourGeneration) return;
-  if (!continueProject && name !== FIRST && name !== "audio") {
-    if (await addTutorialBass() === false) return;
-    if (generation !== tourGeneration) return;
-    // A direct jump to the drawing lessons starts after the tempo exercise.
-    if (name !== "tempo") {
-      bpmInput.value = "120";
-      offsetInput.value = "0.35";
-      S.appliedGrid = currentGridState();
-      draw();
+  if (!continueProject) {
+    // The demo song's real grid, from the start: 120 BPM from its first beat at
+    // 0.35 s, at the 1/32 that note detection asks for.
+    bpmInput.value = "120";
+    offsetInput.value = "0.35";
+    setSubdiv(8);
+    S.appliedGrid = currentGridState();
+    draw();
+    if (![FIRST, "overview", "audio"].includes(name)) {
+      if (await addTutorialBass() === false) return;
+      if (generation !== tourGeneration) return;
     }
   }
 

@@ -46,6 +46,14 @@ export function previousTourStep(chapter, step) {
 export const ACT = {
   tutorial: "tutorial",     // open the walkthrough's own song, rebuilt
   fretboard: "fretboard",   // the neck is off at launch
+  fretboardShow: "fretboardShow", // reveal the neck during the overview
+  sidebarOpen: "sidebarOpen",
+  prepareSelect: "prepareSelect", // notes to select, none selected yet
+  prepareChord: "prepareChord", // one note to stack a second on
+  prepareDraw: "prepareDraw", // bring the bass line into view
+  ensureLinkedCopy: "ensureLinkedCopy", // a reference with a pasted twin
+  fileMenuOpen: "fileMenuOpen",
+  fileMenuClose: "fileMenuClose",
   audioReady: "audioReady", // restore the compact neck and show the sidebar
   lanes: "lanes",           // so are the marker lanes
   seed: "seed",             // put the demo phrase in the active layer
@@ -132,6 +140,10 @@ export const UNTIL = {
   bass: "bass",             // the bass arrived in the audio list
   stemEditor: "stemEditor", // the audio editor was opened
   layerEditor: "layerEditor",
+  chord: "chord",           // two notes start together
+  clipboard: "clipboard",   // something was copied
+  refCopies: "refCopies",   // a reference gained an occurrence
+  capo: "capo",             // the layer's capo moved
 };
 
 // The chapter the Walkthrough card on the landing page starts. Every other
@@ -159,39 +171,71 @@ export const TOURS = {
   editor: {
     label: "Introduction",
     project: ACT.tutorial,
-    next: "audio",
-    done: "Next: Audio layers",
+    next: "overview",
+    done: "Next: Overview",
     steps: [
       {
         noSpot: true,
         title: "Welcome",
-        body: "Hello and welcome to RS Studio. RS Studio is an interactive note editor with features such as integrated stem separation, note detection, motif search, a spectrogram view and automatic tablature. It provides a comfortable experience for transcribing and exporting guitar and bass charts.",
+        body: "Hello and welcome to RS Studio. Thank you for checking out this app.\n\nIn this walkthrough I'm going to show you the most important features, so you can start charting your favourite songs.",
       },
+    ],
+  },
+
+  overview: {
+    label: "Overview",
+    project: ACT.tutorial,
+    next: "audio",
+    done: "Next: Audio",
+    steps: [
       {
         noSpot: true,
-        title: "RS Studio",
-        body: "In this walkthrough I'm going to show you the most important features, so you can start charting your favourite songs.",
+        title: "Overview",
+        body: "Let's start with a quick overview of the components and panels.",
+      },
+      {
+        target: "transport",
+        title: "Toolbar",
+        body: "At the top is the toolbar, where you'll have quick access to settings and tools.",
+      },
+      {
+        do: ACT.sidebarOpen,
+        target: "sidebar",
+        title: "Sidebar",
+        body: "Then there is the sidebar. This is where you manage your audio files and charts.",
+        placement: "right",
+      },
+      {
+        spot: "editorArea",
+        title: "Editing panel",
+        body: "In the middle are the timeline and the editing panel, the heart of the app. This is where you edit notes and create your charts.",
+      },
+      {
+        do: ACT.fretboardShow,
+        target: "fretboardPanel",
+        title: "Fretboard",
+        body: "Last but not least, at the bottom is the fretboard and tablature view.",
       },
     ],
   },
 
   audio: {
-    label: "Audio layers",
+    label: "Audio",
     project: ACT.tutorial,
     next: "notes",
-    done: "Next: Note layers",
+    done: "Next: Notes",
     steps: [
       {
         do: ACT.audioReady,
         target: "stemsSection",
-        title: "Audio layers",
-        body: "Up here are your audio layers: the full song, plus any stems you separate from it. Click one to hear it and see it in the spectrogram.",
+        title: "Reference audio",
+        body: "Under Audio layers, you'll find your imported audio. Each project needs a main audio track.",
       },
       {
         do: ACT.addMenuOpen,
         sel: ".stem-add-menu",
-        title: "Adding a stem",
-        body: "The plus button under the list opens this menu. Pick a model and the part you want, and RS Studio separates it from the full song. Already have a stem? Use the Upload my own tab.",
+        title: "More audio sources",
+        body: "In addition to the main song, you can add more audio sources. The app has built-in stem separators that can extract specific instruments from your song.\n\nYou can also upload any audio file you like.",
         lockApp: true,
         allow: ".stem-add-menu select",
         back: ACT.addMenuClose,
@@ -200,55 +244,31 @@ export const TOURS = {
   },
 
   notes: {
-    label: "Note layers",
+    label: "Notes",
     project: ACT.tutorial,
-    next: "tempo",
-    done: "Next: Tempo",
+    next: "drawing",
+    done: "Next: Note editor",
     steps: [
       {
         do: ACT.addBass,
         back: ACT.bassRemove,
         target: "layersSection",
         title: "Note layers",
-        body: "Down here are your note layers. Each one is a part you're charting, like lead guitar or bass.",
+        body: "Right below are the note layers. Here you'll manage your transcriptions and arrangements.",
       },
       {
         do: ACT.stemEditOpenIfClosed,
         back: ACT.layerEditClose,
         target: "spLayer",
         title: "Layer settings",
-        body: "Hover a layer and click its pencil to open its settings. The important ones are the instrument and tuning, and which Rocksmith arrangement this layer becomes.",
+        body: "Each layer has its own settings. Here you choose the instrument, tuning, arrangement and more.",
         placement: "right",
       },
     ],
   },
 
-  tempo: {
-    label: "Tempo",
-    project: ACT.tutorial,
-    next: "drawing",
-    done: "Next: Drawing notes",
-    steps: [
-      {
-        do: ACT.tempoReady,
-        spot: "tempoMarker",
-        title: "Tempo first",
-        body: "Before you chart anything, get the tempo right. Your notes snap to the grid lines, so if the grid is off, everything is off.\n\nThis flag holds the song's tempo. RS Studio guesses it for you, and the guess is usually close, but not always.",
-      },
-      {
-        do: ACT.tempoPopOpen,
-        back: ACT.tempoPopClose,
-        target: "markerPop",
-        title: "Setting the tempo",
-        body: "This song is 120 BPM and its first beat is at 0.35 seconds. Type those in, then hit play with the metronome on and listen if it lines up.",
-        lockApp: true,
-        allow: "#markerBpm, #markerTime, #markerTsNum, #markerTsDen, #markerSubdiv, #markerSubdivCustom, #markerPop .field-revert, #play, #metroToggle",
-      },
-    ],
-  },
-
   drawing: {
-    label: "Drawing notes",
+    label: "Note editor",
     project: ACT.tutorial,
     next: "detect",
     done: "Next: Detecting notes",
@@ -256,13 +276,51 @@ export const TOURS = {
       {
         do: ACT.bass,
         spot: "spectrogramArea",
+        title: "Place a note",
+        body: "RS Studio offers many ways to create notes. The most straightforward way is to place them directly. To place a single note, double-click on the spectrogram.",
+        until: UNTIL.notes,
+        task: "Double-click to place a note",
+        optional: true,
+        allowSpot: "stage",
+        allowButton: 0,
+        placement: "top-right",
+      },
+      {
+        do: ACT.prepareChord,
+        spot: "spectrogramArea",
+        title: "Chords",
+        body: "Notes that start at the same time are played together as a chord. Double-click right above or below this note to turn it into a chord.",
+        until: UNTIL.chord,
+        task: "Add a note above or below it",
+        optional: true,
+        allowSpot: "stage",
+        allowButton: 0,
+        placement: "top-right",
+      },
+      {
+        do: ACT.prepareDraw,
+        spot: "phraseArea",
         title: "Draw a line",
-        body: "The most straightforward way to add notes is to draw them. Hold the left mouse button and trace along the bright lines, and RS Studio places the notes for you.",
+        body: "To place multiple notes at once, click and hold the mouse button to draw a line. Trace the bright lines at the bottom with your mouse, and the app will place the notes for you.",
         until: UNTIL.notes,
         task: "Draw a line to add notes",
         optional: true,
         allowSpot: "stage",
         allowButton: 0,
+        placement: "top-right",
+      },
+      {
+        do: ACT.prepareSelect,
+        spot: "spectrogramArea",
+        title: "Selecting",
+        body: "To select notes and chords, hold [[Shift]] and drag a box around them.",
+        until: UNTIL.selection,
+        task: "Select notes with [[Shift]]",
+        optional: true,
+        allowSpot: "stage",
+        allowButton: 0,
+        allowKeys: ["Shift"],
+        requireModifier: "Shift",
         placement: "top-right",
       },
       {
@@ -274,6 +332,21 @@ export const TOURS = {
         tasks: [
           { label: "Move a note", until: UNTIL.notePosition },
           { label: "Change a note's length", until: UNTIL.noteLength },
+        ],
+        optional: true,
+        allowSpot: "stage",
+        allowButton: 0,
+        placement: "top-right",
+      },
+      {
+        do: ACT.selectFirstPhrase,
+        spot: "spectrogramArea",
+        title: "Groups",
+        body: "The same works for several notes at once. With these notes selected, drag one of them to move the whole group, or drag an edge to resize them all.",
+        until: UNTIL.noteLength,
+        tasks: [
+          { label: "Move the group", until: UNTIL.notePosition },
+          { label: "Resize the group", until: UNTIL.noteLength },
         ],
         optional: true,
         allowSpot: "stage",
@@ -298,7 +371,7 @@ export const TOURS = {
         do: ACT.prepareEffectNote,
         spot: "spectrogramArea",
         title: "Note effects",
-        body: "Right-click a note to add effects like palm mutes, vibrato or slides. Right-click it again whenever you want to change them.",
+        body: "Right-click a note to add effects like palm mutes, vibrato or slides. This also works for chords.",
         until: UNTIL.noteEffects,
         tasks: [
           { label: "Open the note's context menu", until: UNTIL.menuOpened },
@@ -319,13 +392,13 @@ export const TOURS = {
     label: "Detecting notes",
     project: ACT.tutorial,
     next: "repeats",
-    done: "Next: Repeats",
+    done: "Next: References",
     steps: [
       {
         do: ACT.clear,
         spot: "spectrogramArea",
         title: "Detection",
-        body: "Alternatively, RS Studio can detect the notes for you. Right-click an empty spot and choose Detect notes.",
+        body: "If you don't feel like drawing the notes yourself, RS Studio can also detect notes for you. Right-click an empty spot and choose Detect notes.",
         until: UNTIL.detectPanel,
         tasks: [
           { label: "Open the context menu", until: UNTIL.menuOpened },
@@ -345,26 +418,20 @@ export const TOURS = {
         back: ACT.detectClose,
         target: "detectPanel",
         title: "Pick a model",
-        body: "Each model is good at different things. For a single bass line like this one, torchcrepe is a good choice.",
+        body: "Note detection listens to your selected audio layer and adds the notes to your current note layer. RS Studio provides multiple models to choose from. The torchcrepe model, for example, works well with bass lines and single-note melodies.",
         detectModel: "torchcrepe",
         until: UNTIL.detectFinished,
         task: "Detect notes with torchcrepe",
+        stay: true,
         placement: "side",
         optional: true,
         freeApp: "#detectPanel, #actionConfirmBackdrop, #confirmBackdrop",
-      },
-      {
-        do: ACT.ensureDetectedNotes,
-        back: ACT.detectOpen,
-        spot: "spectrogramArea",
-        title: "The result",
-        body: "Detection saves a lot of time, but it's rarely perfect, so expect to clean up the result.\n\nTip: hold [[Alt]] and drag across the timeline first to detect just that part.",
       },
     ],
   },
 
   repeats: {
-    label: "Repeats",
+    label: "References",
     project: ACT.tutorial,
     next: "fretboard",
     done: "Next: The fretboard",
@@ -372,40 +439,57 @@ export const TOURS = {
       {
         do: ACT.seedFirstPhrase,
         spot: "spectrogramArea",
-        title: "Select a riff",
-        body: "Most songs repeat their riffs, so you only need to chart each one once. Hold [[Shift]] and drag a box around these notes to select them.",
-        until: UNTIL.selection,
-        task: "Select the riff with [[Shift]]",
-        optional: true,
-        allowSpot: "stage",
-        allowButton: 0,
-        allowKeys: ["Shift"],
-        requireModifier: "Shift",
-        placement: "top-right",
-      },
-      {
-        do: ACT.selectFirstPhrase,
-        spot: "spectrogramArea",
-        title: "Make a reference",
-        body: "Now right-click and choose Group into reference. Copies of a reference stay linked, so fixing one fixes them all.",
+        title: "References",
+        body: "If your song has repeating parts or recurring motifs, you can use references to chart them once and reuse them as often as you like.\n\nSelect these notes, then right-click and choose Group into reference.",
         until: UNTIL.refs,
         tasks: [
-          { label: "Open the context menu", until: UNTIL.menuOpened },
-          { label: "Group the selection into a reference", until: UNTIL.refs },
+          { label: "Select the notes with [[Shift]]", until: UNTIL.selection },
+          { label: "Group them into a reference", until: UNTIL.refs },
         ],
         optional: true,
         allowSpot: "stage",
-        allowButton: 2,
+        allowButtons: [0, 2],
+        allowKeys: ["Shift"],
+        requireModifier: "Shift",
         allowMenu: "Group into reference",
         menuSpot: true,
         lockCard: true,
         placement: "top-right",
       },
       {
+        do: ACT.ensureReference,
+        spot: "spectrogramArea",
+        title: "Linked copies",
+        body: "Now let's reuse it. Click the box's number to select its notes and press [[Ctrl]]+[[C]]. Then click right after the box and press [[Ctrl]]+[[V]], and choose Paste as reference.",
+        until: UNTIL.refCopies,
+        tasks: [
+          { label: "Copy the reference", until: UNTIL.clipboard },
+          { label: "Paste it as a reference", until: UNTIL.refCopies },
+        ],
+        optional: true,
+        allowSpot: "stage",
+        allowButton: 0,
+        allowKeys: ["Control", "c", "C", "v", "V"],
+        allow: "#pasteBackdrop",
+        placement: "top-right",
+      },
+      {
+        do: ACT.ensureLinkedCopy,
+        spot: "spectrogramArea",
+        title: "Editing a reference",
+        body: "Both boxes are linked now. Move a note in one of them and watch the other one follow.",
+        until: UNTIL.notePosition,
+        task: "Move a note inside a box",
+        optional: true,
+        allowSpot: "stage",
+        allowButton: 0,
+        placement: "top-right",
+      },
+      {
         do: ACT.findSimilar,
         spot: "spectrogramArea",
         title: "Find similar",
-        body: "RS Studio can also find where the riff comes back in the song. Right-click and choose Find similar passage.",
+        body: "RS Studio can also find riffs and motifs by itself. Right-click and choose Find similar passage.",
         until: UNTIL.matches,
         tasks: [
           { label: "Open the context menu", until: UNTIL.menuOpened },
@@ -422,7 +506,7 @@ export const TOURS = {
         do: ACT.prepareMatches,
         spot: "spectrogramArea",
         title: "Paste it in",
-        body: "Each box is a match. Hover one to hear it, and click it to paste your notes there.",
+        body: "Each box is a potential match. Hover your mouse over one to hear a preview, and left-click to paste your notes there.",
         until: UNTIL.notes,
         task: "Paste notes into a match",
         allow: "#pasteBackdrop",
@@ -444,7 +528,7 @@ export const TOURS = {
         do: ACT.fretboard,
         target: "fretboardChevron",
         title: "The neck",
-        body: "To see how your chart is played, click the top edge of the fretboard, or press [[F]].",
+        body: "To see how your notes are played on the instrument, click the top edge of the fretboard, or press [[F]].",
         until: UNTIL.fretboardVisible,
         task: "Open the fretboard",
         allow: "#fretboardToggle, #fretboardChevron",
@@ -453,8 +537,8 @@ export const TOURS = {
       {
         do: ACT.focusAlternative,
         target: "fretboardStage",
-        title: "Fingering",
-        body: "RS Studio works out the fingering for you. To change it, double-click the note.",
+        title: "Fingering and hand position",
+        body: "RS Studio works out both the fingering and the hand position for you. The numbers show which finger plays each note, and the highlighted frets show where your hand sits.\n\nHowever, you may want to change its choice. To do that, click a note, a chord or the highlighted hand position, then choose Edit.",
         until: UNTIL.fretboardEdit,
         task: "Open fretboard Edit mode",
         optional: true,
@@ -465,9 +549,33 @@ export const TOURS = {
         back: ACT.fbEditClose,
         target: "fretboardStage",
         title: "Other positions",
-        body: "The outlines show other places you could play it. Click one to use it instead. Reset override restores the automatic position.",
+        body: "Inside edit mode, you'll see your current note or chord, and alternative placements as outlines on the fretboard.\n\nChoose the note on the 10th fret.",
         until: UNTIL.fretboardOverride,
-        task: "Choose another fingering",
+        task: "Choose the 10th fret",
+        optional: true,
+        freeApp: "#fretboardStage",
+      },
+      {
+        target: "fretboardStage",
+        title: "Override settings",
+        body: "By default, an override doesn't affect the notes and chords before it, but the notes after it adapt to the change. The two active forward arrows show this, and you can change it freely.\n\nIf you want to undo the change, click Reset override.",
+      },
+      {
+        target: "fretboardStage",
+        title: "Moving the hand",
+        body: "You can also just move the hand: click a fret, and RS Studio picks a fitting fingering for the notes around it.",
+        until: UNTIL.fretboardHandHold,
+        task: "Click a fret to move the hand",
+        optional: true,
+        freeApp: "#fretboardStage",
+      },
+      {
+        do: ACT.fbEdit,
+        target: "fretboardStage",
+        title: "Capo",
+        body: "Playing with a capo? In edit mode, grab the nut and drag it up the neck to place one. Drag it back to the nut to take it off again.",
+        until: UNTIL.capo,
+        task: "Drag the nut to place a capo",
         optional: true,
         freeApp: "#fretboardStage",
       },
@@ -487,10 +595,22 @@ export const TOURS = {
         body: "Up top are the markers. They're optional, but they improve your export. Press [[L]] to show or hide them.",
       },
       {
+        do: ACT.tempoReady,
+        spot: "tempoMarker",
+        title: "Tempo",
+        body: "The tempo flag sets the song's tempo. Your notes snap to this grid, so it's worth getting right before you start charting.\n\nRS Studio estimates it when you import a song. The estimate is usually close, but check it with the metronome. If the tempo changes during the song, add another flag.",
+      },
+      {
         do: ACT.demoSections,
         spot: "sectionFlags",
         title: "Sections",
         body: "Sections like intro, verse and chorus label your song, and they turn into practice sections in Rocksmith's Riff Repeater.",
+      },
+      {
+        do: ACT.demoPhrases,
+        spot: "phraseFlags",
+        title: "Phrases",
+        body: "Phrases work like sections, but without a name. They also define practice regions in Rocksmith. Without sections or phrases, the song is split into even regions automatically.",
       },
       {
         do: ACT.demoTone,
@@ -507,17 +627,34 @@ export const TOURS = {
     done: "Stay here",
     steps: [
       {
-        target: "fileMenuBtn",
+        do: ACT.fileMenuOpen,
+        back: ACT.fileMenuClose,
+        target: "fileMenu",
         title: "Export",
-        body: "When your chart is finished, the File menu exports to Guitar Pro, Rocksmith and .chart.",
+        body: "When your chart is finished, the File menu has everything you need to save and export it.",
+        lockApp: true,
+      },
+      {
+        do: ACT.fileMenuOpen,
+        target: "saveAs",
+        title: "Saving your project",
+        body: "Export .chart saves the whole project, audio included, as a single .chart file. Open it again later, or share it with someone else.",
+        lockApp: true,
+      },
+      {
+        do: ACT.fileMenuOpen,
+        target: "menuExportModernGp",
+        title: "Guitar Pro",
+        body: "Export Guitar Pro creates a .gp file with your tabs, which you can open in Guitar Pro and other tab editors. For older programs, there's also the legacy .gp5 format.",
+        lockApp: true,
       },
       {
         do: ACT.rsExport,
         back: ACT.rsExportClose,
         target: "rocksmithExportModal",
         title: "Rocksmith",
-        body: "For Rocksmith, fill in the song information here before exporting.",
-        freeApp: "#rocksmithExportModal",
+        body: "Before exporting to Rocksmith, you can fill in the song information, select your arrangements, add a leading silence and set a version number for the track.",
+        lockApp: true,
       },
       {
         do: ACT.rsExportClose,

@@ -324,6 +324,10 @@ class EndToEndTests(unittest.TestCase):
         card = page.locator(".tour-card")
         expect(card).to_be_visible()
         head = card.locator(".tour-head")
+        # The demo song starts on its real grid, at detection's 1/32.
+        expect(page.locator("#bpm")).to_have_value("120")
+        expect(page.locator("#offset")).to_have_value("0.35")
+        expect(page.locator("#subdiv")).to_have_value("8")
         seen = []
         while not card.locator(".tour-home").is_visible():
             self.assertLess(len(seen), 400, "the walkthrough does not end")
@@ -332,8 +336,8 @@ class EndToEndTests(unittest.TestCase):
             expect(head).not_to_have_text(seen[-1])
         self.assertGreater(len(seen), 20, seen)
         self.assertIn("Introduction", seen[0])
-        self.assertIn("RS Studio", seen[1])
-        self.assertNotIn("Introduction", seen[2])   # the chapter is just the two cards
+        self.assertNotIn("Introduction", seen[1])   # the chapter is just the welcome card
+        self.assertIn("Overview", seen[1])
 
 if __name__ == "__main__":
     unittest.main()
