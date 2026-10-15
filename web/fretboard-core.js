@@ -343,8 +343,11 @@ export function handAt(columns, t, travel, s = GUITAR) {
 
   const hammersOn = cur && next?.fingers.some((f) => cur.fingers.some((g) =>
     g.string === f.string && hammerLink(g.note, f.note)));
-  if (next && !(cur && cur.shape === next.shape) && !slidesOn && !hammersOn) {
-    const window = travelWindow(cur, next, travel);
+  const window = next ? travelWindow(cur, next, travel) : 0;
+  // Once the neck has gone empty, the old grip is no longer a visible origin.
+  // Reappear at the destination instead, including when its shape is unchanged.
+  const fresh = !cur || cur.end < next?.start - window;
+  if (next && (fresh || (!(cur && cur.shape === next.shape) && !slidesOn && !hammersOn))) {
     if (t >= next.start - window) {
       // A PREBEND IS PUSHED BEFORE IT IS PICKED. Where the previous note has already
       // let go, the second half of that free time is spent pushing the string up, so
@@ -355,22 +358,25 @@ export function handAt(columns, t, travel, s = GUITAR) {
       const lead = pre ? Math.max(0, Math.min(window, cur ? next.start - cur.end : window)) : 0;
       const arrive = window - lead / 2;
       const u = arrive > 0 ? Math.min(1, (t - (next.start - window)) / arrive) : 1;
+      // Smootherstep: leave and arrive with zero velocity and acceleration.
+      const shift = u * u * u * (u * (u * 6 - 15) + 10);
       const v = lead > 0 ? Math.max(0, (t - (next.start - lead / 2)) / (lead / 2)) : 0;
       const push = v * v * (3 - 2 * v);   // smoothstep: a push starts and lands gently
-      const origins = cur ? cur.fingers : [];
+      const origins = cur && !fresh ? cur.fingers : [];
       return {
         pressed: false,
         marks: next.fingers.map((f) => {
           const grace = graceBefore(f.note, next.eighth ? 30 / next.eighth : 120, f.fret);
           const b = markAt(grace ? { ...f, fret: f.fret + grace.offset } : f, s), a = originFor(f, origins);
           b.lift = bendLift(b, next.start, s.strings) * push;
+          if (fresh) b.opacity = u * u * (3 - 2 * u);
           if (!a) return b;
           const o = markAt(a, s);
           return {
             ...b,
             fret: u < 0.5 ? a.fret : f.fret,
-            string: o.string + (b.string - o.string) * u,
-            x: o.x + (b.x - o.x) * u,
+            string: o.string + (b.string - o.string) * shift,
+            x: o.x + (b.x - o.x) * shift,
           };
         }),
       };
@@ -389,6 +395,7 @@ export function handAt(columns, t, travel, s = GUITAR) {
       const source = prev?.fingers.find((g) => g.string === f.string && hammerLink(g.note, note));
       if (source) {
         m.slurred = true;
+        m.hammerMotion = f.fret > source.fret ? "hammer" : "pull";
         if (source.fret < f.fret && source.fret > 0)
           m.hammerSupport = { fret: source.fret, x: fretCentre(source.fret, s), finger: source.finger };
       }
@@ -401,6 +408,7 @@ export function handAt(columns, t, travel, s = GUITAR) {
         const lower = f.fret + grace.offset;
         m.finger = lower > 0 ? Math.max(2, f.finger || 1) : f.finger || 1;
         m.slurred = true;
+        m.hammerMotion = "hammer";
         const release = (t - note.start) / grace.duration;
         if (lower > 0 && release >= 0 && release < 1) {
           m.graceOrigin = { fret: lower, x: fretCentre(lower, s), finger: m.finger - 1,

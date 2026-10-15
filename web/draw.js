@@ -1,12 +1,11 @@
-import { hasNoteEffects } from "./note-effects.js";
 import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
 import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGhosts, notePlaybackGlow } from "./note-motion.js";
 // Canvas rendering: the main spectrogram + notes draw loop, the overview minimap
 // (whole-song strip with a viewport window), and the hover highlight / cursor line.
 
-import { bendCurve, bendPeak } from "./bend.js";
+import { bendCurve, bendPeak, slideRibbon } from "./bend.js";
 import { BEND_HANDLE_R, MM_HEAD, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
-import { bendHandles, collectStacks, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, regionEdgeAt } from "./note-render.js";
+import { bendHandles, collectStacks, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, regionEdgeAt } from "./note-render.js";
 import { editorEl, minimap, mmctx, overviewRuler, overviewRulerCtx, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
@@ -381,10 +380,12 @@ function paintFrame() {
     // turning the draw loop into a quadratic search on imported arrangements.
     const edgeKey = (pitch, time) => `${pitch}|${Number(time).toFixed(5)}`;
     const reattackEdges = new Set(lane.notes.map((note) => edgeKey(note.pitch, note.end)));
+    const slides = laneSlides(lane);
     sctx.globalAlpha = laneAlpha;
     for (const n of lane.notes) {
       const motion = noteMotion(lane, n);
-      const x = xOf(motion.start), w = Math.max(2, xOf(motion.end) - x), y = yOf(n.pitch);
+      const ribbon = slideRibbon(n, slides.get(n));
+      const x = xOf(motion.start), w = Math.max(2, xOf(ribbon?.end ?? motion.end) - x), y = yOf(n.pitch);
       if (x > vx1 || x + w < vx0) continue; // off-screen
       const rowH = S.state.rowH;
       const fill = stackCount.has(n) ? PAINT.error : lane.color;
@@ -396,7 +397,7 @@ function paintFrame() {
       // traces the bend curve instead of staying a flat rect with a glyph on top,
       // so the drawn pitch always matches what's exported. A prebend's bar sits
       // flat but *above* the fretted row, which is what it actually sounds.
-      const curve = bendCurve(n);
+      const curve = bendCurve(n) || ribbon?.points;
       const glow = notePlaybackGlow(lane, n);
       if (glow > 0) {
         sctx.beginPath();
@@ -476,17 +477,6 @@ function paintFrame() {
         sctx.lineWidth = 1; sctx.fillStyle = PAINT.warn;
         sctx.fillText("!", x + w, py - 1);
         sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
-      }
-      {
-        const label = noteName(n.pitch);
-        const tw = sctx.measureText(label).width;
-        if (w >= tw + 6 && !hasNoteEffects(n)) {                       // only when the note can hold the text
-          const ly = y + S.state.rowH / 2;
-          sctx.lineWidth = 2.5; sctx.strokeStyle = halo();
-          sctx.strokeText(label, x + 3, ly);     // dark halo for legibility on any color
-          sctx.lineWidth = 1; sctx.fillStyle = PAINT.text;
-          sctx.fillText(label, x + 3, ly);
-        }
       }
       if (omittedNotes.has(n)) {
         const crossY = drop ? y - drop : y;

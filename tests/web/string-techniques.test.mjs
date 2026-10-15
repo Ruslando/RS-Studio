@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { popPreparation, fingerWaveAt, bendSnapAt } from "../../web/string-techniques.js";
+import { popPreparation, popThicknessAt, fingerLightAt, fingerWaveAt, bendSnapAt } from "../../web/string-techniques.js";
 import { ringingMarksAt, releasedBendsAt, GUITAR, fretCentre } from "../../web/fretboard-core.js";
 import { stringGlow } from "../../web/string-glow.js";
 import { letRingEnd } from "../../web/articulations.js";
@@ -10,12 +10,28 @@ assert.ok(popPreparation(pop, 0.98) > popPreparation(pop, 0.93));
 assert.ok(popPreparation(pop, 1.01) > popPreparation(pop, 1.07));
 assert.equal(popPreparation(pop, 1.2), 0);
 assert.equal(popPreparation({ start: 1 }, 0.98), 0);
+assert.ok(popPreparation(pop, 1.025) < 0, "pop rebounds after release");
+assert.ok(popThicknessAt(0.3, 0.3, 1) > popThicknessAt(0.1, 0.3, 1), "depth peaks at the pulling finger");
+assert.equal(popThicknessAt(0, 0.3, 1), 1, "nut stays anchored");
+assert.equal(popThicknessAt(1, 0.3, 1), 1, "bridge stays anchored");
+assert.equal(popThicknessAt(0.2, 0.8, 1, 0.4), 1, "string behind the fretting finger stays unchanged");
+assert.equal(popThicknessAt(0.4, 0.8, 1, 0.4), 1, "fretting finger anchors the pop");
+assert.ok(popThicknessAt(0.8, 0.8, 1, 0.4) > popThicknessAt(0.6, 0.8, 1, 0.4),
+  "string grows toward the picking hand near the body");
+assert.ok(popThicknessAt(0.3, 0.3, popPreparation(pop, 1.025)) > 0, "rebound keeps a positive thickness");
+assert.equal(fingerLightAt(0.1, 0.3, 0.048, "hammer"), 0, "hammer light never travels left");
+assert.ok(fingerLightAt(0.5, 0.3, 0.048, "hammer") > 0.7, "hammer front travels right");
+assert.ok(fingerLightAt(0.1, 0.3, 0.048, "tap") > 0.7, "tap travels left too");
+assert.ok(Math.abs(fingerLightAt(0.1, 0.3, 0.048, "tap") - fingerLightAt(0.5, 0.3, 0.048, "tap")) < 1e-10);
+assert.equal(fingerLightAt(0.5, 0.3, 0.048, "pull"), 0, "no pull-off pulse");
+assert.equal(fingerLightAt(0.5, 0.3, -0.01, "tap"), 0);
+assert.equal(fingerLightAt(0.5, 0.3, 0.25, "tap"), 0);
 const peak = (age, kind) => Array.from({ length: 101 }, (_, i) => i / 100)
   .reduce((best, x) => Math.abs(fingerWaveAt(x, 0.3, age, kind)) > Math.abs(fingerWaveAt(best, 0.3, age, kind)) ? x : best, 0);
 assert.ok(peak(0.04, "slap") > peak(0.14, "slap"), "slap travels from body toward the hand");
 assert.equal(fingerWaveAt(0.2, 0.3, 0.04, "slap"), 0, "slap stops at fretted contact");
 assert.equal(fingerWaveAt(0.3, 0.3, 0.04, "finger"), 0, "tapping keeps its contact fixed");
-assert.notEqual(fingerWaveAt(0.5, 0.3, 0.04, "finger"), 0);
+assert.equal(fingerWaveAt(0.5, 0.3, 0.04, "finger"), 0, "finger energy does not move the string");
 assert.equal(fingerWaveAt(0.5, 0.3, 0.3, "slap"), 0);
 assert.equal(bendSnapAt(0), 1); assert.ok(bendSnapAt(0.035) < 0);
 assert.equal(bendSnapAt(0.2), 0);

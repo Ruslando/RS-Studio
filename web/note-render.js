@@ -15,12 +15,12 @@
 import { hammerDirections } from "./articulations.js";
 import { paintNoteBar } from "./canvas-components.js";
 import { graceBefore } from "./grace.js";
-import { BEND_TAG, bendCurve } from "./bend.js";
+import { bendCurve, slideRibbon, slideTargets } from "./bend.js";
 import { OVERLAP_EPS, REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono, stageUi } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
 import { contentH, pitchAt, xOf, yOf } from "./geometry.js";
 import { gridAt, gridSegments, gridSubdiv, segStep } from "./grid.js";
-import { FX_GLYPHS, HARMONIC_TAG, hasNoteEffects, noteMarks } from "./note-effects.js";
+import { FX_GLYPHS, HARMONIC_TAG, noteMarks } from "./note-effects.js";
 import { PAINT, WASH, halo, veil } from "./stage-paint.js";
 import { S } from "./store.js";
 import { dpr, fmtTime, hexA, noteName } from "./util.js";
@@ -208,66 +208,38 @@ export function drawStackBadges(badges, vx0, vx1) {
   sctx.lineWidth = 1;
 }
 
-// ---- effect labels, wholly inside their note bodies ----
+// ---- centered note names and effect labels ----
 const SLIDE_TAG = { shift: "↗", legato: "⌒↗", inBelow: "↗", inAbove: "↘", outDown: "↘", outUp: "↗" };
 
-// The existing ribbon uses horizontal-control Beziers. Invert their time axis
-// to place text on that exact silhouette (audio/finger interpolation is linear).
-function ribbonValue(pts, t) {
-  if (t <= pts[0][0]) return pts[0][1];
-  for (let i = 1; i < pts.length; i++) {
-    const [a, v0] = pts[i - 1], [b, v1] = pts[i];
-    if (t > b) continue;
-    if (a === b) return v1;
-    const target = (t - a) / (b - a);
-    let lo = 0, hi = 1;
-    for (let k = 0; k < 16; k++) {
-      const u = (lo + hi) / 2, x = 1.5 * u - 1.5 * u * u + u * u * u;
-      if (x < target) lo = u; else hi = u;
-    }
-    const u = (lo + hi) / 2;
-    return v0 + (v1 - v0) * (3 * u * u - 2 * u * u * u);
-  }
-  return pts.at(-1)[1];
-}
-
-function insideLabel(n, text, x, width, pitch = n.pitch, curve = bendCurve(n)) {
-  if (width < 2) return;
-  const h = S.state.rowH, ym = yOf(pitch) + h / 2;
+// Labels stay horizontal, including at the individual bend control points.
+// Allow overflow so short notes and thin rows keep the same readable type size.
+function centeredLabel(text, x, width, pitch) {
+  const ym = yOf(pitch) + S.state.rowH / 2;
   sctx.save();
-  if (curve) {
-    const half = Math.max(0.5, (h - 1) / 2);
-    const edge = (pts, offset, first) => {
-      const px = (p) => x + width * p[0], py = (p) => ym - p[1] * h + offset;
-      if (first) sctx.moveTo(px(pts[0]), py(pts[0])); else sctx.lineTo(px(pts[0]), py(pts[0]));
-      for (let i = 1; i < pts.length; i++) {
-        const a = pts[i - 1], b = pts[i], mid = (px(a) + px(b)) / 2;
-        sctx.bezierCurveTo(mid, py(a), mid, py(b), px(b), py(b));
-      }
-    };
-    sctx.beginPath(); edge(curve, -half, true); edge([...curve].reverse(), half, false);
-    sctx.closePath(); sctx.clip();
-  } else {
-    sctx.beginPath(); sctx.rect(x + 0.5, ym - h / 2 + 0.5, Math.max(1, width - 1), Math.max(1, h - 1)); sctx.clip();
-  }
-  const fontSize = Math.max(3, Math.min(STAGE_ANCHORED, h - 2));
-  sctx.font = stageUi(fontSize, 600); sctx.textAlign = "center"; sctx.textBaseline = "middle";
-  const chars = [...text], total = chars.reduce((sum, c) => sum + sctx.measureText(c).width, 0);
-  const fit = Math.min(1, Math.max(1, width - 6) / Math.max(1, total));
-  let cursor = x + (width - total * fit) / 2;
-  sctx.lineWidth = 1.5; sctx.strokeStyle = halo(); sctx.fillStyle = PAINT.text;
-  for (const char of chars) {
-    const advance = sctx.measureText(char).width * fit, cx = cursor + advance / 2;
-    const u = Math.max(0, Math.min(1, (cx - x) / width));
-    const cy = ym - (curve ? ribbonValue(curve, u) * h : 0);
-    sctx.save(); sctx.translate(cx, cy); sctx.scale(fit, 1);
-    sctx.strokeText(char, 0, 0); sctx.fillText(char, 0, 0); sctx.restore();
-    cursor += advance;
-  }
+  sctx.font = stageUi(13, 600);
+  sctx.textAlign = "center"; sctx.textBaseline = "middle";
+  sctx.lineWidth = 2.5; sctx.strokeStyle = halo(); sctx.fillStyle = PAINT.text;
+  sctx.strokeText(text, x + width / 2, ym);
+  sctx.fillText(text, x + width / 2, ym);
   sctx.restore();
 }
 
+function bendPitchName(pitch) {
+  const cents = Math.round(pitch * 100), whole = Math.floor(cents / 100);
+  const offset = cents - whole * 100;
+  return noteName(whole) + (offset ? ` +${offset}ct` : "");
+}
+
 const hammerTagCache = new WeakMap();
+const slideTargetCache = new WeakMap();
+export function laneSlides(lane) {
+  const hit = slideTargetCache.get(lane);
+  if (hit?.revision === S.voicingRevision && hit.notes === lane.notes) return hit.targets;
+  const targets = slideTargets(lane.notes);
+  slideTargetCache.set(lane, { revision: S.voicingRevision, notes: lane.notes, targets });
+  return targets;
+}
+
 function laneHammerTags(lane) {
   const hit = hammerTagCache.get(lane);
   if (hit?.revision === S.voicingRevision && hit.notes === lane.notes) return hit.tags;
@@ -281,21 +253,37 @@ export function drawNoteFx() {
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
     const hammerTags = laneHammerTags(lane);
+    const slides = laneSlides(lane);
     for (const n of lane.notes) {
-      if (!hasNoteEffects(n)) continue;
       const x = xOf(n.start), x1 = xOf(n.end);
+      const onto = slides.get(n), ribbon = slideRibbon(n, onto);
       const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
-      if ((grace ? xOf(grace.start) : x) > vx1 || x1 < vx0) continue;
-      const tags = noteMarks(n).map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(n) || m
-        : m === "gr" ? "Grace note" : m);
-      if (n.bend) tags.push(BEND_TAG[n.bend] || "bend");
-      if (n.slide) tags.push(SLIDE_TAG[n.slide] || "slide");
+      if ((grace ? xOf(grace.start) : x) > vx1 || Math.max(x1, ribbon ? xOf(ribbon.end) : x1) < vx0) continue;
+      const tags = noteMarks(n).map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(n) || m : m);
+      if (n.slide && !ribbon) tags.push(SLIDE_TAG[n.slide] || "slide");
       if (n.harmonic) tags.push(HARMONIC_TAG[n.harmonic] || "harm.");
-      insideLabel(n, `${noteName(n.pitch)} ${tags.join(" ")}`, x, x1 - x);
+      const curve = bendCurve(n);
+      if (ribbon && !curve) {
+        centeredLabel([noteName(n.pitch), ...tags].join(" "), x, 0, n.pitch);
+        const arrow = onto.pitch < n.pitch ? "\u2198" : "\u2197";
+        centeredLabel((n.slide === "legato" ? "\u2312" : "") + arrow,
+          x, xOf(ribbon.end) - x, (n.pitch + onto.pitch) / 2);
+        if (n.slide === "shift") {
+          const ax = xOf(onto.start) + 1, ay = yOf(onto.pitch), h = S.state.rowH;
+          sctx.save(); sctx.lineCap = "round";
+          sctx.beginPath(); sctx.moveTo(ax, ay - 2); sctx.lineTo(ax, ay + h + 2);
+          sctx.lineWidth = 4; sctx.strokeStyle = halo(); sctx.stroke();
+          sctx.lineWidth = 2; sctx.strokeStyle = PAINT.text; sctx.stroke();
+          sctx.restore();
+        }
+      } else if (curve) {
+        for (const [t, semi] of curve)
+          centeredLabel(bendPitchName(n.pitch + semi), x + (x1 - x) * t, 0, n.pitch + semi);
+        if (tags.length) centeredLabel(tags.join(" "), x, x1 - x, n.pitch);
+      } else centeredLabel([noteName(n.pitch), ...tags].join(" "), x, x1 - x, n.pitch);
       if (grace) {
         const gx = xOf(grace.start), width = Math.max(2, x - gx), pitch = n.pitch + grace.offset;
         paintNoteBar(sctx, gx, yOf(pitch), width, S.state.rowH, lane.color, S.selection.has(n), S.hoverNote === n);
-        insideLabel(n, "gr", gx, width, pitch, null);
       }
     }
   }

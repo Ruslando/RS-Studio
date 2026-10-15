@@ -149,8 +149,10 @@ const onHammer = handAt(hammerCols, 0.5, 0.5);
 assert.equal(onHammer.marks[0].x, fretCentre(9));
 assert.equal(onHammer.marks[0].hammerSupport.fret, 7);
 assert.ok(onHammer.marks[0].slurred);
+assert.equal(onHammer.marks[0].hammerMotion, "hammer");
 assert.equal(handAt(hammerCols, 0.99, 0.5).pressed, true, "no anticipation before pull-off");
 assert.equal(handAt(hammerCols, 1, 0.5).marks[0].x, fretCentre(7));
+assert.equal(handAt(hammerCols, 1, 0.5).marks[0].hammerMotion, "pull");
 console.log("hammer/pull-off visuals OK");
 
 const tempoColumn = column(2, 7, { start: 2, end: 3, trill: "half" })[0];

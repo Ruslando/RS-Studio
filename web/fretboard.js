@@ -29,7 +29,7 @@ import { gridAt, gridBpm, gridSegments, segBeatSec } from "./grid.js";
 import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
 import { S } from "./store.js";
-import { fingerWaveAt, popPreparation } from "./string-techniques.js";
+import { fingerLightAt, fingerWaveAt, popPreparation, popThicknessAt } from "./string-techniques.js";
 import { stringAttackPulse, stringGlow } from "./string-glow.js";
 import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulations.js";
 import { whammyGripStyle } from "./whammy.js";
@@ -709,11 +709,12 @@ export function drawFretboard() {
     const pull = preparing ? popPreparation(preparing.note, now.t) : 0;
     const moving = now?.moving && contact && (now.at?.pressed || contact.ringing);
     const n = contact?.note;
-    const kind = moving && n?.slap === "slap" ? "slap" : moving && (n?.slap === "tap"
-      || (contact.slurred && (n?.fx?.hammer || n?.grace))) ? "finger" : null;
-    const excitation = kind === "finger" ? contact.start : contact ? strikeTime(contact, now?.t) : null;
+    const kind = !moving ? null : n?.slap === "slap" ? "slap"
+      : n?.slap === "tap" ? "tap" : contact.hammerMotion === "hammer" ? "hammer" : null;
+    const excitation = kind === "tap" || kind === "hammer" ? contact.start
+      : contact ? strikeTime(contact, now?.t) : null;
     const age = excitation == null ? -1 : now.t - excitation;
-    const waving = kind && age >= 0 && age < 0.24;
+    const waving = kind === "slap" && age >= 0 && age < 0.24;
     const baseY = (mm) => mm < start
       ? nutY + (y0 - nutY) * (mm - nut) / Math.max(0.001, start - nut)
       : y0 + (bridgeY - y0) * (mm - start) / Math.max(0.001, s.scale - start);
@@ -731,18 +732,48 @@ export function drawFretboard() {
         ctx.lineTo(X(end), yAt(end));
       }
     };
-    const width = Math.max(1, s.gauges[i] * scale) * (1 + pull * 0.8);
-    ctx.save(); ctx.translate(0, -pull * spacing * 0.65);
+    const width = Math.max(1, s.gauges[i] * scale);
+    const popAnchor = preparing ? fretCentre(preparing.fret, s) : start;
+    // The fretting hand anchors the string; the picking hand pulls near the body.
+    const popX = Math.min(end - 2, Math.max(end - 12, popAnchor + 4));
+    ctx.save(); ctx.lineCap = "round";
     ctx.strokeStyle = hexA(PAINT.label, 0.65); ctx.lineWidth = width;
-    trace(nut); ctx.stroke();
-    const glow = moving ? stringGlow(contact, now.t) : 0;
-    const pulse = moving ? stringAttackPulse(contact, now.t) : 0;
+    if (Math.abs(pull) > 0.001) {
+      ctx.lineCap = "butt";
+      const steps = Math.max(24, Math.min(160, Math.ceil((X(end) - X(nut)) / 5)));
+      for (let k = 0; k < steps; k++) {
+        const a = nut + (end - nut) * k / steps, b = nut + (end - nut) * (k + 1) / steps;
+        const depth = popThicknessAt(Math.max(0, (a + b) / 2) / s.scale, popX / s.scale, pull, Math.max(0, popAnchor) / s.scale) - 1;
+        // A minimum screen-space lift keeps thin treble strings visibly growing.
+        ctx.lineWidth = Math.max(width * 0.45, width + depth * Math.max(width, 5));
+        ctx.beginPath(); ctx.moveTo(X(a), yAt(a)); ctx.lineTo(X(b), yAt(b)); ctx.stroke();
+      }
+    } else { trace(nut); ctx.stroke(); }
+    const fingerLight = kind === "hammer" || kind === "tap";
+    const glow = moving ? stringGlow(contact, now.t) * (fingerLight ? 0.3 : 1) : 0;
+    const pulse = moving && !fingerLight ? stringAttackPulse(contact, now.t) : 0;
     if (glow > 0.001 || pulse > 0.001) {
       ctx.lineCap = "round"; trace(start);
       ctx.strokeStyle = hexA(lane.color || PAINT.accent, Math.min(1, glow * 0.3 + pulse * 0.45));
       ctx.lineWidth = width + 3 + pulse * 3; ctx.stroke();
       ctx.strokeStyle = hexA(PAINT.paper, Math.max(glow, pulse));
       ctx.lineWidth = Math.max(1.4, width) + pulse * 1.8; ctx.stroke();
+    }
+    if ((kind === "hammer" || kind === "tap") && age >= 0 && age < 0.24) {
+      ctx.lineCap = "butt";
+      const steps = Math.max(32, Math.min(160, Math.ceil((X(end) - X(nut)) / 5)));
+      for (let k = 0; k < steps; k++) {
+        const a = nut + (end - nut) * k / steps, b = nut + (end - nut) * (k + 1) / steps;
+        const light = fingerLightAt(((a + b) / 2 - nut) / (end - nut),
+          (start - nut) / (end - nut), age, kind);
+        if (light < 0.002 || (kind === "hammer" && b <= start)) continue;
+        ctx.beginPath(); ctx.moveTo(X(kind === "hammer" ? Math.max(start, a) : a), baseY(kind === "hammer" ? Math.max(start, a) : a));
+        ctx.lineTo(X(b), baseY(b));
+        ctx.strokeStyle = hexA(lane.color || PAINT.accent, light * 0.65);
+        ctx.lineWidth = width + 5; ctx.stroke();
+        ctx.strokeStyle = hexA(PAINT.paper, light);
+        ctx.lineWidth = width + 1.5; ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -1039,7 +1070,7 @@ function onHue(hex) {
 // and it carries the X that says why.
 function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time = null, liveStrings = false } = {}) {
   for (const m of marks) if (!(m.fret > 0) && !m.dead && !liveStrings) {
-    ctx.save(); ctx.globalAlpha *= m.note?.fx?.ghost ? 0.4 : 1;
+    ctx.save(); ctx.globalAlpha *= (m.opacity ?? 1) * (m.note?.fx?.ghost ? 0.4 : 1);
     glowString(ctx, s, scale, X, Y, m.string, hue); ctx.restore();
   }
   // EVERY fretted mark carries its finger, a lone note included. It used not to, on
@@ -1404,7 +1435,7 @@ function handNow(lane, s) {
   return { found, t, moving, at: handAt(found.columns, t, moving ? travelSeconds() : 0, s),
     ringing: moving ? ringingMarksAt(found.ringFingers || [], t, s) : [],
     releases: moving ? releasedBendsAt(found.bendFingers || [], t, s) : [],
-    preparations: moving ? (found.popFingers || []).filter((f) => popPreparation(f.note, t) > 0) : [] };
+    preparations: moving ? (found.popFingers || []).filter((f) => Math.abs(popPreparation(f.note, t)) > 0.001) : [] };
 }
 
 function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {

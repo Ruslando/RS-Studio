@@ -130,6 +130,13 @@ export function slideTargets(notes) {
   return out;
 }
 
+// A slide joins its source to the next attack's position, even across a rest.
+// The renderer uses the same ribbon geometry as bends; playback stays separate.
+export function slideRibbon(note, target) {
+  if (!SLIDES_TO_NEXT.has(note.slide) || !target || target.start <= note.start) return null;
+  return { end: target.start, points: [[0, 0], [1, target.pitch - note.pitch]] };
+}
+
 export const bendPeak = (pts) => pts.reduce((m, p) => Math.max(m, p[1]), 0);
 
 // Semitone offset at fraction t, linear between control points — how every

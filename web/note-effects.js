@@ -66,8 +66,8 @@ export const SLAP_TAG = { tap: "tap", slap: "slap", pop: "pop" };
 export function noteMarks(n) {
   const m = [];
   if (n.fx) for (const k of FX_KEYS) if (n.fx[k]) m.push(FX_GLYPHS[k]);
-  if (n.grace) m.push("gr");
-  if (n.trill) m.push("tr");
+  if (n.grace) m.push("Grace note");
+  if (n.trill) m.push("Trill");
   if (n.tremPick) m.push("≣");
   if (n.slap) m.push(SLAP_TAG[n.slap]);
   if (n.stroke) m.push(n.stroke === "up" ? "⤴" : "⤵");
