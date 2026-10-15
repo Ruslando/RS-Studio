@@ -99,6 +99,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#gpImportTracks")).to_contain_text("8 notes")
         page.click("#gpImportConfirm")
         expect(page.locator("#lanes")).to_contain_text("8 notes")
+        self.loaded()
         expect(page.locator("#tabViewBackdrop")).to_be_hidden()   # an import stays on the editor
 
     def new_audio_project(self):
@@ -111,6 +112,23 @@ class EndToEndTests(unittest.TestCase):
         page.click("#go", timeout=60000)
         expect(page.locator("#appshell")).to_be_visible()
         expect(page.locator("#lanes")).to_contain_text("0 notes")
+        self.loaded()
+
+    def loaded(self):
+        """The loading screen is gone. It fades out after the editor is already there,
+        and until then it takes the clicks and swallows the keys meant for the editor."""
+        expect(self.page.locator(".project-loading-backdrop")).to_have_count(0)
+
+    def rail_point(self, t):
+        """Viewport point on the tempo-flag rail at song time t, asked of the app at the
+        moment of use: the view may still be laid out again after a project opens."""
+        return self.page.evaluate("""async (t) => {
+            const { xOf } = await import("./geometry.js");
+            const { drawNow } = await import("./repaint.js");
+            drawNow();   // the flags' hit areas are built by the paint
+            const r = document.getElementById("stage").getBoundingClientRect();
+            return [r.left + xOf(t) - document.getElementById("scroll").scrollLeft + 5, r.top + 10];
+        }""", t)
 
     def file_menu(self, item):
         self.page.click("#fileMenuBtn")
@@ -168,9 +186,9 @@ class EndToEndTests(unittest.TestCase):
         page.get_by_text("Detect notes…").click()
         page.select_option("#detectModel", "torchcrepe")
         page.click("#detectBtn")
-        page.get_by_role("button", name="Use 1/32 grid").click(timeout=180000)
+        # A new project's grid is already 1/32, so detection asks nothing about the grid.
         expected = tutorial.PHRASE * tutorial.REPEATS
-        expect(page.locator("#lanes")).to_contain_text(f"{len(expected)} notes")
+        expect(page.locator("#lanes")).to_contain_text(f"{len(expected)} notes", timeout=180000)
 
         track = gp.parse(io.BytesIO(self.download("#menuExportTab").read_bytes())).tracks[0]
         pitches = [track.strings[note.string - 1].value + note.value for measure in track.measures
@@ -259,13 +277,13 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate("""async () => {
             const { S } = await import("./store.js");
             const { addMarker, snap } = await import("./grid.js");
-            const { draw } = await import("./repaint.js");
+            const { drawNow } = await import("./repaint.js");   // now: the flags' hit areas are built by the paint
             addMarker(2); addMarker(4);
             S.state.sectionMarkers = [1, 3, 5].map((t) => ({ id: "s" + t, t, type: "verse", name: "" }));
             const lane = S.state.editLanes[0];
             lane.toneMarkers = [{ id: "tone1", t: 3, tone: "A" }];
             lane.notes = [1, 3, 5].map((t) => ({ start: snap(t), end: t + 0.25, pitch: 45, string: 5, fret: 0 }));
-            draw();
+            drawNow();
         }""")
         times = lambda: page.evaluate("""async () => {
             const { S } = await import("./store.js");
@@ -273,15 +291,11 @@ class EndToEndTests(unittest.TestCase):
             return [S.state.sectionMarkers.map((m) => m.t), lane.notes.map((n) => n.start).sort((a, b) => a - b),
                     lane.toneMarkers[0].t];
         }""")
-        px = page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
-        stage = page.locator("#stage").bounding_box()
-        scroll = page.evaluate("document.getElementById('scroll').scrollLeft")
-
         def drag(t, by, then=None):
-            x = stage["x"] + t * px - scroll + 5
-            page.mouse.move(x, stage["y"] + 10)
+            (x, y), (x1, _) = self.rail_point(t), self.rail_point(t + by)
+            page.mouse.move(x, y)
             page.mouse.down()
-            page.mouse.move(x + px * by, stage["y"] + 10, steps=6)
+            page.mouse.move(x1, y, steps=6)
             if then: then()
             page.mouse.up()
 
@@ -307,7 +321,7 @@ class EndToEndTests(unittest.TestCase):
         near(sections + notes + [tone], [1.5, 3, 5, a + 0.5, b, c, 3])
         page.keyboard.press("Control+z")
         # Typing a marker's time is the same move as dragging its flag.
-        page.mouse.click(stage["x"] + 2 * px - scroll + 5, stage["y"] + 10)
+        page.mouse.click(*self.rail_point(2))
         page.fill("#markerTime", "2.5")
         page.click("#markerPopClose")
         sections, notes, tone = times()
@@ -321,17 +335,15 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate("""async () => {
             const { S } = await import("./store.js");
             const { addMarker } = await import("./grid.js");
-            const { draw } = await import("./repaint.js");
+            const { drawNow } = await import("./repaint.js");   // now: the flags' hit areas are built by the paint
             addMarker(2); addMarker(4).bpm = 90;
             S.state.editLanes[0].notes = [{ start: 3, end: 3.25, pitch: 45, string: 5, fret: 0 }];
-            draw();
+            drawNow();
         }""")
-        px = page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
-        stage = page.locator("#stage").bounding_box()
-        x = stage["x"] + 2 * px - page.evaluate("document.getElementById('scroll').scrollLeft") + 5
-        page.mouse.move(x, stage["y"] + 10)
+        (x, y), (x1, _) = self.rail_point(2), self.rail_point(3.3)
+        page.mouse.move(x, y)
         page.mouse.down()
-        page.mouse.move(x + px * 1.3, stage["y"] + 10, steps=6)   # the note crosses the 90 BPM flag at 4 s
+        page.mouse.move(x1, y, steps=6)   # the note crosses the 90 BPM flag at 4 s
         page.mouse.up()
         start, cells = page.evaluate("""async () => {
             const { S } = await import("./store.js");
@@ -347,18 +359,16 @@ class EndToEndTests(unittest.TestCase):
         self.new_audio_project()
         page.evaluate("""async () => {
             const { addMarker } = await import("./grid.js");
-            const { draw } = await import("./repaint.js");
-            addMarker(2); draw();
+            const { drawNow } = await import("./repaint.js");   // now: the flags' hit areas are built by the paint
+            addMarker(2); drawNow();
         }""")
         marker_t = lambda: page.evaluate("async () => (await import('./store.js')).S.state.tempoMap[0].t")
-        px = page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
-        stage = page.locator("#stage").bounding_box()
-        x = stage["x"] + 2 * px - page.evaluate("document.getElementById('scroll').scrollLeft") + 5
-        page.mouse.click(x, stage["y"] + 10)                  # open its popover
+        (x, y), (x1, _) = self.rail_point(2), self.rail_point(2.5)
+        page.mouse.click(x, y)                               # open its popover
         expect(page.locator("#markerPop")).to_be_visible()
-        page.mouse.move(x, stage["y"] + 10)
+        page.mouse.move(x, y)
         page.mouse.down()
-        page.mouse.move(x + px * 0.5, stage["y"] + 10, steps=6)
+        page.mouse.move(x1, y, steps=6)
         self.assertAlmostEqual(float(page.input_value("#markerTime")), marker_t(), places=3)   # live
         self.assertAlmostEqual(marker_t(), 2.5, delta=0.02)
         page.mouse.up()
@@ -392,6 +402,7 @@ class EndToEndTests(unittest.TestCase):
         chooser.value.set_files(self.data / "song.gp5")
         page.click("#gpImportConfirm")
         expect(page.locator("#lanes")).to_contain_text("Own tempo")
+        self.loaded()
         # The imported layer is active: its grid and sections are on screen, not the song's.
         self.assertEqual(float(page.input_value("#offset")), 0)
         self.assertNotIn("song_verse", state("S.state.sectionMarkers.map((m) => m.id)"))
@@ -401,9 +412,11 @@ class EndToEndTests(unittest.TestCase):
         self.assertIn("song_verse", state("S.state.sectionMarkers.map((m) => m.id)"))
         # It survives saving and reopening.
         page.keyboard.press("Control+s")
+        expect(page.locator("#projDirtyDot")).to_be_hidden()   # the save has landed
         self.home()
         page.get_by_role("button", name="Open E2E Audio").first.click()
         expect(page.locator("#lanes")).to_contain_text("Own tempo")
+        self.loaded()
         # Following the song again is a Layer settings switch, and one undo step.
         guitar = page.locator("#lanes .lane-row").filter(has_not_text="Layer 1").first
         guitar.click()
