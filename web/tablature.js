@@ -10,6 +10,10 @@ import { copyEffects } from "./note-effects.js";
 import { beatsPerBar, exportResolution, gridBpm, gridOffset, gridSubdiv, minDur } from "./grid.js";
 import { refOccurrences } from "./reference-core.js";
 import { songBarStarts } from "./song-bars.js";
+import { onLiveTiming, timingData, timingIdOf } from "./timing.js";
+
+// A layer's bar lines come from its own timing (web/timing.js).
+const laneBars = (lane) => (onLiveTiming(lane) ? songBarStarts() : songBarStarts(timingData(timingIdOf(lane))));
 import { editLanes } from "./lanes.js";
 import { exportSongName, metadataFromState, metadataPayload } from "./metadata.js";
 import { ensureTone, pauseTransport, playbackTime, playTransport, revealPlaybackPosition, seekPlayback, transportPlaying } from "./playback.js";
@@ -111,8 +115,10 @@ export function refreshTabIfOpen() {
 // Apply the explicit output role before arranging or voicing. Eye visibility
 // affects only the editor: a hidden tab track still exports, while a visible
 // reference layer never invokes the potentially expensive fingering pass.
+// One score has one tempo map, so the tab shows the layers that share the active
+// layer's timing; a layer with its own shows when it is the active one.
 function tabLanes() {
-  return editLanes().filter((lane) => isTablatureLane(lane) && lane.notes.length);
+  return editLanes().filter((lane) => isTablatureLane(lane) && lane.notes.length && onLiveTiming(lane));
 }
 
 // Whole-lane voicing is pure CPU work. Cache completed position arrays by the
@@ -125,7 +131,7 @@ function laneVoicingKey(lane, tuning) {
   // time — and a meter-only grid edit changes them without touching a note, so it
   // never bumps voicingRevision. Keyed on the times themselves rather than a summary:
   // a tempo marker can move a bar without changing how many there are.
-  return `${S.voicingRevision}:${tuning.join(",")}:${songBarStarts().join(",")}`;
+  return `${S.voicingRevision}:${tuning.join(",")}:${laneBars(lane).join(",")}`;
 }
 
 const aborted = () => Object.assign(new Error("tablature generation cancelled"), { name: "AbortError" });
@@ -149,7 +155,7 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
   // Headless callers and older embedded browsers retain the synchronous path.
   if (typeof Worker === "undefined") {
     const { voiced, fingers, seats } = voiceNotesFingered(notes, tuning, Infinity,
-      { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo,
+      { bars: laneBars(lane), instrument: lane.instrument, capo: lane.capo,
         holds: lane.handHolds });
     const got = {
       positions: notes.map((note) => voiced.get(note) || null),
@@ -180,7 +186,7 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
       });
     };
     worker.onerror = () => finish(reject, new Error("automatic fingering worker failed"));
-    worker.postMessage({ task: "voice", notes, tuning, bars: songBarStarts(),
+    worker.postMessage({ task: "voice", notes, tuning, bars: laneBars(lane),
       instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
   });
   if (signal?.aborted || laneVoicingKey(lane, tuning) !== key) throw aborted();
@@ -194,6 +200,17 @@ const handedMap = (notes, got) => ({
   fingers: new Map(notes.flatMap((note, i) => Number.isFinite(got.fingers?.[i]) ? [[note, got.fingers[i]]] : [])),
   seats: new Map(notes.flatMap((note, i) => Number.isFinite(got.seats?.[i]) ? [[note, got.seats[i]]] : [])),
 });
+
+// A track on another timing than the spec's (the live one) carries its own grid
+// and sections; the Rocksmith builder charts each arrangement on its own beat grid.
+function ownTimingFields(lane) {
+  if (onLiveTiming(lane)) return {};
+  const t = timingData(timingIdOf(lane));
+  return {
+    sections: sectionMarkersForExport(t.sectionMarkers || []),
+    grid: { ...t.grid, tempoMap: (t.tempoMap || []).map((m) => ({ t: +m.t, bpm: +m.bpm, tsNum: +m.tsNum, tsDen: +m.tsDen, subdiv: +m.subdiv || t.grid.subdiv })) },
+  };
+}
 
 function buildSpecFromPrepared(prepared) {
   const meta = metadataFromState(S.state);
@@ -219,6 +236,7 @@ function buildSpecFromPrepared(prepared) {
       return {
         id: l.id,
         name: l.name,
+        ...ownTimingFields(l),
         ...normalizedLaneFields(l),
         instrument: laneGm(l),
         tuning,

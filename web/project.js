@@ -20,7 +20,7 @@ import { draw } from "./repaint.js";
 import { icon } from "./icons.js";
 import { toggleStemMute, updateUndoButtons } from "./edit.js";
 import { layout, syncRowHeight, updateZoomLabels } from "./geometry.js";
-import { beatsPerBar, currentGridState, gridBpm, gridOffset, gridSubdiv, setSubdiv } from "./grid.js";
+import { currentGridState, gridSubdiv, setSubdiv } from "./grid.js";
 import { dedupeIds, syncUidPastLoaded } from "./ids.js";
 import { rebuildLanes, renderLanes } from "./lanes.js";
 import { metadataPayload, normalizeMetadata, projectName } from "./metadata.js";
@@ -42,6 +42,7 @@ import { defaultPinFlags } from "./voicing-core.js";
 import { isValidTuningKey, parseTuning, setView } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
+import { SONG, loadTimings, timingData, timingIdOf, timingsForSave } from "./timing.js";
 
 // ---- project save / open (self-contained .chart files) ----
 // Snapshot the editor state in the shape the server merges into the manifest.
@@ -53,6 +54,7 @@ function projectBody() {
     volume: normLayerVolume(l.volume),
     muted: l.muted, active: l.active, tablatureEnabled: l.tablatureEnabled !== false,
     ...(l.rocksmithArrangement ? { rocksmithArrangement: l.rocksmithArrangement } : {}), notes: l.notes,
+    ...(timingIdOf(l) !== SONG ? { timing: l.timing } : {}),   // absent: follows the song's timing
     ...normalizedLaneFields(l, Number(S.state.duration) || Infinity),
     ...(Number.isFinite(l.gmProgram) ? { gmProgram: l.gmProgram } : {}),
     ...(Number.isFinite(l.sourceTrackIndex) ? { sourceTrackIndex: l.sourceTrackIndex } : {}),
@@ -65,6 +67,7 @@ function projectBody() {
     // one, so an untouched project gains no field.
     ...(l.handHolds?.length ? { handHolds: l.handHolds.map((h) => ({ t: h.t, fret: h.fret })) } : {}),
   });
+  const song = timingData(SONG);
   return {
     name: projectName(S.state),
     metadata: metadataPayload(S.state.metadata || {}),
@@ -75,15 +78,18 @@ function projectBody() {
     })),
     editLanes: S.state.editLanes.map(serialize),
     ...(S.state.guitarPro ? { guitarPro: S.state.guitarPro } : {}),
-    sectionMarkers: normalizeSectionMarkers(S.state.sectionMarkers || [], Number(S.state.duration) || Infinity),
-    scoreBars: (S.state.scoreBars || []).map((bar) => ({ ...bar })),
+    // The project's own grid, sections and bars are the SONG's timing — whichever
+    // layer is active; layers with their own timing save theirs under `timings`.
+    sectionMarkers: normalizeSectionMarkers(song.sectionMarkers || [], Number(S.state.duration) || Infinity),
+    scoreBars: (song.scoreBars || []).map((bar) => ({ ...bar })),
+    timings: timingsForSave(),
     scoreDuration: Number(S.state.scoreDuration) || Number(S.state.duration) || 1,
     view: { stem: S.state.curStem, zoomX: S.zoomX, zoomY: S.zoomY, speed: speedSel.value },
     grid: {
-      bpm: gridBpm(), offset: gridOffset(), subdiv: gridSubdiv(),
+      bpm: song.grid.bpm, offset: song.grid.offset, subdiv: song.grid.subdiv,
       snap: true, showGrid: true,
-      tsNum: beatsPerBar(), tsDen: parseInt(tsDenInput.value, 10) || 4,
-      tempoMap: (S.state.tempoMap || []).map((m) => ({ t: +m.t, bpm: +m.bpm, tsNum: +m.tsNum, tsDen: +m.tsDen, subdiv: +m.subdiv || gridSubdiv() })),
+      tsNum: song.grid.tsNum, tsDen: song.grid.tsDen,
+      tempoMap: (song.tempoMap || []).map((m) => ({ t: +m.t, bpm: +m.bpm, tsNum: +m.tsNum, tsDen: +m.tsDen, subdiv: +m.subdiv || song.grid.subdiv })),
     },
   };
 }
@@ -124,7 +130,7 @@ let savedSig = null;
 
 function dirtySig() {
   const b = projectBody();
-  return JSON.stringify({ editLanes: b.editLanes, grid: b.grid, sectionMarkers: b.sectionMarkers,
+  return JSON.stringify({ editLanes: b.editLanes, grid: b.grid, sectionMarkers: b.sectionMarkers, timings: b.timings,
     scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, stemSettings: b.stemSettings });
 }
 
@@ -284,6 +290,7 @@ export function mapLane(l) {
     gmProgram: Number.isFinite(l.gmProgram) ? l.gmProgram : undefined,
     sourceTrackIndex: Number.isFinite(l.sourceTrackIndex) ? l.sourceTrackIndex : undefined,
     sourceStaffIndex: Number.isFinite(l.sourceStaffIndex) ? l.sourceStaffIndex : undefined,
+    timing: typeof l.timing === "string" ? l.timing : undefined,
     capo: Number.isFinite(l.capo) ? l.capo : 0,
     transpositionPitch: Number.isFinite(l.transpositionPitch) ? l.transpositionPitch : 0,
     displayTranspositionPitch: Number.isFinite(l.displayTranspositionPitch) ? l.displayTranspositionPitch : 0,
@@ -319,8 +326,10 @@ export function applyProject(data) {
   disposeSynths();
   closeStemSettings();   // an open stem panel targets the previous project's stem
 
-  // 2. score structure
-  const restoredBars = normalizeScoreBars(data.scoreBars?.length ? data.scoreBars : data.guitarPro?.score?.masterBars,
+  // 2. score structure. The imported file's bars stand in for the song's only while
+  // its layers follow the song; on their own timing they are that timing's bars.
+  const gpOwnTiming = (data.editLanes || []).some((lane) => lane.sourceTrackIndex != null && data.timings?.[lane.timing]);
+  const restoredBars = normalizeScoreBars(data.scoreBars?.length ? data.scoreBars : gpOwnTiming ? [] : data.guitarPro?.score?.masterBars,
     Number(data.scoreDuration) || Number(data.guitarPro?.score?.durationSeconds) || Number(data.duration));
   const noteEnd = Math.max(0, ...(data.editLanes || []).flatMap((lane) => (lane.notes || []).map((note) => Number(note.end) || 0)));
   const coveredBars = coverScoreDuration(restoredBars, Math.max(Number(data.duration) || 0, Number(data.scoreDuration) || 0, noteEnd));
@@ -353,6 +362,7 @@ export function applyProject(data) {
     metadata: normalizeMetadata(data.metadata || {}),
     guitarPro: data.guitarPro || null,
     sectionMarkers: restoredSections,
+    timings: loadTimings(data.timings),   // the song's timing is the fields around it; it starts live
     scoreBars: coveredBars,
     scoreDuration: coveredBars.length ? coveredBars.at(-1).seconds + coveredBars.at(-1).durationSeconds
       : Number(data.scoreDuration) || Number(data.duration) || 1,

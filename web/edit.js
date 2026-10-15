@@ -12,6 +12,7 @@ import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
 import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapNote, snapStrayNotes } from "./grid.js";
 import { nid, shapeId } from "./ids.js";
+import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addMarkerAtTime } from "./markers.js";
 import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, targetLane, toggleLaneMute } from "./lanes.js";
@@ -80,6 +81,7 @@ export function snapshotEdit() {
     grid: currentGridState(),
     offset: gridOffset(),   // so undoing an offset-driven note shift also rolls the offset back (no-op for every other edit)
     structure: structureSnapshot(),
+    timing: S.state ? timingSnapshot() : null,   // which layer follows which timing, and the timings not live
   };
   for (const l of editLanes()) {
     snap.lanes[l.id] = l.notes.map((n) => ({ ...n }));
@@ -118,7 +120,7 @@ export function commitStructure(prev) {
 }
 
 function recordUndo(prev) {
-  if (S.state) snapStrayNotes(editLanes());   // whatever the edit was, no note stays off its grid
+  if (S.state) eachTiming(editLanes(), snapStrayNotes);   // whatever the edit was, no note stays off its layer's grid
   S.voicingRevision++;
   S.undoStack.push(prev);
   if (S.undoStack.length > MAX_UNDO) S.undoStack.shift();
@@ -132,6 +134,7 @@ function restore(snap) {
   // Structure first: the grid readout and every note position below are drawn
   // against it, so putting the bars back after the notes would paint one frame
   // of the two disagreeing.
+  if (S.state) restoreTimingSnapshot(snap.timing);   // first: the fields below are its live timing
   if (snap.structure && S.state) {
     S.state.tempoMap = cloneJson(snap.structure.tempoMap);
     S.state.scoreBars = cloneJson(snap.structure.scoreBars);
@@ -139,16 +142,18 @@ function restore(snap) {
     S.state.scoreDuration = snap.structure.scoreDuration;
     if (snap.structure.duration != null) S.state.duration = snap.structure.duration;
   }
-  // Bring back the stem the edit was made under so the backdrop matches what you
-  // edited (edit lanes show across every stem, so this is just the spectrogram).
-  if (snap.stem && S.state.curStem !== snap.stem && S.state.stems.some((s) => s.id === snap.stem))
-    selectStem(snap.stem);
+  // The grid before the stem: switching stems rebuilds the lanes, which may swap
+  // timings, and that must not catch the live timing half restored.
   if (snap.grid) restoreGridState(snap.grid);
   else if (snap.offset != null) {
     offsetInput.value = (+snap.offset).toFixed(3);
     S.appliedOffset = +snap.offset;
     S.appliedGrid = currentGridState();
   }
+  // Bring back the stem the edit was made under so the backdrop matches what you
+  // edited (edit lanes show across every stem, so this is just the spectrogram).
+  if (snap.stem && S.state.curStem !== snap.stem && S.state.stems.some((s) => s.id === snap.stem))
+    selectStem(snap.stem);
   for (const l of editLanes()) {
     if (snap.lanes && snap.lanes[l.id]) l.notes = snap.lanes[l.id].map((n) => ({ ...n }));
     if (snap.boxes) l.refBoxes = JSON.parse(JSON.stringify(snap.boxes[l.id] || {}));

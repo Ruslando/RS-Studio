@@ -344,6 +344,9 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
         m["scoreBars"] = payload["scoreBars"]
     if "sectionMarkers" in payload and isinstance(payload.get("sectionMarkers"), list):
         m["sectionMarkers"] = payload["sectionMarkers"]
+    # Layers with their own tempo/sections (web/timing.js); the song's stay in grid & co.
+    if isinstance(payload.get("timings"), dict):
+        m["timings"] = payload["timings"]
     if "scoreDuration" in payload:
         try:
             score_duration = float(payload["scoreDuration"])
@@ -429,6 +432,7 @@ def _response_from_manifest(m: dict) -> dict:
         "editLanes": m.get("editLanes", []),
         "guitarPro": m.get("guitarPro"),
         "sectionMarkers": m.get("sectionMarkers"),
+        "timings": m.get("timings", {}),
         "scoreBars": m.get("scoreBars", []),
         "scoreDuration": m.get("scoreDuration"),
         "grid": m.get("grid", {}),

@@ -9,6 +9,7 @@ import { songBarStarts } from "./song-bars.js";
 import { isTablatureLane } from "./layer-role.js";
 import { assignSectionsToBars } from "./section-marker-core.js";
 import { S } from "./store.js";
+import { onLiveTiming } from "./timing.js";
 import { laneFingering } from "./tablature.js";
 
 let cacheKey = "";
@@ -22,8 +23,17 @@ function currentKey() {
 
 // Visibility and playback are independent from score membership. Apply this
 // explicit role before alphaTab construction or automatic fingering begins.
+// A score has one tempo map: the layers that share the active layer's timing.
 function enabledScoreLanes() {
-  return (S.state?.editLanes || []).filter((lane) => isTablatureLane(lane) && lane.notes?.length);
+  return (S.state?.editLanes || []).filter((lane) => isTablatureLane(lane) && lane.notes?.length && onLiveTiming(lane));
+}
+
+// The original file's bars and tempo are its imported layers' timing; build on it
+// only when those layers are in this export.
+function exportsFromSource() {
+  if (!S.state?.guitarPro?.sourceRel) return false;
+  const imported = (S.state.editLanes || []).filter((lane) => lane.sourceTrackIndex != null);
+  return !imported.length || imported.some(onLiveTiming);
 }
 
 function importedLanes() {
@@ -114,7 +124,7 @@ export function originalGpProjectionStatus() {
 }
 
 export function modernGpProjectionStatus() {
-  if (S.state?.guitarPro?.sourceRel) return originalGpProjectionStatus();
+  if (exportsFromSource()) return originalGpProjectionStatus();
   const lanes = enabledScoreLanes();
   if (!lanes.length) return { available: false, pristine: false, exportable: false, reason: "No tablature tracks remain to export." };
   return { available: true, pristine: false, exportable: true, reason: "" };
@@ -245,7 +255,7 @@ export async function modernGpResult(alphaTabRuntime, signal) {
 export async function projectedGpScore(alphaTabRuntime, signal) {
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) throw new Error(status.reason);
-  if (!S.state.guitarPro?.sourceRel) {
+  if (!exportsFromSource()) {
     const lanes = await fingered(enabledScoreLanes(), signal);
     const score = blankProjectScore(alphaTabRuntime);
     appendCreatedLanes(alphaTabRuntime, score, lanes, songBarStarts());
@@ -290,7 +300,7 @@ export async function projectedGpLaneScore(alphaTabRuntime, lane, signal) {
   if (!isTablatureLane(lane) || !lane?.notes?.length)
     throw new Error("The selected layer has no enabled tablature to preview");
 
-  if (!S.state?.guitarPro?.sourceRel) {
+  if (!exportsFromSource()) {
     const score = blankProjectScore(alphaTabRuntime);
     appendCreatedLanes(alphaTabRuntime, score, await fingered([lane], signal), songBarStarts());
     const structure = projectStructureForGeneratedScore(score);

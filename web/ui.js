@@ -52,7 +52,7 @@ export const settingsModalBackdrop = $("settingsModalBackdrop"), settingsModalCl
 
 export const layerName = $("layerName"), layerColor = $("layerColor");
 
-export const layerInstr = $("layerInstr"), layerTone = $("layerTone"), layerTun = $("layerTun"), layerCapo = $("layerCapo"), layerArrangement = $("layerArrangement");
+export const layerInstr = $("layerInstr"), layerTone = $("layerTone"), layerTun = $("layerTun"), layerCapo = $("layerCapo"), layerArrangement = $("layerArrangement"), layerOwnTiming = $("layerOwnTiming");
 export const spLayerName = $("spLayerName");
 
 export const layerVolume = $("layerVolume"), layerVolumeValue = $("layerVolumeValue");

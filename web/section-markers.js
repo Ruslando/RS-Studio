@@ -216,9 +216,11 @@ const markersChanged = () => { normalizedCache = null; };
 export const sectionMarkersChanged = markersChanged;
 
 function normalizedMarkers() {
-  if (normalizedCache) return normalizedCache;
   const live = sectionMarkers();
+  // A layer switch or undo swaps the whole array (timing.js), which no call site here sees.
+  if (normalizedCache?.live === live) return normalizedCache;
   normalizedCache = {
+    live,
     list: normalizeSectionMarkers(live),
     byId: new Map(live.map((marker) => [marker.id, marker])),
   };

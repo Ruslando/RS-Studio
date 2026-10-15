@@ -207,21 +207,28 @@ def _with_lead_in(spec: dict, lead: float) -> dict:
         for name in ("phraseBoundaries", "practiceBoundaries"):
             if track.get(name):
                 track[name] = [moved(item) for item in track[name]]
+        # A layer on its own timing carries its own grid and sections.
+        for section in track.get("sections") or []:
+            moved(section)
+        _grid_lead_in(track.get("grid"), lead, moved)
     for section in out.get("sections") or []:
         moved(section)
-
-    grid = out.get("grid")
-    if isinstance(grid, dict):
-        for marker in grid.get("tempoMap") or []:
-            moved(marker)
-        try:
-            bpm = float(grid.get("bpm") or 120.0) or 120.0
-            measure = 60.0 / bpm * max(1, int(grid.get("tsNum") or 4))
-            start = max(0.0, float(grid.get("offset") or 0.0)) + lead
-        except (TypeError, ValueError):
-            return out
-        grid["offset"] = start - int(start / measure) * measure
+    _grid_lead_in(out.get("grid"), lead, moved)
     return out
+
+
+def _grid_lead_in(grid, lead: float, moved) -> None:
+    if not isinstance(grid, dict):
+        return
+    for marker in grid.get("tempoMap") or []:
+        moved(marker)
+    try:
+        bpm = float(grid.get("bpm") or 120.0) or 120.0
+        measure = 60.0 / bpm * max(1, int(grid.get("tsNum") or 4))
+        start = max(0.0, float(grid.get("offset") or 0.0)) + lead
+    except (TypeError, ValueError):
+        return
+    grid["offset"] = start - int(start / measure) * measure
 
 
 def _prepare_audio(audio_path: Path, first_note: float, workdir: Path,
@@ -417,8 +424,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
                 raise ValueError(f"{arr['full_name']} needs a {need} tuning")
 
             compiled = chart.compile_track(
-                track, spec.get("grid") or {}, song_length,
-                section_markers=spec.get("sections") or [],
+                track, track.get("grid") or spec.get("grid") or {}, song_length,
+                section_markers=(track["sections"] if "sections" in track else spec.get("sections")) or [],
                 phrase_boundaries=(
                     track.get("phraseBoundaries")
                     or track.get("practiceBoundaries")

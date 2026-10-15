@@ -17,6 +17,7 @@ import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { railScale, railsHidden, timedLaneMarkers } from "./marker-rails.js";
 import { editLanes } from "./lanes.js";
+import { onLiveTiming } from "./timing.js";
 import { sectionMarkersChanged } from "./section-markers.js";
 import { gridDivLabelFor } from "./ui.js";
 import { refreshSaveState } from "./project.js";
@@ -151,7 +152,7 @@ function spanRiders(seg) {
   const t1 = gridSegments().find((s) => s.t > seg.t + 1e-6)?.t ?? Infinity;
   const inSpan = (t) => t >= seg.t - 1e-6 && t < t1 - 1e-6;
   const dur = S.state.duration, clamp = (t) => Math.max(0, Math.min(dur, t));
-  const lanes = editLanes(), riders = [];
+  const lanes = editLanes().filter(onLiveTiming), riders = [];   // a layer with its own timing stays
   const marks = [...(S.state.sectionMarkers || []), ...timedLaneMarkers(lanes), ...lanes.flatMap((l) => l.handHolds || [])];
   for (const m of marks) {
     const t = +m.t;

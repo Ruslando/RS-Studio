@@ -38,6 +38,16 @@ class LeadInTest(unittest.TestCase):
         self.assertEqual(moved["grid"]["tempoMap"][0]["t"], 13.0)
         # the base tone stays the base tone; the switch moves with the music
         self.assertEqual([m["t"] for m in track["toneMarkers"]], [0, 9.0])
+
+    def test_a_track_on_its_own_timing_moves_its_grid_and_sections_too(self):
+        spec = _spec(5)
+        spec["tracks"][0]["grid"] = {"bpm": 140, "offset": 0.0, "tsNum": 7, "tempoMap": [{"t": 6.0, "bpm": 100}]}
+        spec["tracks"][0]["sections"] = [{"t": 1.0, "text": "Riff", "sectionType": "riff"}]
+        moved = builder._with_lead_in(spec, builder._lead_in_seconds(spec))
+        track = moved["tracks"][0]
+        self.assertEqual(track["grid"]["tempoMap"][0]["t"], 11.0)
+        self.assertEqual(track["sections"][0]["t"], 6.0)
+        self.assertEqual(moved["grid"]["tempoMap"][0]["t"], 13.0)   # the song's still moves once
         self.assertEqual(spec["tracks"][0]["notes"][0]["start"], 0.5)
 
     def test_bar_lines_run_back_into_the_silence_in_phase(self):

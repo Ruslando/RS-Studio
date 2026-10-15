@@ -98,10 +98,8 @@ class EndToEndTests(unittest.TestCase):
         chooser.value.set_files(self.data / "song.gp5")
         expect(page.locator("#gpImportTracks")).to_contain_text("8 notes")
         page.click("#gpImportConfirm")
-        # A score-only project opens on its tablature.
-        expect(page.locator("#tabRender svg").first).to_be_visible()
-        page.click("#tabViewClose")
         expect(page.locator("#lanes")).to_contain_text("8 notes")
+        expect(page.locator("#tabViewBackdrop")).to_be_hidden()   # an import stays on the editor
 
     def new_audio_project(self):
         page = self.page
@@ -377,6 +375,47 @@ class EndToEndTests(unittest.TestCase):
         page.click("#markerPopClose")
         page.keyboard.press("Control+z")                     # the popover session is one step
         self.assertEqual(marker_t(), 2)
+
+    def test_guitar_pro_import_in_another_tempo_gets_its_own_timing(self):
+        page = self.page
+        state = lambda expr: page.evaluate(f"async () => {{ const {{ S }} = await import('./store.js'); return {expr}; }}")
+        self.new_audio_project()   # its detected grid does not start at 0, the file's does
+        page.dblclick("#stage", position={"x": 300, "y": 300})
+        page.evaluate("""async () => {
+            const { S } = await import("./store.js");
+            S.state.sectionMarkers = [{ id: "song_verse", t: 1, type: "verse", name: "" }];
+        }""")
+        song_offset = float(page.input_value("#offset"))
+        page.click("#fileMenuBtn")
+        with page.expect_file_chooser() as chooser:
+            page.click("#importGp")
+        chooser.value.set_files(self.data / "song.gp5")
+        page.click("#gpImportConfirm")
+        expect(page.locator("#lanes")).to_contain_text("Own tempo")
+        # The imported layer is active: its grid and sections are on screen, not the song's.
+        self.assertEqual(float(page.input_value("#offset")), 0)
+        self.assertNotIn("song_verse", state("S.state.sectionMarkers.map((m) => m.id)"))
+        # Back on Layer 1, the song's are.
+        page.locator("#lanes .lane-row", has_text="Layer 1").click()
+        self.assertAlmostEqual(float(page.input_value("#offset")), song_offset, places=3)
+        self.assertIn("song_verse", state("S.state.sectionMarkers.map((m) => m.id)"))
+        # It survives saving and reopening.
+        page.keyboard.press("Control+s")
+        self.home()
+        page.get_by_role("button", name="Open E2E Audio").first.click()
+        expect(page.locator("#lanes")).to_contain_text("Own tempo")
+        # Following the song again is a Layer settings switch, and one undo step.
+        guitar = page.locator("#lanes .lane-row").filter(has_not_text="Layer 1").first
+        guitar.click()
+        guitar.hover()
+        guitar.locator(".edit-btn").click()
+        page.uncheck("#layerOwnTiming")
+        page.click("#layerSave")
+        expect(page.locator("#lanes")).not_to_contain_text("Own tempo")
+        self.assertAlmostEqual(float(page.input_value("#offset")), song_offset, places=3)
+        page.keyboard.press("Control+z")
+        expect(page.locator("#lanes")).to_contain_text("Own tempo")
+        self.assertEqual(float(page.input_value("#offset")), 0)
 
     def test_layer_settings_reach_the_layer_row_and_the_export_window(self):
         page = self.page

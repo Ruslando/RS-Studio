@@ -7,6 +7,10 @@ import { bpmInput, markerBpm, offsetInput, subdivCustom, subdivCustomWrap, subdi
 import { draw } from "./repaint.js";
 import { commit, snapshotEdit } from "./edit.js";
 import { editLanes, refreshCounts, renderLanes } from "./lanes.js";
+import { onLiveTiming } from "./timing.js";
+
+// The layers the live grid belongs to; a layer with its own timing is not moved by it.
+const timedLanes = () => editLanes().filter(onLiveTiming);
 import { refreshSaveState } from "./project.js";
 import { S } from "./store.js";
 
@@ -203,7 +207,8 @@ export function snapNote(start, end) {
 // After every committed edit: a note whose start fell off its grid — a tempo flag
 // dragged it into another tempo's span, an offset change slid it, a meter change
 // moved the lines under it — is pulled back on exactly as touching it would. A
-// start on the 1/32 grid counts as on-grid, so detected notes keep their rhythm.
+// start on a 1/24-of-a-quarter line counts as on-grid: that holds 1/32 and the
+// 1/8 and 1/16 triplets, so detected notes and imported tuplets keep their rhythm.
 // Hand holds on a snapped note's start follow it. Returns how many notes moved.
 // ponytail: start-only check, a note whose end alone is off is left as it is
 export function snapStrayNotes(lanes) {
@@ -212,7 +217,7 @@ export function snapStrayNotes(lanes) {
   for (const lane of lanes) {
     for (const n of lane.notes) {
       const seg = gridAt(n.start);
-      if (!seg.bpm || on(n.start, seg, segStep(seg)) || on(n.start, seg, 60 / seg.bpm / FINE_SUBDIV)) continue;
+      if (!seg.bpm || on(n.start, seg, segStep(seg)) || on(n.start, seg, 60 / seg.bpm / 24)) continue;
       const q = snapNote(n.start, n.end);
       for (const h of lane.handHolds || []) if (Math.abs(+h.t - n.start) < 1e-6) h.t = q.start;
       n.start = q.start; n.end = q.end;
@@ -244,7 +249,7 @@ export function quantizeFine(start, end) {
 // every snapped note a hair off the beat. Slide every note and its reference boxes.
 function shiftEditLanesBy(delta) {
   const dur = S.state.duration;
-  for (const lane of editLanes()) {
+  for (const lane of timedLanes()) {
     for (const n of lane.notes) {
       n.start = Math.max(0, n.start + delta);
       n.end = Math.min(dur, n.end + delta);
@@ -256,13 +261,13 @@ function shiftEditLanesBy(delta) {
 }
 
 function hasGridContent() {
-  return editLanes().some((l) => l.notes.length || (l.refBoxes && Object.keys(l.refBoxes).length));
+  return timedLanes().some((l) => l.notes.length || (l.refBoxes && Object.keys(l.refBoxes).length));
 }
 
 // A tempo marker's BPM changed: re-time what sits under it (see retimeSpan).
 export function retimeTempoSpan(t0, t1, oldBpm, newBpm) {
   if (!S.state) return 0;
-  return retimeSpan(editLanes(), S.state.sectionMarkers, S.state.duration, minDur(), t0, t1, oldBpm, newBpm);
+  return retimeSpan(timedLanes(), S.state.sectionMarkers, S.state.duration, minDur(), t0, t1, oldBpm, newBpm);
 }
 
 export function init_grid() {

@@ -584,7 +584,7 @@ export function convertGpScore(score, selectedTrackIndexes, alphaTabVersion = ""
     duration,
     metadata: { title: score.title || "", artist: score.artist || "", album: score.album || "", year: null },
     grid: {
-      bpm: timeline[0]?.bpm || score.tempo || 120, offset: 0, subdiv: 4,
+      bpm: timeline[0]?.bpm || score.tempo || 120, offset: 0, subdiv: 8,
       tsNum: firstBar?.timeSignatureNumerator || 4,
       tsDen: firstBar?.timeSignatureDenominator || 4,
       snap: true, showGrid: true, tempoMap,

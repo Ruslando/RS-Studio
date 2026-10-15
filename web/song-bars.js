@@ -14,13 +14,14 @@
 import { barStartsFromGrid } from "./bars.js";
 import { S } from "./store.js";
 
-export function songBarStarts() {
-  const stored = (S.state?.scoreBars || []).map((bar) => Number(bar.seconds)).filter(Number.isFinite);
+// `timing` (web/timing.js timingData) asks for a layer's bars rather than the live ones.
+export function songBarStarts(timing = null) {
+  const stored = ((timing ? timing.scoreBars : S.state?.scoreBars) || []).map((bar) => Number(bar.seconds)).filter(Number.isFinite);
   if (stored.length) return [...new Set(stored)].sort((a, b) => a - b);
-  const grid = S.appliedGrid || S.state?.baseGrid || S.state?.grid;
+  const grid = timing ? timing.grid : S.appliedGrid || S.state?.baseGrid || S.state?.grid;
   if (!grid) return [];
   return barStartsFromGrid(
-    { ...grid, tempoMap: S.state?.tempoMap || [] },
+    { ...grid, tempoMap: (timing ? timing.tempoMap : S.state?.tempoMap) || [] },
     Math.max(0, Number(S.state?.duration) || Number(S.state?.scoreDuration) || 0),
   );
 }

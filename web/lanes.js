@@ -6,17 +6,18 @@ import { confirmAction } from "./dialog.js";
 import { clearArriving, lanesEl } from "./dom.js";
 import { draw } from "./repaint.js";
 import { icon } from "./icons.js";
-import { updateUndoButtons } from "./edit.js";
+import { commitStructure, snapshotEdit, updateUndoButtons } from "./edit.js";
 import { emptyLaneFields } from "./marker-rails.js";
 import { ungroupShape } from "./shapes.js";
 import { refreshSaveState } from "./project.js";
 import { S, setSelection } from "./store.js";
 import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, tuningToNames } from "./tablature.js";
-import { closeLayerSettings, layerArrangement, layerCapo, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
+import { closeLayerSettings, layerArrangement, layerCapo, layerOwnTiming, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
 import { layerVolumePercent, normLayerVolume, notesLowToHigh, volumeToDb } from "./util.js";
 import { withStartTone } from "./tone-marker-core.js";
 import { RS_KIND_OPTIONS, assignRsKinds, isTablatureLane, rsKindFits } from "./layer-role.js";
 import { moveCapo } from "./voicing-core.js";
+import { SONG, joinSongTiming, splitTiming, syncTiming, timingIdOf } from "./timing.js";
 
 // ---- lane / stem helpers ----
 // Edit lanes are the only lanes and are GLOBAL (shared across every stem view).
@@ -64,6 +65,7 @@ export function rebuildLanes() {
   if (!S.state.lanes.some((l) => l.active) && S.state.editLanes[0]) {
     S.state.editLanes[0].active = true;
   }
+  syncTiming();   // the grid on screen is the active layer's
 }
 
 // ---- Settings → Layer pane: instrument & tuning of the active edit lane ----
@@ -154,6 +156,10 @@ export function renderLayerSettings() {
       option.disabled = option.value !== "none" && (taken.has(option.value) || !rsKindFits(option.value, laneTuning(lane)));
     layerArrangement.value = lane.rocksmithArrangement || "none";
   }
+  if (layerOwnTiming) {
+    layerOwnTiming.checked = timingIdOf(lane) !== SONG;
+    layerOwnTiming.disabled = !!newLaneDraft;   // a layer joins a timing once it exists
+  }
 }
 
 // Inline-SVG icons for the per-layer controls (no icon library; design handoff).
@@ -220,6 +226,7 @@ function wireLaneDrag(row, lane) {
 }
 
 export function renderLanes() {
+  syncTiming();   // every layer switch ends here
   const actions = document.getElementById('noteLayerActions');
   lanesEl.innerHTML = "";
   for (const lane of editLanes()) {
@@ -423,6 +430,7 @@ export function refreshCounts() {
       isTablatureLane(lane) ? RS_KIND_OPTIONS.find(([k]) => k === lane.rocksmithArrangement)[1] : "No export",
       tuningLabel(lane),
       ...(Number(lane.capo) > 0 ? [`Capo ${lane.capo}`] : []),
+      ...(timingIdOf(lane) !== SONG ? ["Own tempo"] : []),
       `${lane.notes.length.toLocaleString()} note${lane.notes.length === 1 ? "" : "s"}`,
     ];
     lane._count.textContent = lane._count.title = parts.join(" · ");
@@ -546,6 +554,14 @@ export function init_lanes() {
     if (layerArrangement) layerArrangement.addEventListener("change", () => {
       const lane = settingsLane(); if (!lane) return;
       setLaneArrangement(lane, layerArrangement.value);
+    });
+    if (layerOwnTiming) layerOwnTiming.addEventListener("change", () => {
+      const lane = settingsLane(); if (!lane || newLaneDraft) return;
+      const prev = snapshotEdit();
+      if (layerOwnTiming.checked) splitTiming(lane);
+      else joinSongTiming(lane);
+      commitStructure(prev);   // one undo step; leaving its own timing snaps the notes to the song's grid
+      renderLayerSettings(); renderLanes(); refreshCounts(); draw(); refreshTabIfOpen();
     });
     if (layerVolume) layerVolume.addEventListener("input", () => {
       const lane = settingsLane(); if (!lane) return;
