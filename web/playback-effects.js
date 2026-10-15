@@ -1,9 +1,10 @@
 // Sample articulations. Times remain in song seconds until the audio scheduler.
+import { hammerLink, strumOffset, tremoloStep } from "./articulations.js";
 import { noteOffsetAt, slideTargets, trillOffsetAt } from "./bend.js";
 
 import { whammyAt } from "./whammy.js";
 
-const interval = (v) => v === "whole" ? 2 : v === "half" ? 1 : 0;
+import { graceBefore } from "./grace.js";
 export function articulation(n) {
   const fx = n.fx || {};
   let velocity = fx.accent ? 1 : 0.72;
@@ -11,7 +12,7 @@ export function articulation(n) {
   if (fx.hammer || n.slap === "tap") velocity *= 0.75;
   if (n.slap === "slap") velocity = 0.95;
   if (n.slap === "pop") velocity = 1;
-  return { velocity, release: fx.dead ? 0.012 : fx.palmMute ? 0.035 : fx.staccato ? 0.025 : 0.15,
+  return { velocity, release: fx.dead ? 0.012 : fx.palmMute ? 0.22 : fx.staccato ? 0.025 : 0.15,
     attack: fx.hammer || n.slap === "tap" ? 0.012 : 0,
     filter: fx.dead ? ["bandpass", 1200, 0.5] : fx.palmMute ? ["lowpass", 900, 0.7]
       : n.harmonic ? ["bandpass", 0, 5] : n.slap === "slap" || n.slap === "pop" ? ["highpass", 650, 0.7] : null };
@@ -53,9 +54,11 @@ export function playbackEvents(notes, bpmAt = () => 120, songEnd = Infinity) {
     for (const n of columns[i]) future.set(voice(n), n);
   }
   for (const n of sorted) {
+    if (n.fx?.dead) continue;
     let target = n.slide === "legato" ? slides.get(n) : null;
+    if (target?.fx?.dead) target = null;
     const next = nextSame.get(n);
-    if (!target && next?.fx?.hammer && Math.abs(next.start - n.end) < 0.03) target = next;
+    if (!target && hammerLink(n, next)) target = next;
     if (target && !into.has(target)) { onward.set(n, target); into.set(target, n); }
   }
   const events = [];
@@ -78,27 +81,24 @@ export function playbackEvents(notes, bpmAt = () => 120, songEnd = Infinity) {
     }
     let duration = Math.max(0.01, end - n.start);
     if (fx.staccato) duration = Math.min(duration * 0.45, 0.18);
-    if (fx.palmMute) duration = Math.min(duration, 0.16);
-    if (fx.dead) duration = Math.min(duration, 0.045);
+    if (fx.palmMute) duration = Math.min(duration, 0.04);
+    if (fx.dead) duration = Math.min(duration, 0.065);
     if (n.slap === "slap") duration = Math.min(duration, 0.22);
-    const chord = columnOf.get(n), rank = chord.indexOf(n);
-    const spread = n.stroke ? Math.min(0.025, duration / Math.max(2, chord.length * 2))
-      * (n.stroke === "up" ? chord.length - 1 - rank : rank) : 0;
-    const style = articulation(n), base = { note: n, pitch: n.pitch, segments, ...style };
-    const step = ["8", "16", "32"].includes(n.tremPick) ? 240 / (segments[0].bpm * Number(n.tremPick)) : duration;
-    for (let offset = 0, count = 0; offset < duration - 1e-8 && count < 8192; offset += step, count++) {
+    const spread = strumOffset(n, columnOf.get(n));
+    const style = articulation(n), base = { note: n, pitch: n.pitch, segments, percussion: !!fx.dead, ...style };
+    const step = tremoloStep(n, segments[0].bpm) || duration;
+    const repeatEnd = n.tremPick ? Math.max(0.01, end - n.start) : duration;
+    for (let offset = 0, count = 0; offset < repeatEnd - 1e-8 && count < 8192; offset += step, count++) {
       events.push({ ...base, start: n.start + spread + offset,
-        duration: Math.min(step, duration - offset), release: n.tremPick ? 0.015 : style.release });
+        duration: Math.min(step, duration, repeatEnd - offset), release: n.tremPick && !fx.palmMute ? 0.015 : style.release });
     }
-    if (interval(n.grace)) {
-      const lead = Math.min(0.08, 15 / segments[0].bpm, Math.max(0, n.start));
-      if (lead > 0) {
-        const grace = { ...n, start: n.start - lead, end: n.start,
-          pitch: n.pitch - Math.min(interval(n.grace), n.pos?.fret ?? interval(n.grace)), grace: undefined };
-        events.push({ ...base, note: grace, pitch: grace.pitch, start: grace.start, duration: lead,
-          velocity: style.velocity * 0.65, release: 0.01,
-          segments: [{ note: grace, end: n.start, bpm: segments[0].bpm, slide: {} }] });
-      }
+    const before = fx.dead ? null : graceBefore(n, segments[0].bpm);
+    if (before) {
+      const grace = { ...n, start: before.start, end: n.start,
+        pitch: n.pitch + before.offset, grace: undefined };
+      events.push({ ...base, note: grace, pitch: grace.pitch, start: grace.start, duration: before.duration,
+        velocity: style.velocity * 0.65, release: 0.01,
+        segments: [{ note: grace, end: n.start, bpm: segments[0].bpm, slide: {} }] });
     }
   }
   return events.sort((a, b) => a.start - b.start);
@@ -107,6 +107,7 @@ export function playbackEvents(notes, bpmAt = () => 120, songEnd = Infinity) {
 // Each note owns its source, envelope and filter: chord members never change
 // their neighbours' timbre. Keep sources in Sampler's map for pause/releaseAll.
 export function playSampleEvent(synth, event, when, heardAt, r = 1) {
+  if (event.percussion) { playDeadNote(synth, event, Math.max(when, heardAt), r); return; }
   const name = Tone.Frequency(event.pitch, "midi").toNote();
   const dur = event.duration / r;
   const oldAttack = synth.attack;
@@ -143,4 +144,37 @@ export function playSampleEvent(synth, event, when, heardAt, r = 1) {
     };
   }
   src.stop(Math.max(heardAt, when) + dur);
+}
+
+// A dead note is an unpitched string hit, never a transposed guitar sample.
+// The short noise buffer has its decay baked in and follows the lane's normal
+// volume/mute path. Register its source so pause, seek and disposal stop it too.
+const deadBuffers = new WeakMap();
+function playDeadNote(synth, event, when, r) {
+  const context = synth.context;
+  let buffer = deadBuffers.get(context);
+  if (!buffer) {
+    const sampleRate = context.sampleRate;
+    buffer = context.rawContext.createBuffer(1, Math.ceil(sampleRate * 0.08), sampleRate);
+    const data = buffer.getChannelData(0);
+    let seed = 173, previous = 0;
+    for (let i = 0; i < data.length; i++) {
+      seed = (1664525 * seed + 1013904223) >>> 0;
+      const noise = seed / 2147483648 - 1, t = i / sampleRate;
+      data[i] = (noise - previous * 0.6) * 0.35 * Math.min(1, t / 0.0015) * Math.exp(-t / 0.012);
+      previous = noise;
+    }
+    deadBuffers.set(context, buffer);
+  }
+  const source = new Tone.ToneBufferSource({ context, url: buffer, playbackRate: r, fadeOut: 0.006 / r });
+  source.connect(synth.output);
+  const sources = synth._activeSources;
+  if (sources && !sources.has(-1)) sources.set(-1, []);
+  sources?.get(-1).push(source);
+  source.onended = () => {
+    const list = sources?.get(-1), index = list?.indexOf(source) ?? -1;
+    if (index >= 0) list.splice(index, 1);
+  };
+  source.start(when, 0, undefined, event.velocity);
+  source.stop(when + event.duration / r);
 }

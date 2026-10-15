@@ -19,9 +19,9 @@ assert.equal(grace.length, 2);
 assert.equal(grace[0].pitch, 60);
 assert.equal(grace[0].start + grace[0].duration, 1);
 assert.equal(plan(n({ start: 0, grace: "half" })).length, 1, "no negative playback times");
-assert.equal(plan(n({ fx: { dead: true } }))[0].duration, 0.045);
+assert.equal(plan(n({ fx: { dead: true } }))[0].percussion, true, "dead notes use unpitched percussion");
 assert.equal(plan(n({ fx: { staccato: true } }))[0].duration, 0.18);
-assert.equal(plan(n({ fx: { palmMute: true } }))[0].duration, 0.16);
+assert.equal(plan(n({ fx: { palmMute: true } }))[0].duration, 0.04);
 assert.ok(articulation(n({ fx: { ghost: true } })).velocity < articulation(n()).velocity);
 assert.ok(articulation(n({ fx: { accent: true } })).velocity > articulation(n()).velocity);
 const ring = n({ fx: { letRing: true } });
@@ -65,11 +65,68 @@ const synth = { attack: 0, output: {}, _activeSources: new Map(),
 };
 playSampleEvent(synth, plan(n({ fx: { palmMute: true } }))[0], 10, 10.02, 0.5);
 const source = synth._activeSources.get(62)[0];
-assert.equal(source.stopped, 10.34);
-assert.equal(source.fadeOut, 0.07);
+assert.equal(source.stopped, 10.1);
+assert.equal(source.fadeOut, 0.44);
 assert.equal(filters[0].options.type, "lowpass");
 source.onended(); assert.ok(filters[0].disposed);
 assert.equal(synth.attack, 0);
 playSampleEvent(synth, plan(n({ whammy: "dip" }))[0], 11, 11.02, 1);
 assert.ok(calls.some((c) => c.curve?.length > 2));
 console.log("playback effects OK");
+
+// Dip returns its finger markers to full strength along the same pitch curve.
+const { whammyGripStyle } = await import("../../web/whammy.js");
+const dip = n({ whammy: "dip" });
+assert.deepEqual(whammyGripStyle(dip, 1), { size: 1, opacity: 1 });
+const bottom = whammyGripStyle(dip, 1.5);
+assert.ok(bottom.size < 1 && bottom.opacity < 1);
+assert.deepEqual(whammyGripStyle(dip, 1.25), whammyGripStyle(dip, 1.75));
+assert.deepEqual(whammyGripStyle(dip, 2), { size: 1, opacity: 1 });
+assert.deepEqual(whammyGripStyle(n({ whammy: "dive" }), 1.5), whammyGripStyle(dip, 1.25));
+
+const { strikeTime, strumOffset, tremoloStep, hammerDirections } = await import("../../web/articulations.js");
+const repeating = n({ tremPick: "16" });
+const tremEvents = plan(repeating);
+const mark = { note: repeating, start: repeating.start, tremoloStep: tremoloStep(repeating) };
+for (const event of tremEvents) assert.equal(strikeTime(mark, event.start + 0.01), event.start);
+assert.equal(strikeTime(mark, 0.99), null);
+for (const stroke of ["up", "down"]) {
+  const chord = [45, 52, 57].map((pitch) => n({ pitch, stroke }));
+  for (const event of playbackEvents(chord))
+    assert.equal(event.start, event.note.start + strumOffset(event.note, chord));
+}
+const sequence = [n({ end: 2, fx: { hammer: true } }),
+  n({ start: 2, end: 3, pitch: 64, fx: { hammer: true } }),
+  n({ start: 3, end: 4, pitch: 62, fx: { hammer: true } })];
+const tags = hammerDirections(sequence);
+assert.equal(tags.get(sequence[1]), "H"); assert.equal(tags.get(sequence[2]), "P");
+assert.equal(playbackEvents([n({ fx: { dead: true } }), sequence[1]]).filter(e => !e.percussion).length, 1,
+  "a dead source cannot swallow a following live hammer note");
+const pm = plan(n({ fx: { palmMute: true } }))[0];
+assert.ok(pm.release > pm.duration, "palm mute decays gradually after its short attack");
+
+const rawBuffers = [], deadSources = [];
+synth.context = { sampleRate: 48000, rawContext: { createBuffer(channels, length) {
+  const data = new Float32Array(length); rawBuffers.push(data);
+  return { getChannelData: () => data };
+} } };
+Tone.ToneBufferSource = class {
+  constructor(options) { this.options = options; deadSources.push(this); }
+  connect(output) { this.output = output; }
+  start(when, offset, duration, velocity) { this.when = when; this.velocity = velocity; }
+  stop(when) { this.stopped = when; }
+};
+const attacksBefore = calls.length;
+playSampleEvent(synth, plan(n({ fx: { dead: true } }))[0], 20, 20.02);
+playSampleEvent(synth, plan(n({ pitch: 80, fx: { dead: true } }))[0], 21, 21.02);
+assert.equal(calls.length, attacksBefore, "no pitched sampler attacks for a dead note");
+assert.equal(rawBuffers.length, 1, "noise buffer is reused within the audio context");
+assert.equal(deadSources[0].options.url, deadSources[1].options.url, "dead-note timbre is independent of pitch");
+assert.equal(deadSources[0].output, synth.output, "percussion follows lane volume and mute");
+assert.equal(synth._activeSources.get(-1).length, 2, "pause/releaseAll owns the percussion sources");
+deadSources[0].onended(); assert.equal(synth._activeSources.get(-1).length, 1);
+assert.ok(rawBuffers[0].some(v => v !== 0));
+const { popAmount } = await import("../../web/articulations.js");
+const pop = { start: 1, note: n({ slap: "pop" }) };
+assert.equal(popAmount(pop, 1), 0); assert.equal(popAmount(pop, 1.08), 1);
+assert.equal(popAmount(pop, 1.2), 0);

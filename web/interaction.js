@@ -2,6 +2,7 @@
 // (select / move / marquee / trace / frame), edge auto-scroll while dragging, and
 // the sidebar drag-to-resize / collapse.
 
+import { graceBefore } from "./grace.js";
 import { SNAP_SEMI, SNAP_T, bendAt, bendCurve, clampSemi, snapTo } from "./bend.js";
 import { AUTOSCROLL_MAX, AUTOSCROLL_ZONE, BEND_HANDLE_R, EDGE_PX, MIN_DUR, MIN_REGION, ZOOM_STEP } from "./constants.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
@@ -53,6 +54,13 @@ export function pickNote(t, pitch) {
     if (!lane || !lane.visible || lane.locked) continue;
     const n = noteAt(lane, t, pitch);
     if (n) return { lane, note: n };
+    // A derived grace bar grabs its parent. It is never an independent note,
+    // and cannot acquire its own resize handles or separate pitch/timing.
+    for (let i = lane.notes.length - 1; i >= 0; i--) {
+      const note = lane.notes[i], grace = graceBefore(note, gridAt(note.start)?.bpm || 120);
+      if (grace && t >= grace.start && t < note.start && pitch === note.pitch + grace.offset)
+        return { lane, note, grace: true };
+    }
   }
   return null;
 }
@@ -397,7 +405,7 @@ export function init_interaction() {
       // Click-to-hear: audition the clicked note's pitch (also unlocks audio on
       // this gesture so a follow-up vertical drag can play landing pitches).
       auditionNote(hit.note, hit.lane);
-      const edge = edgeOf(hit.note, x);
+      const edge = hit.grace ? null : edgeOf(hit.note, x);
       if (edge) {
         const notes = [...S.selection].filter((n) => hit.lane.notes.includes(n));
         S.drag = {
@@ -504,7 +512,7 @@ export function init_interaction() {
     const [x, y] = localXY(e);
     const hit = pickNote(timeAt(x), pitchAt(y));
     stage.style.cursor = hit
-      ? (edgeOf(hit.note, x) ? "ew-resize" : "move")
+      ? (!hit.grace && edgeOf(hit.note, x) ? "ew-resize" : "move")
       : (S.toolMode === "trace" ? "crosshair" : "default");
   });
   // Pointer motion over the spectrogram feeds auto-scroll (#stage events bubble

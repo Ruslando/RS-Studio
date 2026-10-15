@@ -12,12 +12,15 @@
 // offset by the scroll position. Nothing here reads the DOM beyond the two
 // canvas contexts, and nothing mutates project state.
 
+import { hammerDirections } from "./articulations.js";
+import { paintNoteBar } from "./canvas-components.js";
+import { graceBefore } from "./grace.js";
 import { WHAMMY_CURVES, WHAMMY_TAG } from "./whammy.js";
 import { BEND_TAG, SLIDE_IN, bendCurve, bendPeak, slideTargets } from "./bend.js";
 import { OVERLAP_EPS, REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono, stageUi } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
 import { contentH, pitchAt, xOf, yOf } from "./geometry.js";
-import { gridSegments, gridSubdiv, segStep } from "./grid.js";
+import { gridAt, gridSegments, gridSubdiv, segStep } from "./grid.js";
 import { FX_GLYPHS, HARMONIC_TAG, noteMarks } from "./note-effects.js";
 import { PAINT, WASH, halo, veil } from "./stage-paint.js";
 import { S } from "./store.js";
@@ -374,6 +377,27 @@ function drawWhammyCurve(n, x0, x1, y) {
   sctx.restore();
 }
 
+// The grace is a normal short bar derived from its parent: same layer color,
+// selection and hover. Its pitch and timing always follow that authored note.
+function drawGraceNote(n, before, lane) {
+  const x = xOf(before.start), width = Math.max(2, xOf(n.start) - x);
+  const y = yOf(n.pitch + before.offset), height = S.state.rowH;
+  sctx.save();
+  paintNoteBar(sctx, x, y, width, height, lane.color, S.selection.has(n), S.hoverNote === n);
+  sctx.font = FX_FONT; sctx.textAlign = "right"; sctx.textBaseline = "alphabetic";
+  fxLabel("Grace note", x + width - 1, y - 3);
+  sctx.restore();
+}
+
+const hammerTagCache = new WeakMap();
+function laneHammerTags(lane) {
+  const hit = hammerTagCache.get(lane);
+  if (hit?.revision === S.voicingRevision && hit.notes === lane.notes) return hit.tags;
+  const tags = hammerDirections(lane.notes);
+  hammerTagCache.set(lane, { revision: S.voicingRevision, notes: lane.notes, tags });
+  return tags;
+}
+
 // Tiny tags above each note carrying short-form effects (the fx toggles plus
 // grace/trill/tremolo-pick/slap/stroke/whammy — see noteMarks). Slide, bend,
 // harmonic and vibrato draw their own shapes.
@@ -383,15 +407,26 @@ export function drawNoteFx() {
   sctx.font = FX_FONT; sctx.textBaseline = "alphabetic";
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
+    const hammerTags = laneHammerTags(lane);
     for (const n of lane.notes) {
       const vib = !!(n.fx && n.fx.vibrato);
       const whammy = WHAMMY_CURVES[n.whammy];
+      const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
       const marks = noteMarks(n).filter((m) => (!vib || m !== FX_GLYPHS.vibrato)
-        && (!whammy || m !== WHAMMY_TAG[n.whammy]));
-      if (!marks.length && !vib && !whammy) continue;
+        && (!whammy || m !== WHAMMY_TAG[n.whammy]) && (!grace || m !== "gr")
+        && (!n.fx?.staccato || m !== FX_GLYPHS.staccato))
+        .map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(n) || m : m);
+      if (!marks.length && !vib && !whammy && !grace && !n.fx?.staccato) continue;
       const x = xOf(n.start), x1 = xOf(n.end);
-      if (x > vx1 || x1 < vx0) continue;
+      if ((grace ? xOf(grace.start) : x) > vx1 || x1 < vx0) continue;
+      if (grace) drawGraceNote(n, grace, lane);
       let ty = yOf(n.pitch) - 2;
+      if (n.fx?.staccato) {
+        const cx = (x + x1) / 2, cy = yOf(n.pitch) - 6;
+        sctx.save(); sctx.beginPath(); sctx.arc(cx, cy, 1.8, 0, Math.PI * 2);
+        sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.stroke();
+        sctx.fillStyle = FX_COLOR; sctx.fill(); sctx.restore();
+      }
       if (vib) {
         // Limitation: wave sits on the home row even when the bar bends away
         drawVibratoWave(x + 1, Math.max(x + 9, x1 - 1), yOf(n.pitch) - 5);

@@ -31,6 +31,8 @@
 // the fretboard, one off the nut and the bridge — so the two agreeing to a tenth
 // of a millimetre is a real cross-check and not arithmetic.
 
+import { hammerLink } from "./articulations.js";
+import { graceBefore } from "./grace.js";
 import { noteName } from "./util.js";
 import { SLIDES_TO_NEXT, bendCurve, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
 
@@ -213,7 +215,7 @@ export function handColumns(columns, strings = GUITAR.strings) {
     const fingers = (c.fingers || []).filter((f) => f.string >= 0 && f.string < strings);
     if (!fingers.length) continue;
     const shape = fingers.map((f) => `${f.string}:${f.fret}`).sort().join(" ");
-    out.push({ start: c.start, end: c.end, fingers, shape, note: c.note, seat: c.seat ?? null });
+    out.push({ start: c.start, end: c.end, eighth: c.eighth, fingers, shape, note: c.note, seat: c.seat ?? null });
   }
   return out.sort((a, b) => a.start - b.start);
 }
@@ -232,6 +234,7 @@ function startedBy(timeline, t) {
 }
 
 const markAt = (f, s) => ({
+  strikeStart: f.strikeStart, tremoloStep: f.tremoloStep,
   finger: f.finger, fret: f.fret, string: f.string, start: f.start, dead: f.dead,
   // The note object itself, so a mark can be edited and not only drawn: moving one
   // note of a grip has to name which note, and pitch cannot (a unison bend puts the
@@ -319,7 +322,26 @@ export function handAt(columns, t, travel, s = GUITAR) {
   // A slide onto the next note is not a shift of the hand: the finger stays down and
   // slides there (the pressed branch below carries it), so no travel window opens.
   const slidesOn = cur?.fingers.some((f) => f.fret > 0 && SLIDES_TO_NEXT.has(f.note?.slide));
-  if (next && !(cur && cur.shape === next.shape) && !slidesOn) {
+  // The sounding grace note precedes its authored column. Show the lower finger
+  // already pressed, with the upper hammer-on finger poised at the main fret.
+  const before = next?.fingers.flatMap((f) => {
+    const grace = graceBefore(f.note, next.eighth ? 30 / next.eighth : 120, f.fret);
+    if (!grace || t < grace.start || t >= f.note.start) return [];
+    const lower = f.fret + grace.offset;
+    const targetFinger = lower > 0 ? Math.max(2, f.finger || 1) : f.finger || 1;
+    const m = markAt({ ...f, fret: lower, finger: lower > 0 ? targetFinger - 1 : 0, start: grace.start }, s);
+    m.graceTarget = { fret: f.fret, x: fretCentre(f.fret, s), finger: targetFinger };
+    return [m];
+  }) || [];
+  if (before.length) {
+    const strings = new Set(before.map((m) => m.string));
+    const held = cur?.fingers.filter((f) => f.note?.end > t && !strings.has(f.string)).map((f) => markAt(f, s)) || [];
+    return { pressed: true, marks: [...held, ...before] };
+  }
+
+  const hammersOn = cur && next?.fingers.some((f) => cur.fingers.some((g) =>
+    g.string === f.string && hammerLink(g.note, f.note)));
+  if (next && !(cur && cur.shape === next.shape) && !slidesOn && !hammersOn) {
     const window = travelWindow(cur, next, travel);
     if (t >= next.start - window) {
       // A PREBEND IS PUSHED BEFORE IT IS PICKED. Where the previous note has already
@@ -337,7 +359,8 @@ export function handAt(columns, t, travel, s = GUITAR) {
       return {
         pressed: false,
         marks: next.fingers.map((f) => {
-          const b = markAt(f, s), a = originFor(f, origins);
+          const grace = graceBefore(f.note, next.eighth ? 30 / next.eighth : 120, f.fret);
+          const b = markAt(grace ? { ...f, fret: f.fret + grace.offset } : f, s), a = originFor(f, origins);
           b.lift = bendLift(b, next.start, s.strings) * push;
           if (!a) return b;
           const o = markAt(a, s);
@@ -361,6 +384,27 @@ export function handAt(columns, t, travel, s = GUITAR) {
       // A slide carries the finger along its string, a fret per semitone. Onto the
       // next note it lands where that grip holds the same string.
       const note = f.note;
+      const source = prev?.fingers.find((g) => g.string === f.string && hammerLink(g.note, note));
+      if (source) {
+        m.slurred = true;
+        if (source.fret < f.fret && source.fret > 0)
+          m.hammerSupport = { fret: source.fret, x: fretCentre(source.fret, s), finger: source.finger };
+      }
+      const target = next?.fingers.find((g) => g.string === f.string && hammerLink(note, g.note));
+      if (target && target.fret !== f.fret)
+        m.hammerTarget = { fret: target.fret, x: fretCentre(target.fret, s), finger: target.finger,
+          pressed: target.fret < f.fret, opacity: target.fret < f.fret ? 1 : 0.55 };
+      const grace = graceBefore(note, cur.eighth ? 30 / cur.eighth : 120, f.fret);
+      if (grace) {
+        const lower = f.fret + grace.offset;
+        m.finger = lower > 0 ? Math.max(2, f.finger || 1) : f.finger || 1;
+        m.slurred = true;
+        const release = (t - note.start) / grace.duration;
+        if (lower > 0 && release >= 0 && release < 1) {
+          m.graceOrigin = { fret: lower, x: fretCentre(lower, s), finger: m.finger - 1,
+            opacity: 1 - release };
+        }
+      }
       if (note?.slide && f.fret > 0) {
         const onto = SLIDES_TO_NEXT.has(note.slide) && next?.fingers.find((g) => g.string === f.string);
         const semi = slideAt(note, t - note.start, note.end - note.start,
@@ -375,6 +419,8 @@ export function handAt(columns, t, travel, s = GUITAR) {
         m.trill = { fret, x: fretCentre(fret, s), finger,
           down: !!trillOffsetAt(note, t - note.start, cur.eighth ? 30 / cur.eighth : 120) };
       }
+      if (note?.harmonic === "natural" && f.fret > 0)
+        m.x = fretDistance(f.fret + (s.capo || 0), s.scale);
       return m;
     }) };
   }

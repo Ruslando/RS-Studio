@@ -2,7 +2,7 @@
 // A bent note's finger moves along the fret with the curve: treble strings toward
 // the bass side, bass strings toward the treble, open strings not at all.
 import assert from "node:assert/strict";
-import { BEND_SPACING_PER_SEMI as K, bendLift, fretCentre, handAt } from "../../web/fretboard-core.js";
+import { BEND_SPACING_PER_SEMI as K, bendLift, fretCentre, fretDistance, handAt, handColumns } from "../../web/fretboard-core.js";
 import { VIBRATO, slideTargets } from "../../web/bend.js";
 
 const note = { start: 0, end: 1, bend: "release" };            // 0 → 2 → 0 semitones
@@ -110,3 +110,55 @@ for (const [kind, interval] of [["half", 1], ["whole", 2]]) {
 assert.equal(handAt(column(2, 22, { start: 0, end: 1, trill: "whole" }), 0.13, 0).marks[0].trill,
   undefined, "never draw a finger beyond the neck");
 console.log("fretboard trill ok");
+
+// Grace notes sound before the authored onset, then hammer once into the main fret.
+for (const [kind, interval] of [["half", 1], ["whole", 2]]) {
+  const n = { start: 2, end: 3, pitch: 62, grace: kind, pos: { string: 2, fret: 7 } };
+  const cols = column(2, 7, n);
+  const event = playbackEvents([n])[0];
+  const before = handAt(cols, event.start + 0.01, 0);
+  assert.ok(before.pressed, "grace is pressed even before the main column starts");
+  assert.equal(before.marks[0].fret, 7 - interval);
+  assert.equal(before.marks[0].x, fretCentre(7 - interval));
+  assert.equal(before.marks[0].start, event.start, "audio and finger share the onset");
+  assert.equal(before.marks[0].graceTarget.fret, 7);
+  const main = handAt(cols, n.start, 0).marks[0];
+  assert.equal(main.fret, 7);
+  assert.equal(main.finger, before.marks[0].graceTarget.finger);
+  assert.ok(main.slurred, "no second picked-note strike");
+  assert.equal(main.graceOrigin.fret, 7 - interval);
+  assert.equal(handAt(cols, 2.1, 0).marks[0].graceOrigin, undefined, "lower finger releases after the hammer-on");
+  assert.equal(handAt(cols, event.start - 0.01, 0), null, "no early sounding grace");
+  assert.equal(n.pos.fret, 7, "the animation never changes the authored note");
+}
+const nearNut = { start: 2, end: 3, pitch: 56, grace: "whole" };
+assert.equal(handAt(column(2, 1, nearNut), 1.95, 0).marks[0].fret, 0, "grace stops at the open string");
+console.log("fretboard grace ok");
+
+// Hammer/pull-off transitions stay planted and switch instantly at the onset.
+const ha = { start: 0, end: 0.5, pitch: 62, fx: { hammer: true } };
+const hb = { start: 0.5, end: 1, pitch: 64, fx: { hammer: true } };
+const hc = { start: 1, end: 1.5, pitch: 62, fx: { hammer: true } };
+const hammerCols = [column(2, 7, ha)[0], column(2, 9, hb)[0], column(2, 7, hc)[0]];
+const beforeHammer = handAt(hammerCols, 0.49, 0.5);
+assert.equal(beforeHammer.pressed, true, "no anticipation travel before the hammer");
+assert.equal(beforeHammer.marks[0].x, fretCentre(7));
+assert.equal(beforeHammer.marks[0].hammerTarget.fret, 9);
+const onHammer = handAt(hammerCols, 0.5, 0.5);
+assert.equal(onHammer.marks[0].x, fretCentre(9));
+assert.equal(onHammer.marks[0].hammerSupport.fret, 7);
+assert.ok(onHammer.marks[0].slurred);
+assert.equal(handAt(hammerCols, 0.99, 0.5).pressed, true, "no anticipation before pull-off");
+assert.equal(handAt(hammerCols, 1, 0.5).marks[0].x, fretCentre(7));
+console.log("hammer/pull-off visuals OK");
+
+const tempoColumn = column(2, 7, { start: 2, end: 3, trill: "half" })[0];
+tempoColumn.eighth = 0.5;
+const timeline = handColumns([tempoColumn]);
+assert.equal(handAt(timeline, 2.13, 0).marks[0].trill.down, false,
+  "building the hand timeline preserves slow-tempo articulation timing");
+assert.equal(handAt(timeline, 2.26, 0).marks[0].trill.down, true);
+
+const harmonicMark = handAt(column(2, 12, { start: 0, end: 1, harmonic: "natural" }), 0.3, 0).marks[0];
+assert.equal(harmonicMark.x, fretDistance(12), "natural harmonic touches the fret wire");
+assert.notEqual(harmonicMark.x, fretCentre(12));

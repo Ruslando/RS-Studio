@@ -11,9 +11,9 @@ export const whammyAt = (kind, u) => WHAMMY_CURVES[kind]
   ? bendAt(WHAMMY_CURVES[kind], Math.max(0, Math.min(1, u))) : 0;
 
 // Less string tension reads as a smaller, lighter held finger, without moving
-// its fret/string position. The style applies only during the sounding dive.
+// its fret/string position. The style applies only while the whammy note is sounding.
 export function whammyGripStyle(note, time) {
-  if (note?.whammy !== "dive" || !(note.start <= time && time < note.end))
+  if (!WHAMMY_CURVES[note?.whammy] || !(note.start <= time && time < note.end))
     return { size: 1, opacity: 1 };
   const u = (time - note.start) / (note.end - note.start);
   const tensionLoss = -whammyAt(note.whammy, u) / 2;

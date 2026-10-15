@@ -25,10 +25,11 @@ import { splitter } from "./splitters.js";
 import { draw } from "./repaint.js";
 import { MAX_CAPO, editLanes } from "./lanes.js";
 import { songBarStarts } from "./song-bars.js";
-import { gridAt, gridBpm, segBeatSec } from "./grid.js";
+import { gridAt, gridBpm, gridSegments, segBeatSec } from "./grid.js";
 import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
 import { S } from "./store.js";
+import { popAmount, strikeTime, strumOffset, tremoloStep } from "./articulations.js";
 import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
@@ -81,7 +82,8 @@ let hand = null;      // { key, columns, strings }
 let handJob = "";     // the key currently being voiced, so one lane is asked once
 
 function handKey(lane) {
-  return `${lane.id}:${S.voicingRevision}:${lane.notes.length}:${lane.tuning}:${lane.transpositionPitch || 0}:${lane.capo || 0}`;
+  const tempo = gridSegments().map((seg) => `${seg.t}:${seg.bpm}`).join(",");
+  return `${lane.id}:${S.voicingRevision}:${lane.notes.length}:${lane.tuning}:${lane.transpositionPitch || 0}:${lane.capo || 0}:${tempo}`;
 }
 
 // Which finger holds which note, and which fret the hand is anchored on.
@@ -129,6 +131,8 @@ function gripsFrom({ tuning, notes, voiced, fingers: walked, seats }) {
       // is the model's answer, not a gap in it, and the marker must say which.
       fingers: [...shape].map(([note, pos]) => ({
         note,
+        strikeStart: note.start + strumOffset(note, col.notes),
+        tremoloStep: tremoloStep(note, gridAt(note.start)?.bpm || 120),
         string: pos.string, fret: pos.fret, start: note.start,
         finger: fingers.get(note) || 0, dead: !!note.fx?.dead,
         // Carried so the grip can name itself. Not derivable from the mark, whose
@@ -686,7 +690,9 @@ export function drawFretboard() {
     ctx.beginPath();
     ctx.moveTo(X(-s.nutDepth), Y(stringOffsetAt(i, 0, s)));
     if (bent) ctx.lineTo(X(bent.x), Y(stringOffsetAt(i + bent.lift, bent.x, s)));
-    ctx.lineTo(X(last + s.overhang), Y(stringOffsetAt(i, last + s.overhang, s)));
+    const popped = now?.moving && now.at?.marks.find((m) => m.string === i && popAmount(m, now.t));
+    if (popped) popTail(ctx, s, scale, X, Y, i, popAmount(popped, now.t));
+    else ctx.lineTo(X(last + s.overhang), Y(stringOffsetAt(i, last + s.overhang, s)));
     ctx.stroke();
   }
 
@@ -751,6 +757,7 @@ export function drawFretboard() {
   const placing = shaping ? drawShaping(ctx, s, scale, X, Y, lane) : null;
   // Something else is on offer: the grip in the hand steps back. See drawHand.
   drawHand(ctx, s, scale, X, Y, lane, now, shaping ? "ghost" : hovered || spot || resetPeeking ? "fade" : null);
+  drawStringAttacks(ctx, s, scale, X, Y, lane, now);
   drawBundle(ctx, s, scale, X, Y, lane, held, w, h, chord, placing);
   if (hovered) drawOffer(ctx, s, scale, X, Y, hovered, lane);
   if (spot) drawNoteOffer(ctx, s, scale, X, Y, lane, spot);
@@ -952,8 +959,8 @@ function glowString(ctx, s, scale, X, Y, i, hue) {
 function barreGroups(marks) {
   const groups = [], byFinger = new Map();
   for (const m of marks) {
-    if (!(m.finger > 0) || !(m.fret > 0) || m.dead) { groups.push([m]); continue; }
-    const key = `${m.finger}:${m.fret}`;
+    if (!(m.finger > 0) || !(m.fret > 0) || m.dead || m.note?.harmonic === "natural") { groups.push([m]); continue; }
+    const key = `${m.finger}:${m.fret}:${!!m.note?.fx?.ghost}`;
     const g = byFinger.get(key);
     if (g) g.push(m);
     else { const fresh = [m]; byFinger.set(key, fresh); groups.push(fresh); }
@@ -981,7 +988,10 @@ function onHue(hex) {
 // (rule 25). A muted open string is therefore the one circle that lands on the nut,
 // and it carries the X that says why.
 function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time = null } = {}) {
-  for (const m of marks) if (!(m.fret > 0) && !m.dead) glowString(ctx, s, scale, X, Y, m.string, hue);
+  for (const m of marks) if (!(m.fret > 0) && !m.dead) {
+    ctx.save(); ctx.globalAlpha *= m.note?.fx?.ghost ? 0.4 : 1;
+    glowString(ctx, s, scale, X, Y, m.string, hue); ctx.restore();
+  }
   // EVERY fretted mark carries its finger, a lone note included. It used not to, on
   // the grounds that one fretted note is finger 1 by definition and a mark that never
   // varies states nothing — and the first half of that was simply wrong. It is only
@@ -1002,14 +1012,28 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
     const style = filled && time != null ? whammyGripStyle(g[0].note, time) : { size: 1, opacity: 1 };
     const x = pts[0].x, r = pts[0].r * style.size;
     ctx.save();
-    ctx.globalAlpha *= style.opacity * (g[0].opacity ?? 1);
+    const ghost = !!g[0].note?.fx?.ghost;
+    ctx.globalAlpha *= style.opacity * (g[0].opacity ?? 1) * (ghost ? 0.4 : 1);
     const pressed = filled && (g[0].pressed ?? true);
     ctx.font = stageMono(STAGE_ANCHORED * style.size, 600);
     const ys = pts.map((p) => p.y), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    if (g[0].note?.harmonic === "natural") {
+      const cy = (y0 + y1) / 2;
+      ctx.beginPath(); ctx.moveTo(x, cy - r); ctx.lineTo(x + r, cy);
+      ctx.lineTo(x, cy + r); ctx.lineTo(x - r, cy); ctx.closePath();
+      ctx.fillStyle = hexA(hue, 0.12); ctx.fill();
+      ctx.strokeStyle = hue; ctx.lineWidth = 1.8; ctx.stroke();
+      ctx.restore(); continue;
+    }
     if (pressed) {
       markPath(ctx, x, y0, y1, r);
       ctx.fillStyle = hue;
       ctx.fill();
+      if (g.some((p) => p.note?.fx?.accent)) {
+        ctx.fillStyle = hexA(PAINT.paper, 0.3); ctx.fill();
+        markPath(ctx, x, y0, y1, r + 2);
+        ctx.strokeStyle = PAINT.paper; ctx.lineWidth = 1.5; ctx.stroke();
+      }
       ctx.fillStyle = onHue(hue);
     } else {
       // 1.8 is the app's icon stroke, in CSS px: the marker annotates the board
@@ -1024,7 +1048,11 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
     // effect's own glyph for a dead note, otherwise the finger. Written once per body,
     // at its middle, and dropped when the body is narrower than the glyph, as the
     // stage drops a note label too wide for its note.
-    const glyph = !digits ? "" : g[0].dead ? FX_GLYPHS.dead : g[0].finger > 0 ? String(g[0].finger) : "";
+    let glyph = !digits ? "" : g[0].dead ? FX_GLYPHS.dead : g[0].finger > 0 ? String(g[0].finger) : "";
+    if (ghost && glyph && !g[0].dead) {
+      glyph = `(${glyph})`;
+      ctx.font = stageMono(STAGE_ANCHORED * style.size * 0.8, 600);
+    }
     if (glyph && r >= STAGE_ANCHORED * style.size / 2) ctx.fillText(glyph, x, (y0 + y1) / 2 + 0.5);
     ctx.restore();
   }
@@ -1325,6 +1353,66 @@ function handNow(lane, s) {
   return { found, t, moving, at: handAt(found.columns, t, moving ? travelSeconds() : 0, s) };
 }
 
+// The picking hand acts at the strings' right end; the fretting hand stays put.
+function popTail(ctx, s, scale, X, Y, string, amount) {
+  const end = fretDistance(s.frets, s.scale) + s.overhang;
+  const near = end - 40 / scale, pull = Math.abs(stringOffsetAt(1, end, s) - stringOffsetAt(0, end, s)) * scale * 0.8 * amount;
+  ctx.lineTo(X(near), Y(stringOffsetAt(string, near, s)));
+  ctx.quadraticCurveTo(X(end) - 18, Y(stringOffsetAt(string, end, s)) - pull,
+    X(end), Y(stringOffsetAt(string, end, s)));
+}
+
+function drawStringAttacks(ctx, s, scale, X, Y, lane, now) {
+  if (!now?.moving || !now.at?.pressed) return;
+  const { t, at } = now, end = fretDistance(s.frets, s.scale) + s.overhang;
+  const px = X(end) - 6, hue = lane.color || PAINT.accent;
+  ctx.save(); ctx.lineCap = "round";
+  for (const m of at.marks) {
+    const strike = strikeTime(m, t), age = strike == null ? -1 : t - strike;
+    if (age < 0 || age >= 0.16 || m.dead) continue;
+    const py = Y(stringOffsetAt(m.string, end, s));
+    if (m.note?.stroke) {
+      ctx.globalAlpha = 1 - age / 0.16;
+      ctx.strokeStyle = PAINT.paper; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(px - 28, py); ctx.lineTo(px, py); ctx.stroke();
+    }
+    if (m.note?.slap === "slap") {
+      ctx.globalAlpha = 1 - age / 0.16;
+      ctx.strokeStyle = hue; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(px - 7, py - 7); ctx.lineTo(px - 7, py + 5); ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(px - 15, py - 4); ctx.lineTo(px - 11, py);
+      ctx.moveTo(px - 3, py); ctx.lineTo(px + 1, py - 4); ctx.stroke();
+    }
+    const pop = popAmount(m, t);
+    if (pop) {
+      ctx.globalAlpha = 1 - age / 0.16;
+      ctx.strokeStyle = hue; ctx.lineWidth = 2.5;
+      ctx.beginPath(); popTail(ctx, s, scale, X, Y, m.string, pop); ctx.stroke();
+    }
+  }
+  // A moving pick links the staggered attacks into one visible up/down sweep.
+  const strum = at.marks.filter((m) => m.note?.stroke && !m.dead)
+    .sort((a, b) => (a.strikeStart ?? a.start) - (b.strikeStart ?? b.start));
+  if (strum.length > 1) {
+    const first = strum[0].strikeStart ?? strum[0].start;
+    const last = strum.at(-1).strikeStart ?? strum.at(-1).start;
+    if (t >= first && t < last + 0.12) {
+      const u = Math.min(1, (t - first) / Math.max(1e-6, last - first));
+      const i = Math.min(strum.length - 2, Math.floor(u * (strum.length - 1)));
+      const f = u * (strum.length - 1) - i;
+      const off = strum[i].string + (strum[i + 1].string - strum[i].string) * f;
+      const y0 = Y(stringOffsetAt(strum[0].string, end, s)), py = Y(stringOffsetAt(off, end, s));
+      ctx.globalAlpha = t <= last ? 1 : 1 - (t - last) / 0.12;
+      ctx.strokeStyle = hue; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(px, y0); ctx.lineTo(px, py); ctx.stroke();
+      ctx.fillStyle = PAINT.paper;
+      ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
   if (!now) return;
   const { found, t, moving, at } = now;
@@ -1352,8 +1440,15 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
     const decay = glowSeconds();
     ctx.lineWidth = 1.8;
     for (const m of at.marks) {
-      const u = (t - m.start) / decay;
-      if (!(u >= 0 && u < 1) || (!(m.fret > 0) && !m.dead) || m.slurred) continue;
+      const strike = strikeTime(m, t);
+      const pulse = m.tremoloStep ? Math.min(decay, m.tremoloStep * 0.8) : decay;
+      const u = strike == null ? -1 : (t - strike) / pulse;
+      if (!(u >= 0 && u < 1) || m.dead || (m.slurred && !m.tremoloStep)) continue;
+      if (!(m.fret > 0)) {
+        ctx.save(); ctx.globalAlpha *= 1 - u;
+        glowString(ctx, s, scale, X, Y, m.string, PAINT.text);
+        ctx.restore(); continue;
+      }
       const r = markRadius(m.x, scale, s);
       ctx.beginPath();
       ctx.arc(X(m.x), Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s)), r * (1 + u), 0, Math.PI * 2);
@@ -1363,11 +1458,15 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
   }
   // The low finger stays planted. A second finger taps/releases the upper fret;
   // its fill follows the same sixteenth-note phase as the audible trill.
-  const marks = at.marks.flatMap((m) => !m.trill ? [m] : [
-    m,
-    { ...m, ...m.trill, trill: undefined, lift: 0, pressed: m.trill.down,
-      opacity: m.trill.down ? 1 : 0.55 },
-  ]);
+  const marks = at.marks.flatMap((m) => {
+    if (m.graceTarget) return [m, { ...m, ...m.graceTarget, lift: 0, pressed: false, opacity: 0.55 }];
+    if (m.graceOrigin) return [{ ...m, ...m.graceOrigin, lift: 0 }, m];
+    if (m.trill) return [m, { ...m, ...m.trill, trill: undefined, lift: 0, pressed: m.trill.down,
+      opacity: m.trill.down ? 1 : 0.55 }];
+    const extra = m.hammerSupport || m.hammerTarget;
+    if (extra) return [{ ...m, ...extra, lift: 0 }, m];
+    return [m];
+  });
   drawGrip(ctx, s, scale, X, Y, marks, hue, at.pressed, { time: t });
 }
 
