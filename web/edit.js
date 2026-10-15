@@ -846,9 +846,12 @@ export function clearOverrideAt(lane, colNotes, t) {
 //   field+set a variant on note[field]; renders as a radio submenu, `variants`
 //             being [value, label] pairs with null meaning "clear"
 //   only      "chord" or "single" — entries that make sense for only one
+//   rs        how Rocksmith takes it, when not natively: "absent" or "simulated"
+//             (on an item, or as a variant's third element). Native says nothing.
 //
 // Adding an effect is an entry here plus its setter; openNoteMenu below does not
 // need to know it exists.
+const RS_NOTE = { absent: "Not in Rocksmith", simulated: "Simulated in Rocksmith" };
 const EFFECT_MENU = [
   { label: "Bends & slides", kw: "pitch expression", items: [
     { toggle: "vibrato", kw: "wobble" },
@@ -862,26 +865,26 @@ const EFFECT_MENU = [
     ] },
     { field: "slide", label: "Slide", kw: "glide glissando", set: setSlideOnSelection, variants: [
       [null, "None"], ["shift", "Shift → next"], ["legato", "Legato → next"],
-      ["inBelow", "In from below ↗"], ["inAbove", "In from above ↘"],
+      ["inBelow", "In from below ↗", "absent"], ["inAbove", "In from above ↘", "absent"],
       ["outDown", "Out downward ↓"], ["outUp", "Out upward ↑"],
     ] },
-    { field: "whammy", label: "Whammy bar", kw: "tremolo arm dive bar", set: (v) => setChoiceOnSelection("whammy", v), variants: [
+    { field: "whammy", rs: "absent", label: "Whammy bar", kw: "tremolo arm dive bar", set: (v) => setChoiceOnSelection("whammy", v), variants: [
       [null, "None"], ["dip", "Dip"], ["dive", "Dive"],
     ] },
-    { only: "single", field: "trill", label: "Trill", kw: "ornament", set: (v) => setChoiceOnSelection("trill", v), variants: [
+    { only: "single", field: "trill", rs: "absent", label: "Trill", kw: "ornament", set: (v) => setChoiceOnSelection("trill", v), variants: [
       [null, "None"], ["half", "½-step"], ["whole", "Whole-step"],
     ] },
-    { only: "single", field: "grace", label: "Grace note", kw: "ornament acciaccatura lead-in", set: (v) => setChoiceOnSelection("grace", v), variants: [
+    { only: "single", field: "grace", rs: "absent", label: "Grace note", kw: "ornament acciaccatura lead-in", set: (v) => setChoiceOnSelection("grace", v), variants: [
       [null, "None"], ["half", "½-step below"], ["whole", "Whole-step below"],
     ] },
   ] },
   { label: "Muting & dynamics", kw: "attack volume", items: [
     { toggle: "accent", kw: "loud emphasis" },
-    { toggle: "ghost", kw: "quiet" },
+    { toggle: "ghost", rs: "absent", kw: "quiet" },
     { toggle: "dead", kw: "x mute muted choke" },
-    { toggle: "staccato", kw: "short detached" },
+    { toggle: "staccato", rs: "absent", kw: "short detached" },
     { toggle: "palmMute", kw: "pm damp" },
-    { toggle: "letRing", kw: "lr sustain ring" },
+    { toggle: "letRing", rs: "absent", kw: "lr sustain ring" },
   ] },
   { label: "Picking & tapping", kw: "technique hand", items: [
     { toggle: "hammer", kw: "ho po legato pull-off" },
@@ -894,7 +897,7 @@ const EFFECT_MENU = [
     { field: "slap", label: "Slap / pop", kw: "thumb bass tapping", set: (v) => setChoiceOnSelection("slap", v), variants: [
       [null, "None"], ["tap", "Tapping"], ["slap", "Slapping"], ["pop", "Popping"],
     ] },
-    { only: "chord", field: "stroke", label: "Strum", kw: "brush rake chord", set: (v) => setChoiceOnSelection("stroke", v), variants: [
+    { only: "chord", field: "stroke", rs: "absent", label: "Strum", kw: "brush rake chord", set: (v) => setChoiceOnSelection("stroke", v), variants: [
       [null, "None"], ["up", "Strum up ⤴"], ["down", "Strum down ⤵"],
     ] },
   ] },
@@ -1052,9 +1055,9 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   const isChord = sel.length > 1;
   // One on/off note flag as a menu toggle. ✓ when every selected note already
   // carries it; clicking toggles them all off. `kw` adds search-only synonyms.
-  const fxItem = (key, kw) => {
+  const fxItem = (key, kw, rs) => {
     const on = sel.every((n) => n.fx && n.fx[key]);
-    return { label: (on ? "✓ " : "") + FX_LABELS[key], kw, fn: () => setFxOnSelection(key, !on) };
+    return { label: (on ? "✓ " : "") + FX_LABELS[key], kw, note: RS_NOTE[rs], fn: () => setFxOnSelection(key, !on) };
   };
   // The variant every selected note shares for `field` (null if they differ / none).
   const common = (field) => {
@@ -1064,10 +1067,10 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // A variant-picker submenu with ✓ on the active choice (radio-style, so "None"
   // is ticked when nothing is set) and on the parent when any variant is applied.
   // opts = [[value, label], …]; value null is the clear item.
-  const pick = (field, label, kw, set, opts) => {
+  const pick = (field, label, kw, set, opts, rs) => {
     const cur = common(field);
-    return { label: (cur ? "✓ " : "") + label, kw,
-      children: opts.map(([v, l]) => ({ label: (cur === v ? "✓ " : "") + l, fn: () => set(v) })) };
+    return { label: (cur ? "✓ " : "") + label, kw, note: RS_NOTE[rs],
+      children: opts.map(([v, l, vrs]) => ({ label: (cur === v ? "✓ " : "") + l, note: RS_NOTE[vrs], fn: () => set(v) })) };
   };
   const families = EFFECT_MENU
     .filter((family) => !family.only || family.only === (isChord ? "chord" : "single"))
@@ -1076,8 +1079,8 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
       children: family.items
         .filter((item) => !item.only || item.only === (isChord ? "chord" : "single"))
         .map((item) => (item.toggle
-          ? fxItem(item.toggle, item.kw)
-          : pick(item.field, item.label, item.kw, item.set, item.variants))),
+          ? fxItem(item.toggle, item.kw, item.rs)
+          : pick(item.field, item.label, item.kw, item.set, item.variants, item.rs))),
     }));
 
   // Declarative menu: { label, fn } = action, { label, children } = hover submenu,
@@ -1175,7 +1178,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
       const none = document.createElement("div"); none.className = "ctxmenu-empty"; none.textContent = "No matching effect";
       results.append(none);
     } else matches.forEach((a, i) => {
-      const b = document.createElement("button"); b.className = "ctxmenu-item"; b.textContent = a.display;
+      const b = document.createElement("button"); b.className = "ctxmenu-item"; labelItem(b, a.display, a.note);
       b.onclick = () => { a.fn(); hideNoteMenu(); };
       b.addEventListener("mousemove", () => { if (hi !== i) { hi = i; paint(); } });
       results.append(b);
@@ -1211,26 +1214,28 @@ function openSelectedNoteMenu() {
 // Family groupings are transparent (their label is dropped); a non-family parent
 // (Bend, Harmonic, Reference #2) prefixes its children so a hit reads "Bend ·
 // full". `kw` rides along as hidden synonyms — matched, but never shown.
-function flattenActions(entries, crumb = "", crumbKw = "") {
+function flattenActions(entries, crumb = "", crumbKw = "", crumbNote = undefined) {
   const out = [];
   for (const e of entries) {
     if (e.sep) continue;
     if (e.children) {
       if (e.family) out.push(...flattenActions(e.children));
-      else out.push(...flattenActions(e.children, e.label.replace(/^✓ /, ""), e.kw || ""));
+      else out.push(...flattenActions(e.children, e.label.replace(/^✓ /, ""), e.kw || "", e.note));
     } else if (e.fn) {
       const display = crumb ? `${crumb} · ${e.label}` : e.label;
-      out.push({ display, search: `${crumb} ${e.label} ${crumbKw} ${e.kw || ""}`.toLowerCase(), fn: e.fn });
+      out.push({ display, note: e.note || crumbNote, search: `${crumb} ${e.label} ${crumbKw} ${e.kw || ""}`.toLowerCase(), fn: e.fn });
     }
   }
   return out;
 }
 
 // An entry whose label starts with "✓ " is on: the row shows the label and the
-// check as the menu's own mark on the right, not as a character in the text.
-function labelItem(button, label) {
+// check as the menu's own mark on the right, not as a character in the text. A
+// `note` (how Rocksmith takes the effect) follows the label in small grey type.
+function labelItem(button, label, note) {
   const on = label.startsWith("✓ ");
   button.textContent = on ? label.slice(2) : label;
+  if (note) button.insertAdjacentHTML("beforeend", `<span class="ctxmenu-note">${note}</span>`);
   if (on) button.insertAdjacentHTML("beforeend", `<span class="chkmark">${icon("check", 14)}</span>`);
 }
 
@@ -1244,13 +1249,13 @@ function buildMenu(parent, entries) {
     } else if (e.children) {
       const wrap = document.createElement("div"); wrap.className = "ctxmenu-sub";
       if (e.family) wrap.classList.add("ctxmenu-family");
-      const row = document.createElement("button"); row.type = "button"; row.className = "ctxmenu-item ctxmenu-parent"; labelItem(row, e.label);
+      const row = document.createElement("button"); row.type = "button"; row.className = "ctxmenu-item ctxmenu-parent"; labelItem(row, e.label, e.note);
       const child = document.createElement("div"); child.className = "ctxmenu ctxmenu-child";
       buildMenu(child, e.children);
       wrap.append(row, child); parent.append(wrap);
       wireContextSubmenu(wrap, row, child);
     } else {
-      const b = document.createElement("button"); b.className = "ctxmenu-item"; labelItem(b, e.label);
+      const b = document.createElement("button"); b.className = "ctxmenu-item"; labelItem(b, e.label, e.note);
       b.onclick = () => { e.fn(); if (!e.keepOpen) hideNoteMenu(); };
       parent.append(b);
     }

@@ -195,6 +195,7 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 
 .menu-item .chkmark { min-width: 48px; color: var(--text); display: flex; justify-content: flex-end; }
 .ctxmenu-item .chkmark { margin-left: auto; color: var(--text); display: flex; }
+.ctxmenu-note { color: var(--hint); font-size: 0.85em; }
 
 .menu-sep, .ctxmenu-sep { height: 1px; background: var(--line); margin: var(--s-pair) 0; }
 

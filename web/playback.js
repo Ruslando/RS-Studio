@@ -11,7 +11,7 @@ import { S } from "./store.js";
 import { clamp, fmtTime, followerTrim, normLayerVolume, onsetSec, playheadScrollLeft, schedWindow } from "./util.js";
 import { viewportMoving } from "./viewport-motion.js";
 import { busLevel } from "./volume.js";
-import { noteOffsetAt, pitchMoves, slideTargets } from "./bend.js";
+import { playbackEvents, playSampleEvent } from "./playback-effects.js";
 
 export let scheduled = new Set();   // notes scheduled in the current play cycle
 
@@ -144,16 +144,16 @@ export function previewNotes(notes, lane) {
   // Earliest-first, capped so a huge selection can't schedule a runaway swarm.
   const playable = [...notes].sort((a, b) => a.start - b.start).slice(0, 64);
   if (!playable.length) return;
-  const t0 = playable[0].start;
-  const fire = (p, dur) => {
-    try { synth.triggerAttackRelease(Tone.Frequency(p, "midi").toNote(), dur, undefined, 0.7); }
-    catch { /* ignore */ }
-  };
-  for (const n of playable) {
-    const dur = Math.max(0.05, n.end - n.start);
-    const delayMs = Math.max(0, (n.start - t0) * 1000);
-    if (delayMs < 1) fire(n.pitch, dur);
-    else previewTimers.push(setTimeout(() => fire(n.pitch, dur), delayMs));
+  const events = playbackEvents(playable, (t) => gridAt(t)?.bpm || 120);
+  const t0 = events[0].start, now = ctxNow() + 0.01;
+  for (const event of events) {
+    const delay = event.start - t0;
+    const fire = () => {
+      try { playSampleEvent(synth, event, Math.max(now + delay, ctxNow()), Math.max(now + delay, ctxNow())); }
+      catch { /* unavailable samples */ }
+    };
+    if (delay < 0.001) fire();
+    else previewTimers.push(setTimeout(fire, delay * 1000));
   }
 }
 
@@ -286,44 +286,18 @@ function synthOnset(synth) {
   return synth.onsetSec;
 }
 
-// Play one note. A bent, vibrato or sliding one rides its pitch on the sample's own
-// playback rate, which is how a sampler bends: the recording is sped up by
-// 2^(semi/12) and sounds that much higher. The pitch is sampled into a curve
-// (noteOffsetAt, the same one the fretboard's finger follows) at 200 points a
-// second — fine enough for a 5.5 Hz vibrato to stay round. The curve is read in
-// song seconds, as the board reads it, so slowed playback slows the motion too.
-// `at` is when the note is heard — `when` is earlier by the sample's onset.
-// `dur` is how long it sounds (a legato slide carries on through its target),
-// `motion` = { r, own: its own length in song seconds, slide: slideAt's options }.
-function playNote(synth, n, when, dur, at, { r = 1, own = dur, slide = {} } = {}) {
-  const name = Tone.Frequency(n.pitch, "midi").toNote();
-  if (!pitchMoves(n) || !synth._activeSources) { synth.triggerAttackRelease(name, dur, when); return; }
-  synth.triggerAttack(name, when);
-  // Limitation: reads Tone.Sampler's private map of its sources (keyed by MIDI) to
-  // reach this note's own one; on breakage the note plays unbent.
-  const src = synth._activeSources.get(Math.round(n.pitch))?.at(-1);
-  const rate = src?.playbackRate;
-  if (rate) {
-    const base = rate.value, at0 = Math.max(at, when), steps = Math.max(2, Math.ceil(dur * 200));
-    const curve = Float32Array.from({ length: steps + 1 },
-      (_, k) => base * 2 ** (noteOffsetAt(n, (k / steps) * dur * r, own, slide) / 12));
-    rate.setValueAtTime(curve[0], when);
-    rate.setValueCurveAtTime(curve, at0, dur);
-  }
-  synth.triggerRelease(name, when + dur);
-}
-
-// Where each shift/legato slide of a lane lands, and which notes a legato slide
-// carries on into (those are not picked again). Per lane and edit, not per tick.
-const slideCache = new WeakMap();
-function laneSlideTargets(lane) {
-  const hit = slideCache.get(lane);
-  if (hit && hit.revision === S.voicingRevision && hit.count === lane.notes.length) return hit;
-  const map = slideTargets(lane.notes);
-  const legatoInto = new Set([...map].filter(([n]) => n.slide === "legato").map(([, target]) => target));
-  const fresh = { revision: S.voicingRevision, count: lane.notes.length, map, legatoInto };
-  slideCache.set(lane, fresh);
-  return fresh;
+// Plans are rebuilt after edits, never once per audio tick. Each event is one
+// sample attack (a linked legato phrase shares an attack; tremolo has many).
+const eventCache = new WeakMap();
+function lanePlaybackEvents(lane) {
+  const tempo = gridSegments().map((seg) => `${seg.t}:${seg.bpm}`).join(",");
+  const hit = eventCache.get(lane);
+  if (hit && hit.revision === S.voicingRevision && hit.count === lane.notes.length
+      && hit.duration === S.state.duration && hit.tempo === tempo && hit.notes === lane.notes) return hit.events;
+  const events = playbackEvents(lane.notes, (t) => gridAt(t)?.bpm || 120, S.state.duration);
+  eventCache.set(lane, { revision: S.voicingRevision, count: lane.notes.length,
+    duration: S.state.duration, tempo, notes: lane.notes, events });
+  return events;
 }
 
 function scheduleNotes() {
@@ -336,22 +310,13 @@ function scheduleNotes() {
     const synth = laneSynth(lane);
     if (!synth) continue;
     const onset = synthOnset(synth); // real output-path seconds (samples play at 1×), so not divided by rate
-    const targets = laneSlideTargets(lane);
-    for (const n of lane.notes) {
-      if (n.start >= from && n.start < horizon && !scheduled.has(n)) {
-        scheduled.add(n);
-        // Not picked: the slide into it is still sounding.
-        // ponytail: starting playback inside such a note leaves it silent; pick it when the source was not scheduled, if that matters.
-        if (targets.legatoInto.has(n)) continue;
+    for (const event of lanePlaybackEvents(lane)) {
+      if (event.start >= from && event.start < horizon && !scheduled.has(event)) {
+        scheduled.add(event);
         const r = rate();
-        const when = Math.max(S.anchorCtx + (n.start - S.anchorSong) / r - onset, ctxNow());
-        const onto = targets.map.get(n);
-        const end = n.slide === "legato" && onto ? onto.end : n.end;
-        try {
-          playNote(synth, n, when, Math.max(0.05, (end - n.start) / r), when + onset,
-            { r, own: n.end - n.start,
-              slide: { to: onto ? onto.pitch - n.pitch : 0, eighth: 30 / (gridAt(n.start)?.bpm || 120) } });
-        } catch { /* ignore */ }
+        const when = Math.max(S.anchorCtx + (event.start - S.anchorSong) / r - onset, ctxNow());
+        try { playSampleEvent(synth, event, when, when + onset, r); }
+        catch { /* unavailable samples */ }
       }
     }
   }

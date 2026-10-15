@@ -88,3 +88,25 @@ assert.equal(slideAt({ slide: "outDown", pos: { fret: 3 } }, 1, 1), -2, "lands o
 assert.equal(slideAt({ slide: "outUp" }, 1, 1), 5);
 console.log("slide-outs ok");
 
+
+// The lower finger remains planted while the upper finger taps in sync with audio.
+import { eventOffsetAt, playbackEvents } from "../../web/playback-effects.js";
+for (const [kind, interval] of [["half", 1], ["whole", 2]]) {
+  const n = { start: 2, end: 3, pitch: 62, trill: kind };
+  const cols = column(2, 7, n);
+  const event = playbackEvents([n])[0];
+  for (const sec of [0, 0.13, 0.26, 0.39]) {
+    const mark = handAt(cols, n.start + sec, 0).marks[0];
+    assert.equal(mark.fret, 7, "lower finger stays at its fret");
+    assert.equal(mark.trill.fret, 7 + interval);
+    assert.equal(mark.trill.x, fretCentre(7 + interval));
+    assert.equal(mark.trill.down ? interval : 0, eventOffsetAt(event, sec), "fret and audio use the same phase");
+    assert.equal(mark.trill.finger, 2, "a second finger taps above the held index");
+  }
+  cols[0].eighth = 0.5;
+  assert.equal(handAt(cols, 2.13, 0).marks[0].trill.down, false, "slower tempo slows the finger");
+  assert.equal(handAt(cols, 2.26, 0).marks[0].trill.down, true);
+}
+assert.equal(handAt(column(2, 22, { start: 0, end: 1, trill: "whole" }), 0.13, 0).marks[0].trill,
+  undefined, "never draw a finger beyond the neck");
+console.log("fretboard trill ok");

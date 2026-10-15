@@ -12,6 +12,7 @@
 // offset by the scroll position. Nothing here reads the DOM beyond the two
 // canvas contexts, and nothing mutates project state.
 
+import { WHAMMY_CURVES, WHAMMY_TAG } from "./whammy.js";
 import { BEND_TAG, SLIDE_IN, bendCurve, bendPeak, slideTargets } from "./bend.js";
 import { OVERLAP_EPS, REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono, stageUi } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
@@ -348,6 +349,31 @@ function drawVibratoWave(x0, x1, y) {
   sctx.stroke(); sctx.restore();
 }
 
+// Whammy is a time contour, kept above the fretted row like the vibrato wave.
+// Dip returns to the baseline; dive ends below it. A label also distinguishes
+// the two at low zoom, where the contour can only occupy a few pixels.
+function drawWhammyCurve(n, x0, x1, y) {
+  const points = WHAMMY_CURVES[n.whammy];
+  if (!points) return;
+  const width = Math.max(10, x1 - x0 - 2), depth = 8;
+  sctx.save(); fxStroke();
+  const trace = () => {
+    sctx.beginPath();
+    points.forEach(([u, semi], i) => {
+      const x = x0 + 1 + u * width, py = y - semi / 2 * depth;
+      if (i === 0) sctx.moveTo(x, py); else sctx.lineTo(x, py);
+    });
+  };
+  trace(); sctx.lineWidth = 4; sctx.strokeStyle = halo(); sctx.stroke();
+  trace(); sctx.lineWidth = 1.5; sctx.strokeStyle = FX_COLOR; sctx.stroke();
+  const [u, semi] = points.at(-1), [prevU, prevSemi] = points.at(-2);
+  fxArrow(x0 + 1 + u * width, y - semi / 2 * depth,
+    Math.atan2(-(semi - prevSemi) / 2 * depth, (u - prevU) * width), 3.5);
+  sctx.textAlign = "left";
+  fxLabel(n.whammy, x0 + 2, y - 4);
+  sctx.restore();
+}
+
 // Tiny tags above each note carrying short-form effects (the fx toggles plus
 // grace/trill/tremolo-pick/slap/stroke/whammy — see noteMarks). Slide, bend,
 // harmonic and vibrato draw their own shapes.
@@ -359,8 +385,10 @@ export function drawNoteFx() {
     if (!lane.visible) continue;
     for (const n of lane.notes) {
       const vib = !!(n.fx && n.fx.vibrato);
-      const marks = vib ? noteMarks(n).filter((m) => m !== FX_GLYPHS.vibrato) : noteMarks(n);
-      if (!marks.length && !vib) continue;
+      const whammy = WHAMMY_CURVES[n.whammy];
+      const marks = noteMarks(n).filter((m) => (!vib || m !== FX_GLYPHS.vibrato)
+        && (!whammy || m !== WHAMMY_TAG[n.whammy]));
+      if (!marks.length && !vib && !whammy) continue;
       const x = xOf(n.start), x1 = xOf(n.end);
       if (x > vx1 || x1 < vx0) continue;
       let ty = yOf(n.pitch) - 2;
@@ -368,6 +396,10 @@ export function drawNoteFx() {
         // Limitation: wave sits on the home row even when the bar bends away
         drawVibratoWave(x + 1, Math.max(x + 9, x1 - 1), yOf(n.pitch) - 5);
         ty -= 8;                           // remaining tags stack above the wave
+      }
+      if (whammy) {
+        drawWhammyCurve(n, x, x1, ty - 10);
+        ty -= 26;
       }
       if (marks.length) fxLabel(marks.join(" "), x + 1, ty);
     }

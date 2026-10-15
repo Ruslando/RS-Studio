@@ -451,11 +451,9 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
     what everything downstream indexes by. Notes without a string/fret position
     are dropped and frets past the neck are clamped, both with a warning.
     """
-    _NO_RS_EQUIVALENT = {"ghost": "ghost note", "letRing": "let ring", "staccato": "staccato"}
     voiced = []
     dropped = 0
     clamped = 0
-    unsupported_fx: set = set()
     for n in track.get("notes") or []:
         if n.get("string") is None or n.get("fret") is None:
             dropped += 1
@@ -472,16 +470,11 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         if fret > MAX_FRET:
             fret = MAX_FRET
             clamped += 1
-        fx = n.get("fx") or {}
-        unsupported_fx.update(label for key, label in _NO_RS_EQUIVALENT.items() if fx.get(key))
         voiced.append((_f(n.get("start")), rs_string, fret, n))
     if clamped:
         warnings.append(f"{clamped} note(s) above fret {MAX_FRET} were moved down to it")
     if dropped:
         warnings.append(f"{dropped} note(s) without a string/fret position were skipped")
-    if unsupported_fx:
-        warnings.append(
-            f"{', '.join(sorted(unsupported_fx))} have no Rocksmith equivalent and were dropped")
     if not voiced:
         raise ValueError("No voiced notes to export")
     voiced.sort(key=lambda v: (v[0], v[1]))
@@ -1140,8 +1133,5 @@ def compile_track(track: dict, grid: dict, song_length: float,
         warnings.append(
             f"{emitted.dropped_slides} connected slide(s) had no fretted "
             "same-string target and were dropped")
-    if voicing.slide_ins:
-        warnings.append(
-            f"{voicing.slide_ins} slide-in(s) have no Rocksmith equivalent and were dropped")
     return Compiled(sng=sng_obj, note_count=len(notes), arr_props=emitted.arr_props,
                     average_tempo=average_tempo, warnings=warnings)

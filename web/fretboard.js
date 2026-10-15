@@ -29,6 +29,7 @@ import { gridAt, gridBpm, segBeatSec } from "./grid.js";
 import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
 import { S } from "./store.js";
+import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
 import { assignFingers, chordColumns, handProfileForTuning, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
@@ -979,7 +980,7 @@ function onHue(hex) {
 // because a mute *is* a hand on the string — the tab writes X there and so does this
 // (rule 25). A muted open string is therefore the one circle that lands on the nut,
 // and it carries the X that says why.
-function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true } = {}) {
+function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time = null } = {}) {
   for (const m of marks) if (!(m.fret > 0) && !m.dead) glowString(ctx, s, scale, X, Y, m.string, hue);
   // EVERY fretted mark carries its finger, a lone note included. It used not to, on
   // the grounds that one fretted note is finger 1 by definition and a mark that never
@@ -998,9 +999,14 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true } = {
       m, x: X(m.x), y: Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s)),
       r: markRadius(m.x, scale, s),
     }));
-    const x = pts[0].x, r = pts[0].r;      // one fret, so one x and one radius
+    const style = filled && time != null ? whammyGripStyle(g[0].note, time) : { size: 1, opacity: 1 };
+    const x = pts[0].x, r = pts[0].r * style.size;
+    ctx.save();
+    ctx.globalAlpha *= style.opacity * (g[0].opacity ?? 1);
+    const pressed = filled && (g[0].pressed ?? true);
+    ctx.font = stageMono(STAGE_ANCHORED * style.size, 600);
     const ys = pts.map((p) => p.y), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    if (filled) {
+    if (pressed) {
       markPath(ctx, x, y0, y1, r);
       ctx.fillStyle = hue;
       ctx.fill();
@@ -1019,7 +1025,8 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true } = {
     // at its middle, and dropped when the body is narrower than the glyph, as the
     // stage drops a note label too wide for its note.
     const glyph = !digits ? "" : g[0].dead ? FX_GLYPHS.dead : g[0].finger > 0 ? String(g[0].finger) : "";
-    if (glyph && r >= STAGE_ANCHORED / 2) ctx.fillText(glyph, x, (y0 + y1) / 2 + 0.5);
+    if (glyph && r >= STAGE_ANCHORED * style.size / 2) ctx.fillText(glyph, x, (y0 + y1) / 2 + 0.5);
+    ctx.restore();
   }
 }
 
@@ -1354,7 +1361,14 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
       ctx.stroke();
     }
   }
-  drawGrip(ctx, s, scale, X, Y, at.marks, hue, at.pressed);
+  // The low finger stays planted. A second finger taps/releases the upper fret;
+  // its fill follows the same sixteenth-note phase as the audible trill.
+  const marks = at.marks.flatMap((m) => !m.trill ? [m] : [
+    m,
+    { ...m, ...m.trill, trill: undefined, lift: 0, pressed: m.trill.down,
+      opacity: m.trill.down ? 1 : 0.55 },
+  ]);
+  drawGrip(ctx, s, scale, X, Y, marks, hue, at.pressed, { time: t });
 }
 
 // ---- putting the hand somewhere ----

@@ -53,6 +53,12 @@ export function pitchOffsetAt(n, u, sec) {
   return (pts ? bendAt(pts, u) : 0) + (n?.fx?.vibrato ? vibratoAt(sec) : 0);
 }
 
+// Trills alternate with the upper fret at a sixteenth-note rate. Sharing the
+// phase keeps the tapping finger exactly in step with sample pitch playback.
+export const trillInterval = (kind) => kind === "whole" ? 2 : kind === "half" ? 1 : 0;
+export const trillOffsetAt = (n, sec, bpm = 120) => sec >= 0
+  && Math.floor((sec + 1e-8) / (15 / (bpm || 120))) % 2 ? trillInterval(n?.trill) : 0;
+
 // ---- slides ----
 // A slide moves the fretting finger ALONG the string, so its pitch moves a fret —
 // a semitone — at a time: `slideAt` is rounded to whole semitones, the steps a real

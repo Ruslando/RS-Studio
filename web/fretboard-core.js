@@ -32,7 +32,7 @@
 // of a millimetre is a real cross-check and not arithmetic.
 
 import { noteName } from "./util.js";
-import { SLIDES_TO_NEXT, bendCurve, pitchMoves, pitchOffsetAt, slideAt } from "./bend.js";
+import { SLIDES_TO_NEXT, bendCurve, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
 
 export const GUITAR = {
   name: "Electric guitar",
@@ -366,6 +366,14 @@ export function handAt(columns, t, travel, s = GUITAR) {
         const semi = slideAt(note, t - note.start, note.end - note.start,
           { to: onto ? onto.fret - f.fret : 0, steps: false, eighth: cur.eighth });
         if (semi) m.x = fretCentre(Math.max(1, f.fret + semi), s);
+      }
+      const interval = trillInterval(note?.trill);
+      if (interval && t >= note.start && t < note.end && f.fret + interval <= s.frets) {
+        const fret = f.fret + interval;
+        const used = new Set(cur.fingers.filter((g) => g !== f).map((g) => g.finger));
+        const finger = [1, 2, 3, 4].find((v) => v > (f.finger || 0) && !used.has(v)) || 0;
+        m.trill = { fret, x: fretCentre(fret, s), finger,
+          down: !!trillOffsetAt(note, t - note.start, cur.eighth ? 30 / cur.eighth : 120) };
       }
       return m;
     }) };

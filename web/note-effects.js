@@ -1,3 +1,5 @@
+import { WHAMMY_TAG } from "./whammy.js";
+
 // Note-attached metadata shared by editing, references, tracing, and export.
 // Keep this module DOM-free so copying/signature behavior can be tested directly.
 
@@ -69,7 +71,7 @@ export function noteMarks(n) {
   if (n.tremPick) m.push("≣");
   if (n.slap) m.push(SLAP_TAG[n.slap]);
   if (n.stroke) m.push(n.stroke === "up" ? "⤴" : "⤵");
-  if (n.whammy) m.push("w");
+  if (WHAMMY_TAG[n.whammy]) m.push(WHAMMY_TAG[n.whammy]);
   return m;
 }
 
