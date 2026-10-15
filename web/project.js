@@ -12,7 +12,7 @@
 //   stem-settings.js     the stem panel (its buttons call the ops below)
 
 import { operationRequest, uploadRequest } from "./operation-progress.js";
-import { INSTRUMENTS, PX_PER_SEC, ZOOM_MAX_X, ZOOM_MAX_Y, ZOOM_MIN_X, ZOOM_MIN_Y, instrKey, toneKey } from "./constants.js";
+import { INSTRUMENTS, PX_PER_SEC, ZOOM_MAX_X, ZOOM_MAX_Y, ZOOM_MIN_X, ZOOM_MIN_Y, instrKey } from "./constants.js";
 import { confirmChoice } from "./dialog.js";
 import { updateDetectStatus } from "./detect.js";
 import { appshell, attachAudioBtn, audio, bpmInput, clearArriving, closeProjBtn, detectStemNameEl, goBtn, homeBtn, inTourCard, offsetInput, openBtn, openFileInput, projDirtyDot, projTab, projTabName, saveAsBtn, saveBtn, speedSel, statusEl, stemTabsEl, tsDenInput, tsNumInput, warnEl } from "./dom.js";
@@ -39,9 +39,10 @@ import { normalizeSectionMarkers, sectionMarkersFromScoreBars } from "./section-
 import { inferTablatureEnabled } from "./layer-role.js";
 import { cleanupShapeMembership } from "./shapes.js";
 import { defaultPinFlags } from "./voicing-core.js";
-import { isValidTuningKey, parseTuning, setView } from "./tablature.js";
+import { isValidTuningKey, parseTuning, setView, tuningKeyFor } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
+import { busLevel, mountBus, normMix, volumeControl } from "./volume.js";
 import { SONG, loadTimings, timingData, timingIdOf, timingsForSave } from "./timing.js";
 
 // ---- project save / open (self-contained .chart files) ----
@@ -50,7 +51,7 @@ function projectBody() {
   const serialize = (l) => ({
     id: l.id, name: l.name, kind: l.kind, color: l.color, visible: l.visible,
     locked: !!l.locked,
-    instrument: l.instrument, tone: l.tone, tuning: l.tuning, customTuning: l.customTuning,
+    instrument: l.instrument, tuning: l.tuning, customTuning: l.customTuning,
     volume: normLayerVolume(l.volume),
     muted: l.muted, active: l.active, tablatureEnabled: l.tablatureEnabled !== false,
     ...(l.rocksmithArrangement ? { rocksmithArrangement: l.rocksmithArrangement } : {}), notes: l.notes,
@@ -76,6 +77,7 @@ function projectBody() {
     stemSettings: S.state.stems.map((stem) => ({
       id: stem.id, muted: !!stem.muted, solo: !!stem.solo, volume: normLayerVolume(stem.volume),
     })),
+    mix: normMix(S.state.mix),   // the two buses: all note layers, all audio layers
     editLanes: S.state.editLanes.map(serialize),
     ...(S.state.guitarPro ? { guitarPro: S.state.guitarPro } : {}),
     // The project's own grid, sections and bars are the SONG's timing — whichever
@@ -131,7 +133,7 @@ let savedSig = null;
 function dirtySig() {
   const b = projectBody();
   return JSON.stringify({ editLanes: b.editLanes, grid: b.grid, sectionMarkers: b.sectionMarkers, timings: b.timings,
-    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, stemSettings: b.stemSettings });
+    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, stemSettings: b.stemSettings, mix: b.mix });
 }
 
 function isDirty() { return !!S.state && S.state.job !== "tutorial" && dirtySig() !== savedSig; }
@@ -243,11 +245,6 @@ function chooseAudioAttachment() {
 // Notes/lanes share one object shape in every lane, so copy-paste is trivial.
 export function mapLane(l) {
   const instrument = instrKey(l.instrument);
-  // Before the split, one key named the instrument *and* its sound, so a project
-  // with no `tone` has it spelled in `instrument`: guitar_dist is an electric with
-  // a pedal on. toneKey knows the old vocabulary, so reading the old field is the
-  // whole migration.
-  const tone = toneKey(l.tone ?? l.instrument);
   // `source` named the tool that made each note — "trace", "pasted", a detector's
   // own label. Nothing displayed it and one migration heuristic read it, so it is
   // dropped on the way in and the next save writes the project without it. A note
@@ -259,17 +256,18 @@ export function mapLane(l) {
   if (l.fingeringMode === "exact") for (const n of notes)
     if (n.pos && typeof n.pos.influenceNext !== "boolean") n.pos = { ...n.pos, ...defaultPinFlags() };
   cleanupShapeMembership(notes);
-  // Keep a valid tuning preset key / "custom". A custom tuning deleted since the
-  // project was saved keeps its strings as an unnamed tuning; older projects had
-  // no tuning at all, so they fall back to the instrument's default.
-  const tuningOk = isValidTuningKey(l.tuning);
-  const keepStrings = !tuningOk && /^ct_/.test(l.tuning || "") && parseTuning(l.customTuning);
+  // Keep a valid tuning key. Bare strings (an import, a custom tuning deleted
+  // since) are looked up by those strings, so E A D G B E is E Standard; strings
+  // no tuning has stay "custom" and show as their notes. Older projects had no
+  // tuning at all, so they fall back to the instrument's default.
+  const tuningOk = isValidTuningKey(l.tuning) && l.tuning !== "custom";
+  const strings = !tuningOk && (l.tuning === "custom" || /^ct_/.test(l.tuning || "")) && parseTuning(l.customTuning);
+  const keepStrings = strings && (tuningKeyFor(strings) || "custom");
   return {
     id: l.id, name: l.name, kind: "edit", color: l.color,
     visible: l.visible !== false, active: !!l.active, locked: !!l.locked,
-    instrument,
-    tone,
-    tuning: tuningOk ? l.tuning : keepStrings ? "custom" : INSTRUMENTS[instrument].tuning,
+    instrument,   // names the sound too (toneOf); a saved `tone` is dropped
+    tuning: tuningOk ? l.tuning : keepStrings || INSTRUMENTS[instrument].tuning,
     customTuning: l.customTuning || "",
     volume: normLayerVolume(l.volume),
     // "none" was the old field's way of saying a layer makes no sound. There is no
@@ -372,6 +370,7 @@ export function applyProject(data) {
       id: s.id, name: s.name, spec: s.spectrogram, audioUrl: s.audio_url,
       muted: !!s.muted, solo: !!s.solo, volume: normLayerVolume(s.volume),
     })),
+    mix: normMix(data.mix),
     editLanes: sourceLanes.map(mapLane),
     curStem: null,         // set by selectStem below
     spec: null, rowH: 0, lanes: [],
@@ -603,6 +602,7 @@ export function renderStemTabs() {
   const actions = document.getElementById('audioLayerActions');
   if (!stemTabsEl) return;
   stemTabsEl.innerHTML = "";
+  mountBus("audio", "stems", "All audio layers", { apply: applyStemGains, rerender: renderStemTabs, done: refreshSaveState });
   const anySolo = S.state.stems.some((s) => !isMasterStem(s) && s.solo);
   const masterOn = masterStemAudible();
   for (const stem of S.state.stems) {
@@ -620,19 +620,10 @@ export function renderStemTabs() {
     name.setAttribute("aria-label", `View ${stem.name} on the spectrogram`);
 
 
-    const mute = document.createElement("button");
-    // The same speaker a note layer mutes with: one action, one mark.
-    mute.innerHTML = icon(stem.muted ? "speakerOff" : "speaker", 14);
-    if (master) {
-      mute.className = "stem-btn mute" + (stem.muted ? " on" : "");
-      mute.title = stem.muted ? "Unmute full song" : "Mute full song";
-    } else {
-      const implicitlyOff = !masterOn && anySolo && !stem.solo;
-      mute.className = "stem-btn mute" + (stem.muted ? " on" : "") + (implicitlyOff ? " dim" : "");
-      mute.title = viewing ? "Mute (Shift+M)" : "Mute";
-    }
-    mute.setAttribute("aria-label", mute.title);
-    mute.addEventListener("click", (ev) => { ev.stopPropagation(); toggleStemMute(stem); });
+    // The same control a note layer has: one action, one mark.
+    const mute = volumeControl(stem, { name: stem.name,
+      onChange: applyStemGains, onMute: () => toggleStemMute(stem), onDone: refreshSaveState });
+    if (!busLevel("audio") || (!master && !masterOn && anySolo && !stem.solo)) mute.classList.add("dim");   // silent by the bus or another's solo
 
     const edit = document.createElement("button");
     edit.className = "stem-btn edit";

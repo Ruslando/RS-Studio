@@ -16,6 +16,8 @@ venv/
 .agents/
 .claude/
 .walkthrough-critique.json
+tunings.json
+.webview/
 .DS_Store
 
 # Build output and binaries staged for packaging

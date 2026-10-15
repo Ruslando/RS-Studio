@@ -611,9 +611,6 @@
 
           <div class="section">
             <div class="section-head"><span>Playback</span></div>
-            <label class="field-inline"><span class="label">Tone <span class="info" role="img" tabindex="0" title="Playback voice and the exported Guitar Pro program. Independent of the instrument, so an electric can play a distorted tone." aria-label="Playback voice and the exported Guitar Pro program. Independent of the instrument, so an electric can play a distorted tone.">i</span></span>
-              <select id="layerTone"></select>
-            </label>
             <label class="field-slider layer-volume-control"><span class="label">Volume</span>
               <input type="range" id="layerVolume" min="0" max="100" step="1" value="100" title="Note layer playback volume" />
               <span id="layerVolumeValue" class="ro">100%</span>
@@ -622,10 +619,10 @@
 
           <div class="section">
             <div class="section-head"><span>Notation</span></div>
-            <!-- Instrument is notation: it picks the neck the fretboard draws and the
-                 default tuning. Playback tone and volume sit together above. -->
+            <!-- The instrument picks the neck the fretboard draws, the default tuning
+                 and the sound. Volume sits above. -->
             <div class="field-pair">
-            <label class="field-group block"><span class="label">Instrument <span class="info" role="img" tabindex="0" title="Sets the fretboard, the string count and the default tuning" aria-label="Sets the fretboard, the string count and the default tuning">i</span></span>
+            <label class="field-group block"><span class="label">Instrument <span class="info" role="img" tabindex="0" title="Sets the fretboard, the string count, the default tuning and the sound" aria-label="Sets the fretboard, the string count, the default tuning and the sound">i</span></span>
               <select id="layerInstr"></select>
             </label>
             <label class="field-group block"><span class="label">Tuning <span class="info" role="img" tabindex="0" title="String tuning used for the tab" aria-label="String tuning used for the tab">i</span></span>

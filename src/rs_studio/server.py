@@ -347,6 +347,8 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
     # Layers with their own tempo/sections (web/timing.js); the song's stay in grid & co.
     if isinstance(payload.get("timings"), dict):
         m["timings"] = payload["timings"]
+    if isinstance(payload.get("mix"), dict):   # the note and audio buses (web/volume.js)
+        m["mix"] = payload["mix"]
     if "scoreDuration" in payload:
         try:
             score_duration = float(payload["scoreDuration"])
@@ -433,6 +435,7 @@ def _response_from_manifest(m: dict) -> dict:
         "guitarPro": m.get("guitarPro"),
         "sectionMarkers": m.get("sectionMarkers"),
         "timings": m.get("timings", {}),
+        "mix": m.get("mix", {}),
         "scoreBars": m.get("scoreBars", []),
         "scoreDuration": m.get("scoreDuration"),
         "grid": m.get("grid", {}),
@@ -977,6 +980,29 @@ TUTORIAL_JOB = "tutorial"
 
 
 _TUTORIAL_PROGRESS: dict[str, str] = {}
+
+
+# Your own tunings (web/tuning-editor.js). Kept here rather than in the window's
+# storage: the desktop window forgets that on every start.
+CUSTOM_TUNINGS = _DATA_ROOT / "tunings.json"
+
+
+@app.get("/api/tunings")
+def api_tunings_get() -> list:
+    try:
+        tunings = json.loads(CUSTOM_TUNINGS.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return tunings if isinstance(tunings, list) else []
+
+
+@app.post("/api/tunings")
+def api_tunings_save(payload: list = Body(...)) -> dict:
+    if not all(isinstance(t, dict) for t in payload) or len(json.dumps(payload)) > 1_000_000:
+        raise HTTPException(status_code=400, detail="Bad tunings")
+    CUSTOM_TUNINGS.parent.mkdir(parents=True, exist_ok=True)
+    CUSTOM_TUNINGS.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True}
 
 
 # TEMP critique: walkthrough text edits and comments while the copy is reviewed. Remove with web/tour-critique.js.

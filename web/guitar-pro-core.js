@@ -29,7 +29,9 @@ export function gpProjectionSignature(lanes) {
       sourceStaffIndex: lane.sourceStaffIndex,
       name: lane.name,
       gmProgram: lane.gmProgram,
-      tuning: lane.tuning,
+      // The strings are customTuning. The key naming them changes on load (mapLane
+      // finds "custom" E A D G B E is E Standard), and that is no edit.
+      tuning: "custom",
       customTuning: lane.customTuning,
       capo: lane.capo || 0,
       notes: lane.notes.map((note) => ({
@@ -72,7 +74,6 @@ export function scoreProjectionSignature(lanes) {
     sourceStaffIndex: lane.sourceStaffIndex ?? null,
     name: lane.name,
     instrument: lane.instrument,
-    tone: lane.tone,
     gmProgram: lane.gmProgram ?? null,
     tuning: lane.tuning,
     customTuning: lane.customTuning,
@@ -213,15 +214,12 @@ function noteName(midi) {
   return names[((value % 12) + 12) % 12] + (Math.floor(value / 12) - 1);
 }
 
-// A GP track states one General-MIDI program, which is a *sound*, and the family
-// classifier tells a bass part from a guitar one. Between them they name both of
-// the lane's fields — and the pair is where the split actually shows: an overdrive
-// program used to import as a whole separate instrument.
+// A GP track states one General-MIDI program and the family classifier tells a
+// bass part from a guitar one; the instrument then names the sound (toneOf).
 function instrumentFor(program, family) {
-  if (family === "bass") return { instrument: "bass", tone: "bass" };
-  if (program === 24 || program === 25) return { instrument: "acoustic", tone: "acoustic" };
-  if (program >= 29 && program <= 31) return { instrument: "electric", tone: "distortion" };
-  return { instrument: "electric", tone: "electric" };
+  if (family === "bass") return { instrument: "bass" };
+  if (program === 24 || program === 25) return { instrument: "acoustic" };
+  return { instrument: "electric" };
 }
 
 function slideKind(note) {

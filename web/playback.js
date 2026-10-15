@@ -1,7 +1,7 @@
 // In-editor playback: a Tone.js sampler voice per edit lane, the transport + seek,
 // the metronome, and the per-stem mixer.
 
-import { LOOKAHEAD, MAX_METRONOME_BEATS, TONES, toneKey } from "./constants.js";
+import { LOOKAHEAD, MAX_METRONOME_BEATS, toneOf } from "./constants.js";
 import { audio, editorEl, metroOn, playBtn, scroll, seek, speedSel, timeEl } from "./dom.js";
 import { draw, drawNow } from "./repaint.js";
 import { gridSegments, segBeatSec } from "./grid.js";
@@ -10,6 +10,7 @@ import { refreshSaveState, renderStemTabs } from "./project.js";
 import { S } from "./store.js";
 import { clamp, fmtTime, followerTrim, normLayerVolume, onsetSec, playheadScrollLeft, schedWindow } from "./util.js";
 import { viewportMoving } from "./viewport-motion.js";
+import { busLevel } from "./volume.js";
 
 export let scheduled = new Set();   // notes scheduled in the current play cycle
 
@@ -62,13 +63,15 @@ let notesFrom = 0, metroFrom = 0;
 const lookahead = () => (document.hidden ? 1.5 : LOOKAHEAD);
 
 // ---- synth playback (edit lanes only) ----
+// Silent when the lane or the note bus is muted, or either is at zero.
+const laneAudible = (lane) => !lane.muted && normLayerVolume(lane.volume) * busLevel("notes") > 0;
+
 function laneSynth(lane) {
   if (!window.Tone) return null;
   if (lane._synth) return lane._synth;
-  // The voice follows the lane's tone, not its instrument: the neck decides what is
-  // fretted and the tone decides what is heard. A legacy silent layer (instrument
-  // "none") arrives from the loader muted, so there is no third state here.
-  const def = TONES[toneKey(lane.tone)];
+  // The instrument names the voice. A legacy silent layer (instrument "none")
+  // arrives from the loader muted, so there is no third state here.
+  const def = toneOf(lane);
   if (!def.make) return null;
   lane._synth = def.make();   // factories self-connect to the destination
   applyLaneVolume(lane);
@@ -131,7 +134,7 @@ export function cancelPassagePreview(opts = {}) {
 
 export function previewNotes(notes, lane) {
   if (!window.Tone || !S.toneReady) return;
-  if (lane.muted || normLayerVolume(lane.volume) <= 0) return; // muted means silent, auditions included
+  if (!laneAudible(lane)) return; // muted means silent, auditions included
   const synth = laneSynth(lane);
   if (!synth) return;
   setSynthsMuted(false); // auditioning is an explicit request for sound — lift any pause mute
@@ -288,8 +291,7 @@ function scheduleNotes() {
   notesFrom = horizon;   // advance during passage previews too — their notes are meant to be skipped, not queued
   if (S.passagePreviewActive) return; // similar-passage previews audition the stem slice only
   for (const lane of editLanes()) {
-    // Per-lane control: mute the lane, or drop its volume to zero.
-    if (lane.muted || normLayerVolume(lane.volume) <= 0) continue;
+    if (!laneAudible(lane)) continue;
     const synth = laneSynth(lane);
     if (!synth) continue;
     const onset = synthOnset(synth); // real output-path seconds (samples play at 1×), so not divided by rate
@@ -405,7 +407,8 @@ function stemAudible(stem) {
 }
 
 // Stems default to full volume; normLayerVolume clamps and defaults the same way.
-const stemVolume = (stem) => normLayerVolume(stem.volume);
+// Every stem plays through the audio bus.
+const stemVolume = (stem) => normLayerVolume(stem.volume) * busLevel("audio");
 
 export function applyStemGains() {
   if (!S.state) return;

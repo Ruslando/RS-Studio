@@ -16,7 +16,7 @@ import webbrowser
 from pathlib import Path
 
 from .audio_runtime import prepare_ffmpeg
-from .paths import resource_root
+from .paths import data_root, resource_root
 
 
 def _prep_runtime() -> None:
@@ -128,7 +128,10 @@ def _open_window(url: str) -> bool:
                                        js_api=shell)
         shell._window = window
         window.events.closing += shell._on_closing
-        webview.start(icon=str(_app_icon()))   # blocks until the window closes
+        # Not private: pywebview's default forgets the page's storage (theme, keys)
+        # on every start.
+        webview.start(icon=str(_app_icon()), private_mode=False,
+                      storage_path=str(data_root() / ".webview"))   # blocks until the window closes
     except Exception as exc:  # noqa: BLE001 - any backend problem means "use the browser"
         print(f"[desktop] no native webview backend ({exc}); opening a browser instead")
         return False

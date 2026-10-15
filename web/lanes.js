@@ -1,7 +1,7 @@
 // Edit-lane and stem-view helpers (the global edit lanes shared across stems),
 // the lane list panel, and the Settings > Layer pane (instrument/tuning/output role).
 
-import { DEFAULT_INSTRUMENT, DEFAULT_LAYER_VOLUME, EDIT_PALETTE, INSTRUMENTS, TONES, instrKey, toneKey } from "./constants.js";
+import { DEFAULT_INSTRUMENT, DEFAULT_LAYER_VOLUME, EDIT_PALETTE, INSTRUMENTS, instrKey, toneOf } from "./constants.js";
 import { confirmAction } from "./dialog.js";
 import { clearArriving, lanesEl } from "./dom.js";
 import { draw } from "./repaint.js";
@@ -12,8 +12,9 @@ import { ungroupShape } from "./shapes.js";
 import { refreshSaveState } from "./project.js";
 import { S, setSelection } from "./store.js";
 import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, tuningToNames } from "./tablature.js";
-import { closeLayerSettings, layerArrangement, layerCapo, layerOwnTiming, layerColor, layerDeleteBtn, layerInstr, layerName, layerTone, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
+import { closeLayerSettings, layerArrangement, layerCapo, layerOwnTiming, layerColor, layerDeleteBtn, layerInstr, layerName, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
 import { layerVolumePercent, normLayerVolume, notesLowToHigh, volumeToDb } from "./util.js";
+import { busLevel, mountBus, volumeControl } from "./volume.js";
 import { withStartTone } from "./tone-marker-core.js";
 import { RS_KIND_OPTIONS, assignRsKinds, isTablatureLane, rsKindFits } from "./layer-role.js";
 import { moveCapo } from "./voicing-core.js";
@@ -75,18 +76,15 @@ function buildLayerOptions() {
   if (layerOptsBuilt || !layerInstr) return;
   for (const [key, def] of Object.entries(INSTRUMENTS))
     layerInstr.append(new Option(def.label, key));
-  for (const [key, def] of Object.entries(TONES))
-    layerTone.append(new Option(def.label, key));
   layerOptsBuilt = true;
 }
 
-// The sound, and the two things downstream of it: the voice the scheduler builds
-// (dropped so the next note rebuilds it) and the General-MIDI program an export
-// writes. gmProgram is only overwritten when the lane already carries one — an
-// imported track's program is its own and outlives a tone change.
-function setLaneTone(lane, tone) {
-  lane.tone = tone;
-  if (Number.isFinite(lane.gmProgram)) lane.gmProgram = TONES[tone].gm;
+// The instrument names the sound, so a new one changes what is downstream of it:
+// the voice the scheduler builds (dropped so the next note rebuilds it) and the
+// General-MIDI program an export writes. gmProgram is only overwritten when the
+// lane already carries one, i.e. it came from an imported track.
+function soundFollowsInstrument(lane) {
+  if (Number.isFinite(lane.gmProgram)) lane.gmProgram = toneOf(lane).gm;
   disposeLaneSynth(lane);
 }
 
@@ -114,9 +112,8 @@ function buildTuningOptions(lane) {
     for (const t of customTunings) grp.append(new Option(`${t.name} (${notesLowToHigh(parseTuning(t.notes) || [])})`, t.id));
     layerTun.append(grp);
   }
-  // Older projects stored an ad-hoc "custom" tuning inline; keep it selectable
-  // (read-only here) so a lane created that way still displays correctly.
-  if (lane && lane.tuning === "custom") layerTun.append(new Option("Custom (legacy)", "custom"));
+  // Strings no tuning has (an import, a deleted tuning) show as their notes.
+  if (lane && lane.tuning === "custom") layerTun.append(new Option(notesLowToHigh(laneTuning(lane)), "custom"));
   layerTun.append(new Option("Manage tunings…", "__manage"));
 }
 
@@ -131,7 +128,7 @@ export function renderLayerSettings() {
   // The chip carries the layer's own identity dot — the same colour the stage
   // draws it in, so the dialog names the object the way the sidebar does.
   spLayerName.parentElement?.style.setProperty("--chip-dot", lane?.color || "");
-  for (const el of [layerName, layerColor, layerInstr, layerTone, layerTun, layerCapo, layerArrangement, layerVolume]) if (el) el.disabled = !lane;
+  for (const el of [layerName, layerColor, layerInstr, layerTun, layerCapo, layerArrangement, layerVolume]) if (el) el.disabled = !lane;
   buildTuningOptions(lane);
   if (!lane) return;
   if (layerName && document.activeElement !== layerName) layerName.value = lane.name || "";
@@ -140,7 +137,6 @@ export function renderLayerSettings() {
   if (document.activeElement !== layerVolume) layerVolume.value = String(volPct);
   if (layerVolumeValue) layerVolumeValue.textContent = `${volPct}%`;
   layerInstr.value = instrKey(lane.instrument);
-  layerTone.value = toneKey(lane.tone);
   layerTun.value = isValidTuningKey(lane.tuning) ? lane.tuning : INSTRUMENTS[layerInstr.value].tuning;
   if (layerCapo) {
     // Rebuilt each time so a higher capo from an imported file still shows.
@@ -163,7 +159,7 @@ export function renderLayerSettings() {
 }
 
 // Inline-SVG icons for the per-layer controls (no icon library; design handoff).
-const ICON = Object.fromEntries(["eye", "lock", "unlock", "speaker", "speakerOff", "edit"].map((name) => [name, icon(name, 14)]));
+const ICON = Object.fromEntries(["eye", "lock", "unlock", "edit"].map((name) => [name, icon(name, 14)]));
 const laneBtn = (cls, icon, title, onClick) => {
   const b = document.createElement("button");
   b.className = cls; b.innerHTML = icon; b.title = title;
@@ -228,6 +224,8 @@ function wireLaneDrag(row, lane) {
 export function renderLanes() {
   syncTiming();   // every layer switch ends here
   const actions = document.getElementById('noteLayerActions');
+  mountBus("notes", "layers", "All note layers", {
+    apply: () => editLanes().forEach(applyLaneVolume), rerender: renderLanes, done: refreshSaveState });
   lanesEl.innerHTML = "";
   for (const lane of editLanes()) {
     const row = document.createElement("div");
@@ -261,10 +259,10 @@ export function renderLanes() {
       () => toggleLaneLock(lane));
     lock.setAttribute("aria-pressed", String(lane.locked));
 
-    const mute = laneBtn("lane-btn mute-btn" + (lane.muted ? " on" : ""), lane.muted ? ICON.speakerOff : ICON.speaker,
-      lane.muted ? "Unmute note layer" : "Mute note layer",
-      () => toggleLaneMute(lane));
-    mute.setAttribute("aria-pressed", String(lane.muted));
+    const vol = volumeControl(lane, { name: lane.name,
+      onChange: () => applyLaneVolume(lane),
+      onMute: () => toggleLaneMute(lane), onDone: refreshSaveState });
+    if (!busLevel("notes")) vol.classList.add("dim");   // silent by the bus
 
     // Edit opens this layer's name, color, instrument, tuning, tablature role,
     // and volume panel.
@@ -274,7 +272,7 @@ export function renderLanes() {
     const ctrls = document.createElement("div");
     ctrls.className = "lane-ctrls";
     // Fixed action column: note counts never change the buttons' position.
-    ctrls.append(edit, lock, vis, mute);
+    ctrls.append(edit, lock, vis, vol);
 
     row.append(dot, name, count, ctrls);
     wireLaneDrag(row, lane);
@@ -374,7 +372,7 @@ export const laneOf = (note) => editLanes().find((l) => l.notes.includes(note)) 
 
 export function applyLaneVolume(lane) {
   if (!lane?._synth?.volume) return;
-  try { lane._synth.volume.value = volumeToDb(lane.volume); } catch { /* already disposed */ }
+  try { lane._synth.volume.value = volumeToDb(normLayerVolume(lane.volume) * busLevel("notes")); } catch { /* already disposed */ }
 }
 
 export function releaseLaneSynth(lane) {
@@ -430,7 +428,6 @@ export function refreshCounts() {
       isTablatureLane(lane) ? RS_KIND_OPTIONS.find(([k]) => k === lane.rocksmithArrangement)[1] : "No export",
       tuningLabel(lane),
       ...(Number(lane.capo) > 0 ? [`Capo ${lane.capo}`] : []),
-      ...(timingIdOf(lane) !== SONG ? ["Own tempo"] : []),
       `${lane.notes.length.toLocaleString()} note${lane.notes.length === 1 ? "" : "s"}`,
     ];
     lane._count.textContent = lane._count.title = parts.join(" · ");
@@ -443,7 +440,7 @@ function addEditLane() {
   const lane = {
     id: "draft", name: "Layer " + (idx + 1), kind: "edit",
     color: EDIT_PALETTE[idx % EDIT_PALETTE.length], visible: true, active: false, locked: false,
-    instrument: DEFAULT_INSTRUMENT, tone: INSTRUMENTS[DEFAULT_INSTRUMENT].tone,
+    instrument: DEFAULT_INSTRUMENT,
     tuning: INSTRUMENTS[DEFAULT_INSTRUMENT].tuning, customTuning: "",
     volume: DEFAULT_LAYER_VOLUME,
     muted: false, tablatureEnabled: true, notes: [], ...emptyLaneFields(),
@@ -517,23 +514,12 @@ export function init_lanes() {
     });
     layerInstr.addEventListener("change", () => {
       const lane = settingsLane(); if (!lane) return;
-      const was = instrKey(lane.instrument);
       lane.instrument = layerInstr.value;
-      // The sound moves with the instrument only if it was still that instrument's
-      // own. Picking a tone is a choice, and choosing a different neck is not a
-      // reason to undo it — but a lane nobody has voiced yet should not sound like
-      // an electric because it started as one.
-      if (toneKey(lane.tone) === INSTRUMENTS[was].tone) setLaneTone(lane, INSTRUMENTS[lane.instrument].tone);
+      soundFollowsInstrument(lane);
       lane.tuning = INSTRUMENTS[layerInstr.value].tuning;   // instrument drives the default tuning
       lane.customTuning = tuningToNames(laneTuning(lane));  // materialize for portable GP export
       clearLaneShapes(lane);
       renderLayerSettings(); draw(); refreshTabIfOpen();   // a new neck to draw
-      refreshSaveState();
-    });
-    layerTone.addEventListener("change", () => {
-      const lane = settingsLane(); if (!lane) return;
-      setLaneTone(lane, layerTone.value);
-      renderLayerSettings();  refreshTabIfOpen();
       refreshSaveState();
     });
     layerTun.addEventListener("change", () => {
@@ -570,5 +556,6 @@ export function init_lanes() {
       applyLaneVolume(lane);
       refreshSaveState();
     });
+    if (layerVolume) layerVolume.addEventListener("change", renderLanes);   // the row shows the level too
   }
 }

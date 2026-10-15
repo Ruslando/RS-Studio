@@ -3,7 +3,7 @@
 // selected layer. alphaTab draws the playback cursor and handles click-to-seek;
 // the app's own transport (song audio + lane synths) remains the sound engine.
 
-import { INSTRUMENTS, TONES, instrKey, toneKey } from "./constants.js";
+import { INSTRUMENTS, instrKey, toneOf } from "./constants.js";
 import { fretboardFor } from "./fretboard-core.js";
 import { audio, tabRenderEl, tabScrollEl, tabViewBackdropEl, tabViewCloseEl, tabWarnEl, tsDenInput } from "./dom.js";
 import { copyEffects } from "./note-effects.js";
@@ -33,20 +33,39 @@ import { arrangedNotes, representPickedOpenSlides, voiceNotesFingered } from "./
 // Tuning presets live in tunings.js (no DOM), so guitar-pro-edit.js can read them too.
 export { TUNINGS } from "./tunings.js";
 
-// User-defined named tunings (typed as note strings, e.g. "G2 D2 A1 E1"),
-// managed via the "Manage tunings…" option on the layer tuning select.
-// Global + persisted, like keymap overrides — reusable across lanes/projects.
+// User-defined named tunings (note strings, e.g. "G2 D2 A1 E1"), managed via
+// "Manage tunings…" on the layer tuning select. Global, reusable across projects,
+// and kept by the server: the desktop window's own storage is wiped on every start.
+// The window's storage only carries tunings made before that, into the server once.
 const LS = typeof localStorage !== "undefined" ? localStorage : null;   // Limitation: undefined under node test
-const CUSTOM_TUNINGS_KEY = "cw.customTunings";
-const loadCustomTunings = () => { try { return JSON.parse(LS && LS.getItem(CUSTOM_TUNINGS_KEY)) || []; } catch { return []; } };
-const saveCustomTunings = () => { if (LS) LS.setItem(CUSTOM_TUNINGS_KEY, JSON.stringify(customTunings)); };
-export let customTunings = loadCustomTunings();
+const OLD_TUNINGS_KEY = "cw.customTunings";
+const saveCustomTunings = () => fetch("/api/tunings", { method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(customTunings) }).catch(() => {});
+export let customTunings = [];
+
+export async function loadCustomTunings() {
+  try {
+    const res = await fetch("/api/tunings");
+    customTunings = res.ok ? await res.json() : [];
+    const old = JSON.parse(LS?.getItem(OLD_TUNINGS_KEY) || "[]");
+    if (old.length && !customTunings.length) { customTunings = old; await saveCustomTunings(); }
+    LS?.removeItem(OLD_TUNINGS_KEY);
+  } catch { /* offline: no tunings of your own this session */ }
+}
 
 export const newTuningId = () => "ct_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 // The tuning manager edits a draft and hands the whole list over on Save.
 export function replaceCustomTunings(list) {
   customTunings = list.map((t) => ({ id: t.id, name: t.name, notes: t.notes, ...(t.instrument ? { instrument: t.instrument } : {}) }));
   saveCustomTunings();
+}
+// A tuning IS its open strings: two with the same strings are the same tuning,
+// whatever they are called. The built-in or one of yours with these strings, or null.
+const sameStrings = (a, b) => a.length === b.length && a.every((p, i) => p === b[i]);
+export function tuningKeyFor(midis) {
+  if (!midis?.length) return null;
+  return Object.keys(TUNINGS).find((key) => sameStrings(TUNINGS[key].tuning, midis))
+    || customTunings.find((t) => sameStrings(parseTuning(t.notes) || [], midis))?.id || null;
 }
 // A lane's `tuning` field resolves against built-ins, a custom-tuning id, or
 // (legacy) the literal "custom" sentinel paired with lane.customTuning.
@@ -85,7 +104,7 @@ export const laneFretCount = (lane) => fretboardFor(lane.instrument).frets - (Nu
 // it comes off the tone and not off the neck.
 function laneGm(lane) {
   if (Number.isFinite(lane.gmProgram)) return Math.max(0, Math.min(127, Math.round(lane.gmProgram)));
-  return TONES[toneKey(lane.tone)].gm;
+  return toneOf(lane).gm;
 }
 
 // ---- the tablature window ----
@@ -606,6 +625,8 @@ export async function exportModernGp() {
 }
 
 export function init_tablature() {
+  // ponytail: not awaited; a project is opened by hand, long after this localhost round trip.
+  loadCustomTunings();
   tabViewCloseEl?.addEventListener("click", () => setView("spec"));
   // Keep alphaTab's player state and cursor in step with the app transport. In
   // external-media mode play()/pause() round-trip through our handler back to the

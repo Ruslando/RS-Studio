@@ -114,10 +114,8 @@ function makeDistortionGuitar() {
 // strings it has, and the default tuning. There are three because there are three
 // necks (see FRETBOARDS in fretboard-core.js, which is keyed by these).
 //
-// `tone` is the sound it makes with no effect applied — what a lane gets when its
-// instrument changes and nothing was chosen. It is a default, not a constraint:
-// the two fields are independent afterwards, and a bass tone on an electric neck
-// is legal. Odd, but legal, and the app has no business refusing it.
+// `tone` is the sound it makes, and the instrument alone decides it: a bass sounds
+// like a bass, an acoustic clean, an electric like an electric (toneOf).
 export const INSTRUMENTS = {
   electric: { label: "Electric guitar", tone: "electric", tuning: "guitar6" },
   acoustic: { label: "Acoustic guitar", tone: "acoustic", tuning: "guitar6" },
@@ -126,31 +124,18 @@ export const INSTRUMENTS = {
 export const DEFAULT_INSTRUMENT = "electric";
 
 // The tone is everything about the sound: the in-editor playback voice (make) and
-// the exported Guitar Pro program (gm = General MIDI). Four, because an electric
-// plays clean or dirty and that is a pedal rather than a different guitar — the
-// one distinction the old single field could not make without inventing an
-// instrument for it.
+// the exported Guitar Pro program (gm = General MIDI).
+// ponytail: no instrument names distortion for now; it stays here for when one does.
 export const TONES = {
   electric:   { label: "Electric",   make: () => makeSampler("guitar-electric"), gm: 27 },
   distortion: { label: "Distortion", make: makeDistortionGuitar,                 gm: 30 },
   acoustic:   { label: "Acoustic",   make: () => makeSampler("guitar-acoustic"), gm: 25 },
   bass:       { label: "Bass",       make: () => makeSampler("bass-electric"),   gm: 33 },
 };
-export const DEFAULT_TONE = "electric";
-
-// Projects saved before the split have one key naming both, so both normalizers
-// read the old vocabulary: `guitar_dist` was never an instrument, it was an
-// electric with a pedal on. Kept here rather than only in the project loader
-// because every reader of these fields goes through these two functions, and a
-// lane can also arrive from a Guitar Pro import or a paste.
-const LEGACY = {
-  guitar:      { instrument: "electric", tone: "electric" },
-  guitar_dist: { instrument: "electric", tone: "distortion" },
-  lead:        { instrument: "electric", tone: "electric" },
-};
+// Older projects named the instrument with these keys; guitar_dist was an
+// electric with a pedal on.
+const LEGACY = { guitar: "electric", guitar_dist: "electric", lead: "electric" };
 export function instrKey(k) {
-  return INSTRUMENTS[k] ? k : LEGACY[k]?.instrument || DEFAULT_INSTRUMENT;
+  return INSTRUMENTS[k] ? k : LEGACY[k] || DEFAULT_INSTRUMENT;
 }
-export function toneKey(k) {
-  return TONES[k] ? k : LEGACY[k]?.tone || DEFAULT_TONE;
-}
+export const toneOf = (lane) => TONES[INSTRUMENTS[instrKey(lane?.instrument)].tone];

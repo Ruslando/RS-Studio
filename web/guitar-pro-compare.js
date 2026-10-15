@@ -207,7 +207,7 @@ function importedLaneSnapshot(lane) {
   return {
     id: lane.id, sourceTrackIndex: scalar(lane.sourceTrackIndex),
     sourceStaffIndex: scalar(lane.sourceStaffIndex), name: lane.name || "",
-    instrument: lane.instrument || "", tone: lane.tone || "", gmProgram: scalar(lane.gmProgram),
+    instrument: lane.instrument || "", gmProgram: scalar(lane.gmProgram),
     capo: scalar(lane.capo), transpositionPitch: scalar(lane.transpositionPitch),
     displayTranspositionPitch: scalar(lane.displayTranspositionPitch),
     tuning: lane.tuning || "", customTuning: lane.customTuning || "",

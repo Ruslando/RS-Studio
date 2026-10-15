@@ -337,6 +337,13 @@ body.col-resizing { cursor: col-resize; user-select: none; }
    on the right only room for a focus ring, because the fold strip is already the gap. */
 .side-header { display: flex; align-items: center; flex: none; gap: var(--s-pair); padding: var(--s-sibling) var(--s-pair) var(--s-pair) var(--s-sibling); }
 .side-header .side-label { flex: 1; min-width: 0; }
+/* The bus's volume sits inside the header's box, in the column of the rows' volumes:
+   the list's inset, a row's border and its padding from the right. */
+.side-header { position: relative; }
+.side-header > .vol {
+  position: absolute; right: calc(var(--s-pair) + 1px + var(--s-row));
+  top: calc(var(--s-sibling) + (var(--h-control) - var(--h-compact)) / 2);
+}
 .layer-actions { display: flex; flex: none; justify-content: center; padding-top: var(--s-pair); }
 .side-label:hover:not(:disabled) { background: var(--control-hover); }
 .side-label > span {
@@ -376,10 +383,10 @@ body.row-resizing { cursor: row-resize; user-select: none; }
   .lane-row .count { grid-column: 2; }
   .lane-row:not(#addLane) { row-gap: var(--s-pair); }
 }
-.stem-ctrls { display: grid; grid-template-columns: repeat(3, var(--h-compact)); gap: var(--s-pair); }
-.stem-ctrls .stem-btn.mute { grid-column: 3; }
-/* The full song has no solo, so its mute takes that place too: one wide button. */
-.stem-master .stem-ctrls .stem-btn.mute { grid-column: 2 / span 2; width: 100%; }
+/* Edit, solo, volume. The full song has no solo; its volume stays in line with the others'. */
+.stem-ctrls { display: grid; grid-template-columns: repeat(2, var(--h-compact)) auto; gap: var(--s-pair); }
+.stem-ctrls .vol { grid-column: 3; }
+.stem-master .stem-ctrls .stem-btn.edit { grid-column: 2; }   /* no solo: edit takes its place */
 
 .stem-row.arriving, .stem-row.arriving *,
 .lane-row.arriving, .lane-row.arriving * { transition: none; }

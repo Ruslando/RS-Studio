@@ -386,9 +386,47 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press("Control+z")                     # the popover session is one step
         self.assertEqual(marker_t(), 2)
 
+    def test_layer_and_bus_volumes_are_dragged_and_muted_in_the_sidebar(self):
+        page = self.page
+        state = lambda expr: page.evaluate(f"async () => {{ const {{ S }} = await import('./store.js'); return {expr}; }}")
+        def drag(control, dx):
+            box = control.bounding_box()
+            x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+            page.mouse.move(x, y)
+            page.mouse.down()
+            page.mouse.move(x + dx, y, steps=5)
+            page.mouse.up()
+        self.new_audio_project()
+        layer = page.locator("#lanes .lane-row .vol").first
+        notes_bus = page.locator("#layersSection .side-header .vol")
+        audio_bus = page.locator("#stemsSection .side-header .vol")
+        expect(layer).to_have_text("100")
+        drag(layer, -60)                                     # half a percent a pixel
+        expect(layer).to_have_text("70")
+        self.assertFalse(state("S.state.editLanes[0].muted"), "a drag is not a click")
+        layer.click()
+        self.assertTrue(state("S.state.editLanes[0].muted"))
+        drag(audio_bus, -100)
+        expect(audio_bus).to_have_text("50")
+        notes_bus.click()
+        expect(notes_bus).to_have_attribute("aria-pressed", "true")
+        expect(layer).to_have_class(re.compile(r"\bdim\b"))   # silent by its bus
+        # The mixer is the project's.
+        page.keyboard.press("Control+s")
+        expect(page.locator("#projDirtyDot")).to_be_hidden()
+        self.home()
+        page.get_by_role("button", name="Open E2E Audio").first.click()
+        self.loaded()
+        expect(layer).to_have_text("70")
+        expect(layer).to_have_attribute("aria-pressed", "true")
+        expect(audio_bus).to_have_text("50")
+        expect(notes_bus).to_have_attribute("aria-pressed", "true")
+
     def test_guitar_pro_import_in_another_tempo_gets_its_own_timing(self):
         page = self.page
         state = lambda expr: page.evaluate(f"async () => {{ const {{ S }} = await import('./store.js'); return {expr}; }}")
+        own = lambda: state("S.state.editLanes.filter((l) => l.timing).length")   # layers on a timing of their own
+        rows = page.locator("#lanes .lane-row")
         self.new_audio_project()   # its detected grid does not start at 0, the file's does
         page.dblclick("#stage", position={"x": 300, "y": 300})
         page.evaluate("""async () => {
@@ -401,8 +439,9 @@ class EndToEndTests(unittest.TestCase):
             page.click("#importGp")
         chooser.value.set_files(self.data / "song.gp5")
         page.click("#gpImportConfirm")
-        expect(page.locator("#lanes")).to_contain_text("Own tempo")
+        expect(rows).to_have_count(2)
         self.loaded()
+        self.assertEqual(own(), 1)
         # The imported layer is active: its grid and sections are on screen, not the song's.
         self.assertEqual(float(page.input_value("#offset")), 0)
         self.assertNotIn("song_verse", state("S.state.sectionMarkers.map((m) => m.id)"))
@@ -415,8 +454,9 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#projDirtyDot")).to_be_hidden()   # the save has landed
         self.home()
         page.get_by_role("button", name="Open E2E Audio").first.click()
-        expect(page.locator("#lanes")).to_contain_text("Own tempo")
+        expect(rows).to_have_count(2)
         self.loaded()
+        self.assertEqual(own(), 1)
         # Following the song again is a Layer settings switch, and one undo step.
         guitar = page.locator("#lanes .lane-row").filter(has_not_text="Layer 1").first
         guitar.click()
@@ -424,10 +464,11 @@ class EndToEndTests(unittest.TestCase):
         guitar.locator(".edit-btn").click()
         page.uncheck("#layerOwnTiming")
         page.click("#layerSave")
-        expect(page.locator("#lanes")).not_to_contain_text("Own tempo")
+        expect(page.locator("#layerSettingsBackdrop")).to_be_hidden()
+        self.assertEqual(own(), 0)
         self.assertAlmostEqual(float(page.input_value("#offset")), song_offset, places=3)
         page.keyboard.press("Control+z")
-        expect(page.locator("#lanes")).to_contain_text("Own tempo")
+        self.assertEqual(own(), 1)
         self.assertEqual(float(page.input_value("#offset")), 0)
 
     def test_layer_settings_reach_the_layer_row_and_the_export_window(self):
@@ -460,6 +501,34 @@ class EndToEndTests(unittest.TestCase):
         expect(rows).to_have_count(2)
         expect(rows.nth(0)).to_contain_text("Rhythm")
         expect(rows.nth(1)).to_contain_text("Bass")
+
+    def test_tunings_are_their_strings_and_outlive_the_window(self):
+        page = self.page
+        self.open_guitar_pro_project()
+        # The file's E A D G B E is E Standard, not a nameless tuning.
+        expect(page.locator("#lanes .lane-row").first).to_contain_text("E Standard")
+        page.click("#settingsMenuBtn")
+        page.click("[data-settings-pane=tunings]")
+        page.click("#tuningNewBtn")                       # E Standard's strings: not yet a tuning of its own
+        expect(page.locator("#tuningEditor .status-line")).to_contain_text("Standard")
+        page.click("#tuningEditor .tuning-whole-btn >> nth=0")   # down a semitone: still D# Standard's
+        page.click("#tuningEditor .tuning-whole-btn >> nth=0")   # D Standard's
+        page.click("#tuningEditor .tuning-whole-btn >> nth=0")   # C#
+        page.click("#tuningEditor .tuning-whole-btn >> nth=0")   # C
+        page.click("#tuningEditor .tuning-whole-btn >> nth=0")   # B Standard: no built-in has it
+        expect(page.locator("#tuningEditor .status-line")).to_have_count(0)
+        page.fill("#tuningEditor .tuning-name", "My tuning")
+        expect(page.locator("#tuningEditor").get_by_role("button", name="Duplicate")).to_have_count(0)
+        # A built-in's strings, unchanged, are that built-in: Save is refused.
+        page.locator(".tuning-item", has_text="Drop D").first.click()
+        expect(page.locator("#tuningEditor").get_by_role("button", name="Save")).to_be_disabled()
+        page.click("#settingsApply")
+        expect(page.locator("#settingsModalBackdrop")).to_be_hidden()
+        # A new window keeps it: it is the server's, not the window's.
+        page.reload()
+        page.click("#welcomeSettingsBtn")
+        page.click("[data-settings-pane=tunings]")
+        expect(page.locator(".tuning-item", has_text="My tuning")).to_have_count(1)
 
     def test_project_is_renamed_then_deleted_from_the_library(self):
         page = self.page

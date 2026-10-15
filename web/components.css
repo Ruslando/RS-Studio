@@ -435,8 +435,7 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
   font: 500 var(--text-caption)/1 var(--font-ui);
   background: transparent; border: 1px solid transparent; color: var(--label);
 }
-.stem-btn.mute.dim { color: var(--hint); }
-.stem-btn.solo.on, .stem-btn.mute.on {
+.stem-btn.solo.on {
   background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
 }
 .stem-btn.edit { color: var(--hint); }
@@ -444,18 +443,36 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .lane-row .lane-btn:is(:hover, :active):not(:disabled) {
   background: var(--surface-button-hover); color: var(--text); border-color: transparent;
 }
-.stem-row .stem-btn.mute.dim:is(:hover, :active) { color: var(--label); }
-.stem-row :is(.stem-btn.solo, .stem-btn.mute).on:is(:hover, :active) {
+.stem-row .stem-btn.solo.on:is(:hover, :active) {
   background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
 }
 .lane-btn:disabled { color: var(--hint); background: transparent; cursor: default; }
 .lane-ctrls .lane-btn.edit-btn { color: var(--hint); }
-.vis-btn.off, .lock-btn.on, .mute-btn.on {
+.vis-btn.off, .lock-btn.on {
   background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
 }
-.lane-row :is(.vis-btn.off, .lock-btn.on, .mute-btn.on):is(:hover, :active):not(:disabled) {
+.lane-row :is(.vis-btn.off, .lock-btn.on):is(:hover, :active):not(:disabled) {
   background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
 }
+
+/* Volume (design.md 4.18): the speaker and the level. Click mutes, drag sets. */
+.vol {
+  position: relative; width: var(--h-compact); height: var(--h-compact); padding: 0; border-radius: var(--r-compact);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  background: transparent; border: 1px solid transparent; color: var(--label); cursor: ew-resize;
+}
+/* While it is pointed at, dragged or focused, the level fades in where the speaker
+   was. A number without its %: three mono digits fit the 24 box. */
+.vol svg, .vol-pct { transition: opacity var(--dur-state) var(--ease); }
+.vol-pct {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.vol:is(:hover, :active, :focus-visible) svg { opacity: 0; }
+.vol:is(:hover, :active, :focus-visible) .vol-pct { opacity: 1; }
+.vol.dim { color: var(--hint); }
+.vol:is(:hover, :active):not(:disabled) { background: var(--surface-button-hover); color: var(--text); border-color: transparent; }
+.vol.on, .vol.on:is(:hover, :active):not(:disabled) { background: var(--surface-engaged); color: var(--on-engaged); border-color: transparent; }
 
 .btn--ghost:hover { color: var(--text); background: var(--control-hover); }
 

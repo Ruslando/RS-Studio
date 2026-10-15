@@ -326,9 +326,9 @@ has `aria-label` and `title`.
 - Window header: 32. Popover header, rows, stage: 24.
 - Close is the `CLOSE_ICON`. A destructive icon button turns `--error` on hover.
 - A toggle carries `aria-pressed`; on is `--surface-engaged`.
-- Mute, lock and visibility are icons on every kind of row, never words. Solo
-  is the letter S, as on a mixing desk. The full song has no solo, so its
-  mute is one button across both places, with the same icon.
+- Lock and visibility are icons on every kind of row, never words. Mute is
+  the volume control (4.18). Solo is the letter S, as on a mixing desk. The
+  full song has no solo; its volume stays in the column the others' use.
 - A button that opens a menu or panel carries `aria-expanded`; open is `--selection`.
 
 ### 4.3 Text field, number field, select
@@ -533,6 +533,24 @@ can the user do meanwhile?
 | Fingering on the fretboard, reset preview, building the tablature, the add-audio menu, checking the audio converter | In place |
 | Model download, an audio layer being added, a stem card being separated or uploaded, the cover tile | Row |
 | Save, export .chart, check for updates, check again, remove a model, delete a project | Short request |
+
+### 4.18 Volume
+
+Class: `.vol`, made by `volumeControl()` in `volume.js`. A compact (24×24)
+ghost icon button with the speaker at 14. Cursor `ew-resize`. While it is
+pointed at, dragged or focused, the level (mono 11, the number without its
+%) fades in over `--dur-state` in place of the speaker, so nothing in the row
+moves.
+
+- Click mutes. Muted is on: `--surface-engaged`, the struck speaker.
+- A sideways drag sets the level, 200px for 0–100 %, Shift for a fifth of
+  that, as the Position field of a marker is scrubbed. Arrow keys step 5 %.
+- Silent because of something else (the bus is muted or at zero, another
+  stem is soloed) is `.dim`: the whole control in `--hint`.
+- Every layer row ends in one. The two sidebar headers hold the bus's (all
+  note layers, all audio layers) inside their box, in the same column as the
+  rows' controls. A layer is heard at its level times its bus's.
+- The layer windows keep their slider (4.4) for the same value.
 
 ---
 

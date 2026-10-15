@@ -181,6 +181,7 @@ def run(page, audit, data, audio):
         page.wait_for_timeout(1500); scene("new-project-filled", "#newProjModal")
         click("#go", timeout=60000)
         page.wait_for_selector("#lanes .lane-row", timeout=60000)
+        page.wait_for_selector(".project-loading-backdrop", state="detached")   # it takes the clicks while it fades
 
     def editor():
         stage = page.locator("#stage").bounding_box()

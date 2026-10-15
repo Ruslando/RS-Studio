@@ -3,15 +3,20 @@
 // Escape drop it, and no layer or saved tuning changes before then.
 //
 // Your own tunings change in place. A built-in one never changes: editing it
-// starts a copy ("fork") that is kept only through "Save": onto your tuning with
-// the same name and instrument, or as a new one. Leaving an unsaved fork asks first.
+// starts a copy ("fork") that is kept only through "Save", as a new tuning.
+// Leaving an unsaved fork asks first.
+//
+// A tuning is its open strings, not its name: two tunings with the same strings
+// are one tuning. Saving strings that another tuning already has is refused,
+// whatever it is called (clashOf).
 import { confirmAction } from "./dialog.js";
+import { toast } from "./notify.js";
 import { icon } from "./icons.js";
 import { clearLaneShapes, renderLayerSettings } from "./lanes.js";
 import { refreshSaveState } from "./project.js";
 import { draw } from "./repaint.js";
 import { S } from "./store.js";
-import { TUNINGS, customTunings, laneTuning, newTuningId, parseTuning, refreshTabIfOpen, replaceCustomTunings, tuningToNames } from "./tablature.js";
+import { TUNINGS, customTunings, laneTuning, newTuningId, parseTuning, refreshTabIfOpen, replaceCustomTunings, tuningKeyFor, tuningToNames } from "./tablature.js";
 import { noteName, notesLowToHigh } from "./util.js";
 
 // C0..E6: low enough for a 5/6-string bass (B0 = 23), high enough for any guitar.
@@ -45,6 +50,12 @@ const uniqueName = (base) => {
   const taken = new Set(allNames());
   for (let i = 1; ; i++) { const n = i === 1 ? base : `${base} ${i}`; if (!taken.has(n.toLowerCase())) return n; }
 };
+// The other tuning with these strings: a built-in, or another of yours. Its name, or null.
+function clashOf(midis, exceptId = null) {
+  const key = Object.keys(TUNINGS).find((k) => sameMidis(TUNINGS[k].tuning, midis));
+  if (key) return builtinName(key);
+  return draft.find((t) => t.id !== exceptId && sameMidis(parseTuning(t.notes) || [], midis))?.name || null;
+}
 const lanesUsing = (id) => (S.state?.editLanes || []).filter((lane) => lane.tuning === id);
 const mine = () => (sel?.id ? draft.find((t) => t.id === sel.id) : null);
 const forkDirty = () => !!fork && (fork.name !== builtinName(fork.key) || !sameMidis(fork.midis, TUNINGS[fork.key].tuning)
@@ -86,6 +97,12 @@ export function dropTuningDraft() { draft = null; fork = null; sel = null; }
 export async function saveTuningDraft() {
   if (!draft) return true;
   if (forkDirty() && !(await confirmDiscard())) return false;
+  const twin = draft.find((t) => clashOf(parseTuning(t.notes) || [], t.id));
+  if (twin) {
+    toast(`“${twin.name}” has the same strings as “${clashOf(parseTuning(twin.notes) || [], twin.id)}”. Change them or delete it.`, 6000, "error");
+    if (sel?.id !== twin.id) await select({ id: twin.id });
+    return false;
+  }
   const before = new Map(customTunings.map((t) => [t.id, t.notes]));
   const after = new Map(draft.map((t) => [t.id, t]));
   const lanes = S.state?.editLanes || [];
@@ -101,6 +118,8 @@ export async function saveTuningDraft() {
   for (const lane of lanes) {
     const t = after.get(lane.tuning);
     if (t && before.get(t.id) !== t.notes) { lane.customTuning = t.notes; clearLaneShapes(lane); }
+    // Bare strings a tuning now has are that tuning.
+    if (lane.tuning === "custom") lane.tuning = tuningKeyFor(laneTuning(lane)) || "custom";
   }
   dropTuningDraft();
   renderLayerSettings(); draw(); refreshTabIfOpen(); refreshSaveState();
@@ -123,7 +142,8 @@ async function select(target) {
 
 // ---- actions ----
 
-// A new tuning is always a 6-string guitar in E standard; the editor changes the rest.
+// A new tuning is always a 6-string guitar in E standard; the editor changes the
+// rest. Until its strings differ from every other tuning's, Apply refuses it.
 async function newTuning() {
   const t = { id: newTuningId(), name: uniqueName("New tuning"), notes: tuningToNames(standard("guitar", 6)), instrument: "guitar" };
   if (forkDirty() && !(await confirmDiscard())) return;
@@ -134,32 +154,15 @@ async function newTuning() {
   editorEl.querySelector(".tuning-name")?.select();
 }
 
-// Name and instrument say which tuning it is: one of yours with both gets these
-// strings, otherwise it becomes a new tuning. A built-in's pair is refused (see
-// syncSave), since built-ins never change.
-const sameKey = (n, instrument) => (t) =>
-  t.name.trim().toLowerCase() === n.toLowerCase() && instrumentOf(t, parseTuning(t.notes) || []) === instrument;
-const builtinWith = (n, instrument) => Object.keys(TUNINGS)
-  .find((key) => builtinName(key).toLowerCase() === n.toLowerCase() && builtinInstrument(key) === instrument);
-
+// An edited built-in becomes a tuning of your own (Save is refused while its
+// strings are another tuning's; see syncSave).
 function save() {
   const { name, midis, instrument } = current();
-  const n = name.trim();
-  let t = draft.find(sameKey(n, instrument));
-  if (t) t.notes = tuningToNames(midis);
-  else draft.push(t = { id: newTuningId(), name: n, notes: tuningToNames(midis), instrument });
+  const t = { id: newTuningId(), name: name.trim(), notes: tuningToNames(midis), instrument };
+  draft.push(t);
   fork = null;
   sel = { id: t.id };
   render();
-}
-
-function duplicate() {
-  const { name, midis, instrument } = current();
-  const t = { id: newTuningId(), name: uniqueName(`${name} copy`), notes: tuningToNames(midis), instrument };
-  draft.push(t);
-  sel = { id: t.id };
-  render();
-  editorEl.querySelector(".tuning-name")?.select();
 }
 
 function remove() {
@@ -337,15 +340,13 @@ function renderEditor() {
   const actions = document.createElement("div");
   actions.className = "tuning-actions";
   let saveBtn = null;
+  const twin = clashOf(midis, t?.id);
   const syncSave = () => {
     if (!saveBtn) return;
     const n = (fork?.name ?? name).trim();
-    const shipped = n && builtinWith(n, instrument);
-    const mineToo = n && draft.find(sameKey(n, instrument));
-    saveBtn.disabled = !n || !!shipped;
+    saveBtn.disabled = !n || !!twin;
     saveBtn.title = !n ? "Give it a name first"
-      : shipped ? `“${n}” is a built-in ${INSTRUMENT_LABEL[instrument].toLowerCase()} tuning. Pick another name.`
-      : mineToo ? `Replaces the strings of your “${mineToo.name}”`
+      : twin ? `“${twin}” already has these strings. Change them to save a tuning of your own.`
       : "Save as your own tuning";
   };
   if (builtin) {
@@ -356,9 +357,6 @@ function renderEditor() {
     syncSave();
   } else {
     const users = lanesUsing(t.id);
-    const dup = document.createElement("button");
-    dup.type = "button"; dup.textContent = "Duplicate";
-    dup.addEventListener("click", duplicate);
     const del = document.createElement("button");
     del.type = "button"; del.className = "danger"; del.textContent = "Delete";
     del.disabled = users.length > 0;
@@ -366,13 +364,19 @@ function renderEditor() {
       ? `In use by ${users.map((l) => `“${l.name}”`).join(", ")}. Give ${users.length === 1 ? "that layer" : "those layers"} another tuning first.`
       : "Delete this tuning";
     del.addEventListener("click", remove);
-    actions.append(dup, del);
+    actions.append(del);
   }
 
   const stringsReset = resetBtn(`Reset to ${o ? notesLowToHigh(o.midis) : ""}`,
     () => set({ instrument: o.instrument, midis: o.midis }), o && !sameMidis(o.midis, midis));
+  // One of yours whose strings another tuning has cannot be kept: said where it is.
+  const clash = document.createElement("div");
+  clash.className = "status-line status-line--warn";
+  clash.setAttribute("role", "status");
+  clash.textContent = `“${twin}” already has these strings. Change them, or this tuning cannot be kept.`;
   editorEl.replaceChildren(field("Name", nameIn, "label", nameReset), shape,
-    field("Open strings", strings, "div", stringsReset), field("Whole tuning", whole, "div"), actions);
+    field("Open strings", strings, "div", stringsReset), field("Whole tuning", whole, "div"),
+    ...(twin && !builtin ? [clash] : []), actions);
 }
 
 // ↑/↓ walk the list; the editor follows.
