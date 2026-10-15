@@ -674,6 +674,9 @@ export function applyScoreStructure(alphaTab, score, bars) {
       rebuildVoice(alphaTab, staff, index, 0, [], staff.stringTuning.tunings || [], new Map());
   });
   for (const [staff] of oldStaffBars) evenVoiceCounts(alphaTab, staff);   // inserted bars have one voice
+  // Master bars put in place by hand, not through addMasterBar, have no repeat
+  // group, and playback (MIDI generation) reads one from every bar.
+  score.rebuildRepeatGroups();
   score.finish(new alphaTab.Settings());
   // The time signature is set twice on purpose. finish() recomputes bar timing
   // from the whole score and normalizes the master bars while doing it, so
@@ -697,6 +700,7 @@ export function applyScoreStructure(alphaTab, score, bars) {
       section.text = item.section.text || item.section.marker || ""; master.section = section;
     } else master.section = null;
   });
+  score.rebuildRepeatGroups();   // the repeat flags just written decide the groups
   score.finish(new alphaTab.Settings());
   return score;
 }
