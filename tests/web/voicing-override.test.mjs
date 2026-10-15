@@ -167,3 +167,32 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   assert.ok(voiced.get(long) && voiced.get(apart) && !voiced.has(short));
 }
 console.log("ok");
+
+// A column wider than any hand — fret 1 on the low E and fret 15 on the high E,
+// pinned, at once — still gets a hand: the index on its lowest note. It used to
+// leave the hand walk with no state at all, and the lane's whole fingering
+// (fretboard, tab) failed.
+{
+  const off = { influencePrevious: false, influenceNext: false, adaptPrevious: false, adaptNext: false };
+  const wide = [note(0, 40 + 1, { pos: pin(5, 1, off) }), note(0, 64 + 15, { pos: pin(0, 15, off) }), note(1, 45 + 3)];
+  const { voiced, seats } = voiceNotesFingered(wide, tuning, Infinity, { bars: [0, 4] });
+  assert.equal(at(voiced, wide[0]), "5:1");
+  assert.equal(at(voiced, wide[1]), "0:15");
+  assert.equal(seats.get(wide[0]), 1);
+}
+
+// A scratch between two notes at fret 7: the muted strings say fret 1 and fret 15
+// (an imported tab writes some number), the open G rings. Muted notes are no reach,
+// so the hand stays at 7 rather than jumping to 1 and back.
+{
+  const off = { influencePrevious: false, influenceNext: false, adaptPrevious: false, adaptNext: false };
+  const dead = { dead: true };
+  const lane = [
+    note(0, 50 + 7, { pos: pin(3, 7, off) }),
+    note(0.5, 45 + 1, { pos: pin(4, 1, off), fx: dead }), note(0.5, 55, { pos: pin(2, 0, off) }),
+    note(0.5, 50 + 15, { pos: pin(3, 15, off), fx: dead }),
+    note(1, 50 + 7, { pos: pin(3, 7, off) }),
+  ];
+  const { seats } = voiceNotesFingered(lane, tuning, Infinity, { bars: [0, 4] });
+  assert.deepEqual(lane.map((n) => seats.get(n)), [7, 7, 7, 7, 7]);
+}

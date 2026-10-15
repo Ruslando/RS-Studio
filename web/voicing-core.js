@@ -1973,6 +1973,8 @@ function registerColumns(columns, tuning, options = {}) {
       // hold below.
       adaptNext: flow?.adaptNext, adaptPrev: !!flow?.adaptPrevious,
       rules,
+      // Muted notes, for the hand walk only (planHand): see `reach` in voiceRegister.
+      dead: notes.some((n) => n.fx?.dead) ? notes.map((n) => !!n.fx?.dead) : null,
     };
   });
 
@@ -2896,6 +2898,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
       pinned: c.pinned ? idx.map((i) => c.pinned[i]) : null,
       rules: c.rules ? idx.map((i) => c.rules[i]) : null,
+      dead: c.dead ? idx.map((i) => c.dead[i]) : null,
     };
   });
 
@@ -3028,8 +3031,10 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       let lo = Infinity, hi = -Infinity;
       for (let k = 0; k < c.pitches.length; k++) {
         const s = strings[i][k];
-        // A tapped note is the other hand's, and an open string is nobody's.
-        if (s < 0 || (c.rules && c.rules[k] && c.rules[k].free)) continue;
+        // A tapped note is the other hand's, and an open string is nobody's. A muted
+        // one is the hand relaxing where it already is: its fret is whatever the
+        // tab wrote down (an imported scratch says 22 beside a 3), not a reach.
+        if (s < 0 || (c.rules && c.rules[k] && c.rules[k].free) || c.dead?.[k]) continue;
         const f = c.pitches[k] - tuning[s];
         if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); }
       }
@@ -3083,8 +3088,11 @@ function planHand(reach, named, span = SPAN) {
   for (let i = 0; i < n; i++) {
     const r = reach[i];
     if (named[i] == null && !r) continue;
+    // From the lowest note down to where the top one is still in reach. A column
+    // wider than any reach (fret 2 and fret 14 at once) still has the first: the
+    // index on its lowest note. With none, the walk below had no state to read.
     const frets = named[i] != null ? [named[i]]
-      : Array.from({ length: r.lo - Math.max(1, r.hi - span - 3) + 1 }, (_, k) => r.lo - k);
+      : Array.from({ length: r.lo - Math.min(r.lo, Math.max(1, r.hi - span - 3)) + 1 }, (_, k) => r.lo - k);
     const states = frets.map((g) => {
       const own = named[i] != null ? 0 : stretchCost(r.hi - g + 1, span) + 0.01 * (r.lo - g);
       let best = 0, from = -1;
