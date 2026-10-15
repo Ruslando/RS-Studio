@@ -15,13 +15,12 @@
 import { hammerDirections } from "./articulations.js";
 import { paintNoteBar } from "./canvas-components.js";
 import { graceBefore } from "./grace.js";
-import { WHAMMY_CURVES, WHAMMY_TAG } from "./whammy.js";
-import { BEND_TAG, SLIDE_IN, bendCurve, bendPeak, slideTargets } from "./bend.js";
+import { BEND_TAG, bendCurve } from "./bend.js";
 import { OVERLAP_EPS, REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono, stageUi } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
 import { contentH, pitchAt, xOf, yOf } from "./geometry.js";
 import { gridAt, gridSegments, gridSubdiv, segStep } from "./grid.js";
-import { FX_GLYPHS, HARMONIC_TAG, noteMarks } from "./note-effects.js";
+import { FX_GLYPHS, HARMONIC_TAG, hasNoteEffects, noteMarks } from "./note-effects.js";
 import { PAINT, WASH, halo, veil } from "./stage-paint.js";
 import { S } from "./store.js";
 import { dpr, fmtTime, hexA, noteName } from "./util.js";
@@ -209,183 +208,62 @@ export function drawStackBadges(badges, vx0, vx1) {
   sctx.lineWidth = 1;
 }
 
-// ---- note-effect glyphs (slides / bends / harmonics / fx tags) ----
-// One shared look so the effects read as a family: soft-white strokes with round
-// caps, filled arrowheads for direction, dark-haloed tags for text.
-const FX_COLOR = PAINT.text;
+// ---- effect labels, wholly inside their note bodies ----
+const SLIDE_TAG = { shift: "↗", legato: "⌒↗", inBelow: "↗", inAbove: "↘", outDown: "↘", outUp: "↗" };
 
-// Every tag here sits on a note, so 9. Hanken, not mono, because these are
-// notation abbreviations — H, P.H., pre·r, ½ — that read as words even when a
-// couple of them contain a number. Bend amounts ride along rather than splitting
-// the family in two: "one shared look" above is the point of this block.
-const FX_FONT = stageUi(STAGE_ANCHORED, 600);
-
-function fxStroke() {
-  sctx.strokeStyle = FX_COLOR; sctx.fillStyle = FX_COLOR;
-  sctx.lineWidth = 1.75; sctx.lineCap = "round"; sctx.lineJoin = "round";
+// The existing ribbon uses horizontal-control Beziers. Invert their time axis
+// to place text on that exact silhouette (audio/finger interpolation is linear).
+function ribbonValue(pts, t) {
+  if (t <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    const [a, v0] = pts[i - 1], [b, v1] = pts[i];
+    if (t > b) continue;
+    if (a === b) return v1;
+    const target = (t - a) / (b - a);
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 16; k++) {
+      const u = (lo + hi) / 2, x = 1.5 * u - 1.5 * u * u + u * u * u;
+      if (x < target) lo = u; else hi = u;
+    }
+    const u = (lo + hi) / 2;
+    return v0 + (v1 - v0) * (3 * u * u - 2 * u * u * u);
+  }
+  return pts.at(-1)[1];
 }
 
-// Filled arrowhead, tip at (x, y), pointing along `ang` (radians, 0 = right).
-function fxArrow(x, y, ang, size = 4.5) {
+function insideLabel(n, text, x, width, pitch = n.pitch, curve = bendCurve(n)) {
+  if (width < 2) return;
+  const h = S.state.rowH, ym = yOf(pitch) + h / 2;
   sctx.save();
-  sctx.translate(x, y); sctx.rotate(ang);
-  sctx.beginPath();
-  sctx.moveTo(0.5, 0); sctx.lineTo(-size, size * 0.55); sctx.lineTo(-size, -size * 0.55);
-  sctx.closePath(); sctx.fill();
-  sctx.restore();
-}
-
-// Dark-haloed tag, legible over any spectrogram color. Leaves ctx state as found.
-function fxLabel(text, x, y) {
-  sctx.save();
-  sctx.lineWidth = 3; sctx.lineJoin = "round"; sctx.strokeStyle = halo();
-  sctx.strokeText(text, x, y);
-  sctx.fillStyle = PAINT.text; sctx.fillText(text, x, y);
-  sctx.restore();
-}
-
-// Slides are drawn as tab notation writes them: a short straight stroke, the same
-// size whatever the timing, with its arrowhead where the finger lands. A slide-out
-// leaves the END of its note, down or up; a slide-in arrives at the START of its
-// note, from below or above; a shift/legato runs diagonally into the head of the
-// note it lands on (the same voice of the next chord — slideTargets, which the
-// playback slides to as well), leaving its own note at least a stroke before the
-// end, so two touching notes still show a slant and not a vertical jump. Dashed =
-// legato (slurred, not picked again). The slant is at least SLIDE_RISE tall, so it
-// still reads as one when the rows are thin.
-// The targets are cached per lane against S.voicingRevision, which every edit bumps:
-// this runs once per frame, on a path that fires on every mousemove over the stage.
-const SLIDE_STROKE = 16;   // px along the time axis; as long as an arrowhead is readable
-const SLIDE_RISE = 8;      // px; the least a slide-in/-out climbs or falls
-const slideCache = new WeakMap();
-function laneSlides(lane) {
-  const hit = slideCache.get(lane);
-  if (hit && hit.revision === S.voicingRevision && hit.count === lane.notes.length) return hit.targets;
-  const targets = slideTargets(lane.notes);
-  slideCache.set(lane, { revision: S.voicingRevision, count: lane.notes.length, targets });
-  return targets;
-}
-
-export function drawSlides() {
-  const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
-  sctx.save(); fxStroke();
-  for (const lane of S.state.lanes) {
-    if (!lane.visible || !lane.notes.some((n) => n.slide)) continue;
-    const targets = laneSlides(lane);
-    const rowH = S.state.rowH, d = Math.max(SLIDE_RISE, rowH), mid = (n) => yOf(n.pitch) + rowH / 2;
-    for (const n of lane.notes) {
-      if (!n.slide) continue;
-      const x0 = xOf(n.start), x1 = xOf(n.end), ym = mid(n);
-      const up = n.slide === "outUp" || n.slide === "inAbove" ? -1 : 1;   // where the far end sits
-      let ax, ay, bx, by;
-      if (SLIDE_IN.has(n.slide)) { ax = x0 - SLIDE_STROKE; ay = ym + up * d; bx = x0; by = ym; }
-      else if (n.slide === "outDown" || n.slide === "outUp") { ax = x1; ay = ym; bx = x1 + SLIDE_STROKE; by = ym + up * d; }
-      else {
-        const onto = targets.get(n);
-        bx = onto ? xOf(onto.start) : x1 + SLIDE_STROKE;
-        by = onto ? mid(onto) : ym;
-        ax = Math.max(x0, Math.min(x1, bx - SLIDE_STROKE)); ay = ym;
+  if (curve) {
+    const half = Math.max(0.5, (h - 1) / 2);
+    const edge = (pts, offset, first) => {
+      const px = (p) => x + width * p[0], py = (p) => ym - p[1] * h + offset;
+      if (first) sctx.moveTo(px(pts[0]), py(pts[0])); else sctx.lineTo(px(pts[0]), py(pts[0]));
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i], mid = (px(a) + px(b)) / 2;
+        sctx.bezierCurveTo(mid, py(a), mid, py(b), px(b), py(b));
       }
-      if (Math.max(ax, bx) < vx0 || Math.min(ax, bx) > vx1) continue;
-      sctx.setLineDash(n.slide === "legato" ? [5, 4] : []);
-      sctx.beginPath(); sctx.moveTo(ax, ay); sctx.lineTo(bx, by); sctx.stroke();
-      sctx.setLineDash([]);
-      fxArrow(bx, by, Math.atan2(by - ay, bx - ax));
-    }
+    };
+    sctx.beginPath(); edge(curve, -half, true); edge([...curve].reverse(), half, false);
+    sctx.closePath(); sctx.clip();
+  } else {
+    sctx.beginPath(); sctx.rect(x + 0.5, ym - h / 2 + 0.5, Math.max(1, width - 1), Math.max(1, h - 1)); sctx.clip();
   }
-  sctx.restore();
-}
-
-// The bend itself is drawn by the note bar — draw.js runs the bar along the
-// audible pitch curve. Here we only add the amount tag over the curve's peak,
-// plus the prebend pre-arrow (the push that happens before the pick, so it has
-// no on-note trajectory of its own to show).
-export function drawBends() {
-  const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
-  sctx.save(); fxStroke();
-  sctx.font = FX_FONT; sctx.textAlign = "center"; sctx.textBaseline = "alphabetic";
-  for (const lane of S.state.lanes) {
-    if (!lane.visible || !lane.notes.some((n) => n.bend)) continue;
-    for (const n of lane.notes) {
-      const pts = bendCurve(n);
-      if (!pts) continue;
-      const x0 = xOf(n.start), x1 = xOf(n.end);
-      if (x1 < vx0 || x0 > vx1) continue;
-      const rowH = S.state.rowH, ymid = yOf(n.pitch) + rowH / 2;
-      const peak = bendPeak(pts), at = pts.find((p) => p[1] === peak);
-      if (pts[0][1] > 0) {   // pre-bent: arrow into the raised starting pitch
-        const ax = x0 + 3, top = ymid - pts[0][1] * rowH - rowH * 0.9;
-        sctx.beginPath(); sctx.moveTo(ax, ymid - 1); sctx.lineTo(ax, top + 4); sctx.stroke();
-        fxArrow(ax, top, -Math.PI / 2);
-      }
-      fxLabel(BEND_TAG[n.bend] || "", x0 + (x1 - x0) * at[0], ymid - peak * rowH - rowH / 2 - 3);
-    }
+  const fontSize = Math.max(3, Math.min(STAGE_ANCHORED, h - 2));
+  sctx.font = stageUi(fontSize, 600); sctx.textAlign = "center"; sctx.textBaseline = "middle";
+  const chars = [...text], total = chars.reduce((sum, c) => sum + sctx.measureText(c).width, 0);
+  const fit = Math.min(1, Math.max(1, width - 6) / Math.max(1, total));
+  let cursor = x + (width - total * fit) / 2;
+  sctx.lineWidth = 1.5; sctx.strokeStyle = halo(); sctx.fillStyle = PAINT.text;
+  for (const char of chars) {
+    const advance = sctx.measureText(char).width * fit, cx = cursor + advance / 2;
+    const u = Math.max(0, Math.min(1, (cx - x) / width));
+    const cy = ym - (curve ? ribbonValue(curve, u) * h : 0);
+    sctx.save(); sctx.translate(cx, cy); sctx.scale(fit, 1);
+    sctx.strokeText(char, 0, 0); sctx.fillText(char, 0, 0); sctx.restore();
+    cursor += advance;
   }
-  sctx.restore();
-}
-
-// Small tag below each note marked with a harmonic (◇ = natural, P.H. = pinch).
-// Sits under the note to stay clear of the fx tags / bend arc above it.
-export function drawHarmonics() {
-  const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
-  sctx.save();
-  sctx.font = FX_FONT; sctx.textBaseline = "alphabetic";
-  for (const lane of S.state.lanes) {
-    if (!lane.visible || !lane.notes.some((n) => n.harmonic)) continue;
-    for (const n of lane.notes) {
-      if (!n.harmonic) continue;
-      const x = xOf(n.start);
-      if (x > vx1 || xOf(n.end) < vx0) continue;
-      fxLabel(HARMONIC_TAG[n.harmonic] || "", x + 1, yOf(n.pitch) + S.state.rowH + 9);
-    }
-  }
-  sctx.restore();
-}
-
-// Vibrato is a pitch effect, so it draws as a pitch shape like bends/slides do:
-// a small sine wave spanning the note, just above the bar.
-function drawVibratoWave(x0, x1, y) {
-  sctx.save(); fxStroke(); sctx.lineWidth = 1.5;
-  sctx.beginPath();
-  sctx.moveTo(x0, y);
-  for (let x = x0 + 2; x <= x1; x += 2) sctx.lineTo(x, y + Math.sin(((x - x0) / 8) * Math.PI * 2) * 2);
-  sctx.stroke(); sctx.restore();
-}
-
-// Whammy is a time contour, kept above the fretted row like the vibrato wave.
-// Dip returns to the baseline; dive ends below it. A label also distinguishes
-// the two at low zoom, where the contour can only occupy a few pixels.
-function drawWhammyCurve(n, x0, x1, y) {
-  const points = WHAMMY_CURVES[n.whammy];
-  if (!points) return;
-  const width = Math.max(10, x1 - x0 - 2), depth = 8;
-  sctx.save(); fxStroke();
-  const trace = () => {
-    sctx.beginPath();
-    points.forEach(([u, semi], i) => {
-      const x = x0 + 1 + u * width, py = y - semi / 2 * depth;
-      if (i === 0) sctx.moveTo(x, py); else sctx.lineTo(x, py);
-    });
-  };
-  trace(); sctx.lineWidth = 4; sctx.strokeStyle = halo(); sctx.stroke();
-  trace(); sctx.lineWidth = 1.5; sctx.strokeStyle = FX_COLOR; sctx.stroke();
-  const [u, semi] = points.at(-1), [prevU, prevSemi] = points.at(-2);
-  fxArrow(x0 + 1 + u * width, y - semi / 2 * depth,
-    Math.atan2(-(semi - prevSemi) / 2 * depth, (u - prevU) * width), 3.5);
-  sctx.textAlign = "left";
-  fxLabel(n.whammy, x0 + 2, y - 4);
-  sctx.restore();
-}
-
-// The grace is a normal short bar derived from its parent: same layer color,
-// selection and hover. Its pitch and timing always follow that authored note.
-function drawGraceNote(n, before, lane) {
-  const x = xOf(before.start), width = Math.max(2, xOf(n.start) - x);
-  const y = yOf(n.pitch + before.offset), height = S.state.rowH;
-  sctx.save();
-  paintNoteBar(sctx, x, y, width, height, lane.color, S.selection.has(n), S.hoverNote === n);
-  sctx.font = FX_FONT; sctx.textAlign = "right"; sctx.textBaseline = "alphabetic";
-  fxLabel("Grace note", x + width - 1, y - 3);
   sctx.restore();
 }
 
@@ -398,46 +276,27 @@ function laneHammerTags(lane) {
   return tags;
 }
 
-// Tiny tags above each note carrying short-form effects (the fx toggles plus
-// grace/trill/tremolo-pick/slap/stroke/whammy — see noteMarks). Slide, bend,
-// harmonic and vibrato draw their own shapes.
 export function drawNoteFx() {
   const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
-  sctx.save();
-  sctx.font = FX_FONT; sctx.textBaseline = "alphabetic";
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
     const hammerTags = laneHammerTags(lane);
     for (const n of lane.notes) {
-      const vib = !!(n.fx && n.fx.vibrato);
-      const whammy = WHAMMY_CURVES[n.whammy];
-      const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
-      const marks = noteMarks(n).filter((m) => (!vib || m !== FX_GLYPHS.vibrato)
-        && (!whammy || m !== WHAMMY_TAG[n.whammy]) && (!grace || m !== "gr")
-        && (!n.fx?.staccato || m !== FX_GLYPHS.staccato))
-        .map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(n) || m : m);
-      if (!marks.length && !vib && !whammy && !grace && !n.fx?.staccato) continue;
+      if (!hasNoteEffects(n)) continue;
       const x = xOf(n.start), x1 = xOf(n.end);
+      const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
       if ((grace ? xOf(grace.start) : x) > vx1 || x1 < vx0) continue;
-      if (grace) drawGraceNote(n, grace, lane);
-      let ty = yOf(n.pitch) - 2;
-      if (n.fx?.staccato) {
-        const cx = (x + x1) / 2, cy = yOf(n.pitch) - 6;
-        sctx.save(); sctx.beginPath(); sctx.arc(cx, cy, 1.8, 0, Math.PI * 2);
-        sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.stroke();
-        sctx.fillStyle = FX_COLOR; sctx.fill(); sctx.restore();
+      const tags = noteMarks(n).map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(n) || m
+        : m === "gr" ? "Grace note" : m);
+      if (n.bend) tags.push(BEND_TAG[n.bend] || "bend");
+      if (n.slide) tags.push(SLIDE_TAG[n.slide] || "slide");
+      if (n.harmonic) tags.push(HARMONIC_TAG[n.harmonic] || "harm.");
+      insideLabel(n, `${noteName(n.pitch)} ${tags.join(" ")}`, x, x1 - x);
+      if (grace) {
+        const gx = xOf(grace.start), width = Math.max(2, x - gx), pitch = n.pitch + grace.offset;
+        paintNoteBar(sctx, gx, yOf(pitch), width, S.state.rowH, lane.color, S.selection.has(n), S.hoverNote === n);
+        insideLabel(n, "gr", gx, width, pitch, null);
       }
-      if (vib) {
-        // Limitation: wave sits on the home row even when the bar bends away
-        drawVibratoWave(x + 1, Math.max(x + 9, x1 - 1), yOf(n.pitch) - 5);
-        ty -= 8;                           // remaining tags stack above the wave
-      }
-      if (whammy) {
-        drawWhammyCurve(n, x, x1, ty - 10);
-        ty -= 26;
-      }
-      if (marks.length) fxLabel(marks.join(" "), x + 1, ty);
     }
   }
-  sctx.restore();
 }

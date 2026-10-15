@@ -57,7 +57,7 @@ export const FX_LABELS = {
 
 export const FX_GLYPHS = { hammer: "H", palmMute: "PM", ghost: "( )", letRing: "LR", vibrato: "~", staccato: "·", accent: ">", dead: "X" };
 
-export const HARMONIC_TAG = { natural: "◇", pinch: "P.H." };
+export const HARMONIC_TAG = { natural: "◎", pinch: "Pnch. harm." };
 
 export const SLAP_TAG = { tap: "tap", slap: "slap", pop: "pop" };
 
@@ -74,6 +74,8 @@ export function noteMarks(n) {
   if (WHAMMY_TAG[n.whammy]) m.push(WHAMMY_TAG[n.whammy]);
   return m;
 }
+
+export const hasNoteEffects = (n) => !!(n.slide || n.bend || n.harmonic || noteMarks(n).length);
 
 export const cloneFx = (fx) => (fx ? { ...fx } : undefined);
 

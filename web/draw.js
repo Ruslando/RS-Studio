@@ -1,3 +1,4 @@
+import { hasNoteEffects } from "./note-effects.js";
 import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
 import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGhosts, notePlaybackGlow } from "./note-motion.js";
 // Canvas rendering: the main spectrogram + notes draw loop, the overview minimap
@@ -5,7 +6,7 @@ import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGho
 
 import { bendCurve, bendPeak } from "./bend.js";
 import { BEND_HANDLE_R, MM_HEAD, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
-import { bendHandles, collectStacks, drawBends, drawDetectRegion, drawGrid, drawHarmonics, drawNoteFx, drawRuler, drawSlides, drawStackBadges, regionEdgeAt } from "./note-render.js";
+import { bendHandles, collectStacks, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, regionEdgeAt } from "./note-render.js";
 import { editorEl, minimap, mmctx, overviewRuler, overviewRulerCtx, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
@@ -479,7 +480,7 @@ function paintFrame() {
       {
         const label = noteName(n.pitch);
         const tw = sctx.measureText(label).width;
-        if (w >= tw + 6) {                       // only when the note can hold the text
+        if (w >= tw + 6 && !hasNoteEffects(n)) {                       // only when the note can hold the text
           const ly = y + S.state.rowH / 2;
           sctx.lineWidth = 2.5; sctx.strokeStyle = halo();
           sctx.strokeText(label, x + 3, ly);     // dark halo for legibility on any color
@@ -518,11 +519,8 @@ function paintFrame() {
   sctx.textBaseline = "alphabetic";
   drawShapes(vx0, vx1);
   drawStackBadges(stackBadges, vx0, vx1);
-  drawSlides();
-  drawBends();
   drawBendHandles();
   drawNoteFx();
-  drawHarmonics();
   drawOmittedNoteCrosses(omittedCrosses);
   drawOutOfRangeNotes(outOfRange);
   drawGhostNotes(ghostNotes);

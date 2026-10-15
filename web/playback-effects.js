@@ -1,5 +1,5 @@
 // Sample articulations. Times remain in song seconds until the audio scheduler.
-import { hammerLink, strumOffset, tremoloStep } from "./articulations.js";
+import { hammerLink, letRingEnd, strumOffset, tremoloStep } from "./articulations.js";
 import { noteOffsetAt, slideTargets, trillOffsetAt } from "./bend.js";
 
 import { whammyAt } from "./whammy.js";
@@ -76,7 +76,7 @@ export function playbackEvents(notes, bpmAt = () => 120, songEnd = Infinity) {
     let end = last.end;
     if (fx.letRing) {
       const next = nextSame.get(last.note);
-      end = Math.min(next?.start ?? end + 2, songEnd);
+      end = letRingEnd(n, next?.start, songEnd);
       last.end = end;
     }
     let duration = Math.max(0.01, end - n.start);

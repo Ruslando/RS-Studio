@@ -39,13 +39,10 @@ export function hammerDirections(notes) {
 
 export function strikeTime(mark, t) {
   const start = mark.strikeStart ?? mark.start;
-  if (t < start || (mark.note && t >= mark.note.end)) return null;
+  if (t < start || (mark.note && t >= (mark.soundingEnd ?? mark.note.end))) return null;
   const step = mark.tremoloStep || 0;
   return step ? start + Math.floor((t - start + 1e-8) / step) * step : start;
 }
 
-export function popAmount(mark, t) {
-  const strike = strikeTime(mark, t);
-  const age = strike == null ? -1 : t - strike;
-  return mark.note?.slap === "pop" && age >= 0 && age < 0.16 ? Math.sin(Math.PI * age / 0.16) : 0;
-}
+export const letRingEnd = (note, nextStart = Infinity, songEnd = Infinity) =>
+  Math.min(Number.isFinite(nextStart) ? nextStart : note.end + 2, songEnd);

@@ -31,6 +31,7 @@
 // the fretboard, one off the nut and the bridge — so the two agreeing to a tenth
 // of a millimetre is a real cross-check and not arithmetic.
 
+import { bendSnapAt } from "./string-techniques.js";
 import { hammerLink } from "./articulations.js";
 import { graceBefore } from "./grace.js";
 import { noteName } from "./util.js";
@@ -234,7 +235,7 @@ function startedBy(timeline, t) {
 }
 
 const markAt = (f, s) => ({
-  strikeStart: f.strikeStart, tremoloStep: f.tremoloStep,
+  strikeStart: f.strikeStart, tremoloStep: f.tremoloStep, soundingEnd: f.soundingEnd,
   finger: f.finger, fret: f.fret, string: f.string, start: f.start, dead: f.dead,
   // The note object itself, so a mark can be edited and not only drawn: moving one
   // note of a grip has to name which note, and pitch cannot (a unison bend puts the
@@ -329,7 +330,8 @@ export function handAt(columns, t, travel, s = GUITAR) {
     if (!grace || t < grace.start || t >= f.note.start) return [];
     const lower = f.fret + grace.offset;
     const targetFinger = lower > 0 ? Math.max(2, f.finger || 1) : f.finger || 1;
-    const m = markAt({ ...f, fret: lower, finger: lower > 0 ? targetFinger - 1 : 0, start: grace.start }, s);
+    const m = markAt({ ...f, fret: lower, finger: lower > 0 ? targetFinger - 1 : 0,
+      start: grace.start, strikeStart: grace.start, tremoloStep: 0 }, s);
     m.graceTarget = { fret: f.fret, x: fretCentre(f.fret, s), finger: targetFinger };
     return [m];
   }) || [];
@@ -419,12 +421,30 @@ export function handAt(columns, t, travel, s = GUITAR) {
         m.trill = { fret, x: fretCentre(fret, s), finger,
           down: !!trillOffsetAt(note, t - note.start, cur.eighth ? 30 / cur.eighth : 120) };
       }
-      if (note?.harmonic === "natural" && f.fret > 0)
-        m.x = fretDistance(f.fret + (s.capo || 0), s.scale);
       return m;
     }) };
   }
   return null;
+}
+
+// Sustaining strings and released tension outlive the displayed note column.
+export function ringingMarksAt(fingers, t, s = GUITAR) {
+  return fingers.filter((f) => f.note.end <= t && t < f.soundingEnd)
+    .map((f) => {
+      const m = markAt(f, s);
+      return { ...m, ringing: true, lift: bendLift(m, f.note.end, s.strings) };
+    });
+}
+
+export function releasedBendsAt(fingers, t, s = GUITAR) {
+  return fingers.filter((f) => {
+    const end = f.soundingEnd ?? f.note.end;
+    return end <= t && t < end + 0.18;
+  }).map((f) => {
+    const m = markAt(f, s);
+    m.lift = bendLift(m, f.note.end, s.strings) * bendSnapAt(t - (f.soundingEnd ?? f.note.end));
+    return m;
+  }).filter((m) => Math.abs(m.lift) > 0.001);
 }
 
 // ---- every other place ONE note could go ----

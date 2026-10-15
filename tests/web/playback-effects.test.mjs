@@ -126,7 +126,3 @@ assert.equal(deadSources[0].output, synth.output, "percussion follows lane volum
 assert.equal(synth._activeSources.get(-1).length, 2, "pause/releaseAll owns the percussion sources");
 deadSources[0].onended(); assert.equal(synth._activeSources.get(-1).length, 1);
 assert.ok(rawBuffers[0].some(v => v !== 0));
-const { popAmount } = await import("../../web/articulations.js");
-const pop = { start: 1, note: n({ slap: "pop" }) };
-assert.equal(popAmount(pop, 1), 0); assert.equal(popAmount(pop, 1.08), 1);
-assert.equal(popAmount(pop, 1.2), 0);

@@ -121,6 +121,7 @@ for (const [kind, interval] of [["half", 1], ["whole", 2]]) {
   assert.equal(before.marks[0].fret, 7 - interval);
   assert.equal(before.marks[0].x, fretCentre(7 - interval));
   assert.equal(before.marks[0].start, event.start, "audio and finger share the onset");
+  assert.equal(before.marks[0].strikeStart, event.start, "grace flashes on its own earlier pick");
   assert.equal(before.marks[0].graceTarget.fret, 7);
   const main = handAt(cols, n.start, 0).marks[0];
   assert.equal(main.fret, 7);
@@ -160,5 +161,4 @@ assert.equal(handAt(timeline, 2.13, 0).marks[0].trill.down, false,
 assert.equal(handAt(timeline, 2.26, 0).marks[0].trill.down, true);
 
 const harmonicMark = handAt(column(2, 12, { start: 0, end: 1, harmonic: "natural" }), 0.3, 0).marks[0];
-assert.equal(harmonicMark.x, fretDistance(12), "natural harmonic touches the fret wire");
-assert.notEqual(harmonicMark.x, fretCentre(12));
+assert.equal(harmonicMark.x, fretCentre(12), "harmonics use the same marker position as other notes");
