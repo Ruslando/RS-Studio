@@ -1,8 +1,9 @@
 // The fretboard's geometry, in millimetres, and what the hand on it is playing.
 // Nothing here touches the DOM, so tests/fretboard.test.mjs can run it under node —
-// same reason marker-rails.js is split this way. The one import is util.js's
+// same reason marker-rails.js is split this way. The imports are util.js's
 // noteName, which is pure: a second copy of the twelve note names is exactly the
-// drift the design contract exists to prevent.
+// drift the design contract exists to prevent — and bend.js's curve, for the same
+// reason: the board bends the string the stage draws, not a second idea of it.
 //
 // Fret placement is 12-TET in closed form: d(n) = L * (1 - 2^(-n/12)). The
 // luthier's constant 17.817152 is that same rule iterated (each fret sits
@@ -31,6 +32,7 @@
 // of a millimetre is a real cross-check and not arithmetic.
 
 import { noteName } from "./util.js";
+import { SLIDES_TO_NEXT, bendCurve, pitchMoves, pitchOffsetAt, slideAt } from "./bend.js";
 
 export const GUITAR = {
   name: "Electric guitar",
@@ -237,6 +239,23 @@ const markAt = (f, s) => ({
   pitch: f.pitch, note: f.note, x: fretCentre(f.fret, s),
 });
 
+// ---- a bend ----
+// A bent string is pushed along the fret and the finger goes with it: the treble
+// strings toward the bass side, the bass strings toward the treble, which is how a
+// player bends them (the way that does not push the string off the neck). A whole
+// step moves it about one string's spacing, roughly what a full bend covers at
+// mid-neck, so the lift is counted in string spacings: `string + lift` is where the
+// fingertip is. An open string has no finger to push it, so it never lifts.
+// A vibrato is the same push, small and repeated, so it moves the finger the same way.
+export const BEND_SPACING_PER_SEMI = 0.5;
+export function bendLift(mark, t, strings) {
+  const note = mark.note;
+  if (!pitchMoves(note) || !(mark.fret > 0)) return 0;
+  const span = note.end - note.start;
+  const semi = pitchOffsetAt(note, span > 0 ? (t - note.start) / span : 0, t - note.start);
+  return semi * BEND_SPACING_PER_SEMI * (mark.string < (strings - 1) / 2 ? 1 : -1);
+}
+
 // How long the hand has to reach the next grip, and this is the number the whole
 // animation turns on. It is `travel` — one beat, set by the caller — except that it
 // may never take more than **half** of the outgoing grip's own time.
@@ -297,15 +316,29 @@ export function handAt(columns, t, travel, s = GUITAR) {
   // a window. Without this the hand "travelled" from a chord to the same chord — no
   // marker moved a millimetre, but the state change from filled to outlined and
   // back read as movement anyway, which is worse than showing nothing.
-  if (next && !(cur && cur.shape === next.shape)) {
+  // A slide onto the next note is not a shift of the hand: the finger stays down and
+  // slides there (the pressed branch below carries it), so no travel window opens.
+  const slidesOn = cur?.fingers.some((f) => f.fret > 0 && SLIDES_TO_NEXT.has(f.note?.slide));
+  if (next && !(cur && cur.shape === next.shape) && !slidesOn) {
     const window = travelWindow(cur, next, travel);
     if (t >= next.start - window) {
-      const u = window > 0 ? Math.min(1, (t - (next.start - window)) / window) : 1;
+      // A PREBEND IS PUSHED BEFORE IT IS PICKED. Where the previous note has already
+      // let go, the second half of that free time is spent pushing the string up, so
+      // the finger eases into the bend instead of snapping there at the onset; the
+      // shift itself finishes first. With no free time (back-to-back notes) there is
+      // nothing to ease in and the bend lands at the onset, as before.
+      const pre = next.fingers.some((f) => f.fret > 0 && bendCurve(f.note)?.[0][1]);
+      const lead = pre ? Math.max(0, Math.min(window, cur ? next.start - cur.end : window)) : 0;
+      const arrive = window - lead / 2;
+      const u = arrive > 0 ? Math.min(1, (t - (next.start - window)) / arrive) : 1;
+      const v = lead > 0 ? Math.max(0, (t - (next.start - lead / 2)) / (lead / 2)) : 0;
+      const push = v * v * (3 - 2 * v);   // smoothstep: a push starts and lands gently
       const origins = cur ? cur.fingers : [];
       return {
         pressed: false,
         marks: next.fingers.map((f) => {
           const b = markAt(f, s), a = originFor(f, origins);
+          b.lift = bendLift(b, next.start, s.strings) * push;
           if (!a) return b;
           const o = markAt(a, s);
           return {
@@ -318,7 +351,25 @@ export function handAt(columns, t, travel, s = GUITAR) {
       };
     }
   }
-  if (cur && t <= cur.end) return { pressed: true, marks: cur.fingers.map((f) => markAt(f, s)) };
+  if (cur && t <= cur.end) {
+    const prev = columns[i - 1];
+    return { pressed: true, marks: cur.fingers.map((f) => {
+      const m = markAt(f, s);
+      // Arrived by a legato slide: sounding, but not picked again, so no strike.
+      m.slurred = !!prev?.fingers.some((g) => g.string === f.string && g.note?.slide === "legato");
+      m.lift = bendLift(m, t, s.strings);
+      // A slide carries the finger along its string, a fret per semitone. Onto the
+      // next note it lands where that grip holds the same string.
+      const note = f.note;
+      if (note?.slide && f.fret > 0) {
+        const onto = SLIDES_TO_NEXT.has(note.slide) && next?.fingers.find((g) => g.string === f.string);
+        const semi = slideAt(note, t - note.start, note.end - note.start,
+          { to: onto ? onto.fret - f.fret : 0, steps: false, eighth: cur.eighth });
+        if (semi) m.x = fretCentre(Math.max(1, f.fret + semi), s);
+      }
+      return m;
+    }) };
+  }
   return null;
 }
 

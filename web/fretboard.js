@@ -114,6 +114,8 @@ function gripsFrom({ tuning, notes, voiced, fingers: walked, seats }) {
       // thing to run per frame, and this pass has already done it.
       note: col.notes[0],
       start: Math.min(...col.notes.map((n) => n.start)),
+      // An eighth at the tempo here: how long a slide into or out of it takes (bend.js).
+      eighth: 30 / (gridAt(col.notes[0].start)?.bpm || 120),
       end: Math.max(...[...shape.keys()].map((n) => n.end)),
       // Each finger keeps its own note's onset, not the column's. A strum is a
       // chord whose notes are milliseconds apart, so this is what makes the glow
@@ -673,12 +675,16 @@ export function drawFretboard() {
   }
 
   // Strings, at their real gauges — the low E is four times the high E and looks
-  // it. Straight from the nut slot to the bridge, which is why they fan out.
+  // it. Straight from the nut slot to the bridge, which is why they fan out — except
+  // one being bent, which the fingertip drags sideways: nut, fingertip, bridge.
+  const now = handNow(lane, s);
   ctx.strokeStyle = hexA(PAINT.label, 0.65);
   for (let i = 0; i < s.strings; i++) {
+    const bent = now?.at?.marks.find((m) => m.lift && m.string === i);
     ctx.lineWidth = Math.max(1, s.gauges[i] * scale);
     ctx.beginPath();
     ctx.moveTo(X(-s.nutDepth), Y(stringOffsetAt(i, 0, s)));
+    if (bent) ctx.lineTo(X(bent.x), Y(stringOffsetAt(i + bent.lift, bent.x, s)));
     ctx.lineTo(X(last + s.overhang), Y(stringOffsetAt(i, last + s.overhang, s)));
     ctx.stroke();
   }
@@ -743,7 +749,7 @@ export function drawFretboard() {
   const spot = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
   const placing = shaping ? drawShaping(ctx, s, scale, X, Y, lane) : null;
   // Something else is on offer: the grip in the hand steps back. See drawHand.
-  drawHand(ctx, s, scale, X, Y, lane, shaping ? "ghost" : hovered || spot || resetPeeking ? "fade" : null);
+  drawHand(ctx, s, scale, X, Y, lane, now, shaping ? "ghost" : hovered || spot || resetPeeking ? "fade" : null);
   drawBundle(ctx, s, scale, X, Y, lane, held, w, h, chord, placing);
   if (hovered) drawOffer(ctx, s, scale, X, Y, hovered, lane);
   if (spot) drawNoteOffer(ctx, s, scale, X, Y, lane, spot);
@@ -989,7 +995,7 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true } = {
   ctx.lineWidth = 1.8;
   for (const g of barreGroups(marks.filter((m) => m.fret > 0 || m.dead))) {
     const pts = g.map((m) => ({
-      m, x: X(m.x), y: Y(stringOffsetAt(m.string, Math.max(0, m.x), s)),
+      m, x: X(m.x), y: Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s)),
       r: markRadius(m.x, scale, s),
     }));
     const x = pts[0].x, r = pts[0].r;      // one fret, so one x and one radius
@@ -1292,25 +1298,31 @@ function offeredSeat(lane) {
 
 const FADED = 0.4;   // the grip in the hand while another one is being considered
 
-function drawHand(ctx, s, scale, X, Y, lane, quiet) {
+// The hand at this frame: what drawHand draws and what the strings bend under.
+function handNow(lane, s) {
   // A 6-string board cannot honestly show a bass. Until the bass neck exists,
   // a lane with another string count gets the instrument and no fingers.
-  if (!lane || !lane.notes?.length) return;
+  if (!lane || !lane.notes?.length) return null;
   const found = gripsFor(lane);
-  if (!found || found.strings !== s.strings) return;
+  if (!found || found.strings !== s.strings) return null;
   // While the positions are on screen the hand holds the column being decided instead
   // of following the playhead: the boxes are a comparison, and a comparison against a
   // moving target is not one. A grip's own onset asks for it pressed and still — the
   // travel window is zero, so nothing can be mid-slide at the moment it starts.
   const frozen = frozenAt(lane);
   const t = frozen ?? boardTime();
-  const hue = lane.color || PAINT.accent;
-  if (editing && $("fretboardOnionEnabled").checked) drawOnion(ctx, s, scale, X, Y, found.columns, gripIndex(found.columns, t), hue);
   // THE HAND ONLY TRAVELS WHILE THE SONG DOES. Stopped, the board answers "what is
   // held here", and a finger drawn part-way to the next grip — which is where the
   // end of every note is — is a position nobody plays.
   const moving = frozen == null && transportPlaying();
-  const at = handAt(found.columns, t, moving ? travelSeconds() : 0, s);
+  return { found, t, moving, at: handAt(found.columns, t, moving ? travelSeconds() : 0, s) };
+}
+
+function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
+  if (!now) return;
+  const { found, t, moving, at } = now;
+  const hue = lane.color || PAINT.accent;
+  if (editing && $("fretboardOnionEnabled").checked) drawOnion(ctx, s, scale, X, Y, found.columns, gripIndex(found.columns, t), hue);
   if (!at) return;
   if (quiet === "ghost") {
     drawGrip(ctx, s, scale, X, Y, at.marks, PAINT.hint, false, { digits: false });
@@ -1334,10 +1346,10 @@ function drawHand(ctx, s, scale, X, Y, lane, quiet) {
     ctx.lineWidth = 1.8;
     for (const m of at.marks) {
       const u = (t - m.start) / decay;
-      if (!(u >= 0 && u < 1) || (!(m.fret > 0) && !m.dead)) continue;
+      if (!(u >= 0 && u < 1) || (!(m.fret > 0) && !m.dead) || m.slurred) continue;
       const r = markRadius(m.x, scale, s);
       ctx.beginPath();
-      ctx.arc(X(m.x), Y(stringOffsetAt(m.string, Math.max(0, m.x), s)), r * (1 + u), 0, Math.PI * 2);
+      ctx.arc(X(m.x), Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s)), r * (1 + u), 0, Math.PI * 2);
       ctx.strokeStyle = hexA(hue, HALO * (1 - u));
       ctx.stroke();
     }

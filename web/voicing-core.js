@@ -5,6 +5,7 @@
 import { noteName } from "./util.js";
 import { OVERLAP_EPS } from "./constants.js";
 import { fretboardFor } from "./fretboard-core.js";
+import { SLIDES_TO_NEXT as SLIDE_TO_NEXT } from "./bend.js";
 
 // One source of truth for string/fret choice, shared by the chord preview and
 // (via buildTabSpec) the Guitar Pro export, so what you see is what you export.
@@ -375,8 +376,8 @@ export const needsFret = (note) => !!(note.slide || note.bend || note.harmonic |
 // A shift/legato slide connects to the NEXT note along ONE string. A picked
 // shift may release into an open target on that string; a legato slide must land
 // fretted because the left hand sounds its target. Neither can change strings.
-// Only these two kinds link to a following note ("in"/"out" slides do not).
-export const SLIDE_TO_NEXT = new Set(["shift", "legato"]);
+// Only these two kinds link to a following note ("in"/"out" slides do not):
+// SLIDE_TO_NEXT, imported from bend.js, which plays and draws them.
 
 
 // Finite fallback cost for source data with no physically satisfiable edge.
@@ -2206,7 +2207,40 @@ export function voiceNotesFingered(notes, tuning, cap = Infinity, options = {}) 
       if (hand.seat != null) seats.set(note, hand.seat);
     }
   });
+  carrySlideFingers(chosen, fingers, seats);
   return { voiced, fingers, seats };
+}
+
+// A SLIDE KEEPS ITS FINGER, AND THE HAND GOES WITH IT. A shift/legato slide is one
+// finger travelling along its string, so the note it lands on is held by the finger
+// that left, and the hand's seat moves by the frets it slid. The walk prices each
+// column on its own and reads a finger off the seat it stands on, so left alone it
+// labels the target by fret distance — a 7→9 slide with the hand at 5 came out as
+// 3 → 4, and the board's digit changed under a finger that never lifted. The other
+// notes of a landing grip are counted from the seat the hand slid to.
+function carrySlideFingers(chosen, fingers, seats) {
+  for (let i = 1; i < chosen.length; i++) {
+    const prev = chosen[i - 1], cur = chosen[i];
+    if (!prev || !cur) continue;
+    let delta = null, seat = null;
+    const carried = new Set();
+    for (const [note, pos] of cur) {
+      if (!(pos.fret > 0)) continue;
+      for (const [from, at] of prev) {
+        if (at.string !== pos.string || !(at.fret > 0) || !SLIDE_TO_NEXT.has(from.slide) || !fingers.has(from)) continue;
+        fingers.set(note, fingers.get(from));
+        carried.add(note);
+        delta ??= pos.fret - at.fret;
+        seat ??= seats.get(from) ?? null;
+      }
+    }
+    if (delta == null || seat == null) continue;
+    seat += delta;
+    for (const [note, pos] of cur) {
+      seats.set(note, seat);
+      if (pos.fret > 0 && !carried.has(note)) fingers.set(note, Math.min(4, Math.max(1, pos.fret - seat + 1)));
+    }
+  }
 }
 
 // Classify the visible source notes whose exported fingering is no longer the

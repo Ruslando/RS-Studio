@@ -12,7 +12,7 @@
 // offset by the scroll position. Nothing here reads the DOM beyond the two
 // canvas contexts, and nothing mutates project state.
 
-import { BEND_TAG, bendCurve, bendPeak } from "./bend.js";
+import { BEND_TAG, SLIDE_IN, bendCurve, bendPeak, slideTargets } from "./bend.js";
 import { OVERLAP_EPS, REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono, stageUi } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
 import { contentH, pitchAt, xOf, yOf } from "./geometry.js";
@@ -240,21 +240,26 @@ function fxLabel(text, x, y) {
   sctx.restore();
 }
 
-// Draw a glide from each note marked with a slide toward its target — flat out
-// of the source, diving into the destination, arrowhead on the landing end —
-// matching how it exports to Guitar Pro. Dashed = legato (slurred).
-// A slide is drawn from a note to whatever the next note in time is, so this
-// needs the lane in time order. Cached per lane against S.voicingRevision, which
-// every edit bumps: this runs once per frame, on a path that fires on every
-// mousemove over the stage, and it was copying and sorting the whole lane each
-// time.
-const sortedLaneCache = new WeakMap();
-function notesByTime(lane) {
-  const hit = sortedLaneCache.get(lane);
-  if (hit && hit.revision === S.voicingRevision) return hit.sorted;
-  const sorted = [...lane.notes].sort((a, b) => a.start - b.start);
-  sortedLaneCache.set(lane, { revision: S.voicingRevision, sorted });
-  return sorted;
+// Slides are drawn as tab notation writes them: a short straight stroke, the same
+// size whatever the timing, with its arrowhead where the finger lands. A slide-out
+// leaves the END of its note, down or up; a slide-in arrives at the START of its
+// note, from below or above; a shift/legato runs diagonally into the head of the
+// note it lands on (the same voice of the next chord — slideTargets, which the
+// playback slides to as well), leaving its own note at least a stroke before the
+// end, so two touching notes still show a slant and not a vertical jump. Dashed =
+// legato (slurred, not picked again). The slant is at least SLIDE_RISE tall, so it
+// still reads as one when the rows are thin.
+// The targets are cached per lane against S.voicingRevision, which every edit bumps:
+// this runs once per frame, on a path that fires on every mousemove over the stage.
+const SLIDE_STROKE = 16;   // px along the time axis; as long as an arrowhead is readable
+const SLIDE_RISE = 8;      // px; the least a slide-in/-out climbs or falls
+const slideCache = new WeakMap();
+function laneSlides(lane) {
+  const hit = slideCache.get(lane);
+  if (hit && hit.revision === S.voicingRevision && hit.count === lane.notes.length) return hit.targets;
+  const targets = slideTargets(lane.notes);
+  slideCache.set(lane, { revision: S.voicingRevision, count: lane.notes.length, targets });
+  return targets;
 }
 
 export function drawSlides() {
@@ -262,30 +267,26 @@ export function drawSlides() {
   sctx.save(); fxStroke();
   for (const lane of S.state.lanes) {
     if (!lane.visible || !lane.notes.some((n) => n.slide)) continue;
-    const sorted = notesByTime(lane);
-    for (let i = 0; i < sorted.length; i++) {
-      const n = sorted[i];
+    const targets = laneSlides(lane);
+    const rowH = S.state.rowH, d = Math.max(SLIDE_RISE, rowH), mid = (n) => yOf(n.pitch) + rowH / 2;
+    for (const n of lane.notes) {
       if (!n.slide) continue;
-      const x0 = xOf(n.start), x1 = xOf(n.end), ym = yOf(n.pitch) + S.state.rowH / 2, d = S.state.rowH * 0.8;
+      const x0 = xOf(n.start), x1 = xOf(n.end), ym = mid(n);
+      const up = n.slide === "outUp" || n.slide === "inAbove" ? -1 : 1;   // where the far end sits
       let ax, ay, bx, by;
-      if (n.slide === "shift" || n.slide === "legato") {       // connect to the next note
-        const nxt = sorted[i + 1];
-        ax = x1; ay = ym;
-        bx = nxt ? xOf(nxt.start) : x1 + 14;
-        by = nxt ? yOf(nxt.pitch) + S.state.rowH / 2 : ym;
-      } else if (n.slide === "outUp") { ax = x1; ay = ym; bx = x1 + 14; by = ym - d; }
-      else if (n.slide === "outDown") { ax = x1; ay = ym; bx = x1 + 14; by = ym + d; }
-      else if (n.slide === "inBelow") { ax = x0 - 14; ay = ym + d; bx = x0; by = ym; }
-      else if (n.slide === "inAbove") { ax = x0 - 14; ay = ym - d; bx = x0; by = ym; }
-      else continue;
+      if (SLIDE_IN.has(n.slide)) { ax = x0 - SLIDE_STROKE; ay = ym + up * d; bx = x0; by = ym; }
+      else if (n.slide === "outDown" || n.slide === "outUp") { ax = x1; ay = ym; bx = x1 + SLIDE_STROKE; by = ym + up * d; }
+      else {
+        const onto = targets.get(n);
+        bx = onto ? xOf(onto.start) : x1 + SLIDE_STROKE;
+        by = onto ? mid(onto) : ym;
+        ax = Math.max(x0, Math.min(x1, bx - SLIDE_STROKE)); ay = ym;
+      }
       if (Math.max(ax, bx) < vx0 || Math.min(ax, bx) > vx1) continue;
-      // Control point holds the source pitch to mid-run, so the curve leaves
-      // flat and dives into the target — reads as a glide, not a plain diagonal.
-      const cx = (ax + bx) / 2, cy = ay;
       sctx.setLineDash(n.slide === "legato" ? [5, 4] : []);
-      sctx.beginPath(); sctx.moveTo(ax, ay); sctx.quadraticCurveTo(cx, cy, bx, by); sctx.stroke();
+      sctx.beginPath(); sctx.moveTo(ax, ay); sctx.lineTo(bx, by); sctx.stroke();
       sctx.setLineDash([]);
-      fxArrow(bx, by, Math.atan2(by - cy, bx - cx));
+      fxArrow(bx, by, Math.atan2(by - ay, bx - ax));
     }
   }
   sctx.restore();
