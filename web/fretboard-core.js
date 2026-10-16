@@ -555,6 +555,45 @@ export function pickBox(boxes, x, y) {
   return best;
 }
 
+// Every string under a barre must sound at that fret or above it. A missing,
+// muted, open or lower-fretted string breaks the span; a higher finger covers it.
+export function barreSpanSupported(positions, fret, lo, hi) {
+  if (!Number.isInteger(lo) || !Number.isInteger(hi)) return false;
+  for (let string = lo; string <= hi; string++) {
+    if (!positions.some(p => p.string === string && p.fret >= fret
+      && !p.dead && !p.note?.fx?.dead && p.note?.harmonic !== "natural")) return false;
+  }
+  return true;
+}
+
+// Group only connected contacts of the same finger and visual state. Split a
+// disconnected grip into partial barres/fingertips instead of drawing over gaps.
+export function barreGroups(marks, filled = true) {
+  const groups = [], byFinger = new Map();
+  for (const m of marks) {
+    if (!(m.finger > 0) || !(m.fret > 0) || !Number.isInteger(m.string)
+      || m.dead || m.note?.fx?.dead || m.note?.harmonic === "natural") { groups.push([m]); continue; }
+    const key = `${m.finger}:${m.fret}:${!!m.note?.fx?.ghost}:${m.pressed ?? filled}:${m.opacity ?? 1}:${!!m.releasing}`;
+    if (!byFinger.has(key)) byFinger.set(key, []);
+    byFinger.get(key).push(m);
+  }
+  for (const contacts of byFinger.values()) {
+    const sorted = [...contacts].sort((a, b) => a.string - b.string);
+    const first = sorted[0];
+    const support = marks.filter(m => (m.pressed ?? filled) === (first.pressed ?? filled)
+      && !!m.releasing === !!first.releasing && (m.opacity ?? 1) > 0);
+    let connected = [];
+    for (const m of sorted) {
+      if (connected.length && !barreSpanSupported(support, m.fret, connected.at(-1).string, m.string)) {
+        groups.push(connected); connected = [];
+      }
+      connected.push(m);
+    }
+    groups.push(connected);
+  }
+  return groups;
+}
+
 // ---- what the hand is holding ----
 // The board says where the hand is; it cannot say what that is, and a player reads
 // "D#sus4" faster than six fret numbers.

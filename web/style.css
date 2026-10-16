@@ -1152,12 +1152,7 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 }
 #rulerRight { display: block; flex: none; background: var(--piano-bg); border-left: 1px solid var(--stage-line); cursor: pointer; }
 
-/* Draw above the canvas and controls: an inset outline could be covered. */
-#fretboardPanel[data-editing]::before {
-  content: ""; position: absolute; inset: 3px; z-index: var(--z-outline);
-  border: 2px dashed var(--stage-text); border-radius: calc(var(--r-container) - 3px);
-  pointer-events: none;
-}
+
 .dp-run { align-items: center; gap: var(--s-sibling); }
 .dp-run { display: flex; justify-content: center; }
 .np-drop .np-copy { overflow-wrap: anywhere; }
@@ -1246,4 +1241,42 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   #artifactsPanel, #artifactsContent { transition: none; }
+}
+
+/* One candidate at a time, with controls that remain inside a narrow board. */
+#fretboardPin { max-width: calc(100% - 8px); flex-wrap: wrap; }
+#fretboardAlternatives { display: flex; align-items: center; gap: var(--s-pair); }
+#fretboardAlternatives[hidden] { display: none; }
+#fretboardAltCount { min-width: 5ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
+#fretboardAltPrev svg, #fretboardAltNext svg { transform: rotate(-90deg); }
+
+#fretboardPin #fretboardChoose:not(:disabled) { color: var(--stage-text); }
+
+/* A fixed toolbar leaves the neck at full width and keeps related actions together. */
+#fretboardControls {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 2;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 6px 12px; background: var(--stage); border-top: 1px solid var(--stage-line);
+}
+#fretboardControls > #fretboardEdit { flex: none; min-width: 58px; }
+#fretboardCapoField, #fretboardHandField { display: flex; align-items: center; gap: 6px; }
+#fretboardCapoField label, #fretboardHandField label { color: var(--stage-label); font-size: var(--text-caption); }
+#fretboardCapo { width: 64px; min-width: 0; }
+#fretboardHand { width: 76px; min-width: 0; }
+#fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField) { display: none; }
+#fretboardControls #fretboardPin {
+  position: static; flex: 1; min-width: 0; max-width: none;
+  padding: 0 0 0 8px; border: 0; border-left: 1px solid var(--stage-line);
+  border-radius: 0; background: transparent; gap: 4px;
+}
+#fretboardShape { margin-left: auto; }
+#fretboardPanel[data-collapsed] #fretboardControls { visibility: hidden; pointer-events: none; }
+
+#fretboardPanel { container-type: inline-size; }
+@container (max-width: 620px) {
+  #fretboardControls #fretboardPin {
+    flex-basis: 100%; padding: 6px 0 0; border-left: 0;
+    border-top: 1px solid var(--stage-line);
+  }
+  #fretboardShape { margin-left: 0; }
 }

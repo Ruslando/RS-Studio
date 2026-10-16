@@ -752,13 +752,13 @@ function writeAlternative(colNotes, choice, influence) {
 // note as a ring you click (setNotePosition), which moves the note and never touches
 // the hand. So the two edits are two gestures, and neither has to infer the other.
 export function setHandAnchor(lane, t, fret) {
-  if (!lane || !Number.isFinite(t) || !Number.isFinite(fret) || fret < 0) return;
+  if (!canEditLane(lane) || !Number.isFinite(t) || (fret !== null && (!Number.isFinite(fret) || fret < 1))) return;
   const near = (h) => Math.abs(Number(h.t) - t) <= 1e-6;
   const had = (lane.handHolds || []).find(near);
   const rest = (lane.handHolds || []).filter((h) => !near(h));
+  if ((!had && fret === null) || (had && Number(had.fret) === fret)) return;
   const prev = snapshotEdit();
-  const same = had && Number(had.fret) === fret;
-  lane.handHolds = (same ? rest : [...rest, { t, fret }]).sort((a, b) => a.t - b.t);
+  lane.handHolds = (fret === null ? rest : [...rest, { t, fret }]).sort((a, b) => a.t - b.t);
   commit(prev); draw(); refreshTabIfOpen();
 }
 

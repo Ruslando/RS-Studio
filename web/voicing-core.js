@@ -4,7 +4,7 @@
 
 import { noteName } from "./util.js";
 import { OVERLAP_EPS } from "./constants.js";
-import { fretboardFor } from "./fretboard-core.js";
+import { barreSpanSupported, fretboardFor } from "./fretboard-core.js";
 import { SLIDES_TO_NEXT as SLIDE_TO_NEXT } from "./bend.js";
 
 // One source of truth for string/fret choice, shared by the chord preview and
@@ -435,9 +435,9 @@ function fretOptions(note, tuning) {
   return options;
 }
 
-// A finger may cover several strings at one fret (a barre), but only when that
-// barre does not cross a sounding open string or a note fretted LOWER than the
-// barre. Higher frets are fine: another finger can press them in front of a
+// A finger may cover several strings at one fret (a barre), but only when
+// every string across that span is played at the same or a higher fret. Missing,
+// muted, open and lower-fretted strings break it. A higher finger can cover a
 // lower barre. With at most six strings, a tiny bitmask search enumerates every
 // physically valid barre/separate-fingertip partition rather than assuming that
 // every equal-fret note must share one finger.
@@ -460,8 +460,7 @@ function groupsAtEachFret(shape) {
       const members = same.filter((_, i) => mask & (1 << i));
       const loS = Math.min(...members.map((e) => e.string));
       const hiS = Math.max(...members.map((e) => e.string));
-      const blocked = entries.some((e) => e.string >= loS && e.string <= hiS && e.fret < fret);
-      if (!blocked) valid.push({ mask, members });
+      if (members.length === 1 || barreSpanSupported(entries, fret, loS, hiS)) valid.push({ mask, members });
     }
     // Enumerate every honest partition, not only the smallest one. Three notes
     // at one fret may be one barre or three separate fingertips; those grips do
@@ -1495,7 +1494,7 @@ function columnRewritePlan(columnNotes, choice, flow) {
 function writtenColumnForm(columnNotes) {
   const saved = columnNotes.find((n) => n.written)?.written;
   if (saved) return saved;
-  return columnNotes.map(({ pos, arrangement, written, ...rest }) => rest);
+  return columnNotes.map(({ arrangement, written, ...rest }) => ({ ...rest, ...(rest.pos ? { pos: { ...rest.pos } } : {}) }));
 }
 
 // Apply `choice` to one column of `laneNotes`, which means rewriting the column

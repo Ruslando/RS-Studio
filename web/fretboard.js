@@ -15,7 +15,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // editor, and past that cap the board shrinks and centres instead of stretching.
 // Both mm → px scales are the same one, always.
 
-import { boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
+import { barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
 import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardAdaptNext, fretboardAdaptPrev, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardStage } from "./dom.js";
 import { UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
@@ -23,7 +23,7 @@ import { dpr, hexA, noteName, rememberPref } from "./util.js";
 import { panelMotion } from "./panel-motion.js";
 import { splitter } from "./splitters.js";
 import { draw } from "./repaint.js";
-import { MAX_CAPO, editLanes } from "./lanes.js";
+import { MAX_CAPO, canEditLane, editLanes } from "./lanes.js";
 import { songBarStarts } from "./song-bars.js";
 import { gridAt, gridBpm, gridSegments, segBeatSec } from "./grid.js";
 import { playbackTime, transportPlaying } from "./playback.js";
@@ -45,6 +45,7 @@ import { toast } from "./notify.js";
 // = --s-group. A canvas cannot read a token, which is the same concession rule 15
 // already makes for the stage's colours and constants.js makes for its fonts.
 const PAD = 16;
+const controlsHeight = () => Math.max(40, $("fretboardControls").offsetHeight + 8);
 
 // Off at launch: the neck is a second view of the song, and the editor opens on the
 // song. A session toggle either way — like the marker lanes, and like zoom.
@@ -200,15 +201,7 @@ const allowedAt = (lane, tuning, s) => (p) =>
 const travelSeconds = () => 60 / (gridBpm() || 120);
 
 // ---- other positions ----
-// The list the deleted Tab preview sidebar held as cards, drawn on the neck those
-// cards were each a small diagram of. A card has to redraw the instrument at 22px a
-// fret to say "fret 9 instead of fret 4"; the board is already saying it at full
-// size, and six shapes on one neck compare in a glance in a way six diagrams in a
-// grid never did — which is why the sidebar is gone.
-//
-// It is a mode, because the boxes are only legible while nothing else is moving: the
-// hand freezes on the column being decided rather than following the playhead. That
-// is also the honest reading of the button — you are looking at one chord.
+// Edit mode previews one candidate at a time; arrows browse it and Use position commits it.
 let altsOn = false;
 let alts = null;      // { note, rev, t0, notes, influence, ranked, boxes, hover }
 // READING THE NECK, OR WORKING ON IT. Off by default, and off is most of the time: a
@@ -218,36 +211,39 @@ let alts = null;      // { note, rev, t0, notes, influence, ranked, boxes, hover
 // this be, and what would it do to its neighbours") and none of them is worth the
 // panel's width while you are only watching the song go past.
 let editing = false;
-// THE WAY IN IS THE GRIP ITSELF. Outside the mode the board is a picture, and the one
-// thing on it you can point at is what the hand is holding: click the note, the
-// chord or the hand's fret, and the bundle under it offers Edit. One way in, so the
-// walkthrough and the board teach the same gesture. It replaced a pencil in a side strip, which was a control about the
-// grip placed as far from the grip as the panel allowed.
-let armed = false;
+let previewAlternative = true;
+let alternativeIndex = 0, alternativeCount = 0, alternativeKey = "", activeAlternative = null;
+
+function selectAlternative(key, items) {
+  if (alternativeKey !== key) { alternativeKey = key; alternativeIndex = 0; }
+  alternativeCount = items.length;
+  alternativeIndex = Math.max(0, Math.min(alternativeIndex, items.length - 1));
+  return items[alternativeIndex] || null;
+}
+
+function stepAlternative(delta) {
+  if (!alternativeCount) return;
+  previewAlternative = true;
+  alternativeIndex = Math.max(0, Math.min(alternativeCount - 1, alternativeIndex + delta));
+  drawFretboard();
+}
+
+function useAlternative() {
+  const offer = activeAlternative, lane = currentLane();
+  if (!offer || !lane) return;
+  previewAlternative = false;
+  if (offer.box) applyColumnAlternative(alts.notes, offer.box.choice, alts.influence);
+  else setNotePosition(offer.hovered.note, offer.hovered.string, offer.hovered.fret);
+}
+
 let altsJob = null;   // the note a request is out for, so one column is asked once
 
-// EVERY PLACE EACH NOTE COULD GO, one note at a time, drawn by the SAME toggle. It
-// was a second switch beside the boxes and the pair could not be told apart: "show
-// other positions" and "show every position" are the same sentence, and a user facing
-// two of them has to discover the difference by trying both. They are one question at
-// two grains — which grips could this be, and where could each note go — so they are
-// one view, and the grain is said by the SHAPE of the mark instead of by a mode: a
-// rounded BOX is a whole grip (hover it to see it played), a CIRCLE is one note's
-// other home (click it to move that note there). Two marks, two meanings, one switch.
+// Only the displayed alternative is a click target. Custom shape entry retains
+// its own per-note targets while that explicit mode is active.
 let spots = null;     // last frame's targets: { note, string, fret, x0, x1, y0, y1 }
 let spotHover = -1;
 
-// A SHAPE THE ENGINE NEVER OFFERED, stated outright. The candidates are the grips it
-// can build and rank; a player who wants one it never enumerated has to be able to say
-// so directly @@ a string and a fret per note, and nothing else.
-//
-// Chords only, and that is not a restriction: a single note's every position is already
-// on the board as circles you click, so there is nothing left to build. What a chord
-// has that a note has not is the COMBINATION, which is the thing the enumerator prunes.
-//
-// It walks the notes low to high, one at a time, because sixteen unlabelled circles on
-// one neck cannot say which of them belongs to which note. The heading names the note
-// being placed, which is the whole instruction (rule 24: state, never prose).
+// Custom shape entry keeps its existing staged walk; its redesign is separate.
 let shaping = null;   // { notes, picked: Map(note -> { string, fret }) }
 
 // THE MOMENT THE BOARD SHOWS. While the song runs that is the playhead. Stopped, it is
@@ -286,8 +282,8 @@ function frozenAt(lane) {
   // on, the offers freeze the column, and the hand then sat on one chord until you hit
   // pause.
   if (transportPlaying()) return null;
-  if (alts?.rev === S.voicingRevision && alts.lane === lane) return alts.t0;
   if (!altsOn) return null;
+  if (alts?.rev === S.voicingRevision && alts.lane === lane) return alts.t0;
   const note = focusNote(lane), found = lane && gripsFor(lane);
   if (!note || !found) return null;
   const i = gripIndex(found.columns, note.start + 1e-6);
@@ -320,14 +316,10 @@ function altsFor(note) {
   return null;
 }
 
-// A candidate box represents a complete playable shape. Hover previews it;
-// clicking applies the whole shape. A ring still changes only one note.
-
-// The mode. Turning it on brings up the working views; turning it off puts them all
-// away, so leaving edit mode cannot leave a stray ghost or a field of boxes behind.
+// The fixed Edit button owns the preview and editing controls.
 export function setFretboardEdit(on) {
   editing = !!on && visible;
-  armed = false;
+  previewAlternative = true;
   fretboardEdit.setAttribute("aria-pressed", String(editing));
   fretboardEdit.textContent = editing ? "Done" : "Edit";
   fretboardPanel.toggleAttribute("data-editing", editing);
@@ -335,7 +327,6 @@ export function setFretboardEdit(on) {
   setFretboardAlts(editing);
   if (!editing) { setFretboardShape(false); }
   fretboardEl.style.cursor = "";
-  hoverFret = 0;
   if (!editing) { endResetPreview(); fretboardPin.hidden = true; }
   layoutFretboard();
 }
@@ -344,6 +335,7 @@ function setFretboardAlts(on) {
   altsOn = !!on && visible;
   if (!altsOn) {
     alts = null; altsJob = null; spots = null; spotHover = -1;
+    activeAlternative = null; alternativeCount = 0; alternativeKey = "";
     fretboardEl.style.cursor = "";
   }
   drawFretboard();
@@ -432,7 +424,7 @@ export const fretboardVisible = () => visible;
 // subtracted: it costs the board about 2px of height, and asking the panel for the
 // height a slightly wider board wanted just leaves that 2px as slack it centres in.
 const boardHeight = (w, s) =>
-  Math.round(boardWidth(s) * ((w - 2 * PAD) / boardLength(s)) + 2 * PAD);
+  Math.round(boardWidth(s) * ((w - 2 * PAD) / boardLength(s)) + 2 * PAD + controlsHeight(w));
 
 // THE PANEL IS AS TALL AS THE TALLER OF ITS TWO HALVES. It used to be the board's own
 // height alone, which is a number the strip beside it has no say in — and the strip is
@@ -472,12 +464,12 @@ export function setFretboardVisible(on) {
     fretboardBusy.hidden = true;
     endResetPreview();
     fretboardPin.hidden = true;
-    editing = false; armed = false;
+    editing = false;
     fretboardPanel.removeAttribute("data-editing");
     fretboardEdit.setAttribute("aria-pressed", "false");
     fretboardEdit.textContent = "Edit";
     altsOn = false; alts = null; altsJob = null;
-    spots = null; spotHover = -1; hoverFret = 0; shaping = null;
+    spots = null; spotHover = -1; shaping = null;
     fretboardShape.hidden = true;
     fretboardApply.hidden = true;
   }
@@ -562,8 +554,20 @@ export function drawFretboard() {
   // and this only has to choose between three sizes. A string at the nut is a pitch
   // row, so it gets rule 6's anchored 9 when 11 will not fit, and nothing when 9
   // will not either: the same "drop the label too wide for its note" the stage does.
+  const capoControl = $("fretboardCapo");
+  capoControl.value = String(Number(lane?.capo) || 0);
+  capoControl.disabled = !editing || !canEditLane(lane) || transportPlaying();
+  const handControl = $("fretboardHand");
+  const maxHand = Math.max(1, lane ? laneFretCount(lane) : s.frets);
+  if (handControl.options.length !== maxHand + 1) {
+    handControl.replaceChildren(new Option("Auto", ""));
+    for (let fret = 1; fret <= maxHand; fret++) handControl.add(new Option(String(fret), String(fret)));
+  }
+  handControl.value = held ? String(held.fret) : "";
+  handControl.disabled = !editing || !canEditLane(lane) || transportPlaying();
+  const neckH = Math.max(2 * PAD + 1, h - controlsHeight(w));
   const rowPx = (s.spreadAtNut / (s.strings - 1))
-    * Math.min((w - 2 * PAD) / boardLength(s), (h - 2 * PAD) / boardWidth(s));
+    * Math.min((w - 2 * PAD) / boardLength(s), (neckH - 2 * PAD) / boardWidth(s));
   const tunePx = rowPx >= 11 ? 11 : rowPx >= STAGE_ANCHORED ? STAGE_ANCHORED : 0;
   const strung = tuning && tuning.length === s.strings && tunePx ? tuning : null;
   // The tuning's own gutter, left of the nut. Its width follows the widest name it
@@ -573,17 +577,28 @@ export function drawFretboard() {
   const gutter = strung
     ? Math.max(...strung.map((p) => ctx.measureText(noteName(p)).width)) + 8 : 0;
   // One scale for both axes — the whole point. Whichever dimension binds, binds.
-  const scale = Math.min((w - 2 * PAD - gutter) / boardLength(s), (h - 2 * PAD) / boardWidth(s));
+  const scale = Math.min((w - 2 * PAD - gutter) / boardLength(s), (neckH - 2 * PAD) / boardWidth(s));
   if (!(scale > 0)) return;
   const originX = PAD + gutter + (w - 2 * PAD - gutter - boardLength(s) * scale) / 2
     + s.nutDepth * scale;
   const X = (mm) => originX + mm * scale;              // mm from the nut
   const direction = $("fretboardStringOrder")?.value === "low-top" ? -1 : 1;
-  const Y = (off) => h / 2 + off * scale * direction;              // mm from the centreline
-  // Kept for the pointer, exactly as `alts.boxes` is: hit-testing against the frame
-  // the pointer was resolved in cannot disagree with what is on screen, and a board
-  // that has not been drawn yet has nothing to click.
-  view = { originX, scale, mid: h / 2, s, direction };
+  const Y = (off) => neckH / 2 + off * scale * direction;              // mm from the centreline
+  // Resolve the selected preview before painting its hand-position band.
+  const at = editing ? focusGrip(lane, s) : null;
+  const chord = (at?.marks.length || 0) > 1;
+  spots = null;
+  // And the working views stand down with it. They are offers about one column, so a
+  // column arriving sixty times a second makes them noise — and the boxes would ask the
+  // worker for a fresh set on every one of them.
+  const offering = editing && altsOn && !shaping && !transportPlaying();
+  activeAlternative = null; alternativeCount = 0;
+  const chordOffer = offering && chord ? drawAlternatives(ctx, s, scale, X, Y, lane, at) : null;
+  const noteOffer = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
+  const hovered = previewAlternative ? chordOffer : null;
+  const spot = previewAlternative ? noteOffer : null;
+  activeAlternative = hovered || spot;
+  fretboardPanel.dataset.alternativeCount = String(activeAlternative ? 1 : 0);
   const nutHalf = boardHalfWidthAt(0, s), endHalf = boardHalfWidthAt(last, s);
 
   // The slab: parallel behind the nut, tapered to the last fret, parallel again
@@ -601,18 +616,6 @@ export function drawFretboard() {
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = PAINT.line; ctx.lineWidth = 1; ctx.stroke();
-
-  // IN EDIT MODE THE WOOD IS A CONTROL, so it answers the pointer the way every other
-  // control does (rule 9). The fill is the one rule 15 already names for something that
-  // sits on the stage and cannot take --control: --stage-chrome-hover, one step off the
-  // board's own --stage-chrome. Painted straight onto the slab and UNDER the inlays,
-  // because what lights up is the board itself and not a mark laid on it — which is
-  // also what keeps it from being read as a second anchor band.
-  if (hoverFret > 0 && hoverFret <= s.frets) {
-    ctx.fillStyle = PAINT.chromeHover;
-    fretSpace(ctx, hoverFret, s, X, Y);
-    ctx.fill();
-  }
 
   // Inlays, cut into the board, so they sit under the strings and the frets.
   ctx.fillStyle = hexA(PAINT.label, 0.45);
@@ -783,14 +786,6 @@ export function drawFretboard() {
     ctx.fillStyle = PAINT.text;
     ctx.fillRect(X(x) - 3 * scale, Math.min(Y(-half), Y(half)), 6 * scale, half * 2 * scale);
   }
-  // Where a dragged capo would land: an outline, like the hand as it WOULD stand.
-  if (capoDrag && capoDrag.lane === lane && capoDrag.at !== (s.capo || 0)) {
-    const x = capoX(capoDrag.at, s), half = boardHalfWidthAt(Math.max(0, x), s) + 1;
-    ctx.save();
-    ctx.strokeStyle = lane.color || PAINT.accent; ctx.lineWidth = 1.8; ctx.setLineDash([3, 2]);
-    ctx.strokeRect(X(x) - 3 * scale, Math.min(Y(-half), Y(half)), 6 * scale, half * 2 * scale);
-    ctx.restore();
-  }
 
   // Fret numbers below the board, on the dotted frets only — a number under
   // every fret is 22 numbers nobody reads. Mono, because a fret number is a
@@ -826,15 +821,6 @@ export function drawFretboard() {
   // the COMBINATION, and most combinations are not playable, so it gets the boxes the
   // engine vouched for and no free per-note circles. Building a combination nobody
   // vouched for is what the shape walk is for, and it is a mode you ask for.
-  const at = editing ? focusGrip(lane, s) : null;
-  const chord = (at?.marks.length || 0) > 1;
-  spots = null;
-  // And the working views stand down with it. They are offers about one column, so a
-  // column arriving sixty times a second makes them noise — and the boxes would ask the
-  // worker for a fresh set on every one of them.
-  const offering = altsOn && !shaping && !transportPlaying();
-  const hovered = offering && chord ? drawAlternatives(ctx, s, scale, X, Y, lane, at) : null;
-  const spot = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
   const placing = shaping ? drawShaping(ctx, s, scale, X, Y, lane) : null;
   // Something else is on offer: the grip in the hand steps back. See drawHand.
   drawHand(ctx, s, scale, X, Y, lane, now, shaping ? "ghost" : hovered || spot || resetPeeking ? "fade" : null);
@@ -861,7 +847,7 @@ export function drawFretboard() {
     ? !gripsFor(lane) ? "Working out the fingering"
       : offering && chord && !alts ? "Finding other positions" : ""
     : "";
-  fretboardBusy.hidden = !waiting;
+  fretboardBusy.hidden = !editing || !waiting;
   if (waiting && fretboardBusyLabel.textContent !== waiting) fretboardBusyLabel.textContent = waiting;
 }
 
@@ -900,47 +886,33 @@ function endResetPreview() {
   $("fretboardResetStatus").hidden = true;
 }
 
-// THE BUNDLE, HUNG UNDER THE GRIP IT BELONGS TO. One floating group, and what is in
-// it is the state: Edit on a grip you clicked; in the mode, Done, the shape walk on
-// a chord, and — on a column that carries an override — its three switches and the
-// way back. Centred under the note or chord and just clear of its lowest mark, so it
-// reads as part of that grip; above it when the grip sits on the bottom string.
-//
-// While the song plays it parks at the foot of the board with Done alone: the grip
-// is moving, and a control that chases it cannot be clicked.
+// Reserve room for the controls only in edit mode, below the strings.
 function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placing) {
   const playing = transportPlaying();
-  const shown = editing || (armed && !playing);
+  const shown = editing;
   fretboardPin.hidden = !shown;
   if (!shown) { endResetPreview(); return; }
-  const column = editing && !shaping && !playing ? pinnedColumn(lane) : null;
-  const overridden = editing && !shaping && !playing && (!!column || !!held);
+  const column = (editing) && !shaping && !playing ? pinnedColumn(lane) : null;
+  const overridden = (editing) && !shaping && !playing && (!!column || !!held);
   // While a shape is being built the bundle names the note being placed, which is
   // the one thing you need to know and the reason no sentence says what to do.
   fretboardName.hidden = !placing;
   if (placing) fretboardName.textContent = noteName(placing.pitch);
-  fretboardEdit.hidden = !!shaping;
   // Chords only: a lone note has every position on the board already.
-  fretboardShape.hidden = !editing || playing || (!chord && !shaping);
+  fretboardShape.hidden = !(editing) || playing || (!chord && !shaping);
+  $("fretboardAlternatives").hidden = playing || !!shaping;
+  $("fretboardAltCount").textContent = alternativeCount ? `${alternativeIndex + 1} / ${alternativeCount}`
+    : chord && (alts?.note !== focusNote(lane) || alts?.rev !== S.voicingRevision) ? "Loading..." : "No alternatives";
+  $("fretboardAltPrev").disabled = alternativeCount === 0 || alternativeIndex === 0;
+  $("fretboardAltNext").disabled = alternativeCount === 0 || alternativeIndex >= alternativeCount - 1;
+  $("fretboardChoose").disabled = !activeAlternative;
   fretboardApply.hidden = !shaping || !!placing;
   fretboardAuto.hidden = !overridden;
   refreshPinControls(lane, overridden);   // before measuring: they change its width
   if (!overridden) endResetPreview();
 
-  const grip = playing ? null : focusGrip(lane, s);
   const focus = focusNote(lane);
-  const marks = (grip?.marks || []).map((m) => ({
-    x: X(m.x), y: Y(stringOffsetAt(m.string, Math.max(0, m.x), s)), r: markRadius(m.x, scale, s),
-  }));
-  const bw = fretboardPin.offsetWidth, bh = fretboardPin.offsetHeight, gap = 6;
-  const foot = height - bh - 4;
-  const cx = marks.length
-    ? (Math.min(...marks.map((m) => m.x)) + Math.max(...marks.map((m) => m.x))) / 2
-    : held && !playing ? X(fretCentre(held.fret || 1, s)) : width / 2;
-  const below = marks.length ? Math.max(...marks.map((m) => m.y + m.r)) + gap : foot;
-  const above = marks.length ? Math.min(...marks.map((m) => m.y - m.r)) - gap - bh : foot;
-  fretboardPin.style.left = `${Math.max(4, Math.min(width - bw - 4, cx - bw / 2))}px`;
-  fretboardPin.style.top = `${below <= foot ? below : Math.max(4, above)}px`;
+  const grip = playing ? null : focusGrip(lane, s);
   if (!resetPeeking || !overridden) return;
 
   const time = beatUnderBoard();
@@ -1034,20 +1006,6 @@ function glowString(ctx, s, scale, X, Y, i, hue) {
   ctx.stroke();
 }
 
-// Marks that one finger holds at one fret, together; everything else alone. A dead
-// note and an open string are never barred — neither is a finger pressing a fret.
-function barreGroups(marks) {
-  const groups = [], byFinger = new Map();
-  for (const m of marks) {
-    if (!(m.finger > 0) || !(m.fret > 0) || m.dead || m.note?.harmonic === "natural") { groups.push([m]); continue; }
-    const key = `${m.finger}:${m.fret}:${!!m.note?.fx?.ghost}:${m.pressed ?? ""}:${m.opacity ?? 1}`;
-    const g = byFinger.get(key);
-    if (g) g.push(m);
-    else { const fresh = [m]; byFinger.set(key, fresh); groups.push(fresh); }
-  }
-  return groups;
-}
-
 // The glyph on a filled marker: --on-accent's job, done for a colour the design
 // system does not own. The layer's hue is the user's — the palette's six are pale
 // and a dark one is a click away — so the digit takes whichever end of the stage's
@@ -1084,7 +1042,7 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineWidth = 1.8;
-  for (const g of barreGroups(marks.filter((m) => m.fret > 0 || m.dead))) {
+  for (const g of barreGroups(marks.filter((m) => m.fret > 0 || m.dead), filled)) {
     const pts = g.map((m) => ({
       m, x: X(m.x), y: Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s)),
       r: markRadius(m.x, scale, s),
@@ -1145,23 +1103,8 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
 const placeKey = (positions) =>
   positions.map((p) => `${p.string}:${p.fret}`).sort().join(" ");
 
-// Every other place the column could be played: one box per candidate, its marks
-// outlined inside it, cheapest-first from the same cost model and the same worker
-// call the sidebar's cards were ranked by. The box is the target — a shape is all of its notes or none of them,
-// so the pointer picks the grip and not a fret.
-//
-// One tier below the frets in --stage-hint: label is the fret wire, and at the wire's
-// own tier six boxes read as more instrument. The ladder that makes this legible is
-// the instrument quietest, the offers above it, the hand loudest.
-//
-// A QUIET CANDIDATE IS ITS BOX AND NOTHING ELSE. It used to draw a ring per fretted
-// note as well, and once the per-note targets moved onto the same toggle that made a
-// circle mean two things on one neck — "a place this note can go, click it" and "part
-// of a grip you can select". The box already says where the shape sits, because it
-// is drawn round exactly those frets. So: a rounded box is a grip, a circle is a note.
-// The whole placement (fingers, open strings, mutes) belongs to the **one under the
-// pointer**, which is why this returns it instead of drawing it: it is drawn last, over
-// the hand, by drawOffer.
+// Filter and rank all candidates, but expose only the selected box to painting
+// and hit testing. Browsing never mutates the current fingering.
 function drawAlternatives(ctx, s, scale, X, Y, lane, held) {
   const note = focusNote(lane);
   const found = note && altsFor(note);
@@ -1173,68 +1116,27 @@ function drawAlternatives(ctx, s, scale, X, Y, lane, held) {
   // from what you are being offered.
   const heldKey = held ? placeKey(held.marks) : "";
   const boxes = [];
-  let hovered = null;
-  ctx.lineWidth = 1.8;
   const limits = limitsFor(lane, found.notes?.[0]);
-  for (const choice of found.ranked) {
+  for (const choice of found.ranked || []) {
     const positions = [...choice.shape.values()];
-    if (placeKey(positions) === heldKey) continue;   // the hand is not another position
-    // A candidate's notes are this column's, in order (see columnAlternatives), so
-    // each one answers to the technique of the note it would move.
+    if (placeKey(positions) === heldKey) continue;
     if (choice.notes.some((voice, k) => {
       const p = choice.shape.get(voice), note = found.notes[k];
       return p && note && placementFault(limits?.get(note), note.pitch, p.string, found.tuning, s.frets);
     })) continue;
     const mm = shapeBox(positions, s);
     if (!mm) continue;
-    // Padded by a marker, so the border holds the shape instead of cutting it, and
-    // rounded like any other container in the app (rule 2).
     const pad = markRadius(mm.x1, scale, s) + 3;
-    // The choice rides on its box, so the pointer cannot pick a shape by index and
-    // land on a different one: a candidate with no drawable position has no box.
-    const box = {
-      choice,
-      x0: X(mm.x0) - pad, x1: X(mm.x1) + pad,
-      y0: Math.min(Y(mm.off0), Y(mm.off1)) - pad, y1: Math.max(Y(mm.off0), Y(mm.off1)) + pad,
-    };
-    if (boxes.length === found.hover) hovered = box;
-    boxes.push(box);
-    if (hovered === box) continue;              // drawn last, in full
-    ctx.strokeStyle = PAINT.hint;
-    boxPath(ctx, box);
-    ctx.stroke();
+    boxes.push({ choice, x0: X(mm.x0) - pad, x1: X(mm.x1) + pad,
+      y0: Math.min(Y(mm.off0), Y(mm.off1)) - pad, y1: Math.max(Y(mm.off0), Y(mm.off1)) + pad });
   }
-  found.boxes = boxes;
-  return hovered && { box: hovered, tuning: found.tuning };
+  const box = selectAlternative(`chord:${lane.id}:${found.note?.id}:${found.rev}`, boxes);
+  found.boxes = box ? [box] : [];
+  found.hover = box ? 0 : -1;
+  return box ? { box, tuning: found.tuning } : null;
 }
 
-// WHAT A POSITION COSTS IS NOT WRITTEN ON IT ANY MORE. Every box carried its
-// difference from the grip in the hand — "-4.3", "+1.8" — with the absolute in the
-// strip, and the boxes were sorted by it. Both are gone: the question the neck
-// answers is WHERE THE HAND GOES, and a number ranking six shapes answers a
-// different one, in units (frets of travel, summed) that read as a score.
-//
-// The price itself stays in the engine and is not dead: it is what drops an offer
-// that sits past this instrument's last fret, since the shape enumerator still
-// enumerates to fret 24 for every neck. It decides what is shown, not what is said
-// about it. The boxes' order is now only their paint order, and pickBox takes the
-// smallest box under the pointer rather than the first, so nothing you click
-// depends on it.
-
-const boxPath = (ctx, b) => {
-  ctx.beginPath();
-  ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 8);
-};
-
-// The candidate under the pointer, over everything including the hand: the whole grip
-// as the hand would hold it — barres, finger numbers, open strings ringing — in the
-// colour it will have once it is taken, because hover is a preview of the commit. A
-// brighter border alone answered "which one am I on" and not "what would I be
-// playing", which is the question a neck is for.
-//
-// Fingers are asked of assignFingers, the same function the exported tab asks, so the
-// numbers on the offer and the numbers on the hand mean the same thing. Outlined,
-// still: filled is what the hand does, and only one grip is being played.
+// The selected alternative is filled in the layer's hue over the dim original.
 function drawOffer(ctx, s, scale, X, Y, hovered, lane) {
   const { choice } = hovered.box;
   // The fingering the ENGINE would use if this shape were taken, keyed by string and
@@ -1253,11 +1155,7 @@ function drawOffer(ctx, s, scale, X, Y, hovered, lane) {
     }] : [];
   });
   const hue = lane.color || PAINT.accent;
-  ctx.strokeStyle = hue;
-  ctx.lineWidth = 1.8;
-  boxPath(ctx, hovered.box);
-  ctx.stroke();
-  drawGrip(ctx, s, scale, X, Y, marks, hue, false);
+  drawGrip(ctx, s, scale, X, Y, marks, hue, true);
 }
 
 // The grip the working views are all talking about: the frozen column, as marks that
@@ -1301,32 +1199,17 @@ function notePlaces(lane, s, at) {
     .map((p) => ({ ...p, mm: fretCentre(p.fret, s) })) };
 }
 
-// Quiet, a ring says WHERE and nothing else — the same tier and the same stroke the
-// candidate boxes use, for the same reason: at the fret wire's own brightness a
-// field of them reads as more instrument. What the move would actually play belongs
-// to the one under the pointer, which is why this returns it rather than drawing it.
+// Single notes use the same navigator, with one possible position at a time.
 function drawNotePlaces(ctx, s, scale, X, Y, lane, at) {
   const got = notePlaces(lane, s, at);
   if (!got) return null;
   const list = got.out.map((p) => spotBox(p, scale, s, X, Y));
-  spots = list;
-  const hovered = list[spotHover] || null;
-  ctx.lineWidth = 1.8;
-  ctx.strokeStyle = PAINT.hint;
-  for (const p of list) {
-    if (p === hovered) continue;
-    ctx.beginPath();
-    ctx.arc((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, Math.max(1, p.r - 0.9), 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  const hovered = selectAlternative(`note:${lane.id}:${got.at.marks[0]?.note?.id}:${S.voicingRevision}`, list);
+  spots = hovered ? [hovered] : [];
   return hovered ? { hovered, at: got.at } : null;
 }
 
-// And hovering one shows the WHOLE grip it would make, in the layer's hue, outlined
-// — barres, finger numbers, open strings ringing. A brighter ring would answer "which
-// one am I on"; the question a neck is for is "what would I be playing", and moving
-// one note re-fingers the hand around it. The fingers come from assignFingers, the
-// same function the exported tab asks, so the numbers mean what the tab will say.
+// Re-finger the preview after moving a single note, without changing the song.
 function drawNoteOffer(ctx, s, scale, X, Y, lane, { hovered, at }) {
   const moved = (m) => (m.note === hovered.note
     ? { ...m, string: hovered.string, fret: hovered.fret, x: fretCentre(hovered.fret, s) } : m);
@@ -1335,7 +1218,7 @@ function drawNoteOffer(ctx, s, scale, X, Y, lane, { hovered, at }) {
   const fingers = assignFingers(shape, handProfileForTuning(laneFretTuning(lane)));
   drawGrip(ctx, s, scale, X, Y,
     marks.map((m) => ({ ...m, finger: fingers.get(m.note) || 0 })),
-    lane.color || PAINT.accent, false);
+    lane.color || PAINT.accent, true);
 }
 
 // The grip before and the grip after, ghosted. Filled rather than outlined so a ghost
@@ -1408,7 +1291,7 @@ function offeredSeat(lane) {
     const i = columns ? gripIndex(columns, frozenAt(lane) ?? boardTime()) : -1;
     return i >= 0 ? Number(columns[i].seat) || 0 : 0;
   }
-  if (altsOn && alts?.boxes?.length) return Number(alts.boxes[alts.hover]?.choice?.seat) || 0;
+  if (altsOn && activeAlternative?.box) return Number(activeAlternative.box.choice.seat) || 0;
   return 0;
 }
 
@@ -1495,58 +1378,6 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
 // is one number where choosing a shape is six, and it is the number the voicer
 // actually decides with — everything else on the neck follows from it.
 
-let view = null;      // last frame's mm -> px mapping; see drawFretboard
-// Which fret the pointer is in, or 0. Only while the wood is a control: outside edit
-// mode the board is a picture, and a picture that lights up under the pointer is
-// promising something it will not do.
-let hoverFret = 0;
-
-// ---- the capo, as a handle ----
-// In edit mode the capo bar is grabbed and dragged along the neck, fret by fret, the
-// way the notes and the hand are moved on it. With no capo the nut is the handle: a
-// capo goes on by pulling it up the neck and comes off by dragging it back to the nut.
-let capoDrag = null;      // { lane, at } while dragging; `at` is the fret it would land on
-let capoDragged = false;  // swallows the click that ends a drag
-const capoX = (p, s) => (p > 0 ? capoLine({ ...s, capo: p }) : -s.nutDepth / 2);
-
-function mmUnder(e) {
-  const r = fretboardEl.getBoundingClientRect();
-  return { mm: (e.clientX - r.left - view.originX) / view.scale, off: Math.abs(e.clientY - r.top - view.mid) / view.scale };
-}
-
-// The capo bar, or the nut without one. Outside edit mode it is one more way in, like
-// a note or the hand (gripUnder) — the only one a layer with no notes yet has.
-function capoHit(e) {
-  if (!view) return false;
-  const { mm, off } = mmUnder(e);
-  return Math.abs(mm - capoX(view.s.capo || 0, view.s)) <= 6 && off <= boardHalfWidthAt(Math.max(0, mm), view.s) + 2;
-}
-const onCapo = (e) => editing && !shaping && capoHit(e);
-
-// The capo position nearest the pointer; the nut (0) when it is nearest of all.
-function capoUnder(e) {
-  const { mm } = mmUnder(e);
-  let best = 0;
-  for (let p = 1; p <= Math.min(Math.max(MAX_CAPO, view.s.capo || 0), view.s.frets - 1); p++)
-    if (Math.abs(mm - capoX(p, view.s)) < Math.abs(mm - capoX(best, view.s))) best = p;
-  return best;
-}
-
-// Which fret space a click landed in: the gap a finger sits in, named for the wire at
-// its far end, which is how a player names it. Off the wood in either axis is -1, and
-// behind the nut is 0 — there is no hand at the nut, so nothing is placed there.
-function fretUnder(e) {
-  if (!view) return -1;
-  const r = fretboardEl.getBoundingClientRect();
-  const mm = (e.clientX - r.left - view.originX) / view.scale;
-  const off = Math.abs(e.clientY - r.top - view.mid) / view.scale;
-  if (mm < 0 || off > boardHalfWidthAt(Math.max(0, mm), view.s)) return -1;
-  // Counted from the capo like every fret here; at or behind it there is no hand.
-  for (let n = 1; n <= view.s.frets; n++)
-    if (mm <= fretDistance(n, view.s.scale)) return Math.max(0, n - (view.s.capo || 0));
-  return -1;
-}
-
 // WHICH BEAT the hand is being put on. A beat and not a subdivision: the grid can be
 // as fine as a 32nd, and a hand that moves four times inside one beat is not a hand.
 // Measured from the bar it falls in, so a tempo or meter change cannot drift it.
@@ -1603,17 +1434,6 @@ function spotUnder(e) {
 // little slack — a mark on the top strings is a small target), the fret the hand is
 // anchored on, or the capo (the nut, without one). This is the whole clickable surface
 // of the board outside edit mode.
-function gripUnder(e) {
-  const lane = currentLane();
-  if (!lane || !view) return false;
-  const r = fretboardEl.getBoundingClientRect();
-  const px = e.clientX - r.left, py = e.clientY - r.top;
-  const X = (mm) => view.originX + mm * view.scale, Y = (off) => view.mid + off * view.scale * view.direction;
-  const onMark = (focusGrip(lane, view.s)?.marks || []).some((m) => Math.hypot(
-    px - X(m.x), py - Y(stringOffsetAt(m.string, Math.max(0, m.x), view.s))) <= markRadius(m.x, view.scale, view.s) + 4);
-  const seat = anchorFret(lane);
-  return onMark || (seat > 0 && fretUnder(e) === seat) || capoHit(e);
-}
 
 function boxUnder(e) {
   if (!altsOn || !alts?.boxes?.length) return -1;
@@ -1666,70 +1486,43 @@ export function init_fretboard() {
     const lane = currentLane();
     if (!lane) return;
     endResetPreview();
+    previewAlternative = false;
     clearOverrideAt(lane, pinnedColumn(lane)?.notes || null, beatUnderBoard());
     fretboardAuto.blur();
     drawFretboard();
   });
-  fretboardEl.addEventListener("mousedown", (e) => {
-    capoDragged = false;
-    const lane = currentLane();
-    if (e.button !== 0 || !lane || !onCapo(e)) return;
-    e.preventDefault();
-    capoDrag = { lane, at: Number(lane.capo) || 0 };
-    fretboardEl.style.cursor = "grabbing";
-  });
-  window.addEventListener("mousemove", (e) => {
-    if (!capoDrag) return;
-    const at = capoUnder(e);
-    if (at !== capoDrag.at) { capoDrag.at = at; drawFretboard(); }
-  });
-  window.addEventListener("mouseup", () => {
-    if (!capoDrag) return;
-    const { lane, at } = capoDrag;
-    capoDrag = null; capoDragged = true;
-    fretboardEl.style.cursor = "";
-    moveLaneCapo(lane, at);
-    drawFretboard();
-  });
-  fretboardEl.addEventListener("mousemove", (e) => {
-    if (capoDrag) return;
-    if (onCapo(e)) {
-      fretboardEl.style.cursor = "grab";
-      if (hoverFret || spotHover >= 0) { hoverFret = 0; spotHover = -1; drawFretboard(); }
-      return;
-    }
-    // A circle wins over the box it sits in. Both are clickable, and the smaller
-    // mark selects the single-note move when they overlap.
+  fretboardEl.addEventListener("mousemove", e => {
+    if (!editing || transportPlaying()) return;
     const spot = spots ? spots.indexOf(spotUnder(e)) : -1;
     const i = spot >= 0 || shaping ? -1 : boxUnder(e);
-    const fret = editing && !shaping && spot < 0 ? Math.max(0, fretUnder(e)) : 0;
-    fretboardEl.style.cursor = (editing ? spot >= 0 || i >= 0 || fret > 0 : !transportPlaying() && gripUnder(e)) ? "pointer" : "";
-    const moved = spot !== spotHover || fret !== hoverFret;
     spotHover = spot;
-    hoverFret = fret;
-    if (!moved && (!alts || i === alts.hover)) return;
-    if (alts) alts.hover = i;
+    fretboardEl.style.cursor = spot >= 0 || i >= 0 ? "pointer" : "";
     drawFretboard();
   });
   fretboardEl.addEventListener("mouseleave", () => {
-    fretboardEl.style.cursor = "";
-    const moved = spotHover >= 0 || hoverFret > 0;
-    spotHover = -1;
-    hoverFret = 0;
-    if (!moved && (!alts || alts.hover < 0)) return;
-    if (alts) alts.hover = -1;
-    drawFretboard();
+    fretboardEl.style.cursor = ""; spotHover = -1;
+    if (editing) drawFretboard();
   });
+  $("fretboardAltPrev").addEventListener("click", () => stepAlternative(-1));
+  $("fretboardAltNext").addEventListener("click", () => stepAlternative(1));
+  $("fretboardChoose").addEventListener("click", () => {
+    useAlternative(); $("fretboardChoose").blur();
+  });
+  const navigateAlternative = e => {
+    if (!(editing) || shaping || transportPlaying()) return;
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault(); e.stopPropagation(); stepAlternative(e.key === "ArrowLeft" ? -1 : 1);
+  };
+  fretboardPin.addEventListener("keydown", navigateAlternative);
+  fretboardEl.addEventListener("keydown", navigateAlternative);
+  window.addEventListener("keydown", e => {
+    if (fretboardStage.matches(":hover") || $("fretboardControls").matches(":hover, :focus-within")) navigateAlternative(e);
+  }, true);
   // The board is a control only while the mode says so. Anywhere on the wood, not
   // only off a candidate box: a box is a drawing of a place the notes could go, and
   // wanting the hand there is the commonest reason to be pointing at one.
   fretboardEl.addEventListener("click", (e) => {
-    if (capoDragged) { capoDragged = false; return; }
-    if (!editing) {
-      const on = !transportPlaying() && gripUnder(e);
-      if (on !== armed) { armed = on; drawFretboard(); }
-      return;
-    }
+    if (!editing || transportPlaying()) return;
     const lane = currentLane();
     if (!lane) return;
     // While a shape is being built the board is only that: a circle places the note
@@ -1746,6 +1539,7 @@ export function init_fretboard() {
     }
     // Rings place one note, candidate boxes place a whole shape, and bare wood
     // sets the hand position. The smaller ring wins when the marks overlap.
+    if (!previewAlternative) return;
     const spot = spotUnder(e);
     if (spot) { setNotePosition(spot.note, spot.string, spot.fret); return; }
     const box = alts?.boxes?.[boxUnder(e)];
@@ -1753,9 +1547,22 @@ export function init_fretboard() {
       applyColumnAlternative(alts.notes, box.choice, alts.influence);
       return;
     }
-    const fret = fretUnder(e);
-    if (fret <= 0) return;
-    setHandAnchor(lane, beatUnderBoard(), fret);
+  });
+  $("fretboardHand").addEventListener("change", e => {
+    const lane = currentLane();
+    if (editing && canEditLane(lane) && !transportPlaying()) {
+      setHandAnchor(lane, beatUnderBoard(), e.target.value === "" ? null : Number(e.target.value));
+    }
+    e.target.blur(); drawFretboard();
+  });
+  const capoControl = $("fretboardCapo");
+  for (let fret = 0; fret <= MAX_CAPO; fret++) {
+    capoControl.add(new Option(String(fret), String(fret)));
+  }
+  capoControl.addEventListener("change", () => {
+    if (editing && !transportPlaying()) moveLaneCapo(currentLane(), Number(capoControl.value));
+    capoControl.blur();
+    drawFretboard();
   });
   fretboardEdit.addEventListener("click", () => {
     fretboardEdit.blur();            // or it eats the arrow keys that walk the song
@@ -1763,6 +1570,7 @@ export function init_fretboard() {
   });
   fretboardShape.addEventListener("click", () => {
     fretboardShape.blur();
+    if (!editing) setFretboardEdit(true);
     setFretboardShape(!shaping);
   });
   // The one place on this panel where work is staged rather than applied as you go, so
@@ -1781,8 +1589,6 @@ export function init_fretboard() {
   });
   // Escape leaves the walk with nothing written, which is what the staging promised.
   // Transient depth: it is canvas state, above the selection and below every window.
-  // And then the mode itself, which no longer has a button of its own to leave by
-  // when nothing is under the hand.
   registerEscapeLayer(ESC_DEPTH.transient, () => {
     if (shaping) setFretboardShape(false);
     else if (editing) setFretboardEdit(false);
@@ -1796,6 +1602,7 @@ export function init_fretboard() {
   // observer on it would feed itself. #editor is flex-sized by the window and
   // the sidebars, and nothing here mutates it.
   new ResizeObserver(() => layoutFretboard()).observe(editorEl);
+  new ResizeObserver(() => layoutFretboard()).observe($("fretboardControls"));
   // The markup ships collapsed so the first paint has nothing to animate; this is
   // what puts the menu's check, the pull's label and `visible` in step with it.
   setFretboardVisible(visible);

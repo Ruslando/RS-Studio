@@ -1,0 +1,2008 @@
+{
+  "name": "RS Studio - Chord showcase",
+  "filename": null,
+  "created_at": "2026-10-16T18:51:36+00:00",
+  "saved_at": "2026-10-16T18:54:44+00:00",
+  "draft": false,
+  "duration": 96.0,
+  "tempo": 60,
+  "separated": false,
+  "separator": null,
+  "metadata": {
+    "title": "Chord showcase",
+    "artist": "RS Studio",
+    "album": "",
+    "coverArtName": "",
+    "titleLatin": "",
+    "artistLatin": "",
+    "albumLatin": "",
+    "year": null,
+    "coverArt": null,
+    "coverArtUpdatedAt": null
+  },
+  "stems": [],
+  "editLanes": [
+    {
+      "id": "edit",
+      "name": "Guitar chords",
+      "kind": "edit",
+      "color": "#6ee7b7",
+      "visible": true,
+      "active": true,
+      "locked": false,
+      "instrument": "electric",
+      "muted": false,
+      "tablatureEnabled": true,
+      "tuning": "guitar6",
+      "customTuning": "E4 B3 G3 D3 A2 E2",
+      "capo": 0,
+      "rocksmithArrangement": "rhythm",
+      "notes": [
+        {
+          "id": "n1",
+          "start": 0.0,
+          "end": 3.5,
+          "pitch": 40,
+          "pos": {
+            "string": 5,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n2",
+          "start": 0.0,
+          "end": 3.5,
+          "pitch": 47,
+          "pos": {
+            "string": 4,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n3",
+          "start": 0.0,
+          "end": 3.5,
+          "pitch": 52,
+          "pos": {
+            "string": 3,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n4",
+          "start": 0.0,
+          "end": 3.5,
+          "pitch": 55,
+          "pos": {
+            "string": 2,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n5",
+          "start": 0.0,
+          "end": 3.5,
+          "pitch": 59,
+          "pos": {
+            "string": 1,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n6",
+          "start": 0.0,
+          "end": 3.5,
+          "pitch": 64,
+          "pos": {
+            "string": 0,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n7",
+          "start": 4.0,
+          "end": 7.5,
+          "pitch": 40,
+          "pos": {
+            "string": 5,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n8",
+          "start": 4.0,
+          "end": 7.5,
+          "pitch": 47,
+          "pos": {
+            "string": 4,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n9",
+          "start": 4.0,
+          "end": 7.5,
+          "pitch": 52,
+          "pos": {
+            "string": 3,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n10",
+          "start": 4.0,
+          "end": 7.5,
+          "pitch": 56,
+          "pos": {
+            "string": 2,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n11",
+          "start": 4.0,
+          "end": 7.5,
+          "pitch": 59,
+          "pos": {
+            "string": 1,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n12",
+          "start": 4.0,
+          "end": 7.5,
+          "pitch": 64,
+          "pos": {
+            "string": 0,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n13",
+          "start": 8.0,
+          "end": 11.5,
+          "pitch": 45,
+          "pos": {
+            "string": 4,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n14",
+          "start": 8.0,
+          "end": 11.5,
+          "pitch": 52,
+          "pos": {
+            "string": 3,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n15",
+          "start": 8.0,
+          "end": 11.5,
+          "pitch": 57,
+          "pos": {
+            "string": 2,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n16",
+          "start": 8.0,
+          "end": 11.5,
+          "pitch": 60,
+          "pos": {
+            "string": 1,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n17",
+          "start": 8.0,
+          "end": 11.5,
+          "pitch": 64,
+          "pos": {
+            "string": 0,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n18",
+          "start": 12.0,
+          "end": 15.5,
+          "pitch": 48,
+          "pos": {
+            "string": 4,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n19",
+          "start": 12.0,
+          "end": 15.5,
+          "pitch": 52,
+          "pos": {
+            "string": 3,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n20",
+          "start": 12.0,
+          "end": 15.5,
+          "pitch": 55,
+          "pos": {
+            "string": 2,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n21",
+          "start": 12.0,
+          "end": 15.5,
+          "pitch": 60,
+          "pos": {
+            "string": 1,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n22",
+          "start": 12.0,
+          "end": 15.5,
+          "pitch": 64,
+          "pos": {
+            "string": 0,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n23",
+          "start": 16.0,
+          "end": 19.5,
+          "pitch": 50,
+          "pos": {
+            "string": 3,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n24",
+          "start": 16.0,
+          "end": 19.5,
+          "pitch": 57,
+          "pos": {
+            "string": 2,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n25",
+          "start": 16.0,
+          "end": 19.5,
+          "pitch": 62,
+          "pos": {
+            "string": 1,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n26",
+          "start": 16.0,
+          "end": 19.5,
+          "pitch": 66,
+          "pos": {
+            "string": 0,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n27",
+          "start": 20.0,
+          "end": 23.5,
+          "pitch": 43,
+          "pos": {
+            "string": 5,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n28",
+          "start": 20.0,
+          "end": 23.5,
+          "pitch": 47,
+          "pos": {
+            "string": 4,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n29",
+          "start": 20.0,
+          "end": 23.5,
+          "pitch": 50,
+          "pos": {
+            "string": 3,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n30",
+          "start": 20.0,
+          "end": 23.5,
+          "pitch": 55,
+          "pos": {
+            "string": 2,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n31",
+          "start": 20.0,
+          "end": 23.5,
+          "pitch": 59,
+          "pos": {
+            "string": 1,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n32",
+          "start": 20.0,
+          "end": 23.5,
+          "pitch": 67,
+          "pos": {
+            "string": 0,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n33",
+          "start": 24.0,
+          "end": 27.5,
+          "pitch": 45,
+          "pos": {
+            "string": 4,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n34",
+          "start": 24.0,
+          "end": 27.5,
+          "pitch": 52,
+          "pos": {
+            "string": 3,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n35",
+          "start": 24.0,
+          "end": 27.5,
+          "pitch": 57,
+          "pos": {
+            "string": 2,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n36",
+          "start": 24.0,
+          "end": 27.5,
+          "pitch": 61,
+          "pos": {
+            "string": 1,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n37",
+          "start": 24.0,
+          "end": 27.5,
+          "pitch": 64,
+          "pos": {
+            "string": 0,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n38",
+          "start": 28.0,
+          "end": 31.5,
+          "pitch": 50,
+          "pos": {
+            "string": 3,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n39",
+          "start": 28.0,
+          "end": 31.5,
+          "pitch": 57,
+          "pos": {
+            "string": 2,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n40",
+          "start": 28.0,
+          "end": 31.5,
+          "pitch": 60,
+          "pos": {
+            "string": 1,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n41",
+          "start": 28.0,
+          "end": 31.5,
+          "pitch": 65,
+          "pos": {
+            "string": 0,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n42",
+          "start": 32.0,
+          "end": 35.5,
+          "pitch": 53,
+          "pos": {
+            "string": 3,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n43",
+          "start": 32.0,
+          "end": 35.5,
+          "pitch": 57,
+          "pos": {
+            "string": 2,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n44",
+          "start": 32.0,
+          "end": 35.5,
+          "pitch": 60,
+          "pos": {
+            "string": 1,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n45",
+          "start": 32.0,
+          "end": 35.5,
+          "pitch": 65,
+          "pos": {
+            "string": 0,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n46",
+          "start": 36.0,
+          "end": 39.5,
+          "pitch": 41,
+          "pos": {
+            "string": 5,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n47",
+          "start": 36.0,
+          "end": 39.5,
+          "pitch": 48,
+          "pos": {
+            "string": 4,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n48",
+          "start": 36.0,
+          "end": 39.5,
+          "pitch": 53,
+          "pos": {
+            "string": 3,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n49",
+          "start": 36.0,
+          "end": 39.5,
+          "pitch": 57,
+          "pos": {
+            "string": 2,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n50",
+          "start": 36.0,
+          "end": 39.5,
+          "pitch": 60,
+          "pos": {
+            "string": 1,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n51",
+          "start": 36.0,
+          "end": 39.5,
+          "pitch": 65,
+          "pos": {
+            "string": 0,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n52",
+          "start": 40.0,
+          "end": 43.5,
+          "pitch": 42,
+          "pos": {
+            "string": 5,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n53",
+          "start": 40.0,
+          "end": 43.5,
+          "pitch": 49,
+          "pos": {
+            "string": 4,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n54",
+          "start": 40.0,
+          "end": 43.5,
+          "pitch": 54,
+          "pos": {
+            "string": 3,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n55",
+          "start": 40.0,
+          "end": 43.5,
+          "pitch": 57,
+          "pos": {
+            "string": 2,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n56",
+          "start": 40.0,
+          "end": 43.5,
+          "pitch": 61,
+          "pos": {
+            "string": 1,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n57",
+          "start": 40.0,
+          "end": 43.5,
+          "pitch": 66,
+          "pos": {
+            "string": 0,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n58",
+          "start": 44.0,
+          "end": 47.5,
+          "pitch": 47,
+          "pos": {
+            "string": 4,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n59",
+          "start": 44.0,
+          "end": 47.5,
+          "pitch": 54,
+          "pos": {
+            "string": 3,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n60",
+          "start": 44.0,
+          "end": 47.5,
+          "pitch": 59,
+          "pos": {
+            "string": 2,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n61",
+          "start": 44.0,
+          "end": 47.5,
+          "pitch": 62,
+          "pos": {
+            "string": 1,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n62",
+          "start": 44.0,
+          "end": 47.5,
+          "pitch": 66,
+          "pos": {
+            "string": 0,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n63",
+          "start": 48.0,
+          "end": 51.5,
+          "pitch": 46,
+          "pos": {
+            "string": 4,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n64",
+          "start": 48.0,
+          "end": 51.5,
+          "pitch": 53,
+          "pos": {
+            "string": 3,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n65",
+          "start": 48.0,
+          "end": 51.5,
+          "pitch": 58,
+          "pos": {
+            "string": 2,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n66",
+          "start": 48.0,
+          "end": 51.5,
+          "pitch": 62,
+          "pos": {
+            "string": 1,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n67",
+          "start": 48.0,
+          "end": 51.5,
+          "pitch": 65,
+          "pos": {
+            "string": 0,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n68",
+          "start": 52.0,
+          "end": 55.5,
+          "pitch": 47,
+          "pos": {
+            "string": 4,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n69",
+          "start": 52.0,
+          "end": 55.5,
+          "pitch": 54,
+          "pos": {
+            "string": 3,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n70",
+          "start": 52.0,
+          "end": 55.5,
+          "pitch": 59,
+          "pos": {
+            "string": 2,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n71",
+          "start": 52.0,
+          "end": 55.5,
+          "pitch": 63,
+          "pos": {
+            "string": 1,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n72",
+          "start": 52.0,
+          "end": 55.5,
+          "pitch": 66,
+          "pos": {
+            "string": 0,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n73",
+          "start": 56.0,
+          "end": 59.5,
+          "pitch": 48,
+          "pos": {
+            "string": 4,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n74",
+          "start": 56.0,
+          "end": 59.5,
+          "pitch": 52,
+          "pos": {
+            "string": 3,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n75",
+          "start": 56.0,
+          "end": 59.5,
+          "pitch": 55,
+          "pos": {
+            "string": 2,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n76",
+          "start": 56.0,
+          "end": 59.5,
+          "pitch": 59,
+          "pos": {
+            "string": 1,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n77",
+          "start": 56.0,
+          "end": 59.5,
+          "pitch": 64,
+          "pos": {
+            "string": 0,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n78",
+          "start": 60.0,
+          "end": 63.5,
+          "pitch": 48,
+          "pos": {
+            "string": 4,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n79",
+          "start": 60.0,
+          "end": 63.5,
+          "pitch": 52,
+          "pos": {
+            "string": 3,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n80",
+          "start": 60.0,
+          "end": 63.5,
+          "pitch": 55,
+          "pos": {
+            "string": 2,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n81",
+          "start": 60.0,
+          "end": 63.5,
+          "pitch": 62,
+          "pos": {
+            "string": 1,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n82",
+          "start": 60.0,
+          "end": 63.5,
+          "pitch": 67,
+          "pos": {
+            "string": 0,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n83",
+          "start": 64.0,
+          "end": 67.5,
+          "pitch": 43,
+          "pos": {
+            "string": 5,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n84",
+          "start": 64.0,
+          "end": 67.5,
+          "pitch": 54,
+          "pos": {
+            "string": 3,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n85",
+          "start": 64.0,
+          "end": 67.5,
+          "pitch": 59,
+          "pos": {
+            "string": 2,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n86",
+          "start": 64.0,
+          "end": 67.5,
+          "pitch": 62,
+          "pos": {
+            "string": 1,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n87",
+          "start": 68.0,
+          "end": 71.5,
+          "pitch": 50,
+          "pos": {
+            "string": 4,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n88",
+          "start": 68.0,
+          "end": 71.5,
+          "pitch": 54,
+          "pos": {
+            "string": 3,
+            "fret": 4,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n89",
+          "start": 68.0,
+          "end": 71.5,
+          "pitch": 60,
+          "pos": {
+            "string": 2,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n90",
+          "start": 68.0,
+          "end": 71.5,
+          "pitch": 64,
+          "pos": {
+            "string": 1,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n91",
+          "start": 72.0,
+          "end": 75.5,
+          "pitch": 52,
+          "pos": {
+            "string": 4,
+            "fret": 7,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n92",
+          "start": 72.0,
+          "end": 75.5,
+          "pitch": 56,
+          "pos": {
+            "string": 3,
+            "fret": 6,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n93",
+          "start": 72.0,
+          "end": 75.5,
+          "pitch": 62,
+          "pos": {
+            "string": 2,
+            "fret": 7,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n94",
+          "start": 72.0,
+          "end": 75.5,
+          "pitch": 67,
+          "pos": {
+            "string": 1,
+            "fret": 8,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n95",
+          "start": 76.0,
+          "end": 79.5,
+          "pitch": 47,
+          "pos": {
+            "string": 4,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n96",
+          "start": 76.0,
+          "end": 79.5,
+          "pitch": 51,
+          "pos": {
+            "string": 3,
+            "fret": 1,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n97",
+          "start": 76.0,
+          "end": 79.5,
+          "pitch": 57,
+          "pos": {
+            "string": 2,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n98",
+          "start": 76.0,
+          "end": 79.5,
+          "pitch": 59,
+          "pos": {
+            "string": 1,
+            "fret": 0,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n99",
+          "start": 76.0,
+          "end": 79.5,
+          "pitch": 66,
+          "pos": {
+            "string": 0,
+            "fret": 2,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n100",
+          "start": 80.0,
+          "end": 83.5,
+          "pitch": 45,
+          "pos": {
+            "string": 5,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n101",
+          "start": 80.0,
+          "end": 83.5,
+          "pitch": 55,
+          "pos": {
+            "string": 3,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n102",
+          "start": 80.0,
+          "end": 83.5,
+          "pitch": 60,
+          "pos": {
+            "string": 2,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n103",
+          "start": 84.0,
+          "end": 87.5,
+          "pitch": 45,
+          "pos": {
+            "string": 5,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n104",
+          "start": 84.0,
+          "end": 87.5,
+          "pitch": 52,
+          "pos": {
+            "string": 4,
+            "fret": 7,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n105",
+          "start": 84.0,
+          "end": 87.5,
+          "pitch": 55,
+          "pos": {
+            "string": 3,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n106",
+          "start": 84.0,
+          "end": 87.5,
+          "pitch": 60,
+          "pos": {
+            "string": 2,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n107",
+          "start": 88.0,
+          "end": 91.5,
+          "pitch": 45,
+          "pos": {
+            "string": 5,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n108",
+          "start": 88.0,
+          "end": 91.5,
+          "pitch": 48,
+          "pos": {
+            "string": 4,
+            "fret": 3,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n109",
+          "start": 88.0,
+          "end": 91.5,
+          "pitch": 55,
+          "pos": {
+            "string": 3,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n110",
+          "start": 88.0,
+          "end": 91.5,
+          "pitch": 60,
+          "pos": {
+            "string": 2,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n111",
+          "start": 92.0,
+          "end": 95.5,
+          "pitch": 45,
+          "pos": {
+            "string": 5,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n112",
+          "start": 92.0,
+          "end": 95.5,
+          "pitch": 52,
+          "pos": {
+            "string": 4,
+            "fret": 7,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n113",
+          "start": 92.0,
+          "end": 95.5,
+          "pitch": 55,
+          "pos": {
+            "string": 3,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n114",
+          "start": 92.0,
+          "end": 95.5,
+          "pitch": 60,
+          "pos": {
+            "string": 2,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n115",
+          "start": 92.0,
+          "end": 95.5,
+          "pitch": 64,
+          "pos": {
+            "string": 1,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        },
+        {
+          "id": "n116",
+          "start": 92.0,
+          "end": 95.5,
+          "pitch": 69,
+          "pos": {
+            "string": 0,
+            "fret": 5,
+            "scope": "local",
+            "influencePrevious": false,
+            "influenceNext": false,
+            "adaptPrevious": false,
+            "adaptNext": false
+          }
+        }
+      ],
+      "refBoxes": {},
+      "volume": 1,
+      "phraseBoundaries": [],
+      "toneMarkers": [],
+      "transpositionPitch": 0,
+      "displayTranspositionPitch": 0
+    }
+  ],
+  "grid": {
+    "bpm": 60,
+    "offset": 0.0,
+    "subdiv": 2,
+    "tsNum": 4,
+    "tsDen": 4,
+    "snap": true,
+    "showGrid": true,
+    "tempoMap": []
+  },
+  "warnings": [],
+  "sectionMarkers": [
+    {
+      "id": "section_1",
+      "t": 0.0,
+      "text": "01. Em (022000)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_2",
+      "t": 4.0,
+      "text": "02. E (022100)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_3",
+      "t": 8.0,
+      "text": "03. Am (x02210)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_4",
+      "t": 12.0,
+      "text": "04. C (x32010)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_5",
+      "t": 16.0,
+      "text": "05. D (xx0232)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_6",
+      "t": 20.0,
+      "text": "06. G (320003)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_7",
+      "t": 24.0,
+      "text": "07. A (x02220)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_8",
+      "t": 28.0,
+      "text": "08. Dm7 (xx0211)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_9",
+      "t": 32.0,
+      "text": "09. F (klein) (xx3211)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_10",
+      "t": 36.0,
+      "text": "10. F (133211)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_11",
+      "t": 40.0,
+      "text": "11. F#m (244222)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_12",
+      "t": 44.0,
+      "text": "12. Bm (x24432)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_13",
+      "t": 48.0,
+      "text": "13. Bb (x13331)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_14",
+      "t": 52.0,
+      "text": "14. B (x24442)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_15",
+      "t": 56.0,
+      "text": "15. Cmaj7 (x32000)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_16",
+      "t": 60.0,
+      "text": "16. Cadd9 (x32033)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_17",
+      "t": 64.0,
+      "text": "17. Gmaj7 (3x443x)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_18",
+      "t": 68.0,
+      "text": "18. D9 (x5455x)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_19",
+      "t": 72.0,
+      "text": "19. E7#9 (x7678x)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_20",
+      "t": 76.0,
+      "text": "20. B7 (x21202)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_21",
+      "t": 80.0,
+      "text": "21. Barre-Test 1: A-Saite fehlt (5x55xx)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_22",
+      "t": 84.0,
+      "text": "22. Barre-Test 2: A-Saite höher (5755xx)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_23",
+      "t": 88.0,
+      "text": "23. Barre-Test 3: A-Saite tiefer (5355xx)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_24",
+      "t": 92.0,
+      "text": "24. Am7 (575555)",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    }
+  ],
+  "scoreBars": [],
+  "scoreDuration": 96.0,
+  "timings": {},
+  "mix": {
+    "notes": {
+      "volume": 1,
+      "muted": false
+    },
+    "audio": {
+      "volume": 1,
+      "muted": false
+    }
+  }
+}
