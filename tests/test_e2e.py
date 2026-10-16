@@ -553,6 +553,76 @@ class EndToEndTests(unittest.TestCase):
         page.wait_for_function("() => document.querySelector('.artifact-pitch-lock').getAttribute('aria-pressed') === 'true'")
         self.assertFalse(page.evaluate(free))
 
+    def test_reference_keeps_its_rhythm_under_another_tempo(self):
+        self.open_reference_project()
+        page = self.page
+        # 120 BPM up to 0:20, then 240: after the marker a beat is half as long.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            S.state.tempoMap = [{ t: 20, bpm: 240, tsNum: 4, tsDen: 4, subdiv: 2 }];
+            (await import('/repaint.js')).draw();
+        }""")
+        starts = """async (t0) => (await import('/store.js')).S.state.editLanes[0].notes
+            .filter(n => n.start >= t0 - 0.01 && n.start < t0 + 3).sort((a, b) => a.start - b.start).map(n => [n.start, n.end])"""
+        source = page.evaluate(starts, 2)
+        # Drop Reference #1 at 0:20.5, under the faster tempo.
+        page.evaluate("""async () => {
+            const { xOf } = await import('/geometry.js');
+            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
+            const at = { clientX: r.left + xOf(20.5) - scroll.scrollLeft + 2, clientY: r.top + 100 };
+            const dataTransfer = new DataTransfer();
+            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
+            const row = document.querySelector('.artifact-row[data-reference="1"]');
+            fire(row, 'dragstart'); fire(scroll, 'dragover', at); fire(scroll, 'drop', at); fire(row, 'dragend');
+        }""")
+        expect(page.locator('.artifact-row[data-reference="1"] .artifact-preview-title')).to_contain_text('/ 3')
+        copy = page.evaluate(starts, 20.5)
+        self.assertEqual(len(copy), len(source))
+        # Every onset and length is halved: the same beats at twice the tempo.
+        for (s0, e0), (s1, e1) in zip(source, copy):
+            self.assertAlmostEqual(s1 - copy[0][0], (s0 - source[0][0]) / 2, places=6)
+            self.assertAlmostEqual(e1 - s1, (e0 - s0) / 2, places=6)
+        # The box on the stage is half as long there too.
+        widths = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { laneClock, occurrenceBox } = await import('/references.js');
+            const lane = S.state.editLanes[0], group = lane.refBoxes[1], clock = laneClock(lane);
+            return group.anchors.map((a, i) => [a, occurrenceBox(group, i, clock)]).sort((p, q) => p[0] - q[0]).map(([, b]) => b.t1 - b.t0);
+        }""")
+        self.assertAlmostEqual(widths[-1], widths[0] / 2, places=6)
+        # An edit in the first occurrence mirrors into the copy in beats, not seconds.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { snapshotEdit, commit } = await import('/edit.js');
+            const lane = S.state.editLanes[0], prev = snapshotEdit();
+            const note = lane.notes.filter(n => n.start >= 1.99 && n.start < 5).sort((a, b) => a.start - b.start)[1];
+            note.end = note.start + 0.25;   // half a beat at 120
+            commit(prev);
+        }""")
+        copy = page.evaluate(starts, 20.5)
+        self.assertAlmostEqual(copy[1][1] - copy[1][0], 0.125, places=6)
+        # A motif dropped there keeps its rhythm in beats as well.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            const notes = lane.notes.filter(n => n.start >= 8 && n.start < 9.9).sort((a, b) => a.start - b.start);
+            (await import('/motifs.js')).markMotif(notes, (await import('/ids.js')).motifId());
+            (await import('/repaint.js')).draw();
+        }""")
+        motif = [n for n in page.evaluate(starts, 8) if n[0] < 9.9]   # the marked notes
+        page.evaluate("""async () => {
+            const { xOf } = await import('/geometry.js');
+            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
+            const at = { clientX: r.left + xOf(22.5) - scroll.scrollLeft + 2, clientY: r.top + 100 };
+            const dataTransfer = new DataTransfer();
+            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
+            const row = document.querySelector('#motifList .artifact-row');
+            fire(row, 'dragstart'); fire(scroll, 'dragover', at); fire(scroll, 'drop', at); fire(row, 'dragend');
+        }""")
+        expect(page.locator('#motifList .artifact-row')).to_have_count(2)
+        dropped = sorted(page.evaluate("""async () => [...(await import('/store.js')).S.selection].map(n => n.start)"""))
+        self.assertAlmostEqual(dropped[-1] - dropped[0], (motif[-1][0] - motif[0][0]) / 2, places=6)
+
     def test_motif_drop_keeps_its_intervals_at_the_pointers_pitch(self):
         self.open_reference_project()
         page = self.page

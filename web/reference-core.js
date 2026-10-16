@@ -33,10 +33,10 @@ export const inRefBox = (note, box, minIn) =>
 // Each occurrence of a group, slot-ordered, out of whatever note array the caller is
 // working on — the lane's own, or the arranged copy the voicer actually sees. Pure: the
 // box geometry and nothing of the editor's state.
-export function refOccurrences(group, notes, minIn) {
+export function refOccurrences(group, notes, minIn, clock = null) {
   if (!group || !Array.isArray(group.anchors) || typeof group.rt0 !== "number") return [];
   return group.anchors.map((anchor, i) => notes
-    .filter((n) => inRefBox(n, occurrenceBox(group, i), minIn))
+    .filter((n) => inRefBox(n, occurrenceBox(group, i, clock), minIn))
     .sort((a, b) => (a.start - b.start) || (a.pitch - b.pitch)));
 }
 
@@ -45,10 +45,29 @@ export function refOccurrences(group, notes, minIn) {
 // may be absent or sparse (a missing entry is 0).
 export const shiftOf = (group, i) => group?.shifts?.[i] || 0;
 
-// Occurrence i's box, unclamped: its anchor's time span at its own pitch.
-export function occurrenceBox(group, i) {
-  const a = group.anchors[i], s = shiftOf(group, i);
-  return { t0: a + group.rt0, t1: a + group.rt1, pLo: group.pLo + s, pHi: group.pHi + s };
+// A group's time shape in beats from its anchor: [rb0, rb1]. Stored as rb0/rb1;
+// a group from before beats were stored reads its seconds (rt0/rt1) at its first
+// occurrence's tempo. rt0/rt1 stay written, measured at the first occurrence, so
+// older readers still find a box.
+export function beatShape(group, clock) {
+  if (Number.isFinite(group.rb0) && Number.isFinite(group.rb1)) return [group.rb0, group.rb1];
+  const a = group.anchors[0], b = clock.beatAt(a);
+  return [clock.beatAt(a + group.rt0) - b, clock.beatAt(a + group.rt1) - b];
+}
+
+// The time span a box anchored at `anchor` covers. With a clock (a beatClock of
+// the layer's timing) the shape is laid out in beats, so the box stretches with
+// the tempo it sits under; without one, in the stored seconds.
+export function spanAt(group, anchor, clock = null) {
+  if (!clock) return { t0: anchor + group.rt0, t1: anchor + group.rt1 };
+  const [r0, r1] = beatShape(group, clock), b = clock.beatAt(anchor);
+  return { t0: clock.timeAt(b + r0), t1: clock.timeAt(b + r1) };
+}
+
+// Occurrence i's box, unclamped: its anchor's span at its own pitch.
+export function occurrenceBox(group, i, clock = null) {
+  const s = shiftOf(group, i);
+  return { ...spanAt(group, group.anchors[i], clock), pLo: group.pLo + s, pHi: group.pHi + s };
 }
 
 export function effectSig(note, { includePos = false } = {}) {

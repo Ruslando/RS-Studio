@@ -15,6 +15,21 @@ import { MAX_BARS_SCANNED } from "./constants.js";
 export const segBeatSec = (seg) => (seg.bpm ? (4 / (parseInt(seg.tsDen, 10) || 4)) * (60 / seg.bpm) : 0);
 export const segBarSec = (seg) => segBeatSec(seg) * (parseInt(seg.tsNum, 10) || 4);  // one bar
 
+// Seconds <-> beats along a tempo map (segments as grid.js builds them). Beats
+// count from the first segment and run at each segment's own tempo, so a passage
+// measured in beats keeps its rhythm wherever it is placed. Before the first
+// segment the first tempo extends backwards.
+export function beatClock(segs) {
+  const sec = (seg) => segBeatSec(seg) || 0.5;
+  const starts = [0];
+  for (let k = 1; k < segs.length; k++) starts.push(starts[k - 1] + (segs[k].t - segs[k - 1].t) / sec(segs[k - 1]));
+  const last = (pred) => { let k = 0; for (let j = 1; j < segs.length; j++) if (pred(j)) k = j; else break; return k; };
+  return {
+    beatAt(t) { const k = last((j) => segs[j].t <= t + 1e-9); return starts[k] + (t - segs[k].t) / sec(segs[k]); },
+    timeAt(b) { const k = last((j) => starts[j] <= b + 1e-9); return segs[k].t + (b - starts[k]) * sec(segs[k]); },
+  };
+}
+
 // Every bar start in the song, ascending. Each segment tiles its own bars forward
 // until the next segment begins, which is the tempo map's own rule: a marker starts
 // a new bar at its own tempo and meter.

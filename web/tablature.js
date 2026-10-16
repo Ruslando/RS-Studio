@@ -9,6 +9,7 @@ import { audio, tabRenderEl, tabScrollEl, tabViewBackdropEl, tabViewCloseEl, tab
 import { copyEffects } from "./note-effects.js";
 import { beatsPerBar, exportResolution, gridBpm, gridOffset, gridSubdiv, minDur } from "./grid.js";
 import { refOccurrences } from "./reference-core.js";
+import { boxMinIn, laneClock } from "./references.js";
 import { songBarStarts } from "./song-bars.js";
 import { onLiveTiming, timingData, timingIdOf } from "./timing.js";
 
@@ -316,7 +317,7 @@ function alignReferences(lane, notes, found) {
   const { voiced, fingers, seats } = found;
   const minIn = minDur();
   for (const key of Object.keys(groups)) {
-    const occurrences = refOccurrences(groups[key], notes, minIn);
+    const occurrences = refOccurrences(groups[key], notes, Math.min(minIn, ...(groups[key].anchors || []).map(boxMinIn)), laneClock(lane));
     const src = occurrences[0];
     if (!src?.length) continue;
     for (let i = 1; i < occurrences.length; i++) {

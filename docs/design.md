@@ -713,6 +713,13 @@ stage its state is said in words left of it ("Pitch locked" / "Pitch unlocked") 
 it is pointed at and for 1.5 s after it was flipped. It is closed and plain when locked (the default), open when free;
 clicking either flips it, as the menu does.
 
+Time in a reference is musical, not absolute: its box (`rb0`/`rb1`) and its
+notes are measured in beats on its layer's grid, so an occurrence under a faster
+tempo is shorter in seconds and keeps the same rhythm, when it is pasted,
+dropped, moved, resized or mirrored. Copy and paste of any notes (motifs too)
+keep their beat distances from the first note the same way. A project saved
+before reads a reference's shape at its first occurrence.
+
 A reference never lands inside another one: a dropped reference or motif whose
 box would overlap a reference box is refused (the drop preview turns
 `--error`, a toast says why), and an occurrence dragged by its label stops at

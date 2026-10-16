@@ -6,7 +6,7 @@ import { localXY } from "./interaction.js";
 import { activateLane, activeLane, canEditLane, renderLanes } from "./lanes.js";
 import { seekPlayback } from "./playback.js";
 import { refreshSaveState } from "./project.js";
-import { eachRefGroup, noteBounds, notesInBox, occurrenceBox, overlapsRefBox, shiftOf, toggleRefPitchLock } from "./references.js";
+import { eachRefGroup, laneClock, noteBounds, notesInBox, occurrenceBox, overlapsRefBox, shiftOf, spanAt, toggleRefPitchLock } from "./references.js";
 import { toast } from "./notify.js";
 import { icon } from "./icons.js";
 import { draw } from "./repaint.js";
@@ -15,7 +15,7 @@ import { moveViewportTo, stopViewportMotion } from "./viewport-motion.js";
 import { initArtifactsPanel } from "./artifacts-panel.js";
 import { paintArtifactPreviews, referencePreview, resetArtifactPreviews, stopArtifactPreview, stopArtifactPreviewFor, removeArtifactPreview } from "./artifact-preview.js";
 
-import { doCopy, doPaste, openRefMenu, openMotifMenu } from "./edit.js";
+import { clipOf, doCopy, doPaste, openRefMenu, openMotifMenu, placeClip } from "./edit.js";
 
 import { motifGroups } from './motifs.js';
 import { artifactName, beginArtifactRename } from './artifact-names.js';
@@ -31,7 +31,7 @@ function jumpToReference(lane, ref, index) {
   const group = lane.refBoxes?.[ref];
   if (!group || group.anchors[index] == null) return;
   stopArtifactPreview();
-  const o = occurrenceBox(group, index);
+  const o = occurrenceBox(group, index, laneClock(lane));
   const box = { ...o, t0: Math.max(0, o.t0), t1: Math.min(S.state.duration, o.t1) };
   revealArtifact(lane, box, notesInBox(box, lane.notes));
 }
@@ -145,7 +145,7 @@ export function renderArtifacts() {
       const ordered = group.anchors.map((anchor, index) => ({anchor, index})).sort((a,b) => a.anchor-b.anchor);
       const position = Math.min(Number(occurrences.dataset.instance || 1) - 1, ordered.length - 1);
       const {anchor, index} = ordered[position];
-      const o = occurrenceBox(group, index), box = {...o, t0: Math.max(0, o.t0), t1: Math.min(S.state.duration, o.t1)};
+      const o = occurrenceBox(group, index, laneClock(currentLane)), box = {...o, t0: Math.max(0, o.t0), t1: Math.min(S.state.duration, o.t1)};
       activateLane(currentLane); setSelection(new Set(notesInBox(box, currentLane.notes))); draw();
       openRefMenu(event.clientX, event.clientY, {lane: currentLane, group, ref, i: index}, {origin: 'artifact'});
     });
@@ -193,7 +193,7 @@ function artifactNotes({kind, lane, ref, position}) {
   if (!group?.anchors?.length) return {notes: [], shift: 0};
   const order = group.anchors.map((a, i) => i).sort((p, q) => group.anchors[p] - group.anchors[q]);
   const index = order[Math.min(position, order.length - 1)];
-  return {notes: notesInBox(occurrenceBox(group, index), lane.notes), shift: shiftOf(group, index)};
+  return {notes: notesInBox(occurrenceBox(group, index, laneClock(lane)), lane.notes), shift: shiftOf(group, index)};
 }
 
 // A drop at world (x, y) puts the first note under the pointer. A motif keeps
@@ -201,7 +201,7 @@ function artifactNotes({kind, lane, ref, position}) {
 // is not locked.
 function dropPlacement(item, notes, x, y, lane) {
   const first = [...notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch)[0];
-  const t = timeAt(x), dt = snap(Math.max(0, t)) - first.start;
+  const t = timeAt(x), dt = snap(Math.max(0, t));   // where the first note lands: the preview's key
   if (item.kind !== 'motif' && !lane.refBoxes?.[item.ref]?.transposable) return { t, dt, shift: 0 };
   const spec = S.state.spec, lo = Math.min(...notes.map(n => n.pitch)), hi = Math.max(...notes.map(n => n.pitch));
   const shift = Math.max(spec.midi_low - lo, Math.min(spec.midi_high - hi, Math.round(pitchAt(y)) - first.pitch));
@@ -217,14 +217,13 @@ function showDropPreview(item, x, y) {
   const { dt, shift } = dropPlacement(item, notes, x, y, lane);
   const key = `${item.kind}:${item.laneId}:${item.ref}:${item.position}:${dt}:${shift}`;
   if (S.dropPreview?.key === key) return;
-  const moved = notes.map(n => {
-    const q = item.kind === 'reference' ? { start: n.start + dt, end: n.end + dt } : snapNote(n.start + dt, n.end + dt);
-    return { start: q.start, end: q.end, pitch: n.pitch + shift };
-  });
+  // Exactly as doPaste will place them: in beats on this layer's grid.
+  const placed = placeClip(clipOf(notes), lane, dropPlacement(item, notes, x, y, lane).t, item.kind === 'reference');
+  const moved = notes.map((n, k) => ({ start: placed[k].start, end: placed[k].end, pitch: n.pitch + shift }));
   // A reference's new box is anchored at its earliest note, as linkPasteAsReference does.
   const group = item.kind === 'reference' && lane.refBoxes?.[item.ref];
   const at = group && Math.min(...moved.map(n => n.start));
-  const box = group ? { t0: at + group.rt0, t1: at + group.rt1, pLo: group.pLo + base + shift, pHi: group.pHi + base + shift } : null;
+  const box = group ? { ...spanAt(group, at, laneClock(lane)), pLo: group.pLo + base + shift, pHi: group.pHi + base + shift } : null;
   S.dropPreview = { key, kind: item.kind, color: lane.color, notes: moved, box,
     blocked: overlapsRefBox(lane, box || noteBounds(moved)) };
   draw();

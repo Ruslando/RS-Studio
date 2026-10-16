@@ -21,7 +21,7 @@ import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, tog
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, refMenuEntry, refName, setRefPitchLock } from "./references.js";
+import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { beginArtifactRename } from "./artifact-names.js";
 import { splitNote } from "./slice.js";
@@ -240,13 +240,42 @@ export function sliceNoteCuts(cuts) {
 }
 
 // ---- clipboard / delete ----
+// A clipboard entry remembers where its note sits in beats on its own layer's
+// grid, so a paste under another tempo keeps the rhythm, not the seconds.
+export function clipOf(notes) {
+  const clocks = new Map();
+  return notes.map((n) => {
+    const lane = laneOf(n);
+    if (lane && !clocks.has(lane)) clocks.set(lane, laneClock(lane));
+    const clock = lane && clocks.get(lane);
+    return copyEffects(n, {
+      start: n.start, end: n.end, pitch: n.pitch,
+      ...(clock ? { beat0: clock.beatAt(n.start), beat1: clock.beatAt(n.end) } : {}),
+      ...(n.motifId ? { motifId: n.motifId } : {}),
+    });
+  });
+}
+
+// Where a clip lands when its first note goes to time `at` on `lane`: each note
+// at its beat distance from the first, on that layer's grid. A reference paste
+// keeps its shape exactly; a plain paste pulls each note onto the grid.
+export function placeClip(clip, lane, at, asReference) {
+  const clock = laneClock(lane);
+  const beats = clip.every((c) => Number.isFinite(c.beat0));
+  const first = beats ? Math.min(...clip.map((c) => c.beat0)) : Math.min(...clip.map((c) => c.start));
+  const target = snap(Math.max(0, at));
+  const b = clock.beatAt(target);
+  return clip.map((c) => {
+    const start = beats ? clock.timeAt(b + c.beat0 - first) : target + c.start - first;
+    const end = beats ? clock.timeAt(b + c.beat1 - first) : target + c.end - first;
+    return asReference ? { start, end } : snapNote(start, end);
+  });
+}
+
 export function doCopy() {
   if (!S.selection.size) return;
   S.clipboardSrc = [...S.selection];
-  S.clipboard = S.clipboardSrc.map((n) => copyEffects(n, {
-    start: n.start, end: n.end, pitch: n.pitch,
-    ...(n.motifId ? { motifId: n.motifId } : {}),
-  }));
+  S.clipboard = clipOf(S.clipboardSrc);
   // Remember the source occurrence when the whole copy sits inside one reference
   // box — that's when Paste offers the copy-vs-reference choice.
   S.clipboardRef = null;
@@ -307,18 +336,14 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
   if (!lane.visible) { toast(`Layer “${lane.name}” is hidden — show it to edit`); return; }
   if (lane.locked) { toast(`Layer “${lane.name}” is locked — unlock it to edit`); return; }
   const prev = snapshotEdit();
-  // Anchor the paste at the current time: shift the whole clipboard so its
-  // earliest note starts at the playhead, preserving relative timing + pitch.
-  const anchor = Math.min(...S.clipboard.map((c) => c.start));
-  const dt = snap(Math.max(0, at ?? playbackTime())) - anchor;
+  // Anchor the paste at the current time: the clipboard's earliest note starts at
+  // the playhead, the rest at their beat distance from it (see placeClip).
+  const placed = placeClip(S.clipboard, lane, at ?? playbackTime(), asReference);
   // Preserve copied motifs, but mint new ids so the paste is independent from
   // the original. A partial copy keeps its annotation, including a single note.
   const pastedMotifIds = new Map();
-  const added = S.clipboard.map((c) => {
-    // A reference paste must keep the group's shared shape (its anchor is already
-    // snapped), so leave its notes relative; a plain paste pulls each note fully
-    // onto the grid so nothing lands off-grid.
-    const q = asReference ? { start: c.start + dt, end: c.end + dt } : snapNote(c.start + dt, c.end + dt);
+  const added = S.clipboard.map((c, k) => {
+    const q = placed[k];
     let pastedMotifId;
     if (c.motifId) {
       if (!pastedMotifIds.has(c.motifId)) pastedMotifIds.set(c.motifId, motifId());
@@ -353,12 +378,13 @@ function linkPasteAsReference(added, lane, refShift = 0) {
   }
   const src = S.clipboardSrc.filter((n) => laneOf(n) === lane && !boxOfNote(n));
   if (src.length !== added.length) return null;   // nothing intact to pair the paste with
-  const ref = nextRef(), nb = noteBounds(added);
-  (lane.refBoxes || (lane.refBoxes = {}))[ref] = {
+  const ref = nextRef(), nb = noteBounds(added), clock = laneClock(lane);
+  const group = (lane.refBoxes || (lane.refBoxes = {}))[ref] = {
     rt0: 0, rt1: nb.t1 - nb.t0,
     pLo: nb.pLo, pHi: nb.pHi,
     anchors: [noteBounds(src).t0, anchorNew],
   };
+  setBeatShape(group, 0, clock.beatAt(nb.t1) - clock.beatAt(nb.t0), clock);
   return ref;
 }
 

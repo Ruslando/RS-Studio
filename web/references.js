@@ -8,13 +8,16 @@ import { draw } from "./repaint.js";
 import { stageIcon } from "./icons.js";
 import { commit, snapshotEdit } from "./edit.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
-import { minDur, snap } from "./grid.js";
+import { gridAt, minDur, segStep, snap } from "./grid.js";
 import { nid } from "./ids.js";
 import { editLanes, laneOf, refreshCounts } from "./lanes.js";
 import { EFFECT_FIELDS, copyEffects } from "./note-effects.js";
 import { toast } from "./notify.js";
-import { effectSig, inRefBox, occurrenceBox, shiftOf } from "./reference-core.js";
-export { occurrenceBox, shiftOf } from "./reference-core.js";
+import { beatShape, effectSig, inRefBox, occurrenceBox, shiftOf, spanAt } from "./reference-core.js";
+export { occurrenceBox, shiftOf, spanAt } from "./reference-core.js";
+import { beatClock } from "./bars.js";
+import { timingSegments } from "./grid.js";
+import { timingData, timingIdOf } from "./timing.js";
 import { PAINT, WASH, halo } from "./stage-paint.js";
 import { S } from "./store.js";
 import { clamp, hexA } from "./util.js";
@@ -28,8 +31,10 @@ import { clamp, hexA } from "./util.js";
 // they round-trip through save + undo; notes carry no tags — membership is purely
 // geometric.
 //   lane.refBoxes[ref] = { rt0, rt1, pLo, pHi, anchors:[t, …] }
-// Box i spans [anchors[i]+rt0, anchors[i]+rt1] in time (relative to its anchor, so
-// one shape mirrors to every box) and [pLo, pHi] in pitch — shared by every
+// Box i spans [rb0, rb1] beats from anchors[i] on its layer's grid (so one shape
+// mirrors to every box, and a box under a faster tempo is shorter in seconds; the
+// notes mirror in beats too; rt0/rt1 hold the same shape in seconds at the first
+// box, for older readers) and [pLo, pHi] in pitch — shared by every
 // occurrence unless the group is `transposable`, when occurrence i sits
 // `shifts[i]` semitones off it. Pitches mirror relative to each box's shift;
 // effects mirror unchanged, and a shifted copy is fingered anew.
@@ -53,12 +58,31 @@ export function noteBounds(notes) {
 }
 
 // Absolute rect of occurrence i's box, clamped to the song / pitch range.
-function boxRect(group, i) {
-  const a = group.anchors[i], s = shiftOf(group, i);
+function boxRect(group, i, clock) {
+  const o = occurrenceBox(group, i, clock);
   return {
-    t0: Math.max(0, a + group.rt0), t1: Math.min(S.state.duration, a + group.rt1),
-    pLo: Math.max(S.state.spec.midi_low, group.pLo + s), pHi: Math.min(S.state.spec.midi_high, group.pHi + s),
+    t0: Math.max(0, o.t0), t1: Math.min(S.state.duration, o.t1),
+    pLo: Math.max(S.state.spec.midi_low, o.pLo), pHi: Math.min(S.state.spec.midi_high, o.pHi),
   };
+}
+
+// The beat clock of a layer's own timing (the song's, or its own tempo map).
+export const laneClock = (lane) => beatClock(timingSegments(timingData(timingIdOf(lane))));
+
+// Set a group's shape in beats, and its seconds at the first box for older readers.
+export function setBeatShape(group, r0, r1, clock) {
+  group.rb0 = r0; group.rb1 = r1;
+  const a = group.anchors[0], { t0, t1 } = spanAt(group, a, clock);
+  group.rt0 = t0 - a; group.rt1 = t1 - a;
+}
+
+// Pin a group's shape in beats before its first box changes: a group saved before
+// beats were stored reads its shape at that first box, so it has to be written
+// down while the first box is still the one it was measured at.
+function freezeShape(lane, group) {
+  if (Number.isFinite(group.rb0)) return;
+  const clock = laneClock(lane), [r0, r1] = beatShape(group, clock);
+  group.rb0 = r0; group.rb1 = r1;
 }
 
 // Whether `box` would overlap any reference box in `lane` other than occurrence
@@ -66,11 +90,12 @@ function boxRect(group, i) {
 // dropped motif inside a reference: notes join a reference one at a time, drawn
 // or pasted by hand.
 export function overlapsRefBox(lane, box, except = null) {
+  const clock = laneClock(lane);
   for (const [key, group] of Object.entries(lane.refBoxes || {})) {
     if (!group?.anchors?.length) continue;
     for (let i = 0; i < group.anchors.length; i++) {
       if (except && +key === except.ref && i === except.i) continue;
-      const b = occurrenceBox(group, i);
+      const b = occurrenceBox(group, i, clock);
       if (box.t0 < b.t1 - 1e-6 && box.t1 > b.t0 + 1e-6 && box.pLo <= b.pHi && box.pHi >= b.pLo) return true;
     }
   }
@@ -83,8 +108,11 @@ export function dropFingering(note) { delete note.pos; delete note.arrangement; 
 // Notes from `arr` that sit inside `box`: pitch within range, and at least one
 // full cell (the smallest a note may be) of the note lies inside the box's time
 // span — a note merely grazing the edge has to be pushed a cell deep to join.
+// The cell is the one in force where the box starts: under a faster tempo the
+// notes are shorter, and the base tempo's cell would leave them all outside.
+export const boxMinIn = (t) => Math.min(minDur(), segStep(gridAt(t)) || minDur());
 export function notesInBox(box, arr) {
-  const minIn = minDur();
+  const minIn = boxMinIn(box.t0);
   return arr.filter((n) => inRefBox(n, box, minIn));
 }
 
@@ -111,8 +139,9 @@ export function boxOfNote(note) {
   let hit = null;
   eachRefGroup((l, ref, group) => {
     if (hit || !l.notes.includes(note)) return;
+    const clock = laneClock(l);
     for (let i = 0; i < group.anchors.length; i++)
-      if (notesInBox(boxRect(group, i), [note]).length) { hit = { lane: l, ref, group, i }; return; }
+      if (notesInBox(boxRect(group, i, clock), [note]).length) { hit = { lane: l, ref, group, i }; return; }
   });
   return hit;
 }
@@ -132,18 +161,20 @@ function patternOf(notes) {
 
 // Contents of a box as a pattern relative to an anchor, so it can be replayed into
 // a sibling box at that box's anchor: sorted [{ dt, dur, pitch, src }].
-function relPattern(notes, anchor, shift = 0) {
-  return [...notes].sort(noteOrder).map((n) => ({
-    dt: n.start - anchor, dur: n.end - n.start, pitch: n.pitch - shift, src: n,
-  }));
+function relPattern(notes, anchor, shift, clock) {
+  const b = clock.beatAt(anchor);
+  return [...notes].sort(noteOrder).map((n) => {
+    const s = clock.beatAt(n.start);
+    return { dt: s - b, dur: clock.beatAt(n.end) - s, pitch: n.pitch - shift, src: n };
+  });
 }
 
 // Position-independent fingerprint of a box's contents (anchored), for spotting
 // which box the user just changed.
 // Fingering is compared only between boxes at the same pitch: a shifted copy has
 // its own.
-function boxSig(notes, anchor, shift = 0, includePos = true) {
-  return relPattern(notes, anchor, shift)
+function boxSig(notes, anchor, shift, includePos, clock) {
+  return relPattern(notes, anchor, shift, clock)
     .map((p) => `${p.dt.toFixed(3)}|${p.dur.toFixed(3)}|${p.pitch}|${effectSig(p.src, { includePos })}`).join("~");
 }
 
@@ -215,12 +246,13 @@ async function markSelectionAsReference() {
     if (choice === "alternative") occ = [selNotes];
   }
   const prev = snapshotEdit();
-  const nb = noteBounds(selNotes);
-  (lane.refBoxes || (lane.refBoxes = {}))[ref] = {
+  const nb = noteBounds(selNotes), clock = laneClock(lane);
+  const group = (lane.refBoxes || (lane.refBoxes = {}))[ref] = {
     rt0: 0, rt1: nb.t1 - nb.t0,
     pLo: nb.pLo, pHi: nb.pHi,
     anchors: occ.map((notes) => noteBounds(notes).t0),
   };
+  setBeatShape(group, 0, clock.beatAt(nb.t1) - clock.beatAt(nb.t0), clock);
   commit(prev);
   refreshCounts(); draw();
   toast(occ.length > 1 ? `Reference #${ref}: ${occ.length} boxes` : `Reference #${ref}: 1 box`);
@@ -242,6 +274,7 @@ export function detachSelection() {
   const prev = snapshotEdit();
   let n = 0;
   for (const [group, t] of targets) {
+    freezeShape(t.lane, group);
     group.anchors = group.anchors.filter((_, i) => !t.idx.has(i));
     if (group.shifts) group.shifts = group.shifts.filter((_, i) => !t.idx.has(i));
     n += t.idx.size;
@@ -275,6 +308,8 @@ export function detachRefGroup(lane, ref) {
 export function moveRefOccurrence(drag, x, y) {
   const group = drag.lane.refBoxes[drag.ref];
   if (!group) return;
+  freezeShape(drag.lane, group);
+  const clock = laneClock(drag.lane);
   let dt = snap(drag.a0 + (timeAt(x) - drag.grabT)) - drag.a0;
   dt = clamp(dt, -(drag.a0 + group.rt0), S.state.duration - (drag.a0 + group.rt1));   // keep the box in-song
   let dp = 0;
@@ -284,12 +319,15 @@ export function moveRefOccurrence(drag, x, y) {
   }
   // Never into another reference: the occurrence waits at its last free spot.
   const s = drag.s0 + dp, a = drag.a0 + dt;
-  const box = { t0: a + group.rt0, t1: a + group.rt1, pLo: group.pLo + s, pHi: group.pHi + s };
+  const box = { ...spanAt(group, a, clock), pLo: group.pLo + s, pHi: group.pHi + s };
   if (overlapsRefBox(drag.lane, box, { ref: drag.ref, i: drag.i })) return;
   group.anchors[drag.i] = a;
   if (group.transposable) (group.shifts || (group.shifts = []))[drag.i] = s;
+  // In beats from the anchor: moved under another tempo, the passage keeps its rhythm.
+  const b0 = clock.beatAt(drag.a0), b = clock.beatAt(a);
   for (const o of drag.notes) {
-    o.n.start = o.s + dt; o.n.end = o.e + dt; o.n.pitch = o.p + dp;
+    o.n.start = clock.timeAt(b + clock.beatAt(o.s) - b0); o.n.end = clock.timeAt(b + clock.beatAt(o.e) - b0);
+    o.n.pitch = o.p + dp;
     if (dp) dropFingering(o.n);
     else { if (o.pos) o.n.pos = o.pos; if (o.arrangement) o.n.arrangement = o.arrangement; }
   }
@@ -317,6 +355,8 @@ export async function setRefPitchLock(lane, ref, lock) {
     if (choice === "cancel") return;
   }
   const prev = snapshotEdit();
+  const clock = laneClock(lane);
+  freezeShape(lane, group);
   if (!lock) group.transposable = true;
   else {
     if (choice === "alternative") {
@@ -324,7 +364,7 @@ export async function setRefPitchLock(lane, ref, lock) {
       group.anchors = group.anchors.filter((_, i) => keep.has(i));
     } else for (const i of off) {
       const delta = target - shiftOf(group, i);
-      for (const n of notesInBox(boxRect(group, i), lane.notes)) { n.pitch += delta; dropFingering(n); }
+      for (const n of notesInBox(boxRect(group, i, clock), lane.notes)) { n.pitch += delta; dropFingering(n); }
     }
     // Every remaining box now sits at the target: fold it into the shared pitch.
     group.pLo += target; group.pHi += target;
@@ -338,7 +378,8 @@ export async function setRefPitchLock(lane, ref, lock) {
 // removed when its last box goes.
 export function deleteRefOccurrence(occ) {
   const { lane, group, ref, i } = occ;
-  const doomed = new Set(notesInBox(boxRect(group, i), lane.notes));
+  freezeShape(lane, group);
+  const doomed = new Set(notesInBox(boxRect(group, i, laneClock(lane)), lane.notes));
   const prev = snapshotEdit();
   lane.notes = lane.notes.filter((n) => !doomed.has(n));
   group.anchors.splice(i, 1);
@@ -355,8 +396,9 @@ export function deleteRefGroup(lane, ref) {
   const group = lane.refBoxes && lane.refBoxes[ref];
   if (!group) return;
   const doomed = new Set();
+  const clock = laneClock(lane);
   for (let i = 0; i < group.anchors.length; i++)
-    for (const n of notesInBox(boxRect(group, i), lane.notes)) doomed.add(n);
+    for (const n of notesInBox(boxRect(group, i, clock), lane.notes)) doomed.add(n);
   const prev = snapshotEdit();
   lane.notes = lane.notes.filter((n) => !doomed.has(n));
   delete lane.refBoxes[ref];
@@ -369,13 +411,13 @@ export function deleteRefGroup(lane, ref) {
 // Replay `pattern` (relative to its source anchor) into the box at `anchor`,
 // overwriting whatever was there. Reuses existing note objects by order so identity
 // (selection / undo) survives where the counts allow.
-function mirrorBox(lane, anchor, oldNotes, pattern, shift = 0, srcShift = 0) {
-  const ordered = [...oldNotes].sort(noteOrder);
+function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock) {
+  const ordered = [...oldNotes].sort(noteOrder), b = clock.beatAt(anchor);
   for (let k = 0; k < pattern.length; k++) {
     const p = pattern[k];
     let nn = ordered[k];
     if (!nn) { nn = { id: nid() }; lane.notes.push(nn); }
-    nn.start = anchor + p.dt; nn.end = nn.start + p.dur; nn.pitch = p.pitch + shift;
+    nn.start = clock.timeAt(b + p.dt); nn.end = clock.timeAt(b + p.dt + p.dur); nn.pitch = p.pitch + shift;
     for (const f of EFFECT_FIELDS) delete nn[f];
     copyEffects(p.src, nn);
     if (shift !== srcShift) dropFingering(nn);
@@ -395,24 +437,25 @@ export function reconcileReferences(prev, mirrorSource) {
   eachRefGroup((lane, ref, group) => {
     const prevNotes = (prev.lanes && prev.lanes[lane.id]) || [];
     const prevGroup = prev.boxes && prev.boxes[lane.id] && prev.boxes[lane.id][ref];
-    const contents = group.anchors.map((a, i) => notesInBox(boxRect(group, i), lane.notes));
+    const clock = laneClock(lane);
+    const contents = group.anchors.map((a, i) => notesInBox(boxRect(group, i, clock), lane.notes));
     let src = mirrorSource && mirrorSource.ref === ref ? mirrorSource.i : -1;
     if (src < 0 && prevGroup && prevGroup.anchors.length === group.anchors.length) {
       for (let i = 0; i < group.anchors.length; i++) {
         // A box whose shift changed was moved, not edited: it is never the source.
         if (shiftOf(group, i) !== shiftOf(prevGroup, i)) continue;
-        const before = notesInBox(boxRect(prevGroup, i), prevNotes);
-        if (boxSig(contents[i], group.anchors[i], shiftOf(group, i)) !== boxSig(before, prevGroup.anchors[i], shiftOf(prevGroup, i))) { src = i; break; }
+        const before = notesInBox(boxRect(prevGroup, i, clock), prevNotes);
+        if (boxSig(contents[i], group.anchors[i], shiftOf(group, i), true, clock) !== boxSig(before, prevGroup.anchors[i], shiftOf(prevGroup, i), true, clock)) { src = i; break; }
       }
     }
     if (src < 0) return;
     const srcShift = shiftOf(group, src);
-    const pattern = relPattern(contents[src], group.anchors[src], srcShift);
+    const pattern = relPattern(contents[src], group.anchors[src], srcShift, clock);
     for (let j = 0; j < group.anchors.length; j++) {
       if (j === src) continue;
       const shift = shiftOf(group, j), same = shift === srcShift;
-      if (boxSig(contents[j], group.anchors[j], shift, same) === boxSig(contents[src], group.anchors[src], srcShift, same)) continue;
-      mirrorBox(lane, group.anchors[j], contents[j], pattern, shift, srcShift);
+      if (boxSig(contents[j], group.anchors[j], shift, same, clock) === boxSig(contents[src], group.anchors[src], srcShift, same, clock)) continue;
+      mirrorBox(lane, group.anchors[j], contents[j], pattern, shift, srcShift, clock);
     }
   });
 }
@@ -441,10 +484,10 @@ export function drawReferences() {
   sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
   eachRefGroup((lane, ref, group) => {
     if (!lane.visible) return;
-    const on = hotRefs.has(lane.id + ":" + ref);
+    const on = hotRefs.has(lane.id + ":" + ref), clock = laneClock(lane);
     for (let i = 0; i < group.anchors.length; i++) {
       const s = shiftOf(group, i), label = refName(group, ref) + (s ? ` ${s > 0 ? "+" : "−"}${Math.abs(s)}` : "");
-      const box = boxRect(group, i);
+      const box = boxRect(group, i, clock);
       const x0 = xOf(box.t0), x1 = xOf(box.t1);
       if (x0 > vx1 || x1 < vx0) continue;   // off-screen
       const y0 = yOf(box.pHi), y1 = yOf(box.pLo) + S.state.rowH;   // y0 = top (high pitch)
@@ -529,9 +572,12 @@ export const refEdgeCursor = (edge) => edge.length === 2
 export function resizeRefBox(drag, x, y) {
   const group = drag.lane.refBoxes[drag.ref];
   if (!group) return;
-  const a = group.anchors[drag.i];
-  if (drag.edge.includes("l")) group.rt0 = Math.min(snap(timeAt(x)) - a, group.rt1 - 1e-3);
-  else if (drag.edge.includes("r")) group.rt1 = Math.max(snap(timeAt(x)) - a, group.rt0 + 1e-3);
+  const a = group.anchors[drag.i], clock = laneClock(drag.lane);
+  let [r0, r1] = beatShape(group, clock);
+  const at = clock.beatAt(snap(timeAt(x))) - clock.beatAt(a);
+  if (drag.edge.includes("l")) r0 = Math.min(at, r1 - 1e-3);
+  else if (drag.edge.includes("r")) r1 = Math.max(at, r0 + 1e-3);
+  setBeatShape(group, r0, r1, clock);
   if (drag.edge.includes("t")) group.pHi = Math.max(Math.round(pitchAt(y)), group.pLo);
   else if (drag.edge.includes("b")) group.pLo = Math.min(Math.round(pitchAt(y)), group.pHi);
   draw();

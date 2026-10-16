@@ -3,7 +3,7 @@ import { stageMono, STAGE_ANCHORED } from "./constants.js";
 import { ensureTone, clearPreview, pauseTransport, previewNotes } from "./playback.js";
 import { releaseLaneSynth } from "./lanes.js";
 import { toast } from "./notify.js";
-import { noteBounds, notesInBox, occurrenceBox, shiftOf } from "./references.js";
+import { laneClock, noteBounds, notesInBox, occurrenceBox, shiftOf } from "./references.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { dpr, fmtTime, noteName } from "./util.js";
@@ -59,7 +59,7 @@ function updateOccurrence(preview) {
   const position = Math.min(positions.get(refKey(lane, ref)) || 0, occurrences.length - 1);
   positions.set(refKey(lane, ref), position);
   preview.position = position;
-  const index = occurrences[position].index, o = preview.motif ? null : occurrenceBox(group, index);
+  const index = occurrences[position].index, o = preview.motif ? null : occurrenceBox(group, index, laneClock(lane));
   preview.box = preview.motif
     ? { index, t0: Math.max(0, occurrences[position].anchor + group.rt0),
       t1: Math.min(S.state.duration, occurrences[position].anchor + group.rt1), pLo: group.pLo, pHi: group.pHi }
