@@ -15,10 +15,10 @@ import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
 import { markerRails, overviewMarkerRails, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
 import { edgeOf, localXY, pickNote } from "./interaction.js";
-import { activeLane } from "./lanes.js";
+import { activeLane, canEditLane } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
-import { drawReferences, refBadgeAt, refBoxEdgeAt } from "./references.js";
-import { motifGroups, motifLabel } from "./motifs.js";
+import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor } from "./references.js";
+import { motifGroups, motifName } from "./motifs.js";
 import { songBarStarts } from "./song-bars.js";
 import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
@@ -239,6 +239,7 @@ function drawBendHandles() {
 // Outline the marked notes themselves. Unmarked notes between motif members
 // must not look as though they belong to the motif's bounding rectangle.
 function drawMotifs(vx0, vx1) {
+  S.motifLabels = [];
   const active = activeLane();
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
@@ -270,12 +271,13 @@ function drawMotifs(vx0, vx1) {
       sctx.setLineDash([6, 4]);
       sctx.strokeRect(x0, y0, Math.max(1, x1 - x0), y1 - y0);
       sctx.setLineDash([]);
-      const label = motifLabel(id);
+      const label = motifName(lane.notes, id);
       // Drawn above the box, not inside it, so nothing clips it — free-floating 11.
       sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
       const labelX = Math.max(x0 + 3, vx0 + 3), labelY = y0 - 2;
       sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(label, labelX, labelY);
       sctx.lineWidth = 1; sctx.fillStyle = PAINT.motif; sctx.fillText(label, labelX, labelY);
+      S.motifLabels.push({ lane, id, x: labelX - 3, y: labelY - 13, w: sctx.measureText(label).width + 6, h: 14 });
       sctx.restore();
     });
   }
@@ -806,7 +808,7 @@ export function init_draw() {
     else if (mi >= 0) cur = "pointer";                       // hovering a suggestion
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && refBadgeAt(x, y)) cur = "grab"; // reference badge (click = select, drag = move)
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (rbe = refBoxEdgeAt(x, y)))
-      cur = (rbe.edge === "l" || rbe.edge === "r") ? "ew-resize" : "ns-resize";   // reference box edge
+      cur = refEdgeCursor(rbe.edge);                         // reference box edge or corner
     else if (!e.ctrlKey && !e.metaKey && !e.shiftKey && regionEdgeAt(x)) cur = "ew-resize"; // frame handle
     else if (S.sliceHeld) cur = "crosshair";                 // hold S = temporary Slice line
     else if (e.altKey) cur = "col-resize";                   // Alt = detect-frame band
@@ -814,6 +816,7 @@ export function init_draw() {
     else if (hit) cur = edgeOf(hit.note, x) ? "ew-resize" : "move";
     else cur = "default";                                    // empty = scrub
     stage.style.cursor = cur;
+    S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
     S.mouseX = x;
     S.mouseY = y;
     S.hoverNote = hit ? hit.note : null;
@@ -823,7 +826,7 @@ export function init_draw() {
     S.pitchHoverClientY = null;
     stage.style.cursor = "default";
     cancelHoverPreview();
-    S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; draw();
+    S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; S.refEdgeHover = null; draw();
   });
   for (const scale of [ruler, rulerRight]) {
   scale.addEventListener("mousedown", (e) => {

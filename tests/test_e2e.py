@@ -198,7 +198,6 @@ class EndToEndTests(unittest.TestCase):
             detachRefGroup(S.state.editLanes[0], 1);
         }""")
         expect(page.locator("#artifactList .artifact-row")).to_have_count(1)
-        expect(page.locator("#artifactEmpty")).to_be_hidden()
         page.keyboard.press("Control+z")
         expect(page.locator("#artifactList .artifact-row")).to_have_count(2)
         expect(page.locator("#artifactList .artifact-jump")).to_have_count(2)
@@ -217,13 +216,14 @@ class EndToEndTests(unittest.TestCase):
         expect(first.locator('.artifact-instance-next')).to_be_disabled()
         expect(first.locator('.artifact-preview-canvas')).to_have_attribute('aria-label', 'Reference #1, instance 2 in Guitar motif, 6 notes')
         expect(second.locator('.artifact-instance-next')).to_be_hidden()
-        first.locator('.artifact-preview').hover()
+        first.locator('.artifact-preview-play').click()
         expect(first.locator('.artifact-preview')).to_have_attribute('data-playing', '')
-        second.locator('.artifact-preview').hover()
+        second.locator('.artifact-preview-play').click()
         expect(first.locator('.artifact-preview')).not_to_have_attribute('data-playing', '')
         expect(second.locator('.artifact-preview')).to_have_attribute('data-playing', '')
         first.locator('.artifact-instance-previous').click()
         expect(first.locator('.artifact-preview')).to_have_attribute('data-instance', '1')
+        second.locator('.artifact-preview-play').click()
         expect(second.locator('.artifact-preview')).not_to_have_attribute('data-playing', '')
         page.mouse.move(700, 40)
         first.locator('.artifact-reference-toggle').click()
@@ -246,21 +246,16 @@ class EndToEndTests(unittest.TestCase):
         page = self.page
         first = page.locator('.artifact-row[data-reference="1"]')
         preview = first.locator('.artifact-preview')
-        expect(page.locator('.artifact-preview-play')).to_have_count(0)
-        page.evaluate("""() => {
-            window.artifactWindow = document.querySelector('.artifact-preview');
-            window.previewStarted = 0;
-            window.hoverStarted = performance.now();
-            new MutationObserver(() => {
-                if (window.artifactWindow.hasAttribute('data-playing')) window.previewStarted = performance.now();
-            }).observe(window.artifactWindow, {attributes:true, attributeFilter:['data-playing']});
-        }""")
+        page.evaluate("() => { window.artifactWindow = document.querySelector('.artifact-preview'); }")
+        # Hovering never plays; the play button starts and stops it.
         preview.hover()
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(700)
         expect(preview).not_to_have_attribute('data-playing', '')
+        play = first.locator('.artifact-preview-play')
+        play.click()
         expect(preview).to_have_attribute('data-playing', '')
-        self.assertGreater(page.evaluate('window.previewStarted - window.hoverStarted'), 450)
-        page.mouse.move(700, 40)
+        expect(play).to_have_attribute('aria-pressed', 'true')
+        play.click()
         expect(preview).not_to_have_attribute('data-playing', '')
         # The ordinary editor reference menu acts on the currently displayed instance.
         first.locator('.artifact-instance-next').click()
@@ -303,17 +298,11 @@ class EndToEndTests(unittest.TestCase):
             (await import('/repaint.js')).draw();
         }""")
         preview = page.locator('.artifact-preview').first
-        preview.hover()
+        preview.locator('.artifact-preview-play').click()
         expect(preview).to_have_attribute('data-playing', '')
         expect(preview).not_to_have_attribute('data-playing', '', timeout=10000)
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.scoreTime"), 0)
         expect(page.locator('.toast')).to_have_count(0)
-        # Leaving before the delay prevents playback altogether.
-        page.mouse.move(700, 40)
-        preview.hover()
-        page.mouse.move(700, 40)
-        page.wait_for_timeout(600)
-        expect(preview).not_to_have_attribute('data-playing', '')
         # Attach actual audio through the existing project flow and audition its crop.
         with page.expect_file_chooser() as chooser:
             self.file_menu('#attachAudio')
@@ -328,7 +317,7 @@ class EndToEndTests(unittest.TestCase):
                 }
             }, true);
         }""")
-        page.locator('.artifact-preview').first.hover()
+        page.locator('.artifact-preview-play').first.click()
         expect(page.locator('.artifact-audio')).to_have_count(1)
         page.wait_for_function("window.referenceAudio.some(e => e.type === 'playing')")
         expect(page.locator('.artifact-preview').first).not_to_have_attribute('data-playing', '')
@@ -343,12 +332,49 @@ class EndToEndTests(unittest.TestCase):
         # Arrowing to another instance must audition that recording slice as well.
         page.locator('.artifact-row[data-reference="1"] .artifact-instance-next').click()
         page.evaluate('window.referenceAudio = []')
-        page.locator('.artifact-preview').first.hover()
+        page.locator('.artifact-preview-play').first.click()
         page.wait_for_function("window.referenceAudio.some(e => e.type === 'playing')")
         expect(page.locator('.artifact-preview').first).not_to_have_attribute('data-playing', '')
         events = page.evaluate('window.referenceAudio')
         self.assertAlmostEqual(events[0]['time'], 16, delta=0.2)
         self.assertEqual(page.locator('#audio').evaluate('el => el.currentTime'), 0)
+
+    def test_reference_rename_and_corner_resize(self):
+        self.open_reference_project()
+        page = self.page
+        row = page.locator('.artifact-row[data-reference="1"]')
+        # Rename from the artifact row; Undo restores the numbered name.
+        row.locator('.artifact-name').dblclick()
+        page.locator('.artifact-rename').fill('Intro riff')
+        page.keyboard.press('Enter')
+        expect(row.locator('.artifact-name')).to_have_text('Intro riff')
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].refBoxes[1].name"), 'Intro riff')
+        page.keyboard.press('Control+z')
+        expect(row.locator('.artifact-name')).to_have_text('Reference #1')
+        # Where the first box's label and bottom-right corner are, in client px.
+        where = """async () => {
+            const { S } = await import('/store.js');
+            const r = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            const at = (x, y) => [x - sc.scrollLeft + r.left, y - sc.scrollTop + r.top];
+            const b = S.refBoxRects.find(b => b.ref === 1 && b.i === 0), l = S.refBadges.find(b => b.ref === 1 && b.i === 0);
+            return { label: at(l.x + l.w / 2, l.y + l.h / 2), corner: at(b.x1, b.y1) };
+        }"""
+        spots = page.evaluate(where)
+        # Rename on the stage by double-clicking the label.
+        page.mouse.dblclick(*spots['label'])
+        page.locator('.artifact-rename').fill('Hook')
+        page.keyboard.press('Enter')
+        expect(row.locator('.artifact-name')).to_have_text('Hook')
+        # The corner shows a diagonal cursor and resizes time and pitch at once.
+        page.mouse.move(*spots['corner'])
+        expect(page.locator('#stage')).to_have_css('cursor', 'nwse-resize')
+        before = page.evaluate("async () => { const g = (await import('/store.js')).S.state.editLanes[0].refBoxes[1]; return [g.rt1, g.pLo]; }")
+        page.mouse.down()
+        page.mouse.move(spots['corner'][0] + 80, spots['corner'][1] + 40, steps=5)
+        page.mouse.up()
+        after = page.evaluate("async () => { const g = (await import('/store.js')).S.state.editLanes[0].refBoxes[1]; return [g.rt1, g.pLo]; }")
+        self.assertGreater(after[0], before[0])
+        self.assertLess(after[1], before[1])
 
     def test_motifs_are_only_note_labels_and_live_artifacts(self):
         self.open_reference_project()
@@ -491,6 +517,9 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes.find(l => l.active).id"), 'other')
         self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 16)
         page.wait_for_function("document.querySelector('#scroll').scrollLeft > 100")
+        # Clicking the row itself moves there too.
+        root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='Start').first.locator('.artifact-name').click()
+        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 0)
         # Editing a tone from another layer selects its owner and updates its row.
         tone = root.locator('[data-marker-key$=":tone_song"]')
         tone.locator('.artifact-marker-edit').click()
@@ -578,17 +607,17 @@ class EndToEndTests(unittest.TestCase):
         }""")
         anchors = page.locator('[data-marker-kind="anchor"] .artifact-row')
         expect(anchors).to_have_count(2)
-        expect(anchors.locator('.artifact-name')).to_have_text(['Hand anchor · Fret 5', 'Hand anchor · Fret 9'])
+        expect(anchors.locator('.artifact-name')).to_have_text(['Fret 5', 'Fret 9'])
         anchors.first.locator('.artifact-marker-edit').click()
         expect(page.locator('#handAnchorPop')).to_be_visible()
         page.locator('#handAnchorFret').fill('7')
         page.locator('#handAnchorFret').press('Tab')
-        expect(anchors.first.locator('.artifact-name')).to_have_text('Hand anchor · Fret 7')
+        expect(anchors.first.locator('.artifact-name')).to_have_text('Fret 7')
         page.locator('#handAnchorPopClose').click()
         page.keyboard.press('Control+z')
-        expect(anchors.first.locator('.artifact-name')).to_have_text('Hand anchor · Fret 5')
+        expect(anchors.first.locator('.artifact-name')).to_have_text('Fret 5')
         page.keyboard.press('Control+Shift+z')
-        expect(anchors.first.locator('.artifact-name')).to_have_text('Hand anchor · Fret 7')
+        expect(anchors.first.locator('.artifact-name')).to_have_text('Fret 7')
         anchors.last.locator('.artifact-marker-jump').click()
         self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 6)
         page.wait_for_function("document.querySelector('#scroll').scrollLeft > 100")
@@ -636,7 +665,7 @@ class EndToEndTests(unittest.TestCase):
         page.reload()
         page.locator(f'#recentList [data-job="{self.reference_job}"] .ri-open').click()
         expect(anchors).to_have_count(2)
-        expect(anchors.locator('.artifact-name')).to_have_text(['Hand anchor · Fret 7', 'Hand anchor · Fret 9'])
+        expect(anchors.locator('.artifact-name')).to_have_text(['Fret 7', 'Fret 9'])
         page.get_by_role('button', name='Collapse hand anchors', exact=True).click()
         expect(page.locator('#artifact-anchor-body')).to_be_hidden()
         page.get_by_role('button', name='Expand hand anchors', exact=True).click()
@@ -660,7 +689,7 @@ class EndToEndTests(unittest.TestCase):
         page.locator('#handAnchorFret').fill('4')
         page.locator('#handAnchorFret').press('Tab')
         page.locator('#handAnchorPopClose').click()
-        expect(other.locator('.artifact-name')).to_have_text('Hand anchor · Fret 4')
+        expect(other.locator('.artifact-name')).to_have_text('Fret 4')
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds[0].fret"), 5)
         page.evaluate("""async () => {
             const {S} = await import('/store.js'); S.state.editLanes[1].locked = true;

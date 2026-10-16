@@ -390,21 +390,14 @@
 
         </div>
         <div id="artifactsResize" class="splitter splitter--x" aria-hidden="true"><svg class="splitter-dots" width="5" height="26" viewBox="0 0 5 26" fill="none"><circle cx="2.5" cy="5" r="1.4" fill="currentColor"/><circle cx="2.5" cy="13" r="1.4" fill="currentColor"/><circle cx="2.5" cy="21" r="1.4" fill="currentColor"/></svg></div>
-        <aside id="artifactsPanel" class="artifact-panel" aria-labelledby="artifactsTitle">
+        <aside id="artifactsPanel" class="artifact-panel" aria-label="Artifacts">
           <button type="button" id="artifactsChevron" class="edge-toggle edge-toggle--artifacts" data-panel-toggle="artifacts" aria-controls="artifactsPanel" aria-expanded="true" aria-label="Hide artifacts" title="Hide artifacts"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
           <div id="artifactsContent">
-          <header class="artifact-panel-head">
-            <h2 id="artifactsTitle">Artifacts</h2>
-          </header>
-          <div class="artifact-panel-intro">Reusable pieces from this project.</div>
           <div class="artifact-sections">
-          <div class="artifact-section-head"><button type="button" id="artifactReferencesToggle" class="side-label" aria-controls="artifactReferencesBody" aria-expanded="true" aria-label="Collapse references" title="Collapse references"><svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span>References</span></button><span id="artifactCount" class="artifact-time" aria-live="polite">0</span></div>
-          <div id="artifactReferencesBody" class="artifact-panel-body">
-            <ul id="artifactList" class="artifact-list"></ul>
-            <div id="artifactEmpty" class="artifact-empty"><strong>No references yet</strong><p>Select notes, then choose &ldquo;Group into reference&rdquo; from the note menu.</p></div>
-          </div>
-          <div class="artifact-section-head"><button type="button" id="artifactMotifsToggle" class="side-label" aria-controls="artifactMotifsBody" aria-expanded="true" aria-label="Collapse motifs" title="Collapse motifs"><svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span>Motifs</span></button><span id="motifCount" class="artifact-time" aria-live="polite">0</span></div>
-          <div id="artifactMotifsBody" class="artifact-panel-body"><ul id="motifList" class="artifact-list"></ul><div id="motifEmpty" class="artifact-empty"><strong>No motifs yet</strong><p>Select notes, then choose &ldquo;Mark as motif&rdquo;.</p></div></div>
+          <div class="side-header"><button type="button" id="artifactReferencesToggle" class="side-label" aria-controls="artifactReferencesBody" aria-expanded="true" aria-label="Collapse references" title="Collapse references"><svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span>References</span><span id="artifactCount" class="artifact-count" aria-live="polite">0</span></button></div>
+          <div id="artifactReferencesBody" class="artifact-panel-body"><ul id="artifactList" class="artifact-list"></ul></div>
+          <div class="side-header"><button type="button" id="artifactMotifsToggle" class="side-label" aria-controls="artifactMotifsBody" aria-expanded="true" aria-label="Collapse motifs" title="Collapse motifs"><svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span>Motifs</span><span id="motifCount" class="artifact-count" aria-live="polite">0</span></button></div>
+          <div id="artifactMotifsBody" class="artifact-panel-body"><ul id="motifList" class="artifact-list"></ul></div>
           <div id="artifactMarkers"></div>
           </div>
           </div>
@@ -589,7 +582,6 @@
       <label class="field-group block">Position
         <span class="pop-field"><input type="number" id="handAnchorTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>
-      <div class="artifact-detail">Sets the fretting hand from this beat onward.</div>
     </div>
   </div>
 

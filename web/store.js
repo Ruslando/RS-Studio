@@ -46,6 +46,8 @@ export const S = {
   matchHover: -1,  // index of the suggestion under the cursor (-1 = none)
   matchFocus: -1,  // keyboard/button-focused suggestion (-1 = none)
   refBadges: [],  // clickable reference number badges: [{ x, y, w, h, notes }] (world px)
+  refEdgeHover: null,  // the reference box whose edge is under the pointer: lights up
+  motifLabels: [],  // motif name labels on the stage: [{ lane, id, x, y, w, h }] (world px)
   refBoxRects: [],  // reference capture boxes for edge-resize: [{ ref, notes, x0, y0, x1, y1 }] (world px)
   hoverPreviewTimer: 0,  // delayed hover audition so pointer jitter doesn't restart audio
   lastPointerX: 0,

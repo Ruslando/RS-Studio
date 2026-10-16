@@ -41,6 +41,8 @@ function snapAnchorTime(time, lane) {
 function changed() { refreshSaveState(); draw(); refreshTabIfOpen(); }
 
 export function closeHandAnchorPop() {
+  // Focus left on a hidden control would swallow the next shortcut (Ctrl+Z).
+  if ($('handAnchorPop').contains(document.activeElement)) document.activeElement.blur();
   $('handAnchorPop').hidden = true;
   const previous = popSnapshot;
   popSnapshot = null; editAnchor = null; editLaneId = null;

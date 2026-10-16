@@ -1,7 +1,7 @@
 // Linked repeated-note groups ("references"): creating a reference from a selection
 // and the per-occurrence operations (move, resize, or edit a single instance).
 
-import { STAGE_ANCHORED, stageMono } from "./constants.js";
+import { stageUi } from "./constants.js";
 import { scroll, sctx } from "./dom.js";
 import { confirmChoice } from "./dialog.js";
 import { draw } from "./repaint.js";
@@ -13,7 +13,7 @@ import { editLanes, laneOf, refreshCounts } from "./lanes.js";
 import { EFFECT_FIELDS, copyEffects } from "./note-effects.js";
 import { toast } from "./notify.js";
 import { effectSig, inRefBox } from "./reference-core.js";
-import { PAINT } from "./stage-paint.js";
+import { PAINT, WASH, halo } from "./stage-paint.js";
 import { S } from "./store.js";
 import { clamp, hexA } from "./util.js";
 
@@ -31,6 +31,7 @@ import { clamp, hexA } from "./util.js";
 // share pitch, no transposition).
 export const REF_TIME_TOL = 0.03;   // s — timing slack when matching repeats
 
+export const refName = (group, ref) => group?.name || `Reference #${ref}`;
 export const REF_ACCENT = PAINT.ref;  // one hue for all refs; the number disambiguates
 
 export const REF_BOX_EDGE_TOL = 5;   // px from a box edge that grabs it for resizing
@@ -332,9 +333,9 @@ export function reconcileReferences(prev, mirrorSource) {
   });
 }
 
-// Paint each reference occurrence: a gold capture box (resizable in time + pitch)
-// plus a number badge. Hovering/selecting any note of a group spotlights — and
-// shows resize handles on — all of its occurrences.
+// Paint each reference occurrence: a gold capture box plus its name, drawn like a
+// motif's. Hovering/selecting any note of a group spotlights all its occurrences;
+// the box under the pointer's edge (or being resized) lights up as a whole.
 export function drawReferences() {
   S.refBadges = []; S.refBoxRects = [];
   if (!S.state) return;
@@ -342,60 +343,59 @@ export function drawReferences() {
   const hotRefs = new Set();   // "laneId:ref" spotlighted by hover / selection
   const mark = (n) => { const b = n && boxOfNote(n); if (b) hotRefs.add(b.lane.id + ":" + b.ref); };
   mark(S.hoverNote); for (const n of S.selection) mark(n);
+  const edge = S.drag?.mode === "refBox" ? S.drag : S.refEdgeHover;
   sctx.save();
-  // "R3" is an identifier you match against the other occurrences, so mono; the
-  // badge is 12px tall and pinned to its box, so the anchored 9.
-  sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "alphabetic";
+  sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
   eachRefGroup((lane, ref, group) => {
     if (!lane.visible) return;
     const on = hotRefs.has(lane.id + ":" + ref);
+    const label = refName(group, ref);
     for (let i = 0; i < group.anchors.length; i++) {
       const box = boxRect(group, i);
       const x0 = xOf(box.t0), x1 = xOf(box.t1);
       if (x0 > vx1 || x1 < vx0) continue;   // off-screen
       const y0 = yOf(box.pHi), y1 = yOf(box.pLo) + S.state.rowH;   // y0 = top (high pitch)
-      sctx.lineWidth = on ? 2 : 1;
-      sctx.strokeStyle = on ? REF_ACCENT : hexA(REF_ACCENT, 0.5);
+      const lit = edge && edge.lane === lane && edge.ref === ref && edge.i === i;
+      if (lit) { sctx.fillStyle = hexA(REF_ACCENT, WASH); sctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
+      sctx.lineWidth = on || lit ? 2 : 1;
+      sctx.strokeStyle = on || lit ? REF_ACCENT : hexA(REF_ACCENT, 0.5);
       sctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0, y1 - y0);
       S.refBoxRects.push({ ref, lane, i, x0, y0, x1, y1 });
-      if (on) {                                     // edge grab-handles when spotlighted
-        sctx.fillStyle = REF_ACCENT;
-        const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-        for (const [hx, hy] of [[x0, my], [x1, my], [mx, y0], [mx, y1]]) sctx.fillRect(hx - 2, hy - 2, 4, 4);
-      }
-      const label = "R" + ref, tw = sctx.measureText(label).width, bw = tw + 6;
-      const ly = clamp(y0 - 14, vy0 + 1, vy0 + S.stageHeight - 13);
-      sctx.fillStyle = on ? REF_ACCENT : hexA(REF_ACCENT, 0.8);
-      sctx.fillRect(x0, ly, bw, 12);
-      sctx.fillStyle = PAINT.ground; sctx.fillText(label, x0 + 3, ly + 9);
-      S.refBadges.push({ x: x0, y: ly, w: bw, h: 12, lane, box, ref, i });   // click selects, drag moves the occurrence
+      // Above the box, as a motif's label: free-floating 11, haloed.
+      const lx = Math.max(x0 + 3, vx0 + 3), ly = clamp(y0 - 2, vy0 + 14, vy0 + S.stageHeight - 1);
+      const tw = sctx.measureText(label).width;
+      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(label, lx, ly);
+      sctx.fillStyle = on || lit ? REF_ACCENT : hexA(REF_ACCENT, 0.85); sctx.fillText(label, lx, ly);
+      S.refBadges.push({ x: lx - 3, y: ly - 13, w: tw + 6, h: 14, lane, box, ref, i });   // click selects, drag moves, double-click renames
     }
   });
   sctx.restore();
 }
 
-// The reference number badge under a world-space point, or null. (badge.box = rect)
+// The reference label under a world-space point, or null. (badge.box = rect)
 export function refBadgeAt(x, y) {
   for (const b of S.refBadges)
     if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
   return null;
 }
 
-// A reference box edge under a world-space point: { ref, lane, i, edge } where edge
-// is "l"/"r" (time) or "t"/"b" (pitch), or null.
+// A reference box edge or corner under a world-space point: { ref, lane, i, edge }
+// where edge holds "t"/"b" (pitch) and/or "l"/"r" (time), e.g. "tl"; or null.
 export function refBoxEdgeAt(x, y) {
   const T = REF_BOX_EDGE_TOL;
   for (const b of S.refBoxRects) {
-    const inX = x >= b.x0 - T && x <= b.x1 + T, inY = y >= b.y0 - T && y <= b.y1 + T;
-    if (!inX || !inY) continue;
-    const e = inY && Math.abs(x - b.x0) <= T ? "l"
-            : inY && Math.abs(x - b.x1) <= T ? "r"
-            : inX && Math.abs(y - b.y0) <= T ? "t"
-            : inX && Math.abs(y - b.y1) <= T ? "b" : null;
+    if (x < b.x0 - T || x > b.x1 + T || y < b.y0 - T || y > b.y1 + T) continue;
+    const e = (Math.abs(y - b.y0) <= T ? "t" : Math.abs(y - b.y1) <= T ? "b" : "")
+            + (Math.abs(x - b.x0) <= T ? "l" : Math.abs(x - b.x1) <= T ? "r" : "");
     if (e) return { ref: b.ref, lane: b.lane, i: b.i, edge: e };
   }
   return null;
 }
+
+// The resize cursor for an edge from refBoxEdgeAt.
+export const refEdgeCursor = (edge) => edge.length === 2
+  ? (edge === "tl" || edge === "br" ? "nwse-resize" : "nesw-resize")
+  : (edge === "l" || edge === "r" ? "ew-resize" : "ns-resize");
 
 // Drag a box edge: resize the group's shared shape (so every box resizes), keyed
 // off the dragged box's anchor. Mirroring of newly-captured notes happens on
@@ -404,10 +404,10 @@ export function resizeRefBox(drag, x, y) {
   const group = drag.lane.refBoxes[drag.ref];
   if (!group) return;
   const a = group.anchors[drag.i];
-  if (drag.edge === "l") group.rt0 = Math.min(snap(timeAt(x)) - a, group.rt1 - 1e-3);
-  else if (drag.edge === "r") group.rt1 = Math.max(snap(timeAt(x)) - a, group.rt0 + 1e-3);
-  else if (drag.edge === "t") group.pHi = Math.max(Math.round(pitchAt(y)), group.pLo);
-  else if (drag.edge === "b") group.pLo = Math.min(Math.round(pitchAt(y)), group.pHi);
+  if (drag.edge.includes("l")) group.rt0 = Math.min(snap(timeAt(x)) - a, group.rt1 - 1e-3);
+  else if (drag.edge.includes("r")) group.rt1 = Math.max(snap(timeAt(x)) - a, group.rt0 + 1e-3);
+  if (drag.edge.includes("t")) group.pHi = Math.max(Math.round(pitchAt(y)), group.pLo);
+  else if (drag.edge.includes("b")) group.pLo = Math.min(Math.round(pitchAt(y)), group.pHi);
   draw();
 }
 

@@ -17,6 +17,7 @@ import { markerRails, railsBottom } from "./marker-rails.js";
 import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes, setLaneNotePitch, targetLane } from "./lanes.js";
 import { auditionNote, previewNotes, seekPlayback } from "./playback.js";
 import { toast } from "./notify.js";
+import { beginArtifactRename } from "./artifact-names.js";
 import { moveRefOccurrence, notesInBox, refBadgeAt, refBoxEdgeAt, resizeRefBox } from "./references.js";
 import { lineXAtRow } from "./slice.js";
 import { beginNoteGesture, finishNoteGesture, updateNoteGesture } from "./note-motion.js";
@@ -434,6 +435,14 @@ export function init_interaction() {
   stage.addEventListener("dblclick", (e) => {
     if (!S.state || e.ctrlKey || e.metaKey) return;
     const [x, y] = localXY(e);
+    // Double-click a reference's or motif's name to rename it in place.
+    const label = refBadgeAt(x, y) || S.motifLabels.find((m) => x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h);
+    if (label && canEditLane(label.lane)) {
+      e.preventDefault(); S.drag = null;
+      beginArtifactRename(label.id ? "motif" : "reference", label.lane, label.id || label.ref,
+        { left: e.clientX - (x - label.x), top: e.clientY - (y - label.y), width: label.w, height: label.h });
+      return;
+    }
     if (bendHandleAt(x, y)) return;              // already a point here
     const hit = bendCurveAt(x, y);
     if (hit) { e.preventDefault(); addBendPoint(hit.note, hit.t); }
@@ -511,6 +520,8 @@ export function init_interaction() {
   stage.addEventListener("mousemove", (e) => {
     if (!S.state || S.drag || sliceHeld || !["select", "trace"].includes(S.toolMode)) return;
     const [x, y] = localXY(e);
+    // Reference labels and edges set their own cursor in draw.js's handler.
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (refBadgeAt(x, y) || refBoxEdgeAt(x, y))) return;
     const hit = pickNote(timeAt(x), pitchAt(y));
     stage.style.cursor = hit
       ? (!hit.grace && edgeOf(hit.note, x) ? "ew-resize" : "move")

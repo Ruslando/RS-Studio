@@ -682,11 +682,12 @@ New comments cite this document by section ("design.md 4.9").
 
 ## 10. Artifact pane
 
-The right artifact pane borrows Claude's quiet side-pane structure: a simple
-heading, restrained separators and stacked content with secondary metadata.
-It uses RS Studio surface and type tokens in both themes. `.artifact-panel`
-is a flat pane; `.artifact-row` groups a reference and its occurrences. Each
-occurrence has a compact ghost Jump button. The pane follows the layer sidebar and fretboard interaction rules: a gap
+The right artifact pane is built like the layer sidebar (4.15): no pane title,
+each list under a `.side-header` / `.side-label` with its count in mono at the
+right, rows as in 4.13. An empty list shows only its header and a 0. A
+reference or motif row's head (`.artifact-row-head`) is the disclosure for its
+preview window. A marker row (`.artifact-marker-row`) is a 44 row: clicking it
+moves there; its compact Edit and Move to icon buttons appear on hover or focus. The pane follows the layer sidebar and fretboard interaction rules: a gap
 splitter resizes it, dragging below the collapse threshold folds it to a frosted
 strip, and hovering peeks at its retained content. The edge chevron, toolbar
 toggle, strip click and splitter double-click restore it. Width and collapsed
@@ -694,9 +695,20 @@ state persist across reloads. Collapsed content is inert. The list updates with 
 and undo; references on hidden lanes remain discoverable.
 
 Each reference row is its own preview window with its lane, a cropped track
-miniature, and a compact Move to control. Hovering the window starts a preview
-after 500ms; leaving cancels the delay or stops the sound. Space/Enter on the
-focused window toggles the same preview. A status line reports playback.
+miniature, and a compact Move to control. Hovering never plays: the compact play
+toggle in the footer (`aria-pressed`, stop icon while playing) starts and stops
+the preview, as does Space/Enter on the focused window.
+
+References and motifs have names. Double-clicking the name in the artifact row
+or the label on the stage, or Rename in their menu, opens a 24-high field over
+it; Enter or leaving saves, Escape cancels, an empty name returns to the
+numbered default, and each rename is one undo step. A reference's name is stored
+on its group (`refBoxes[n].name`), a motif's on its notes (`motifName`). On the
+stage both labels are drawn the same way: 11/700 UI type, haloed, above the box.
+
+A reference box resizes from any edge or corner within `REF_BOX_EDGE_TOL` px:
+the cursor turns to the matching resize arrow and the box lights up (2px stroke
+and a `WASH` fill) while the pointer is on its edge or dragging it.
 The displayed occurrence
 is selected using previous/next arrows overlaid inside the miniature. The arrows appear
 when the reference has multiple instances; the first/last boundary disables the
@@ -709,8 +721,8 @@ owning lane's notes. Without audio it shows and plays the notes. Its height is
 `--h-artifact-preview` (96px); a cursor follows playback inside the crop.
 Every expanded window has the same fixed height and full available width,
 including the same miniature width for single- and multiple-instance references.
-The counter, navigation arrows, playback status and Move to control all sit inside its
-bordered surface. Hiding arrows or switching instances never changes its size.
+The navigation arrows sit on the miniature; under it, one footer line holds the
+playback dot, the counter and time range in mono, and Move to. Hiding arrows or switching instances never changes its size.
 Each row's disclosure folds its preview window. The References disclosure folds
 the entire list. Both use `aria-expanded` and `aria-controls`, and collapse
 choices survive list redraws.

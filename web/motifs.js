@@ -2,6 +2,12 @@
 // chord, or repeat constraints and remain meaningful with a single member.
 export const validMotifId = value => typeof value === "string" && /^motif_(?:legacy_|v2_)?\d+$/.test(value);
 export const motifLabel = id => `Motif #${id.split("_").at(-1)}`;
+// A motif's own name rides on its notes (motifName), so save, undo and deletion
+// need nothing extra; any member carrying one names the whole motif.
+export const motifName = (notes, id) => notes?.find(note => note.motifId === id && note.motifName)?.motifName || motifLabel(id);
+export function renameMotif(notes, id, name) {
+  for (const note of notes) if (note.motifId === id) { if (name) note.motifName = name; else delete note.motifName; }
+}
 
 // The first format used the note/lane counter as its visible number. Upgrade
 // those ids once, across the whole project (including written alternatives).
@@ -56,7 +62,7 @@ export function motifToExtend(notes, selected) {
 }
 
 export function unmarkMotif(notes, id) {
-  for (const note of notes) if (note.motifId === id) delete note.motifId;
+  for (const note of notes) if (note.motifId === id) { delete note.motifId; delete note.motifName; }
 }
 
 export function migrateMotifs(notes) {

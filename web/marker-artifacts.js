@@ -17,6 +17,7 @@ import { xOf } from './geometry.js';
 import { moveViewportTo, stopViewportMotion } from './viewport-motion.js';
 import { stopArtifactPreview } from './artifact-preview.js';
 import { draw } from './repaint.js';
+import { icon } from './icons.js';
 
 const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['anchor', 'Hand anchors']];
 const sections = new Map(), rows = new Map();
@@ -44,12 +45,12 @@ export function markerArtifacts() {
   for (const lane of lanes) {
     (lane.handHolds || []).forEach((marker, index) => entries.push({
       key: `anchor:${lane.id}:${index}`, kind: 'anchor', lane, owner: lane.name,
-      marker, t: marker.t, name: `Hand anchor · Fret ${Math.round(marker.fret)}`,
+      marker, t: marker.t, name: `Fret ${Math.round(marker.fret)}`,
     }));
-    for (const marker of lane.phraseBoundaries || []) entries.push({
+    [...lane.phraseBoundaries || []].sort((a, b) => a.t - b.t).forEach((marker, index) => entries.push({
       key: `phrase:${lane.id}:${marker.id}`, kind: 'phrase', lane, owner: lane.name,
-      marker, t: marker.t, name: 'Phrase boundary',
-    });
+      marker, t: marker.t, name: `Phrase ${index + 1}`,
+    }));
     for (const marker of lane.toneMarkers || []) entries.push({
       key: `tone:${lane.id}:${marker.id}`, kind: 'tone', lane, owner: lane.name,
       marker, t: marker.t, name: tonePresetLabel(marker.tone),
@@ -85,23 +86,22 @@ function actOnMarker(key, edit, target, event) {
 export function initMarkerArtifacts() {
   const root = $('artifactMarkers');
   for (const [kind, label] of categories) {
-    const head = document.createElement('div'); head.className = 'artifact-section-head';
+    const head = document.createElement('div'); head.className = 'side-header';
     const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'side-label';
     toggle.innerHTML = chevron;
-    const title = document.createElement('span'); title.textContent = label; toggle.append(title);
-    const count = document.createElement('span'); count.className = 'artifact-time'; count.setAttribute('aria-live', 'polite');
+    const title = document.createElement('span'); title.textContent = label;
+    const count = document.createElement('span'); count.className = 'artifact-count'; count.setAttribute('aria-live', 'polite');
+    toggle.append(title, count);
     const body = document.createElement('div'); body.className = 'artifact-panel-body'; body.id = `artifact-${kind}-body`;
     const list = document.createElement('ul'); list.className = 'artifact-list'; list.dataset.markerKind = kind;
-    const empty = document.createElement('div'); empty.className = 'artifact-empty';
-    empty.textContent = kind === 'anchor' ? 'No hand anchors yet. Set an anchor in fretboard Edit mode.' : `No ${label.toLowerCase()} markers yet`;
-    body.append(list, empty); head.append(toggle, count); root.append(head, body);
+    body.append(list); head.append(toggle); root.append(head, body);
     const sync = () => {
       toggle.setAttribute('aria-controls', body.id); toggle.setAttribute('aria-expanded', String(!body.hidden));
       toggle.title = `${body.hidden ? 'Expand' : 'Collapse'} ${label.toLowerCase()}`;
       toggle.setAttribute('aria-label', toggle.title);
     };
     toggle.addEventListener('click', () => { body.hidden = !body.hidden; sync(); }); sync();
-    sections.set(kind, {list, empty, count});
+    sections.set(kind, {list, count});
   }
 }
 
@@ -109,9 +109,9 @@ export function renderMarkerArtifacts() {
   if (!sections.size) return;
   const entries = markerArtifacts(), live = new Set(entries.map(entry => entry.key));
   for (const [key, row] of rows) if (!live.has(key)) { row.remove(); rows.delete(key); }
-  for (const [kind, {list, count, empty}] of sections) {
+  for (const [kind, {list, count}] of sections) {
     const group = entries.filter(entry => entry.kind === kind);
-    setText(count, String(group.length)); empty.hidden = group.length > 0;
+    setText(count, String(group.length));
     group.forEach((entry, index) => {
       const key = entry.key;
       let row = rows.get(entry.key);
@@ -121,11 +121,15 @@ export function renderMarkerArtifacts() {
         const name = document.createElement('span'); name.className = 'artifact-name';
         const detail = document.createElement('span'); detail.className = 'artifact-detail'; copy.append(name, detail);
         const controls = document.createElement('div'); controls.className = 'artifact-marker-actions';
-        for (const [edit, label] of [[true, 'Edit'], [false, 'Move to']]) {
-          const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn--compact btn--ghost';
-          button.classList.add(edit ? 'artifact-marker-edit' : 'artifact-marker-jump'); button.textContent = label;
-          button.addEventListener('click', event => actOnMarker(key, edit, button, event)); controls.append(button);
+        for (const [edit, label, svg] of [[true, 'Edit', icon('edit', 14)], [false, 'Move to', icon('jump', 14)]]) {
+          const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-btn icon-btn--compact';
+          button.classList.add(edit ? 'artifact-marker-edit' : 'artifact-marker-jump'); button.innerHTML = svg;
+          button.title = label; button.setAttribute('aria-label', label);
+          button.addEventListener('click', event => actOnMarker(key, edit, button, event));
+          controls.append(button);
         }
+        // A click on the row itself moves there; the buttons stay for keyboard use.
+        row.addEventListener('click', event => { if (!event.target.closest('button')) actOnMarker(key, false, row); });
         row.addEventListener('contextmenu', event => {
           event.preventDefault(); event.stopPropagation(); actOnMarker(key, true, row, event);
         });

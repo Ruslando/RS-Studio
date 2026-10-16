@@ -13,12 +13,13 @@ import { paintArtifactPreviews, referencePreview, resetArtifactPreviews, stopArt
 
 import { openRefMenu, openMotifMenu } from "./edit.js";
 
-import { motifGroups, motifLabel } from './motifs.js';
+import { motifGroups } from './motifs.js';
+import { artifactName, beginArtifactRename } from './artifact-names.js';
 import { initMarkerArtifacts, renderMarkerArtifacts, clearMarkerArtifacts } from './marker-artifacts.js';
 
 const rows = new Map();
 const collapsedArtifacts = new Set();
-const disclosureIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+const disclosureIcon = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
 function jumpToReference(lane, ref, index) {
   const group = lane.refBoxes?.[ref];
@@ -52,33 +53,38 @@ export function renderArtifacts() {
   for (const [key, row] of rows) if (!liveKeys.has(key)) {
     removeArtifactPreview(row.querySelector('.artifact-preview')); row.remove(); rows.delete(key);
   }
-  for (const [countId, emptyId, collection] of [['artifactCount','artifactEmpty',references],['motifCount','motifEmpty',motifs]]) {
+  for (const [countId, collection] of [['artifactCount',references],['motifCount',motifs]])
     if ($(countId).textContent !== String(collection.length)) $(countId).textContent = String(collection.length);
-    $(emptyId).hidden = collection.length > 0;
-  }
   const orders = {reference:0, motif:0};
   for (const {lane, ref, kind} of entries) {
     const list = $(kind === 'motif' ? 'motifList' : 'artifactList');
     const order = orders[kind]++;
     const rowKey = `${kind}:${lane.id}:${ref}`;
     if (rows.has(rowKey)) {
-      const row = rows.get(rowKey), detail = row.querySelector('.artifact-detail');
+      const row = rows.get(rowKey), detail = row.querySelector('.artifact-detail'), name = row.querySelector('.artifact-name');
+      const label = artifactName(kind, lane, ref);
+      if (name.textContent !== label) name.textContent = label;
       if (detail.textContent !== lane.name) { detail.textContent = lane.name; detail.title = lane.name; }
       if (list.children[order] !== row) list.insertBefore(row, list.children[order] || null);
       continue;
     }
     const row = document.createElement("li"); row.className = "artifact-row";
-    const head = document.createElement("div"); head.className = "artifact-row-head";
     const copy = document.createElement("div"); copy.className = "artifact-copy";
-    const name = document.createElement("span"); name.className = "artifact-name"; name.textContent = kind === 'motif' ? motifLabel(ref) : `Reference #${ref}`;
+    const name = document.createElement("span"); name.className = "artifact-name"; name.textContent = artifactName(kind, lane, ref);
+    name.title = 'Double-click to rename';
+    name.addEventListener('dblclick', event => {
+      event.stopPropagation();
+      const currentLane = S.state?.editLanes.find(item => item.id === lane.id);
+      if (canEditLane(currentLane)) beginArtifactRename(kind, currentLane, ref, name.getBoundingClientRect());
+    });
     const detail = document.createElement("span"); detail.className = "artifact-detail"; detail.textContent = lane.name; detail.title = lane.name;
     const key = rowKey;
     row.dataset[kind] = String(ref);
+    // The whole head is the disclosure, like a sidebar section header.
     const toggle = document.createElement('button'); toggle.type = 'button';
-    toggle.className = 'icon-btn icon-btn--compact artifact-reference-toggle';
+    toggle.className = 'artifact-row-head artifact-reference-toggle';
     toggle.innerHTML = disclosureIcon;
-    toggle.title = `Collapse ${name.textContent}`; toggle.setAttribute('aria-label', toggle.title);
-    copy.append(name, detail); head.append(toggle, copy); row.append(head);
+    copy.append(name, detail); toggle.append(copy); row.append(toggle);
     const occurrences = referencePreview(lane, ref, index => {
       const currentLane = S.state.editLanes.find(item => item.id === lane.id);
       if (kind === 'motif') {
@@ -94,7 +100,6 @@ export function renderArtifacts() {
       if (collapsed) stopArtifactPreviewFor(occurrences);
       toggle.setAttribute('aria-expanded', String(!collapsed));
       toggle.title = `${collapsed ? 'Expand' : 'Collapse'} ${name.textContent}`;
-      toggle.setAttribute('aria-label', toggle.title);
     };
     toggle.addEventListener('click', () => {
       if (collapsedArtifacts.has(key)) collapsedArtifacts.delete(key); else collapsedArtifacts.add(key);
@@ -109,7 +114,7 @@ export function renderArtifacts() {
         const notes = motifGroups(currentLane.notes).get(ref);
         if (!notes?.length) return;
         activateLane(currentLane); setSelection(new Set(notes)); draw();
-        openMotifMenu(event.clientX, event.clientY, ref); return;
+        openMotifMenu(event.clientX, event.clientY, ref, currentLane); return;
       }
       const group = currentLane?.refBoxes?.[ref];
       if (!group?.anchors?.length || !canEditLane(currentLane)) return;

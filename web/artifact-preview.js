@@ -8,10 +8,13 @@ import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { dpr, fmtTime, noteName } from "./util.js";
 
-let audition = null, hoverTimer = 0, hoverTarget = null;
+let audition = null;
 const previews = new Map(), positions = new Map();
 import { motifGroups, motifLabel } from './motifs.js';
-const artifactName = preview => preview.motif ? motifLabel(preview.ref) : `Reference #${preview.ref}`;
+import { artifactName as names } from './artifact-names.js';
+const artifactName = preview => names(preview.motif ? 'motif' : 'reference', preview.lane, preview.ref);
+const PLAY_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16l13-8Z"/></svg>';
+const STOP_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>';
 function groupFor(lane, preview) {
   if (!preview.motif) return lane?.refBoxes?.[preview.ref];
   const notes = motifGroups(lane?.notes).get(preview.ref);
@@ -26,7 +29,10 @@ const arrowIcon = direction => `<svg width="14" height="14" viewBox="0 0 24 24" 
 
 function syncPreviewState(preview, playing) {
   preview.root.toggleAttribute('data-playing', playing);
-  preview.status.textContent = playing ? 'Previewing' : 'Hover to preview';
+  preview.play.innerHTML = playing ? STOP_ICON : PLAY_ICON;
+  preview.play.setAttribute('aria-pressed', String(playing));
+  preview.play.title = playing ? 'Stop preview' : 'Play preview';
+  preview.play.setAttribute('aria-label', preview.play.title);
 }
 
 function visible(preview) {
@@ -34,17 +40,8 @@ function visible(preview) {
     && !document.getElementById('artifactsContent').inert && !document.hidden;
 }
 
-function queuePreview(preview) {
-  stopArtifactPreview();
-  hoverTarget = preview;
-  hoverTimer = setTimeout(() => {
-    hoverTimer = 0; hoverTarget = null;
-    if (visible(preview) && preview.root.matches(':hover')) playPreview(preview);
-  }, 500);
-}
-
 export function stopArtifactPreviewFor(root) {
-  if (hoverTarget?.root === root || audition?.preview.root === root) stopArtifactPreview();
+  if (audition?.preview.root === root) stopArtifactPreview();
 }
 
 export function removeArtifactPreview(root) {
@@ -66,7 +63,7 @@ function updateOccurrence(preview) {
     t0: Math.max(0, occurrences[position].anchor + group.rt0),
     t1: Math.min(S.state.duration, occurrences[position].anchor + group.rt1), pLo: group.pLo, pHi: group.pHi };
   preview.root.dataset.instance = String(position + 1);
-  preview.label.textContent = `${position + 1} / ${occurrences.length} | ${fmtTime(preview.box.t0)} - ${fmtTime(preview.box.t1)}`;
+  preview.label.textContent = `${position + 1} / ${occurrences.length} · ${fmtTime(preview.box.t0)}–${fmtTime(preview.box.t1)}`;
   preview.previous.disabled = position === 0;
   preview.next.disabled = position === occurrences.length - 1;
   preview.previous.hidden = preview.next.hidden = occurrences.length === 1;
@@ -77,7 +74,6 @@ function updateOccurrence(preview) {
 }
 
 export function stopArtifactPreview() {
-  clearTimeout(hoverTimer); hoverTimer = 0; hoverTarget = null;
   const current = audition;
   if (!current) return;
   audition = null;
@@ -147,14 +143,13 @@ export function referencePreview(lane, ref, moveTo, motif = false) {
   const stage = document.createElement('div'); stage.className = 'artifact-preview-stage';
   const canvas = document.createElement('canvas'); canvas.className = 'artifact-preview-canvas'; canvas.setAttribute('role', 'img');
   const previous = document.createElement('button'), next = document.createElement('button');
-  const status = document.createElement('span'); status.className = 'artifact-detail artifact-preview-status';
-  status.setAttribute('aria-live', 'polite');
-  const preview = {lane, ref, motif, root, label, stage, previous, next, status, geometry: '', position: 0, box: null, key: '', image: null};
+  const play = document.createElement('button'); play.type = 'button'; play.className = 'icon-btn icon-btn--compact artifact-preview-play';
+  play.addEventListener('click', () => playPreview(preview));
+  const preview = {lane, ref, motif, root, label, stage, previous, next, play, geometry: '', position: 0, box: null, key: '', image: null};
   const change = delta => {
     stopArtifactPreviewFor(root);
     positions.set(refKey(lane, ref), preview.position + delta);
     updateOccurrence(preview); paintArtifactPreviews();
-    if (root.matches(':hover')) queuePreview(preview);
   };
   for (const [button, delta, name] of [[previous,-1,'Previous'],[next,1,'Next']]) {
     button.type = 'button'; button.className = `icon-btn icon-btn--compact artifact-instance-${delta < 0 ? 'previous' : 'next'}`;
@@ -165,10 +160,7 @@ export function referencePreview(lane, ref, moveTo, motif = false) {
   move.textContent = 'Move to'; move.title = `Move to displayed instance of ${artifactName(preview)}`; move.setAttribute('aria-label', move.title);
   move.addEventListener('click', () => moveTo(preview.box.index));
   root.tabIndex = 0;
-  root.title = `Hover for half a second to preview. Right-click for ${motif ? 'motif' : 'reference'} actions. Space toggles preview.`;
-  root.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') queuePreview(preview); });
-  root.addEventListener('pointerleave', () => stopArtifactPreviewFor(root));
-  root.addEventListener('pointerdown', () => stopArtifactPreviewFor(root));
+  root.title = 'Space plays the preview; right-click for actions';
   root.addEventListener('keydown', event => {
     if (event.target !== root) return;
     if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); playPreview(preview); }
@@ -178,8 +170,8 @@ export function referencePreview(lane, ref, moveTo, motif = false) {
       root.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: rect.left + 16, clientY: rect.top + 16}));
     }
   });
-  const footer = document.createElement('div'); footer.className = 'artifact-preview-footer'; footer.append(status, move);
-  stage.append(canvas, previous, next); root.append(label, stage, footer);
+  const footer = document.createElement('div'); footer.className = 'artifact-preview-footer'; footer.append(play, label, move);
+  stage.append(canvas, previous, next); root.append(stage, footer);
   previews.set(canvas, preview); updateOccurrence(preview);
   return root;
 }

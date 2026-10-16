@@ -21,8 +21,9 @@ import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, tog
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, refMenuEntry } from "./references.js";
-import { markMotif, motifGroups, motifLabel, motifToExtend, unmarkMotif } from "./motifs.js";
+import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, refMenuEntry, refName } from "./references.js";
+import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
+import { beginArtifactRename } from "./artifact-names.js";
 import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
@@ -663,10 +664,13 @@ function writeAlternative(colNotes, choice, influence) {
   if (!lane) return false;
   const flow = normalizeOverrideInfluence(influence || overrideFlow(colNotes));
   const markings = new Map(lane.notes.map(note => [note.id, note.motifId]));
+  const names = new Map(lane.notes.map(note => [note.id, note.motifName]));
   const { notes, column } = writeColumnOverride(lane.notes, colNotes, choice, flow, nid);
   for (const note of notes) if (markings.has(note.id)) {
     if (markings.get(note.id)) note.motifId = markings.get(note.id);
     else delete note.motifId;
+    if (names.get(note.id)) note.motifName = names.get(note.id);
+    else delete note.motifName;
   }
   const rewritten = notes !== lane.notes;
   lane.notes = notes;
@@ -944,7 +948,9 @@ export function openRefMenu(clientX, clientY, occ, { origin = "editor" } = {}) {
   // Cut copies, then removes the whole occurrence (box + notes) — not just the
   // notes, which would leave an empty box behind.
   buildMenu(m, [
-    { label: `Reference #${occ.ref}`, header: true },
+    { label: refName(occ.group, occ.ref), header: true },
+    { label: "Rename", fn: () => beginArtifactRename("reference", occ.lane, occ.ref, { left: clientX, top: clientY, width: 0, height: 0 }) },
+    { sep: true },
     { label: "Copy", fn: () => doCopy() },
     { label: "Cut", fn: () => { doCopy(); deleteRefOccurrence(occ); } },
     { sep: true },
@@ -959,11 +965,13 @@ export function openRefMenu(clientX, clientY, occ, { origin = "editor" } = {}) {
   placeCtxMenu(m, clientX, clientY);
 }
 
-export function openMotifMenu(clientX, clientY, id) {
+export function openMotifMenu(clientX, clientY, id, lane) {
   const menu = ensureCtxMenu(); menu.innerHTML = "";
   menu.dataset.origin = "artifact";
   buildMenu(menu, [
-    {label: motifLabel(id), header: true},
+    {label: motifName(lane.notes, id), header: true},
+    {label: "Rename", fn: () => beginArtifactRename("motif", lane, id, { left: clientX, top: clientY, width: 0, height: 0 })},
+    {sep: true},
     {label: "Copy", fn: doCopy},
     {label: "Cut", fn: () => { doCopy(); doDelete(); }},
     {sep: true},
