@@ -28,6 +28,7 @@ import { init_setup } from "./setup.js";
 import { init_updates } from "./updates.js";
 import { initModalFocus } from "./modal-focus.js";
 import { initSelectPickers } from "./select-pickers.js";
+import { init_artifacts } from "./artifacts.js";
 
 init_project();
 init_detect();
@@ -56,3 +57,4 @@ init_setup();
 init_updates();
 initModalFocus();
 initSelectPickers();
+init_artifacts();

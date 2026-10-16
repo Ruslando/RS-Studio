@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zipfile
 import urllib.request
 from pathlib import Path
 
@@ -90,6 +91,264 @@ class EndToEndTests(unittest.TestCase):
         self.page.goto(self.url)
         # Registered last, so it runs first: before the page is closed.
         self.addCleanup(lambda: self.assertEqual(self.faults, [], "the app reported errors during this test"))
+
+    def open_reference_project(self):
+        page = self.page
+        bundle = self.data / "reference-showcase.chart"
+        with zipfile.ZipFile(bundle, "w") as archive:
+            archive.write(Path(__file__).resolve().parents[1] / "examples/reference-showcase/project.json", "project.json")
+        with page.expect_file_chooser() as chooser:
+            page.click("#welcomeOpen")
+        chooser.value.set_files(bundle)
+        expect(page.locator("#lanes .lane-row")).to_be_visible()
+        self.reference_job = page.evaluate("async () => (await import('/store.js')).S.state.job")
+
+    def test_artifact_example_and_reference_navigation(self):
+        self.open_reference_project()
+        page = self.page
+        # Reopen through the ordinary library, as with every user project.
+        page.click("#homeBtn")
+        page.locator(f'#recentList [data-job="{self.reference_job}"] .ri-open').click()
+        expect(page.locator("#artifactsPanel")).to_be_visible()
+        expect(page.locator("#artifactList .artifact-row")).to_have_count(2)
+        expect(page.locator("#artifactList .artifact-jump")).to_have_count(2)
+        expect(page.locator(".artifact-preview-canvas")).to_have_count(2)
+        page.locator('.artifact-row[data-reference="1"] .artifact-instance-next').click()
+        motion = page.evaluate("""async () => {
+            document.querySelector('#artifactList .artifact-jump').click();
+            const { viewportMoving } = await import('/viewport-motion.js');
+            return viewportMoving();
+        }""")
+        self.assertTrue(motion)
+        page.wait_for_function("async () => !(await import('/viewport-motion.js')).viewportMoving()")
+        state = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            return { time: S.scoreTime, selected: S.selection.size,
+                scroll: document.querySelector('#scroll').scrollLeft, job: S.state.job };
+        }""")
+        self.assertEqual(state["time"], 16)
+        self.assertEqual(state["selected"], 6)
+        self.assertGreater(state["scroll"], 0)
+        stored = page.request.get(f"{self.url}api/projects/{state['job']}").json()
+        self.assertEqual(len(stored["editLanes"][0]["refBoxes"]["1"]["anchors"]), 2)
+        page.emulate_media(reduced_motion="reduce")
+        panel = page.locator("#artifactsPanel")
+        original_width = panel.bounding_box()["width"]
+        grip = page.locator("#artifactsResize").bounding_box()
+        x, y = grip["x"] + grip["width"] / 2, grip["y"] + grip["height"] / 2
+        page.mouse.move(x, y)
+        page.mouse.down()
+        page.mouse.move(x - 80, y, steps=8)
+        page.mouse.up()
+        width = panel.bounding_box()["width"]
+        self.assertAlmostEqual(width, original_width + 80, delta=2)
+        page.click("#artifactsChevron")
+        expect(panel).to_have_attribute("data-collapsed", "")
+        expect(page.locator("#artifactsToggle")).to_have_attribute("aria-expanded", "false")
+        self.assertTrue(page.locator("#artifactsContent").evaluate("el => el.inert"))
+        page.mouse.move(700, 40)
+        self.assertAlmostEqual(panel.bounding_box()["width"], 28, delta=1)
+        panel.hover()
+        self.assertAlmostEqual(panel.bounding_box()["width"], 40, delta=1)
+        page.click("#artifactsToggle")
+        expect(panel).not_to_have_attribute("data-collapsed", "")
+        self.assertAlmostEqual(panel.bounding_box()["width"], width, delta=1)
+        # Drag across the fold threshold, then pull back out from the narrow strip.
+        grip = page.locator("#artifactsResize").bounding_box()
+        x = grip["x"] + grip["width"] / 2
+        page.mouse.move(x, y)
+        page.mouse.down()
+        page.mouse.move(x + width - 100, y, steps=8)
+        page.mouse.up()
+        expect(panel).to_have_attribute("data-collapsed", "")
+        page.mouse.move(700, 40)
+        page.reload()
+        page.locator(f'#recentList [data-job="{self.reference_job}"] .ri-open').click()
+        expect(panel).to_have_attribute("data-collapsed", "")
+        page.locator("#artifactsResize").dblclick()
+        expect(panel).not_to_have_attribute("data-collapsed", "")
+        self.assertAlmostEqual(panel.bounding_box()["width"], width, delta=1)
+        page.locator("#artifactsResize").dblclick()
+        expect(panel).to_have_attribute("data-collapsed", "")
+        page.mouse.move(700, 40)
+        grip = page.locator("#artifactsResize").bounding_box()
+        x = grip["x"] + grip["width"] / 2
+        page.mouse.move(x, y)
+        page.mouse.down()
+        page.mouse.move(x - 280, y, steps=8)
+        page.mouse.up()
+        expect(panel).not_to_have_attribute("data-collapsed", "")
+        self.assertGreater(panel.bounding_box()["width"], 280)
+        # The retained strip can be opened directly, and the edge works by keyboard.
+        page.locator("#artifactsChevron").focus()
+        page.keyboard.press("Enter")
+        expect(panel).to_have_attribute("data-collapsed", "")
+        panel.click()
+        expect(panel).not_to_have_attribute("data-collapsed", "")
+        # The jump reveals a hidden lane too; deletion/undo must refresh the index.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            S.state.editLanes[0].visible = false;
+        }""")
+        page.locator("#artifactList .artifact-jump").first.click()
+        self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].visible"))
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { detachRefGroup } = await import('/references.js');
+            detachRefGroup(S.state.editLanes[0], 1);
+        }""")
+        expect(page.locator("#artifactList .artifact-row")).to_have_count(1)
+        expect(page.locator("#artifactEmpty")).to_be_hidden()
+        page.keyboard.press("Control+z")
+        expect(page.locator("#artifactList .artifact-row")).to_have_count(2)
+        expect(page.locator("#artifactList .artifact-jump")).to_have_count(2)
+
+    def test_reference_windows_and_instance_navigation(self):
+        self.open_reference_project()
+        page = self.page
+        expect(page.locator('#artifactList .artifact-row')).to_have_count(2)
+        expect(page.locator('#artifactCount')).to_have_text('2')
+        expect(page.locator('.artifact-preview-canvas')).to_have_count(2)
+        first = page.locator('.artifact-row[data-reference="1"]')
+        second = page.locator('.artifact-row[data-reference="2"]')
+        expect(first.locator('.artifact-instance-previous')).to_be_disabled()
+        first.locator('.artifact-instance-next').click()
+        expect(first.locator('.artifact-preview')).to_have_attribute('data-instance', '2')
+        expect(first.locator('.artifact-instance-next')).to_be_disabled()
+        expect(first.locator('.artifact-preview-canvas')).to_have_attribute('aria-label', 'Reference #1, instance 2 in Guitar motif, 6 notes')
+        expect(second.locator('.artifact-instance-next')).to_be_hidden()
+        first.locator('.artifact-preview').hover()
+        expect(first.locator('.artifact-preview')).to_have_attribute('data-playing', '')
+        second.locator('.artifact-preview').hover()
+        expect(first.locator('.artifact-preview')).not_to_have_attribute('data-playing', '')
+        expect(second.locator('.artifact-preview')).to_have_attribute('data-playing', '')
+        first.locator('.artifact-instance-previous').click()
+        expect(first.locator('.artifact-preview')).to_have_attribute('data-instance', '1')
+        expect(second.locator('.artifact-preview')).not_to_have_attribute('data-playing', '')
+        page.mouse.move(700, 40)
+        first.locator('.artifact-reference-toggle').click()
+        expect(first.locator('.artifact-preview')).to_be_hidden()
+        expect(second.locator('.artifact-preview')).to_be_visible()
+        page.locator('#artifactReferencesToggle').click()
+        expect(page.locator('#artifactReferencesBody')).to_be_hidden()
+        page.locator('#artifactReferencesToggle').focus()
+        page.keyboard.press('Enter')
+        expect(page.locator('#artifactReferencesBody')).to_be_visible()
+        expect(first.locator('.artifact-preview')).to_be_hidden()
+        first.locator('.artifact-reference-toggle').click()
+        expect(first.locator('.artifact-preview')).to_be_visible()
+        # Both the miniature and Move to now target the first instance again.
+        first.locator('.artifact-jump').click()
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.scoreTime"), 2)
+
+    def test_reference_hover_menu_and_live_updates(self):
+        self.open_reference_project()
+        page = self.page
+        first = page.locator('.artifact-row[data-reference="1"]')
+        preview = first.locator('.artifact-preview')
+        expect(page.locator('.artifact-preview-play')).to_have_count(0)
+        page.evaluate("""() => {
+            window.artifactWindow = document.querySelector('.artifact-preview');
+            window.previewStarted = 0;
+            window.hoverStarted = performance.now();
+            new MutationObserver(() => {
+                if (window.artifactWindow.hasAttribute('data-playing')) window.previewStarted = performance.now();
+            }).observe(window.artifactWindow, {attributes:true, attributeFilter:['data-playing']});
+        }""")
+        preview.hover()
+        page.wait_for_timeout(200)
+        expect(preview).not_to_have_attribute('data-playing', '')
+        expect(preview).to_have_attribute('data-playing', '')
+        self.assertGreater(page.evaluate('window.previewStarted - window.hoverStarted'), 450)
+        page.mouse.move(700, 40)
+        expect(preview).not_to_have_attribute('data-playing', '')
+        # The ordinary editor reference menu acts on the currently displayed instance.
+        first.locator('.artifact-instance-next').click()
+        preview.click(button='right')
+        menu = page.locator('.ctxmenu')
+        for label in ('Copy', 'Cut', 'Delete this occurrence', 'Delete entire reference', 'Detach entire reference (keep notes)'):
+            expect(menu.get_by_text(label, exact=True)).to_be_visible()
+        menu.get_by_text('Copy', exact=True).click()
+        copied = page.evaluate("async () => (await import('/store.js')).S.clipboard.map(n => n.start)")
+        self.assertEqual(len(copied), 6)
+        self.assertEqual(min(copied), 16)
+        preview.click(button='right')
+        menu.get_by_text('Cut', exact=True).click()
+        expect(first.locator('.artifact-preview-title')).to_contain_text('1 / 1')
+        expect(first.locator('.artifact-instance-next')).to_be_hidden()
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.length"), 11)
+        page.keyboard.press('Control+z')
+        expect(first.locator('.artifact-instance-next')).to_be_visible()
+        # Editor changes and mirrored notes update the same existing artifact DOM.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { snapshotEdit, commit } = await import('/edit.js');
+            const lane = S.state.editLanes[0], previous = snapshotEdit();
+            lane.notes = lane.notes.filter(n => n.start !== 2);
+            commit(previous);
+            await new Promise(requestAnimationFrame);
+        }""")
+        expect(first.locator('canvas')).to_have_attribute('aria-label', 'Reference #1, instance 1 in Guitar motif, 5 notes')
+        self.assertTrue(page.evaluate("window.artifactWindow === document.querySelector('.artifact-preview')"))
+        page.keyboard.press('Control+z')
+        expect(first.locator('canvas')).to_have_attribute('aria-label', 'Reference #1, instance 1 in Guitar motif, 6 notes')
+
+    def test_reference_preview_is_bounded_and_does_not_seek_transport(self):
+        self.open_reference_project()
+        page = self.page
+        # Earliest in the song, even when the box array is in a different order.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            S.state.editLanes[0].refBoxes[1].anchors.reverse();
+            (await import('/repaint.js')).draw();
+        }""")
+        preview = page.locator('.artifact-preview').first
+        preview.hover()
+        expect(preview).to_have_attribute('data-playing', '')
+        expect(preview).not_to_have_attribute('data-playing', '', timeout=10000)
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.scoreTime"), 0)
+        expect(page.locator('.toast')).to_have_count(0)
+        # Leaving before the delay prevents playback altogether.
+        page.mouse.move(700, 40)
+        preview.hover()
+        page.mouse.move(700, 40)
+        page.wait_for_timeout(600)
+        expect(preview).not_to_have_attribute('data-playing', '')
+        # Attach actual audio through the existing project flow and audition its crop.
+        with page.expect_file_chooser() as chooser:
+            self.file_menu('#attachAudio')
+        chooser.value.set_files(self.audio)
+        expect(page.locator('#stemTabs .stem-row')).to_have_count(1, timeout=60000)
+        page.evaluate("""() => {
+            window.referenceAudio = [];
+            for (const type of ['playing', 'timeupdate']) document.addEventListener(type, event => {
+                if (event.target.classList.contains('artifact-audio')) {
+                    window.referencePlayer = event.target;
+                    window.referenceAudio.push({type, time: event.target.currentTime});
+                }
+            }, true);
+        }""")
+        page.locator('.artifact-preview').first.hover()
+        expect(page.locator('.artifact-audio')).to_have_count(1)
+        page.wait_for_function("window.referenceAudio.some(e => e.type === 'playing')")
+        expect(page.locator('.artifact-preview').first).not_to_have_attribute('data-playing', '')
+        events = page.evaluate('window.referenceAudio')
+        self.assertAlmostEqual(events[0]['time'], 2, delta=0.2)
+        last_time = max(event['time'] for event in events)
+        self.assertGreater(last_time, 4.5)
+        self.assertLess(last_time, 5.3)
+        self.assertTrue(page.evaluate('window.referencePlayer.paused && !window.referencePlayer.isConnected'))
+        expect(page.locator('.artifact-preview').first).not_to_have_attribute('data-playing', '')
+        self.assertEqual(page.locator('#audio').evaluate('el => el.currentTime'), 0)
+        # Arrowing to another instance must audition that recording slice as well.
+        page.locator('.artifact-row[data-reference="1"] .artifact-instance-next').click()
+        page.evaluate('window.referenceAudio = []')
+        page.locator('.artifact-preview').first.hover()
+        page.wait_for_function("window.referenceAudio.some(e => e.type === 'playing')")
+        expect(page.locator('.artifact-preview').first).not_to_have_attribute('data-playing', '')
+        events = page.evaluate('window.referenceAudio')
+        self.assertAlmostEqual(events[0]['time'], 16, delta=0.2)
+        self.assertEqual(page.locator('#audio').evaluate('el => el.currentTime'), 0)
 
     def open_guitar_pro_project(self):
         page = self.page

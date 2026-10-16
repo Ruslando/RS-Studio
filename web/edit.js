@@ -127,6 +127,7 @@ function recordUndo(prev) {
   S.redoStack = [];
   updateUndoButtons();
   refreshSaveState();   // an edit landed — reflect unsaved state in the project tab
+  draw();              // editor and artifact references render the same committed state
 }
 
 function restore(snap) {

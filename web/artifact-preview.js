@@ -1,0 +1,238 @@
+// Each reference card previews one occurrence; only one audition plays at a time.
+import { stageMono, STAGE_ANCHORED } from "./constants.js";
+import { ensureTone, clearPreview, pauseTransport, previewNotes } from "./playback.js";
+import { releaseLaneSynth } from "./lanes.js";
+import { toast } from "./notify.js";
+import { notesInBox } from "./references.js";
+import { PAINT } from "./stage-paint.js";
+import { S } from "./store.js";
+import { dpr, fmtTime, noteName } from "./util.js";
+
+let audition = null, hoverTimer = 0, hoverTarget = null;
+const previews = new Map(), positions = new Map();
+const refKey = (lane, ref) => `${lane.id}:${ref}`;
+const arrowIcon = direction => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${direction < 0 ? 'm15 6-6 6 6 6' : 'm9 6 6 6-6 6'}"/></svg>`;
+
+function syncPreviewState(preview, playing) {
+  preview.root.toggleAttribute('data-playing', playing);
+  preview.status.textContent = playing ? 'Previewing' : 'Hover to preview';
+}
+
+function visible(preview) {
+  return preview.root.isConnected && preview.root.getClientRects().length > 0
+    && !document.getElementById('artifactsContent').inert && !document.hidden;
+}
+
+function queuePreview(preview) {
+  stopArtifactPreview();
+  hoverTarget = preview;
+  hoverTimer = setTimeout(() => {
+    hoverTimer = 0; hoverTarget = null;
+    if (visible(preview) && preview.root.matches(':hover')) playPreview(preview);
+  }, 500);
+}
+
+export function stopArtifactPreviewFor(root) {
+  if (hoverTarget?.root === root || audition?.preview.root === root) stopArtifactPreview();
+}
+
+export function removeArtifactPreview(root) {
+  stopArtifactPreviewFor(root);
+  for (const [canvas, preview] of previews) if (preview.root === root) previews.delete(canvas);
+}
+
+function updateOccurrence(preview) {
+  const lane = S.state?.editLanes.find(item => item.id === preview.lane.id);
+  const group = lane?.refBoxes?.[preview.ref], ref = preview.ref;
+  if (!group?.anchors?.length) return false;
+  preview.lane = lane;
+  preview.geometry = JSON.stringify([group, S.state.duration]);
+  const occurrences = group.anchors.map((anchor, index) => ({anchor, index})).sort((a,b) => a.anchor-b.anchor);
+  const position = Math.min(positions.get(refKey(lane, ref)) || 0, occurrences.length - 1);
+  positions.set(refKey(lane, ref), position);
+  preview.position = position;
+  preview.box = { index: occurrences[position].index,
+    t0: Math.max(0, occurrences[position].anchor + group.rt0),
+    t1: Math.min(S.state.duration, occurrences[position].anchor + group.rt1), pLo: group.pLo, pHi: group.pHi };
+  preview.root.dataset.instance = String(position + 1);
+  preview.label.textContent = `${position + 1} / ${occurrences.length} | ${fmtTime(preview.box.t0)} - ${fmtTime(preview.box.t1)}`;
+  preview.previous.disabled = position === 0;
+  preview.next.disabled = position === occurrences.length - 1;
+  preview.previous.hidden = preview.next.hidden = occurrences.length === 1;
+  preview.stage.toggleAttribute('data-single', occurrences.length === 1);
+  preview.key = '';
+  syncPreviewState(preview, false);
+  return true;
+}
+
+export function stopArtifactPreview() {
+  clearTimeout(hoverTimer); hoverTimer = 0; hoverTarget = null;
+  const current = audition;
+  if (!current) return;
+  audition = null;
+  clearTimeout(current.timer); cancelAnimationFrame(current.frame);
+  if (current.player) { current.player.pause(); current.player.removeAttribute('src'); current.player.load(); current.player.remove(); }
+  else { clearPreview(); releaseLaneSynth(current.preview.lane); }
+  syncPreviewState(current.preview, false);
+  paintArtifactPreviews();
+}
+
+async function playPreview(preview) {
+  const wasPlaying = audition?.preview === preview;
+  stopArtifactPreview();
+  if (wasPlaying) return;
+  if (!updateOccurrence(preview)) return;
+  pauseTransport();
+  const state = S.state, { lane, box } = preview;
+  const stem = state.stems.find(item => item.id === state.curStem) || state.stems[0];
+  const current = { preview, source: stem?.audioUrl || null, player: null, timer: 0, frame: 0, started: 0, noteSig: JSON.stringify(notesInBox(box, lane.notes)) };
+  audition = current; syncPreviewState(preview, true);
+  try {
+    if (stem) {
+      const player = new Audio(stem.audioUrl); current.player = player;
+      player.className = 'artifact-audio'; player.hidden = true;
+      preview.root.append(player); player.currentTime = box.t0;
+      player.addEventListener('timeupdate', () => {
+        if (audition === current && player.currentTime >= box.t1) stopArtifactPreview();
+      });
+      player.addEventListener('ended', () => { if (audition === current) stopArtifactPreview(); });
+      await player.play();
+    } else {
+      await ensureTone();
+      if (window.Tone) await Tone.loaded();
+      if (audition !== current || S.state !== state) return;
+      const notes = notesInBox(box, lane.notes).map(note => ({ ...note,
+        start: Math.max(box.t0, note.start), end: Math.min(box.t1, note.end) }));
+      previewNotes(notes, lane, { start: box.t0 });
+    }
+    if (audition !== current || S.state !== state) return;
+    current.started = performance.now();
+    const animate = () => {
+      if (audition !== current) return;
+      if (!visible(preview)) { stopArtifactPreview(); return; }
+      paintArtifactPreviews();
+      if (audition === current) current.frame = requestAnimationFrame(animate);
+    };
+    animate();
+    if (audition !== current) return;
+    current.timer = setTimeout(stopArtifactPreview, Math.max(0, box.t1 - box.t0) * 1000);
+  } catch (error) {
+    if (audition !== current) return;
+    stopArtifactPreview();
+    toast('Could not play reference preview: ' + (error.message || error), 3000, 'error');
+  }
+}
+
+export function resetArtifactPreviews(clearSelection = false) {
+  stopArtifactPreview(); previews.clear();
+  if (clearSelection) positions.clear();
+}
+
+export function referencePreview(lane, ref, moveTo) {
+  const root = document.createElement('section'); root.className = 'artifact-preview artifact-occurrences';
+  root.setAttribute('aria-label', `Reference #${ref} preview`);
+  const label = document.createElement('div'); label.className = 'artifact-time artifact-preview-title';
+  label.setAttribute('aria-live', 'polite');
+  const stage = document.createElement('div'); stage.className = 'artifact-preview-stage';
+  const canvas = document.createElement('canvas'); canvas.className = 'artifact-preview-canvas'; canvas.setAttribute('role', 'img');
+  const previous = document.createElement('button'), next = document.createElement('button');
+  const status = document.createElement('span'); status.className = 'artifact-detail artifact-preview-status';
+  status.setAttribute('aria-live', 'polite');
+  const preview = {lane, ref, root, label, stage, previous, next, status, geometry: '', position: 0, box: null, key: '', image: null};
+  const change = delta => {
+    stopArtifactPreviewFor(root);
+    positions.set(refKey(lane, ref), preview.position + delta);
+    updateOccurrence(preview); paintArtifactPreviews();
+    if (root.matches(':hover')) queuePreview(preview);
+  };
+  for (const [button, delta, name] of [[previous,-1,'Previous'],[next,1,'Next']]) {
+    button.type = 'button'; button.className = `icon-btn icon-btn--compact artifact-instance-${delta < 0 ? 'previous' : 'next'}`;
+    button.innerHTML = arrowIcon(delta); button.title = `${name} instance of reference #${ref}`;
+    button.setAttribute('aria-label', button.title); button.addEventListener('click', () => change(delta));
+  }
+  const move = document.createElement('button'); move.type = 'button'; move.className = 'btn btn--compact btn--ghost artifact-jump';
+  move.textContent = 'Move to'; move.title = `Move to displayed instance of reference #${ref}`; move.setAttribute('aria-label', move.title);
+  move.addEventListener('click', () => moveTo(preview.box.index));
+  root.tabIndex = 0;
+  root.title = 'Hover for half a second to preview. Right-click for reference actions. Space toggles preview.';
+  root.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') queuePreview(preview); });
+  root.addEventListener('pointerleave', () => stopArtifactPreviewFor(root));
+  root.addEventListener('pointerdown', () => stopArtifactPreviewFor(root));
+  root.addEventListener('keydown', event => {
+    if (event.target !== root) return;
+    if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); playPreview(preview); }
+    else if (event.key === 'Escape') stopArtifactPreviewFor(root);
+    else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      event.preventDefault(); const rect = root.getBoundingClientRect();
+      root.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: rect.left + 16, clientY: rect.top + 16}));
+    }
+  });
+  const footer = document.createElement('div'); footer.className = 'artifact-preview-footer'; footer.append(status, move);
+  stage.append(canvas, previous, next); root.append(label, stage, footer);
+  previews.set(canvas, preview); updateOccurrence(preview);
+  return root;
+}
+
+export function paintArtifactPreviews() {
+  if (!S.state?.spec || document.getElementById("artifactsContent").inert) return;
+  const stem = S.state.stems.find(item => item.id === S.state.curStem) || S.state.stems[0];
+  if (audition && audition.source !== (stem?.audioUrl || null)) { stopArtifactPreview(); return; }
+  for (const [canvas, preview] of previews) {
+    const lane = S.state.editLanes.find(item => item.id === preview.lane.id);
+    const group = lane?.refBoxes?.[preview.ref];
+    if (!group?.anchors?.length) continue;
+    preview.lane = lane;
+    if (preview.geometry !== JSON.stringify([group, S.state.duration])) {
+      preview.geometry = JSON.stringify([group, S.state.duration]);
+      stopArtifactPreviewFor(preview.root); updateOccurrence(preview);
+    }
+    const box = preview.box;
+    const width = Math.round(canvas.clientWidth), height = canvas.clientHeight, dp = dpr();
+    if (!width || !height || box.t1 <= box.t0) continue;
+    const notes = notesInBox(box, lane.notes);
+    if (audition?.preview === preview && audition.noteSig !== JSON.stringify(notes)) {
+      stopArtifactPreview(); return;
+    }
+    canvas.setAttribute("aria-label", `Reference #${preview.ref}, instance ${preview.position + 1} in ${lane.name}, ${notes.length} notes`);
+    const playhead = audition?.preview === preview && audition.started ? (audition.player ? audition.player.currentTime
+      : box.t0 + (performance.now() - audition.started) / 1000) : null;
+    const key = JSON.stringify([width, height, dp, PAINT.ground, lane.color, playhead,
+      S.state.curStem, box, S.state.spec, notes.map(n => [n.start, n.end, n.pitch])]);
+    if (key === preview.key && preview.image === S.spectImg) continue;
+    preview.key = key; preview.image = S.spectImg;
+    canvas.width = Math.round(width * dp); canvas.height = Math.round(height * dp);
+    const ctx = canvas.getContext("2d"); ctx.scale(dp, dp);
+    ctx.fillStyle = PAINT.ground; ctx.fillRect(0, 0, width, height);
+    const lo = Math.max(S.state.spec.midi_low, box.pLo - 2), hi = Math.min(S.state.spec.midi_high, box.pHi + 2);
+    const rows = hi - lo + 1, rowH = height / rows;
+    if (S.spectImg) {
+      const image = S.spectImg, specRows = S.state.spec.midi_high - S.state.spec.midi_low + 1;
+      ctx.drawImage(image, box.t0 / S.state.duration * image.width,
+        (S.state.spec.midi_high - hi) / specRows * image.height,
+        (box.t1 - box.t0) / S.state.duration * image.width, rows / specRows * image.height,
+        0, 0, width, height);
+    }
+    const x = t => (t - box.t0) / (box.t1 - box.t0) * width;
+    ctx.strokeStyle = PAINT.gridSub; ctx.lineWidth = 1;
+    for (let p = lo; p <= hi; p++) {
+      const y = (hi - p) * rowH;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+    }
+    ctx.font = stageMono(STAGE_ANCHORED); ctx.textBaseline = "middle";
+    for (const note of notes) {
+      const left = Math.max(0, x(note.start)), right = Math.min(width, x(note.end));
+      const y = (hi - note.pitch) * rowH;
+      ctx.fillStyle = lane.color; ctx.globalAlpha = .3;
+      ctx.fillRect(left, y, Math.max(1, right - left), rowH);
+      ctx.globalAlpha = 1; ctx.strokeStyle = lane.color;
+      ctx.strokeRect(left + .5, y + .5, Math.max(1, right - left - 1), Math.max(1, rowH - 1));
+      if (right - left > 24 && rowH >= 10) {
+        ctx.fillStyle = PAINT.text; ctx.fillText(noteName(note.pitch), left + 4, y + rowH / 2);
+      }
+    }
+    if (playhead != null) {
+      ctx.strokeStyle = PAINT.accent;
+      ctx.beginPath(); ctx.moveTo(x(playhead), 0); ctx.lineTo(x(playhead), height); ctx.stroke();
+    }
+  }
+}

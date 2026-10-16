@@ -296,7 +296,7 @@ export function renderLanes() {
 }
 
 // Make a lane the active edit target (selection / new notes / layer editor land here).
-function activateLane(lane) {
+export function activateLane(lane) {
   if (lane.active) return;
   S.state.lanes.forEach((l) => (l.active = l === lane));
   renderLanes(); draw();

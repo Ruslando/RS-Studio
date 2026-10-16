@@ -133,7 +133,7 @@ export function cancelPassagePreview(opts = {}) {
   if (opts.pauseAudio && hadPreview && audio && !audio.paused) audio.pause();
 }
 
-export function previewNotes(notes, lane) {
+export function previewNotes(notes, lane, { start } = {}) {
   if (!window.Tone || !S.toneReady) return;
   if (!laneAudible(lane)) return; // muted means silent, auditions included
   const synth = laneSynth(lane);
@@ -145,7 +145,7 @@ export function previewNotes(notes, lane) {
   const playable = [...notes].sort((a, b) => a.start - b.start).slice(0, 64);
   if (!playable.length) return;
   const events = playbackEvents(playable, (t) => gridAt(t)?.bpm || 120);
-  const t0 = events[0].start, now = ctxNow() + 0.01;
+  const t0 = start ?? events[0].start, now = ctxNow() + 0.01;
   for (const event of events) {
     const delay = event.start - t0;
     const fire = () => {

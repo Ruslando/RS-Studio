@@ -1,4 +1,5 @@
 import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
+import { renderArtifacts } from "./artifacts.js";
 import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGhosts, notePlaybackGlow } from "./note-motion.js";
 // Canvas rendering: the main spectrogram + notes draw loop, the overview minimap
 // (whole-song strip with a viewport window), and the hover highlight / cursor line.
@@ -285,6 +286,7 @@ function drawShapes(vx0, vx1) {
 // The frame itself. Registered with repaint.js at boot; everything else asks for
 // a paint through draw()/drawNow() there and never imports this module.
 function paintFrame() {
+  renderArtifacts();
   beginNoteMotionFrame(S.state, S.drag);
   const playheadTime = playbackTime();
   beginNotePlaybackFrame(S.state, playheadTime, transportPlaying());

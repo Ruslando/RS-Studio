@@ -520,6 +520,7 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #fretboardPanel[data-collapsed]:is(:hover, :has(:focus-visible), .is-peeking) { height: var(--h-fretboard-peek); }
 /* Frost the retained contents, keeping the expand controls above the glass. */
 #sidebar::after,
+#artifactsPanel::after,
 #fretboardPanel::after {
   content: ""; position: absolute; inset: 0; z-index: 10; pointer-events: none;
   opacity: 0; transition: opacity var(--dur-panel) var(--ease-panel);
@@ -529,9 +530,10 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
   backdrop-filter: blur(var(--frost-blur)) saturate(1.2);
 }
 #appshell.side-collapsed #sidebar::after,
+#artifactsPanel[data-collapsed]::after,
 #fretboardPanel[data-collapsed]::after { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
-  #sidebar::after, #fretboardPanel::after { transition: none; }
+  #sidebar::after, #artifactsPanel::after, #fretboardPanel::after { transition: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   #sidebar, #stemsSection, #layersSection,
@@ -1212,3 +1214,36 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 }
 .tour-critique-status { min-height: 1em; color: var(--hint); font: 400 var(--text-caption)/1 var(--font-ui); }
 /* /TEMP critique */
+
+/* The project artifact index sits beside the complete editor. */
+#artifactsPanel {
+  --artifacts-w: 300px;
+  width: var(--artifacts-w); flex: none; position: relative;
+  border: 0; box-shadow: inset 0 0 0 1px var(--line);
+  transition: width var(--dur-panel) var(--ease-panel);
+}
+#artifactsContent {
+  display: flex; flex-direction: column; min-height: 0; flex: 1;
+  width: var(--artifacts-w); align-self: flex-end; padding-left: var(--w-edge);
+  opacity: 1; transform: translateX(0);
+  transition: opacity var(--dur-panel) var(--ease-panel), transform var(--dur-panel) var(--ease-panel);
+}
+#artifactsPanel[data-collapsed] { width: var(--w-sidebar-mini); }
+#artifactsPanel[data-collapsed]:is(:hover, :has(:focus-visible), .is-peeking) { width: var(--w-sidebar-peek); }
+#artifactsPanel[data-collapsed] #artifactsContent {
+  opacity: .2; pointer-events: none;
+  transform: translateX(calc(var(--artifacts-w) - var(--w-sidebar-mini)));
+}
+#artifactsPanel[data-collapsed]:is(:hover, :has(:focus-visible), .is-peeking) #artifactsContent {
+  opacity: .85; transform: translateX(calc(var(--artifacts-w) - var(--w-sidebar-peek)));
+}
+.edge-toggle--artifacts {
+  position: absolute; top: 0; bottom: 0; left: 0; width: var(--w-edge);
+  z-index: var(--z-edge); border-radius: var(--r-container) 0 0 var(--r-container);
+  --edge-from: to left;
+}
+#artifactsPanel[data-collapsed] .edge-toggle--artifacts { width: 100%; border-radius: var(--r-container); }
+body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  #artifactsPanel, #artifactsContent { transition: none; }
+}

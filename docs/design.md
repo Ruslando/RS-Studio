@@ -678,3 +678,52 @@ the repository. What each number meant, as far as the comments show:
 
 Rules 1, 3, 4, 10–12, 14, 18, 19 and 22 are cited nowhere and their text is lost.
 New comments cite this document by section ("design.md 4.9").
+
+
+## 10. Artifact pane
+
+The right artifact pane borrows Claude's quiet side-pane structure: a simple
+heading, restrained separators and stacked content with secondary metadata.
+It uses RS Studio surface and type tokens in both themes. `.artifact-panel`
+is a flat pane; `.artifact-row` groups a reference and its occurrences. Each
+occurrence has a compact ghost Jump button. The pane follows the layer sidebar and fretboard interaction rules: a gap
+splitter resizes it, dragging below the collapse threshold folds it to a frosted
+strip, and hovering peeks at its retained content. The edge chevron, toolbar
+toggle, strip click and splitter double-click restore it. Width and collapsed
+state persist across reloads. Collapsed content is inert. The list updates with project edits
+and undo; references on hidden lanes remain discoverable.
+
+Each reference row is its own preview window with its lane, a cropped track
+miniature, and a compact Move to control. Hovering the window starts a preview
+after 500ms; leaving cancels the delay or stops the sound. Space/Enter on the
+focused window toggles the same preview. A status line reports playback.
+The displayed occurrence
+is selected using previous/next arrows overlaid inside the miniature. The arrows appear
+when the reference has multiple instances; the first/last boundary disables the
+corresponding arrow. A counter and time range identify the current occurrence.
+Both playback and Move to target that occurrence. Only one audition plays at a
+time, and switching its instance stops it. Instance choices survive list redraws.
+
+The miniature crops the displayed audio track's spectrogram and overlays the
+owning lane's notes. Without audio it shows and plays the notes. Its height is
+`--h-artifact-preview` (96px); a cursor follows playback inside the crop.
+Every expanded window has the same fixed height and full available width,
+including the same miniature width for single- and multiple-instance references.
+The counter, navigation arrows, playback status and Move to control all sit inside its
+bordered surface. Hiding arrows or switching instances never changes its size.
+Each row's disclosure folds its preview window. The References disclosure folds
+the entire list. Both use `aria-expanded` and `aria-controls`, and collapse
+choices survive list redraws.
+
+The audition leaves the main transport position unchanged and stops at the box
+end, on a project change, on Move to or when normal playback starts. Move to
+sets the playhead immediately and animates both viewport axes using the existing
+panel motion, respecting reduced motion and manual scroll interruption.
+
+Artifacts are live views of the project's reference boxes and owning lane notes,
+never separate editable copies. Cards keep their DOM while notes, geometry and
+metadata change. They render in the editor's paint pass, including undo/redo,
+and resolve their targets again before an action. A changed source or passage
+stops any outdated audition. The row's right-click and keyboard context menu use
+the editor's `openRefMenu` and the displayed occurrence's actual note selection,
+so Copy, Cut, Delete and Detach have exactly the editor's effects and undo.

@@ -1,0 +1,177 @@
+{
+  "name": "RS Studio - Reference showcase",
+  "filename": null,
+  "created_at": "2026-10-15T16:29:08+00:00",
+  "saved_at": "2026-10-15T16:29:08+00:00",
+  "draft": false,
+  "duration": 24.0,
+  "tempo": 120,
+  "separated": false,
+  "separator": null,
+  "metadata": {
+    "title": "Reference showcase",
+    "artist": "RS Studio",
+    "album": "",
+    "coverArtName": "",
+    "titleLatin": "",
+    "artistLatin": "",
+    "albumLatin": "",
+    "year": null,
+    "coverArt": null,
+    "coverArtUpdatedAt": null
+  },
+  "stems": [],
+  "editLanes": [
+    {
+      "id": "edit",
+      "name": "Guitar motif",
+      "kind": "edit",
+      "color": "#6ee7b7",
+      "visible": true,
+      "instrument": "electric",
+      "muted": false,
+      "tablatureEnabled": true,
+      "notes": [
+        {
+          "id": "n1",
+          "start": 2.0,
+          "end": 2.4,
+          "pitch": 52
+        },
+        {
+          "id": "n2",
+          "start": 2.5,
+          "end": 2.9,
+          "pitch": 55
+        },
+        {
+          "id": "n3",
+          "start": 3.0,
+          "end": 3.4,
+          "pitch": 57
+        },
+        {
+          "id": "n4",
+          "start": 3.5,
+          "end": 3.9,
+          "pitch": 59
+        },
+        {
+          "id": "n5",
+          "start": 4.0,
+          "end": 4.4,
+          "pitch": 57
+        },
+        {
+          "id": "n6",
+          "start": 4.5,
+          "end": 4.9,
+          "pitch": 55
+        },
+        {
+          "id": "n7",
+          "start": 16.0,
+          "end": 16.4,
+          "pitch": 52
+        },
+        {
+          "id": "n8",
+          "start": 16.5,
+          "end": 16.9,
+          "pitch": 55
+        },
+        {
+          "id": "n9",
+          "start": 17.0,
+          "end": 17.4,
+          "pitch": 57
+        },
+        {
+          "id": "n10",
+          "start": 17.5,
+          "end": 17.9,
+          "pitch": 59
+        },
+        {
+          "id": "n11",
+          "start": 18.0,
+          "end": 18.4,
+          "pitch": 57
+        },
+        {
+          "id": "n12",
+          "start": 18.5,
+          "end": 18.9,
+          "pitch": 55
+        },
+        {
+          "id": "n13",
+          "start": 8.0,
+          "end": 8.4,
+          "pitch": 67
+        },
+        {
+          "id": "n14",
+          "start": 8.5,
+          "end": 8.9,
+          "pitch": 65
+        },
+        {
+          "id": "n15",
+          "start": 9.0,
+          "end": 9.4,
+          "pitch": 64
+        },
+        {
+          "id": "n16",
+          "start": 9.5,
+          "end": 9.9,
+          "pitch": 62
+        },
+        {
+          "id": "n17",
+          "start": 10.0,
+          "end": 10.4,
+          "pitch": 60
+        }
+      ],
+      "active": true,
+      "tuning": "guitar6",
+      "rocksmithArrangement": "lead",
+      "refBoxes": {
+        "1": {
+          "rt0": 0,
+          "rt1": 3,
+          "pLo": 52,
+          "pHi": 59,
+          "anchors": [
+            2.0,
+            16.0
+          ]
+        },
+        "2": {
+          "rt0": 0,
+          "rt1": 3,
+          "pLo": 60,
+          "pHi": 67,
+          "anchors": [
+            8.0
+          ]
+        }
+      }
+    }
+  ],
+  "grid": {
+    "bpm": 120,
+    "offset": 0.0,
+    "subdiv": 2,
+    "tsNum": 4,
+    "tsDen": 4,
+    "snap": true,
+    "showGrid": true
+  },
+  "warnings": [],
+  "sectionMarkers": [],
+  "scoreBars": [],
+  "scoreDuration": 24.0
+}
