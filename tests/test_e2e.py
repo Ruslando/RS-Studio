@@ -157,6 +157,10 @@ class EndToEndTests(unittest.TestCase):
         height = page.locator('#fretboard').bounding_box()['height']
         page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardPin')).to_be_visible()
+        expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
+        expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
+        expect(page.locator('#fretboardChoose')).to_be_disabled()
+        page.locator('#fretboardAltNext').click()
         expect(page.locator('#fretboardAltCount')).to_have_text('1 / 2')
         expect(page.locator('#fretboardEdit')).to_have_attribute('aria-pressed', 'true')
         self.assertGreaterEqual(page.locator('#fretboard').bounding_box()['height'], height)
@@ -197,13 +201,258 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardCapo')).to_be_hidden()
         page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardCapo')).to_be_enabled()
-        page.locator('#fretboardCapo').select_option('2')
+        page.locator('#fretboardCapo').fill('2')
+        page.locator('#fretboardCapo').press('Enter')
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].capo"), 2)
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.pitch)"), pitches)
         page.keyboard.press('Control+z')
         expect(page.locator('#fretboardCapo')).to_have_value('0')
         page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardCapo')).to_be_disabled()
+
+    def test_marker_flags_snap_to_note_subdivisions(self):
+        self.open_reference_project()
+        page = self.page
+        result = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { snap, addMarker } = await import('/grid.js');
+            const { railMenuItems } = await import('/marker-rails.js');
+            const { closeSectionMarkerPop } = await import('/section-markers.js');
+            const time = 3.31, expected = snap(time);
+            railMenuItems(time,400,200).find(item => item.label === 'Add section marker').fn();
+            closeSectionMarkerPop();
+            const section = S.state.sectionMarkers.find(marker => Math.abs(marker.t-expected)<1e-5);
+            const phrase = (await import('/phrase-markers.js')).snapPhraseTime(time);
+            const tempo = addMarker(time);
+            return {expected,section:section?.t,phrase,tempo:tempo.t};
+        }""")
+        self.assertEqual(result['section'], result['expected'])
+        self.assertEqual(result['phrase'], result['expected'])
+        self.assertEqual(result['tempo'], result['expected'])
+
+    def test_marker_flag_hover_uses_grab_cursor(self):
+        self.open_reference_project()
+        page = self.page
+        points = page.evaluate("""async () => {
+            const { addMarker } = await import('/grid.js');
+            const { railMenuItems, railBand } = await import('/marker-rails.js');
+            addMarker(3);
+            for (const [label, module, close] of [
+                ['Add section marker','section-markers','closeSectionMarkerPop'],
+                ['Add phrase boundary','phrase-markers','closePhraseMarkerPop'],
+                ['Add tone switch','tone-markers','closeToneMarkerPop']]) {
+                railMenuItems(3,400,200).find(item => item.label === label).fn();
+                (await import('/'+module+'.js'))[close]();
+            }
+            (await import('/repaint.js')).drawNow();
+            const { xOf } = await import('/geometry.js');
+            const rect = document.querySelector('#stage').getBoundingClientRect();
+            const scroll = document.querySelector('#scroll');
+            return [10,...['section','phrase','tone'].map(id => railBand(id).y+10)]
+                .map(y => [rect.left+xOf(3)-scroll.scrollLeft+8,rect.top+y]);
+        }""")
+        for point in points:
+            page.mouse.move(*point)
+            expect(page.locator('#stage')).to_have_css('cursor','grab')
+
+    def test_detect_adds_only_new_attacks(self):
+        self.open_reference_project()
+        page = self.page
+        page.route('**/api/detect', lambda route: route.fulfill(json={
+            'notes':[{'start':2,'end':2.5,'pitch':60}, {'start':3,'end':3.5,'pitch':64},
+                     {'start':3,'end':3.5,'pitch':64}]}))
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            S.state.editLanes[0].notes = [{id:'existing',start:2,end:3,pitch:60}];
+            const select = document.querySelector('#detectModel');
+            select.innerHTML = '<option value="mock">Test detector</option>';
+            select.dispatchEvent(new Event('change'));
+            (await import('/detect.js')).openDetectPanel(400,200);
+        }""")
+        page.click('#detectBtn')
+        page.click('#confirmAppend')
+        expect(page.locator('#detectStatus')).to_contain_text('+1 note')
+        notes = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes")
+        self.assertEqual([(n['pitch'],n['start'],n['end']) for n in notes], [(60,2,3),(64,3,3.5)])
+        page.keyboard.press('Control+z')
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.length"), 1)
+
+    def test_grid_flags_control_selection_and_resize(self):
+        self.open_reference_project()
+        page = self.page
+        points = page.evaluate("""async () => {
+            const { S, setSelection } = await import('/store.js');
+            const { xOf, yOf } = await import('/geometry.js');
+            const { snap } = await import('/grid.js');
+            const { snapPhraseTime } = await import('/phrase-markers.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [{id:'left',start:2,end:3,pitch:60}, {id:'right',start:3,end:4,pitch:60}];
+            lane.refBoxes = {}; S.toolMode = 'select'; setSelection(new Set());
+            (await import('/repaint.js')).drawNow();
+            const rect = document.querySelector('#stage').getBoundingClientRect();
+            const scroll = document.querySelector('#scroll');
+            const point = t => [rect.left + xOf(t) - scroll.scrollLeft,
+                rect.top + yOf(60) + S.state.rowH/2 - scroll.scrollTop];
+            return {left:point(2.5),right:point(3.5),
+                edgePoint:point(3),target:point(3.5),snap:snap(2.31),phrase:snapPhraseTime(2.31)};
+        }""")
+        self.assertEqual(points['snap'], points['phrase'])
+        page.keyboard.down('Control')
+        page.mouse.click(*points['left'])
+        page.mouse.click(*points['right'])
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.selection.size"), 2)
+        page.mouse.click(*points['left'])
+        self.assertEqual(page.evaluate("async () => [...(await import('/store.js')).S.selection].map(n=>n.id)"), ['right'])
+        page.keyboard.up('Control')
+        page.mouse.click(*points['left'])
+        # Stay just inside the left note's edge rather than hitting the next attack.
+        page.mouse.move(points['edgePoint'][0]-2, points['edgePoint'][1])
+        page.mouse.down()
+        page.mouse.move(*points['target'], steps=8)
+        page.mouse.up()
+        times = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n=>[n.start,n.end])")
+        self.assertEqual(times, [[2,3.5],[3.5,4]])
+        page.keyboard.press('Control+z')
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n=>[n.start,n.end])"), [[2,3],[3,4]])
+
+    def test_showcase_hand_poses_are_rendered_with_matching_anchors(self):
+        page = self.page
+        bundle = self.data / 'joint-hand-showcase.chart'
+        with zipfile.ZipFile(bundle, 'w') as archive:
+            archive.write(Path(__file__).resolve().parents[1] / 'examples/chord-showcase/project.json', 'project.json')
+        with page.expect_file_chooser() as chooser: page.click('#welcomeOpen')
+        chooser.value.set_files(bundle)
+        expect(page.locator('#lanes .lane-row')).to_be_visible()
+        self.fretboard_hover_points(68)
+        page.locator('#fretboardEdit').click()
+        for start, anchor, digits in [(20,2,[1,2,4]), (68,4,[1,2,3,4]), (72,6,[1,2,3,4]), (84,5,[1,3]), (92,5,[1,3])]:
+            page.evaluate("async t => (await import('/playback.js')).seekPlayback(t)", start)
+            expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
+            actual = page.evaluate("""async start => {
+                const { S } = await import('/store.js');
+                const found = await (await import('/tablature.js')).laneFingering(S.state.editLanes[0]);
+                const notes = found.notes.filter(n => n.start === start);
+                const ctx = document.querySelector('#fretboard').getContext('2d');
+                const original = ctx.fillText, digits = [];
+                ctx.fillText = function(text, x, y, ...args) {
+                    if (/^[1-4]$/.test(String(text)) && this.textBaseline === 'middle' && this.globalAlpha > .9)
+                        digits.push(Number(text));
+                    return original.call(this,text,x,y,...args);
+                };
+                try { (await import('/fretboard.js')).drawFretboard(); } finally { ctx.fillText = original; }
+                return {seats:notes.map(n=>found.seats.get(n)),digits:digits.sort()};
+            }""", start)
+            self.assertEqual(set(actual['seats']), {anchor})
+            self.assertEqual(actual['digits'], digits)
+            expect(page.locator('#fretboardHandAuto')).to_have_text(f'({anchor})')
+            expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count','0')
+            shot = Path(__file__).resolve().parents[1] / '.runs' / f'joint-hand-case-{int(start/4+1)}.png'
+            shot.parent.mkdir(exist_ok=True)
+            page.locator('#fretboardPanel').screenshot(path=str(shot))
+
+    def test_fretboard_anchor_band_moves_with_animation(self):
+        self.open_reference_project()
+        page = self.page
+        self.fretboard_hover_points()
+        result = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { drawFretboard } = await import('/fretboard.js');
+            const { laneFingering } = await import('/tablature.js');
+            const { fretDistance } = await import('/fretboard-core.js');
+            const { hexA } = await import('/util.js');
+            const { WASH } = await import('/stage-paint.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [{id:'a',start:0,end:1,pitch:52,pos:{string:3,fret:2}},
+                {id:'b',start:1,end:2,pitch:58,pos:{string:3,fret:8}}];
+            lane.refBoxes = {}; S.voicingRevision++;
+            (await import('/playback.js')).seekPlayback(.75);
+            const found = await laneFingering(lane);
+            drawFretboard(); await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+            const ctx = document.querySelector('#fretboard').getContext('2d');
+            const original = {begin:ctx.beginPath,move:ctx.moveTo,line:ctx.lineTo,fill:ctx.fill};
+            ctx.fillStyle = hexA(lane.color,WASH); const bandColor = ctx.fillStyle;
+            let points = [], bands = [];
+            ctx.beginPath = function(...a) {points=[];return original.begin.apply(this,a);};
+            ctx.moveTo = function(x,y) {points.push([x,y]);return original.move.call(this,x,y);};
+            ctx.lineTo = function(x,y) {points.push([x,y]);return original.line.call(this,x,y);};
+            ctx.fill = function(...a) {if(this.fillStyle===bandColor && points.length===4) bands.push(points.map(p=>[...p])); return original.fill.apply(this,a);};
+            const paint = async (time,playing,animate) => {
+                S.scorePlaying=playing; S.scoreTime=time; S.scoreAnchorSong=time; S.scoreAnchorClock=performance.now()/1000;
+                document.querySelector('#fretboardAnimations').checked=animate;
+                drawFretboard(); await new Promise(requestAnimationFrame);
+                S.scoreTime=time; S.scoreAnchorSong=time; S.scoreAnchorClock=performance.now()/1000;
+                bands=[];drawFretboard();return bands[0]?.[0][0];
+            };
+            try {
+                return {from:await paint(0,false,false),middle:await paint(.75,true,true),
+                    off:await paint(.75,true,false),to:await paint(1,false,false)};
+            } finally {
+                S.scorePlaying=false;
+                ctx.beginPath=original.begin;ctx.moveTo=original.move;ctx.lineTo=original.line;ctx.fill=original.fill;
+            }
+        }""")
+        self.assertGreater(result['middle'],result['from'])
+        self.assertLess(result['middle'],result['to'])
+        self.assertAlmostEqual(result['off'],result['from'],places=5)
+
+    def test_unplayable_chord_warning_and_shape_exit_on_seek(self):
+        page = self.page
+        bundle = self.data / 'chord-warnings.chart'
+        with zipfile.ZipFile(bundle, 'w') as archive:
+            archive.write(Path(__file__).resolve().parents[1] / 'examples/chord-showcase/project.json', 'project.json')
+        with page.expect_file_chooser() as chooser: page.click('#welcomeOpen')
+        chooser.value.set_files(bundle)
+        expect(page.locator('#lanes .lane-row')).to_be_visible()
+        self.fretboard_hover_points(76)
+        page.locator('#fretboardEdit').click()
+        expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
+        expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
+        shot = Path(__file__).resolve().parents[1] / '.runs' / 'fretboard-controls-b7.png'
+        shot.parent.mkdir(exist_ok=True)
+        page.locator('#fretboardPanel').screenshot(path=str(shot))
+        page.evaluate("async () => (await import('/playback.js')).seekPlayback(80)")
+        page.locator('#fretboardShape').click()
+        expect(page.locator('#fretboardShape')).to_have_attribute('aria-pressed', 'true')
+        page.evaluate("async () => (await import('/playback.js')).seekPlayback(100)")
+        expect(page.locator('#fretboardShape')).to_have_attribute('aria-pressed', 'false')
+        expect(page.locator('#fretboardPanel')).to_have_attribute('data-unplayable', '')
+        expect(page.locator('#fretboardWarning')).to_contain_text('No valid shape found')
+        for start in [96,100,104,108]:
+            page.evaluate("async t => (await import('/playback.js')).seekPlayback(t)", start)
+            expect(page.locator('#fretboardWarning')).to_be_visible()
+            count = page.evaluate("""async () => {
+                const ctx = document.querySelector('#fretboard').getContext('2d'), original = ctx.fillText;
+                let digits = 0; const strings = [];
+                ctx.fillText = function(text,...args) {
+                    if (/^[1-4]$/.test(String(text)) && this.textBaseline === 'middle') digits++;
+                    if (['E2','E4'].includes(String(text))) strings.push(args[1]);
+                    return original.call(this,text,...args);
+                };
+                try { (await import('/fretboard.js')).drawFretboard(); } finally { ctx.fillText = original; }
+                return {digits,strings};
+            }""")
+            self.assertEqual(count['digits'],0,'invalid chords must not paint fingerings or onion skins')
+            expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count','0')
+        warning = page.locator('#fretboardWarning').bounding_box()
+        board = page.locator('#fretboard').bounding_box()
+        self.assertAlmostEqual(warning['x']+warning['width']/2,board['x']+board['width']/2,delta=2)
+        self.assertEqual(len(count['strings']),2)
+        self.assertAlmostEqual(warning['y']+warning['height']/2,board['y']+sum(count['strings'])/2,delta=2)
+        page.evaluate("async () => (await import('/playback.js')).seekPlayback(100)")
+
+        page.evaluate("""async () => {
+            const { xOf } = await import('/geometry.js');
+            document.querySelector('#scroll').scrollLeft = xOf(98);
+            (await import('/repaint.js')).drawNow();
+        }""")
+        shot = Path(__file__).resolve().parents[1] / '.runs' / 'chord-warning.png'
+        shot.parent.mkdir(exist_ok=True)
+        page.locator('#appshell').screenshot(path=str(shot))
+        page.evaluate("""async () => {
+            (await import('/store.js')).setSelection(new Set());
+            (await import('/playback.js')).seekPlayback(0);
+        }""")
+        expect(page.locator('#fretboardPanel')).not_to_have_attribute('data-unplayable', '')
 
     def test_fretboard_previews_only_one_chord_alternative(self):
         page = self.page
@@ -219,6 +468,10 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardPin')).to_be_hidden()
         page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardPin')).to_be_visible()
+        expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
+        expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
+        expect(page.locator('#fretboardChoose')).to_be_disabled()
+        page.locator('#fretboardAltNext').click()
         expect(page.locator('#fretboardAltCount')).to_have_text(re.compile(r'1 / [1-9][0-9]*'))
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '1')
         count = int(page.locator('#fretboardAltCount').inner_text().split('/')[1])
@@ -263,16 +516,51 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press('Control+z')
         self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.some(n => n.start === 80 && n.written)"))
 
+    def test_fretboard_integer_steppers_and_defaults(self):
+        self.open_reference_project()
+        page = self.page
+        self.fretboard_hover_points()
+        page.locator('#fretboardEdit').click()
+        expect(page.locator('#fretboardHand')).to_have_attribute('type','text')
+        expect(page.locator('#fretboardCapo')).to_have_attribute('type','text')
+        expect(page.locator('#fretboardHandAuto')).to_have_text(re.compile(r'\([1-9][0-9]*\)'))
+        page.locator('#fretboardCapoNext').click()
+        expect(page.locator('#fretboardCapo')).to_have_value('1')
+        page.locator('#fretboardCapoPrev').click()
+        expect(page.locator('#fretboardCapo')).to_have_value('0')
+        for invalid in ['-1','1.5','text']:
+            page.locator('#fretboardCapo').fill(invalid)
+            page.locator('#fretboardCapo').press('Enter')
+            expect(page.locator('#fretboardCapo')).to_have_value('0')
+        page.locator('#fretboardHand').fill('7')
+        page.locator('#fretboardHand').press('Enter')
+        page.locator('#fretboardHandNext').click()
+        expect(page.locator('#fretboardHand')).to_have_value('8')
+        page.locator('#fretboardHandPrev').click()
+        expect(page.locator('#fretboardHand')).to_have_value('7')
+        expect(page.locator('#fretboardHandAuto')).to_be_hidden()
+        for invalid in ['0','-1','1.5']:
+            page.locator('#fretboardHand').fill(invalid)
+            page.locator('#fretboardHand').press('Enter')
+            expect(page.locator('#fretboardHand')).to_have_value('7')
+        page.locator('#fretboardHand').fill('')
+        page.locator('#fretboardHand').press('Enter')
+        expect(page.locator('#fretboardHandAuto')).to_be_visible()
+        defaults = page.evaluate("async () => (await import('/voicing-core.js')).defaultPinFlags()")
+        self.assertEqual(set(defaults.values()), {False})
+
     def test_fretboard_hand_position_field(self):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
         expect(page.locator('#fretboardHand')).to_be_hidden()
         page.locator('#fretboardEdit').click()
-        page.locator('#fretboardHand').select_option('7')
+        page.locator('#fretboardHand').fill('7')
+        page.locator('#fretboardHand').press('Enter')
         holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
         self.assertEqual(holds, [{'t': 2, 'fret': 7}])
-        page.locator('#fretboardHand').select_option('')
+        page.locator('#fretboardHand').fill('')
+        page.locator('#fretboardHand').press('Enter')
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds"), [])
         page.keyboard.press('Control+z')
         expect(page.locator('#fretboardHand')).to_have_value('7')

@@ -136,15 +136,14 @@ export function gridAt(t) {
 export { segBarSec, segBeatSec } from "./bars.js";
 export const segStep = (seg) => segBeatSec(seg) / segSubdiv(seg);        // one grid cell
 
-// Add a marker at time t (placed freely — by ear against the audio, no snapping;
-// the export quantizes the seam later). Inherits whatever tempo/meter is in force
+// Add a marker at the nearest note-grid position. Inherits the tempo/meter in force
 // there, so dropping it moves no beat; its grid division starts at 1/32. Returns
 // the marker, or null if it can't sit here.
 export function addMarker(t) {
   if (!S.state) return null;
   if (!S.state.tempoMap) S.state.tempoMap = [];
   const map = S.state.tempoMap;
-  const mt = Math.max(gridOffset() + 1e-3, t);
+  const mt = Math.max(gridOffset() + 1e-3, snap(t));
   if (mt >= S.state.duration || map.some((m) => Math.abs(+m.t - mt) < 1e-4)) return null;
   const seg = gridAt(mt);
   const m = { t: mt, bpm: seg.bpm || gridBpm() || 120, tsNum: seg.tsNum, tsDen: seg.tsDen, subdiv: FINE_SUBDIV };   // new markers start on the 1/32 grid
@@ -194,8 +193,11 @@ export function restoreGridState(g) {
 // tempo grid there's no division to measure against, so fall back to MIN_DUR.
 export const minDur = () => gridStep() || MIN_DUR;
 
-export function snap(t) {
-  const seg = gridAt(t), step = segStep(seg);
+export function snap(t, segments = null) {
+  // A tempo-flag drag uses its starting grid, so its moving origin cannot
+  // pull subsequent pointer events onto a different set of snap positions.
+  const seg = segments ? [...segments].reverse().find(s => s.t <= t) || segments[0] : gridAt(t);
+  const step = segStep(seg);
   if (!step) return t;
   return Math.max(0, Math.round((t - seg.t) / step) * step + seg.t);
 }

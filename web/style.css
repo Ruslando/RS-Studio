@@ -506,6 +506,7 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #fretboardName { padding: 0 var(--s-pair); font: 600 var(--text-body)/1 var(--font-mono); color: var(--stage-text); }
 #fretboardResetStatus.busy::before { border-color: var(--stage-hint); border-top-color: var(--stage-text); }
 #fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
+#fretboardWarning { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1; padding: var(--s-sibling) var(--s-row); border: 1px solid var(--stage-warn); border-radius: var(--r-control); background: var(--stage); color: var(--stage-warn); font-size: var(--text-control); white-space: nowrap; pointer-events: none; }
 
 #fretboardStage { opacity: 1; transform: translateY(0); transition: opacity var(--dur-panel) var(--ease-panel), transform var(--dur-panel) var(--ease-panel); }
 #fretboardPanel[data-collapsed] #fretboardStage {
@@ -1261,8 +1262,8 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardControls > #fretboardEdit { flex: none; min-width: 58px; }
 #fretboardCapoField, #fretboardHandField { display: flex; align-items: center; gap: 6px; }
 #fretboardCapoField label, #fretboardHandField label { color: var(--stage-label); font-size: var(--text-caption); }
-#fretboardCapo { width: 64px; min-width: 0; }
-#fretboardHand { width: 76px; min-width: 0; }
+#fretboardCapo, #fretboardHand { width: 46px; min-width: 0; text-align: center; padding-inline: 4px; }
+#fretboardHandAuto { color: var(--stage-label); font-size: var(--text-caption); white-space: nowrap; }
 #fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField) { display: none; }
 #fretboardControls #fretboardPin {
   position: static; flex: 1; min-width: 0; max-width: none;

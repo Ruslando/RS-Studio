@@ -1,3 +1,4 @@
+import { uniqueDetectedNotes } from "./note-merge.js";
 import { operationRequest } from "./operation-progress.js";
 import { toast } from "./notify.js";
 import { placeFloating } from "./floating-position.js";
@@ -185,8 +186,7 @@ async function runDetect() {
     if (epoch !== detectionEpoch || !stillTargeting()) return;
     // Drop the detected notes straight into the active edit lane as editable
     // notes (fresh ids, like a manual trace/paste) — undo-committed and left
-    // selected. Appended notes that overlap existing ones stay put and get
-    // flagged as a stack (no auto-merge).
+    // selected. Adding skips attacks already present after quantization.
     let added = (data.notes || []).map((n) => ({
       ...n, ...quantizeFine(n.start, n.end), id: nid(),
     }));
@@ -216,6 +216,7 @@ async function runDetect() {
       const wasEmpty = lane.notes.length === 0;
       // Replace clears the frame's notes (scoped detect) or the whole lane (full detect).
       if (mergeMode === "replace") lane.notes = region ? lane.notes.filter((n) => !inFrame(n, region)) : [];
+      added = uniqueDetectedNotes(lane.notes, added);
       lane.notes.push(...added);
       // A fresh Kong piano transcription is a MIDI/reference layer by default.
       // The user can explicitly opt it into the tablature pipeline afterwards.

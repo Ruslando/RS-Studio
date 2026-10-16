@@ -13,10 +13,10 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
 // throughout, so this block measures the reach alone.
 {
   const lane = [0, 1, 2, 3, 4].map((t) => note(t, 57));
-  assert.deepEqual(overrideInfluence([lane[2]]), { previous: false, next: true, adaptPrevious: false, adaptNext: true },
-    "a new override: before stays, after follows, for both pairs");
-  // Written over a pin that carries no switches (an import), it still gets them.
-  assert.equal(overrideFlow([{ pitch: 57, pos: pin(4, 12) }]).next, true);
+  assert.deepEqual(overrideInfluence([lane[2]]), { previous: false, next: false, adaptPrevious: false, adaptNext: false },
+    "new overrides leave both propagation and adaptation off");
+  // Imported pins without switches use the same disabled defaults.
+  assert.equal(overrideFlow([{ pitch: 57, pos: pin(4, 12) }]).next, false);
   assert.equal(overrideInfluence([{ pitch: 57, pos: pin(4, 12) }]).next, false);
   const auto = at(voiceNotes(lane, tuning), lane[0]);
   assert.notEqual(auto, "4:12", "the test needs a pin that differs from the automatic answer");
@@ -146,10 +146,12 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   const { seats, fingers } = voiceNotesFingered(run, bass, Infinity, { bars: [0, 4], instrument: "bass" });
   assert.deepEqual(run.map((n) => seats.get(n)), [13, 13, 8, 8, 8, 8, 2]);
   assert.deepEqual(run.map((n) => fingers.get(n)), [1, 1, 3, 2, 2, 1, 1]);
-  // One fret outside the hand is a stretch, not two shifts: 5 5 9 5 stays at 5.
+  // A bass stretch from fret 5 to 9 exceeds the physical hand-span limit.
+  // The register may stay at 5, but the actual hand must move to play the note.
   const reachy = [5, 5, 9, 5].map((fret, i) => note(i * 0.5, bass[2] + fret, { pos: pin(2, fret, off) }));
   const got = voiceNotesFingered(reachy, bass, Infinity, { bars: [0, 4], instrument: "bass" });
-  assert.deepEqual(reachy.map((n) => got.seats.get(n)), [5, 5, 5, 5]);
+  assert.deepEqual([got.seats.get(reachy[0]), got.seats.get(reachy[1]), got.seats.get(reachy[3])], [5, 5, 5]);
+  assert.ok(got.seats.get(reachy[2]) > 5 && got.seats.get(reachy[2]) <= 9);
   // Three outside is not: 5 5 12 5 moves there and back.
   reachy[2].pitch = bass[2] + 12; reachy[2].pos = pin(2, 12, off);
   const moved = voiceNotesFingered(reachy, bass, Infinity, { bars: [0, 4], instrument: "bass" });
@@ -178,7 +180,7 @@ console.log("ok");
   const { voiced, seats } = voiceNotesFingered(wide, tuning, Infinity, { bars: [0, 4] });
   assert.equal(at(voiced, wide[0]), "5:1");
   assert.equal(at(voiced, wide[1]), "0:15");
-  assert.equal(seats.get(wide[0]), 1);
+  assert.equal(seats.get(wide[0]), undefined, 'an impossible pin keeps its notes but has no physical hand anchor');
 }
 
 // A scratch between two notes at fret 7: the muted strings say fret 1 and fret 15

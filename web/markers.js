@@ -9,7 +9,7 @@ import { MM_HEAD, stageMono, stageUi } from "./constants.js";
 import { bpmInput, inTourCard, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
-import { addMarker, currentGridState, gridOffset, gridSegments, removeMarker, retimeTempoSpan, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid.js";
+import { addMarker, currentGridState, gridOffset, gridSegments, snap, removeMarker, retimeTempoSpan, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid.js";
 import { toast } from "./notify.js";
 import { refreshTabIfOpen } from "./tablature.js";
 import { timeAt, xOf } from "./geometry.js";
@@ -187,6 +187,7 @@ export function markerMouseDown(e) {
   e.preventDefault();
   const seg = hit.seg;
   const grabDT = timeAt(x) - seg.t;
+  const dragGrid = gridSegments().map(segment => ({ ...segment }));
   let moved = null;   // the pre-drag snapshot, taken lazily: a click must not pay for one
   let riders = null;  // (delta) => void, one per thing inside this tempo span: it moves with the flag
   // This flag's popover is open: the drag is that session typing into its
@@ -194,7 +195,7 @@ export function markerMouseDown(e) {
   const viaPop = !markerPop.hidden && editSeg && (seg.seg0 ? editSeg.seg0 : editSeg.ref === seg.ref);
   const onMove = (ev) => {
     const [mx] = toCanvas(ev.clientX, ev.clientY);
-    const nt = timeAt(mx) - grabDT;
+    const nt = snap(timeAt(mx) - grabDT, dragGrid);
     if (viaPop) {
       moved = true;
       markerTime.value = Math.max(0, nt).toFixed(3);

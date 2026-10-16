@@ -2,14 +2,14 @@ import { paintMarkerFlag } from "./canvas-components.js";
 import { placeFloating } from "./floating-position.js";
 // Standalone song-section flags. Unlike tempo/meter markers, moving one never
 // retimes the grid or notes: it is an audio-time annotation that snaps to the
-// nearest current score-bar boundary.
+// current note grid.
 
 import { inTourCard, mmctx, scroll, sctx, sectionMarkerDelete, sectionMarkerHelpIcon, sectionMarkerKind, sectionMarkerName, sectionMarkerNameWrap, sectionMarkerPop, sectionMarkerPopClose, sectionMarkerTime, sectionMarkerType, sectionMarkerTypeWrap, stage } from "./dom.js";
 import { stageUi } from "./constants.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
-import { songBarStarts } from "./song-bars.js";
+import { snap } from "./grid.js";
 import { MARK_H } from "./markers.js";
 import { inRailBand, railBand, registerMarkerRail, setRailOrigin } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
@@ -54,12 +54,9 @@ function toCanvas(cx, cy) {
 }
 
 function snapSectionTime(value) {
-  const time = Math.max(0, Math.min(Number(S.state?.duration) || Number(S.state?.scoreDuration) || Infinity,
-    Number(value) || 0));
-  const starts = songBarStarts();
-  if (!starts.length) return time;
-  return starts.reduce((best, candidate) =>
-    Math.abs(candidate - time) < Math.abs(best - time) ? candidate : best, starts[0]);
+  const duration = Number(S.state?.duration) || Number(S.state?.scoreDuration) || Infinity;
+  const time = Math.max(0, Math.min(duration, Number(value) || 0));
+  return Math.max(0, Math.min(duration, snap(time)));
 }
 
 function changed() {

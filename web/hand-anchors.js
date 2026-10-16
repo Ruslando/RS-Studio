@@ -5,7 +5,7 @@ import { S } from './store.js';
 import { stageMono } from './constants.js';
 import { activeLane, canEditLane } from './lanes.js';
 import { laneFretCount, refreshTabIfOpen } from './tablature.js';
-import { gridAt, segBeatSec } from './grid.js';
+import { snap } from './grid.js';
 import { timingIdOf, withTiming } from './timing.js';
 import { xOf, timeAt } from './geometry.js';
 import { registerMarkerRail, railBand, inRailBand } from './marker-rails.js';
@@ -33,8 +33,7 @@ function snapAnchorTime(time, lane) {
   return withTiming(timingIdOf(lane), () => {
     const limit = Number(S.state.duration) || Number(S.state.scoreDuration) || Infinity;
     const t = Math.max(0, Math.min(limit, Number(time)));
-    const segment = gridAt(t), beat = segBeatSec(segment);
-    return Math.max(0, Math.min(limit, segment.t + Math.round((t - segment.t) / beat) * beat));
+    return Math.max(0, Math.min(limit, snap(t)));
   });
 }
 

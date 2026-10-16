@@ -1,3 +1,4 @@
+import { chordWarnings } from "./chord-warnings.js";
 import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
 import { renderArtifacts } from "./artifacts.js";
 import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGhosts, notePlaybackGlow } from "./note-motion.js";
@@ -543,6 +544,23 @@ function paintFrame() {
   drawNoteFx();
   drawOmittedNoteCrosses(omittedCrosses);
   drawOutOfRangeNotes(outOfRange);
+  sctx.save();
+  sctx.strokeStyle = PAINT.warn; sctx.fillStyle = PAINT.warn; sctx.lineWidth = 1.5;
+  sctx.font = stageUi(14); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
+  for (const lane of S.state.lanes) {
+    if (!lane.visible) continue;
+    for (const { notes } of chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)) {
+      const left = xOf(Math.min(...notes.map(n => n.start))) - 3;
+      const right = xOf(Math.max(...notes.map(n => n.end))) + 3;
+      if (left > vx1 || right < vx0) continue;
+      const top = Math.min(...notes.map(n => yOf(n.pitch))) - 4;
+      const bottom = Math.max(...notes.map(n => yOf(n.pitch))) + S.state.rowH + 4;
+      sctx.setLineDash([4, 3]); sctx.strokeRect(left, top, right - left, bottom - top);
+      sctx.setLineDash([]);
+      sctx.fillText("⚠", Math.max(left, vx0 + 4), top - 2);
+    }
+  }
+  sctx.restore();
   drawGhostNotes(ghostNotes);
   drawReferences();
   drawMatches();

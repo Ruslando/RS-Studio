@@ -547,6 +547,7 @@ export function seekPlayback(t) {
   if (audio.duration) seek.value = Math.round((next / audio.duration) * 1000);
   timeEl.textContent = `${fmtTime(next)} / ${fmtTime(audio.duration || S.state?.duration || 0)}`;
   if (!audio.paused) resetSchedule();
+  window.dispatchEvent(new CustomEvent("cw-transport", { detail: "seek" }));
   draw();
   return next;
 }

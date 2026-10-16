@@ -460,7 +460,8 @@ function groupsAtEachFret(shape) {
       const members = same.filter((_, i) => mask & (1 << i));
       const loS = Math.min(...members.map((e) => e.string));
       const hiS = Math.max(...members.map((e) => e.string));
-      if (members.length === 1 || barreSpanSupported(entries, fret, loS, hiS)) valid.push({ mask, members });
+      const coversAllContacts = same.every(e => e.string < loS || e.string > hiS || members.includes(e));
+      if (coversAllContacts && (members.length === 1 || barreSpanSupported(entries, fret, loS, hiS))) valid.push({ mask, members });
     }
     // Enumerate every honest partition, not only the smallest one. Three notes
     // at one fret may be one barre or three separate fingertips; those grips do
@@ -551,7 +552,7 @@ function gripParts(shape, fingering, profile) {
     // belongs where, so charging one on top would double-count.
     fingers: groups.length * COST_W.finger,
     stringOrder: 0, reach: 0, seatIdle: 0, pinky: 0,
-    stretch: 0, curl: 0, rotation: 0,
+    stretch: 0, curl: 0, rotation: 0, splay: 0,
     barre: 0, muting: 0, rightHand: 0, clearance: 0, high: 0, open: 0,
   };
   for (const g of groups) {
@@ -568,13 +569,14 @@ function gripParts(shape, fingering, profile) {
       + stringTravelUnits(Math.max(0, g.barreSpan - 1), profile) * COST_W.barreString
       + Math.max(0, g.finger - 1) * POSE_W.barreFinger;
   }
-  // Two rules are anatomical order rather than posture: fingers cannot cross
-  // along the neck, and two fingers sharing a fret always lie treble-side in
-  // finger order however the hand is turned. Posture prices where the hand can
-  // be; these price what the hand is.
-  const pose = postureParts(groups, profile);
+  // Finger-order limits complement the reach model: crossing along the neck
+  // is impossible; at a shared fret the grouping and planted index determine
+  // whether an inversion is possible or merely awkward.
+  const pose = postureParts(groups, profile, fingering.seat);
   if (!pose) return null;
   parts.stretch = pose.stretch; parts.curl = pose.curl; parts.rotation = pose.rotation;
+  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++)
+    parts.splay += fingerSplayCost(groups[i], groups[j], profile);
   for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) {
     const a = groups[i], b = groups[j];
     // Fingers do not pass each other along the neck: the middle cannot press a
@@ -584,8 +586,14 @@ function gripParts(shape, fingering, profile) {
     // and sorting the fingers by fret always yields a legal one, so rejecting
     // this never costs a shape — only the assignment no hand can make.
     if ((a.fret - b.fret) * (a.finger - b.finger) < 0) return null;
-    if (a.fret === b.fret && (a.finger - b.finger) * (a.string - b.string) > 0)
+    if (a.fret === b.fret && (a.finger - b.finger) * (a.string - b.string) > 0) {
+      // An index tucked between fingertips at the same fret (e.g. open A) is
+      // different from crossing the outer fingers over a lower, planted index.
+      // A flat barre cannot thread between another finger at this fret either.
+      const plantedIndex = Math.min(a.finger, b.finger) > 1 && groups.some(group => group.finger === 1 && group.fret < a.fret);
+      if (plantedIndex || a.members.length > 1 || b.members.length > 1) return null;
       parts.stringOrder += COST_W.stringOrder * stringTravelUnits(Math.abs(a.string - b.string), profile);
+    }
   }
   // Charged against the seat the DP itself uses, so comfort and movement agree on
   // where the hand is — and ONLY for a shape with one finger down, which is
@@ -693,13 +701,36 @@ const barreSpansFit = (groups) => groups.every((group) => group.members.length <
 // where it stops.
 export const POSE_W = {
   stretch: 1.4, curl: 3, rotation: 0.05,
+  splay: 0.4,
   barre: 0.6, barreFinger: 1.4, maxStretchMm: 46, maxCurlMm: 46,
 };
+
+// Initial heuristic comfort widths across the strings, not individual anatomical
+// limits. In particular, middle/pinky can fan apart more freely than ring/pinky.
+// This is a soft tension cost; it never declares a grip unplayable by itself.
+const FINGER_SPLAY_COMFORT_MM = Object.freeze({
+  '1:2': 20, '1:3': 30, '1:4': 40,
+  '2:3': 18, '2:4': 32, '3:4': 16,
+});
+
+export function fingerSplayCost(a, b, profile = GUITAR_HAND_PROFILE) {
+  if (a.finger === b.finger) return 0;
+  const key = [a.finger, b.finger].sort((x, y) => x - y).join(':');
+  const comfort = FINGER_SPLAY_COMFORT_MM[key];
+  if (!comfort) return 0;
+  // A barre occupies an interval. Measure the gap between contact intervals,
+  // not their centres: a finger beside/over a barre does not span its full width.
+  const stringsA = a.members.map(member => member.string), stringsB = b.members.map(member => member.string);
+  const gap = Math.max(0, Math.min(...stringsA) - Math.max(...stringsB), Math.min(...stringsB) - Math.max(...stringsA));
+  const acrossMm = gap * profile.stringSpacingMm;
+  const excess = Math.max(0, acrossMm - comfort) / comfort;
+  return POSE_W.splay * excess ** 2;
+}
 const POSE_TILTS = [0, 0.25, 0.5, 0.75, 1];
 
 const NO_POSE = Object.freeze({ total: 0, stretch: 0, curl: 0, rotation: 0, tilt: 1, seat: null });
 
-function postureParts(groups, profile) {
+function postureParts(groups, profile, fixedSeat = null) {
   // An all-open shape has no groups to seat. The fretting hand is not involved,
   // so there is no pose to charge — and returning nothing here would have made
   // every open string unplayable.
@@ -743,8 +774,8 @@ function postureParts(groups, profile) {
     if (best && rotation >= best.total) continue;
     // The seat that minimises a sum of convex per-finger costs sits at one of the
     // frets the fingers themselves imply, so only those need testing.
-    for (const group of groups) {
-      const seat = group.fret - (group.finger - 1) * tilt;
+    const anchors = fixedSeat == null ? groups.map(group => group.fret - (group.finger - 1) * tilt) : [fixedSeat];
+    for (const seat of anchors) {
       if (seat < 0.5) continue;
       let stretch = 0, curl = 0, over = false;
       for (const g of groups) {
@@ -807,7 +838,8 @@ export function fingeringOptions(shape, profile = GUITAR_HAND_PROFILE) {
           // 92.4%. Scoped to a single group it leaves every corpus figure
           // untouched to the decimal.
           if (rawSeat !== null && rawSeat < 1 && groups.length === 1) return;
-          const seat = rawSeat === null ? null : Math.max(1, rawSeat);
+          const index = groups.find(group => group.finger === 1);
+          const seat = index ? index.fret : rawSeat === null ? null : Math.max(1, rawSeat);
           const fingering = { fingers, groups, seat };
           const parts = gripParts(shape, fingering, profile);
           if (!parts) return;
@@ -848,6 +880,45 @@ export function gripCostBreakdown(shape, profile = GUITAR_HAND_PROFILE) {
 }
 
 export const hasPlayableFingering = (shape, profile = GUITAR_HAND_PROFILE) => fingeringOptions(shape, profile).length > 0;
+
+// Select the fingers AND their anchor from one physical pose. The passage's
+// register is context, not an independent index position. For a chord its pull
+// is bounded so it cannot buy an unnecessarily split barre to save a shift.
+export function handForShape(shape, seat, profile = GUITAR_HAND_PROFILE, required = new Map(), fixedSeat = false) {
+  let poses = fingeringOptions(shape, profile);
+  // A single fretted contact can stretch without moving the whole hand. Evaluate
+  // that actual anchored pose in millimetres, rather than clamping its finger
+  // number to four and claiming the stretch is automatically possible.
+  const contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !noteIsDead(note));
+  if (contacts.length === 1 && Number.isFinite(seat) && seat >= 1) {
+    const [note] = contacts[0];
+    poses = [...poses, ...poses.flatMap(pose => {
+      if (pose.fingers.get(note) === 1 || pose.seat === seat) return [];
+      const anchored = { ...pose, groups: pose.groups.map(group => ({ ...group })), seat };
+      const parts = gripParts(shape, anchored, profile);
+      return parts ? [{ ...anchored, parts, cost: Object.values(parts).reduce((sum, value) => sum + value, 0) }] : [];
+    })];
+  }
+  const compatible = poses.filter(pose => [...required].every(([note, finger]) => pose.fingers.get(note) === finger));
+  let choices = compatible.length ? compatible : poses;
+  if (fixedSeat) {
+    const atSeat = choices.filter(pose => pose.seat === seat);
+    if (atSeat.length) choices = atSeat;
+  }
+  if (!choices.length) return { fingers: assignFingers(shape, profile), seat: null, playable: false };
+  const fretted = contacts.length;
+  const cost = pose => {
+    if (!Number.isFinite(seat) || pose.seat == null) return pose.cost;
+    const travel = fretTravelUnits(seat, pose.seat, profile);
+    return pose.cost + (fretted > 1 ? Math.min(COST_W.plan, travel * COST_W.plan) : travel * COST_W.mfret);
+  };
+  const chosen = choices.reduce((best, pose) => cost(pose) < cost(best) ? pose : best);
+  return { fingers: new Map(chosen.fingers), seat: chosen.seat ?? seat ?? null, playable: true };
+}
+
+export function fingersAtSeat(shape, seat, profile = GUITAR_HAND_PROFILE, required = new Map()) {
+  return handForShape(shape, seat, profile, required).fingers;
+}
 
 // Intrinsic difficulty of a single shape (lower = easier to fret): choose the
 // cheapest feasible concrete fingering, then sum named ergonomic, string-control,
@@ -1136,9 +1207,13 @@ export function shapeFault(notes, tuning, shape, limits = null, maxFret = MAX_FR
 // neighbouring columns prune further.
 // ============================================================================
 
-export function enumerateShapes(notes, tuning) {
+export function enumerateShapes(notes, tuning, maxFret = MAX_FRET, pins = null) {
   const profile = handProfileForTuning(tuning);
-  const cand = notes.map((n) => ({ note: n, options: fretOptions(n, tuning) }));
+  const cand = notes.map(note => ({
+    note,
+    options: fretOptions(note, tuning).filter(option => option.fret <= maxFret &&
+      (!pins?.has(note) || pins.get(note).string === option.s && pins.get(note).fret === option.fret)),
+  }));
   const order = [...cand.keys()].sort((a, b) => cand[a].options.length - cand[b].options.length);
   const shapes = [];
   const used = new Map();   // string index -> { note, fret }
@@ -1177,9 +1252,16 @@ export const outOfFretboardRange = (pitch, tuning, maxFret = MAX_FRET) =>
 // playable fingering — so "these notes cannot be played together" is otherwise
 // invisible to callers and reaches the UI as a shape smeared across the neck.
 // This is the explicit test for it.
-export const unplayableColumn = (notes, tuning) => {
+export const unplayableColumn = (notes, tuning, maxFret = MAX_FRET) => {
+  if (notes.length > tuning.length || notes.some(n => outOfFretboardRange(n.pitch, tuning, maxFret))) return true;
   const profile = handProfileForTuning(tuning);
-  return !enumerateShapes(notes, tuning).some((shape) => hasPlayableFingering(shape, profile));
+  const pins = pinnedPositions(notes, tuning);
+  // A stored, sounding pin is part of the requested chord, including partial pins.
+  return !enumerateShapes(notes, tuning, maxFret, pins).some(shape =>
+    shape.size === notes.length && new Set([...shape.values()].map(p => p.string)).size === notes.length &&
+    [...shape.values()].every(p => p.fret >= 0 && p.fret <= maxFret) &&
+    [...pins].every(([note, p]) => shape.get(note)?.string === p.string && shape.get(note)?.fret === p.fret) &&
+    hasPlayableFingering(shape, profile));
 };
 
 // Canonical key for a shape (string+fret set), so duplicate voicings dedupe and
@@ -1313,22 +1395,19 @@ export function contextualCandidateSets(columns, tuning, cap = DP_SHAPES_PER_COL
 //                     stays there for the ones that follow — or carry on as if the
 //                     override were not there
 //
-// The rule when nothing says otherwise, for both pairs: what was already played stays
-// as it is, and what comes after follows. `adaptNext` is left undefined on a pin
-// saved before it existed, which keeps that pin's old behaviour (see
-// registerColumns) instead of re-fingering a finished project on load. `adapt` is
-// the one-switch form this was first written as, read as `adaptNext`.
+// All four switches default to off. Explicit saved values are retained;
+// `adapt` is the older one-switch spelling of `adaptNext`.
 export function normalizeOverrideInfluence(value = null) {
   return {
     previous: (value?.previous ?? value?.influencePrevious) === true,
-    next: (value?.next ?? value?.influenceNext) !== false,
+    next: (value?.next ?? value?.influenceNext) === true,
     adaptPrevious: value?.adaptPrevious === true,
-    adaptNext: value ? value.adaptNext ?? value.adapt : true,
+    adaptNext: (value?.adaptNext ?? value?.adapt) === true,
   };
 }
 
 // The stored switches of a pin nobody chose them for: an imported tab's positions.
-// They behave exactly like a fresh override, so notes added around them follow them.
+// Like a fresh override, an imported pin affects its own column by default.
 export function defaultPinFlags() {
   const flow = normalizeOverrideInfluence();
   return { influencePrevious: flow.previous, influenceNext: flow.next,
@@ -1339,7 +1418,7 @@ export function defaultPinFlags() {
 // already carries, and otherwise the defaults. Not overrideInfluence, which answers
 // how an existing pin behaves — a pin with no switches at all (an old project, every
 // position of an imported tab) behaves as one column's, and writing a fresh override
-// over it used to inherit that and come out with everything switched off.
+// over it uses the current defaults.
 export function overrideFlow(notes) {
   const source = (notes || []).find((note) => note.arrangement)?.arrangement
     || (notes || []).find((note) => note.pos)?.pos;
@@ -1978,14 +2057,10 @@ function registerColumns(columns, tuning, options = {}) {
     };
   });
 
-  // Where the hand stood for each column: the lowest fretted fret in that
-  // column's bar. Lean no longer picks a window — it picks a REGISTER per bar and
-  // reads every string off that — so the anchor is read back off what was played
-  // rather than being the state itself, and it is per bar for the same reason it
-  // is not per column. Dropping it here was why a bass line came
-  // back with no anchor and an index finger on every note: with no hand from the
-  // engine, the board falls back to reading each shape alone, and one note alone is
-  // the index by definition.
+  // The register walk supplies passage context for each column. It is not the
+  // final index-finger anchor: handForShape selects that together with actual
+  // finger contacts after the strings and frets have been decided. Single notes
+  // can stay in the passage's hand position when a physical stretch permits it.
   // How long the neck is, off the same measurements the fretboard draws — an
   // acoustic has 20 frets and an electric 22, and the engine inventing its own
   // number is how the voicer and the board come to disagree about the instrument
@@ -2080,24 +2155,14 @@ function registerColumns(columns, tuning, options = {}) {
   if (price) for (const got of price.out) sink.push({ ...(got || { cost: Infinity, seat: null }), fingers: [] });
   return voiced.map((placed, i) => {
     const shape = new Map();
-    const fingers = new Map();
     columns[i].notes.forEach((note, k) => {
       const p = placed[k];
       // -1 is the engine saying the instrument cannot reach this note. Leaving it out of
       // the shape is what the full engine's unplaceable notes already do.
       if (p.string < 0) return;
       shape.set(note, { string: order[p.string], fret: p.fret });
-      // The finger the window implies: one per fret, counted from the seat. It is an
-      // approximation and it is here so the board cannot contradict itself — an
-      // anchor on fret 5 under a marker labelled "1" at fret 8 is a lie, and the
-      // digit has to agree with the band it is counted from. Lean has no finger
-      // model of its own; giving it one is a separate decision, and this is the
-      // cheapest reading that is at least consistent. It gets barres right for free
-      // (same fret, same number, so the board's capsule still forms) and gets a
-      // reused finger wrong (it never reuses one, it stretches).
-      if (p.fret > 0) fingers.set(note, Math.min(4, Math.max(1, p.fret - seats[i] + 1)));
     });
-    if (options.hands) options.hands[i] = { seat: seats[i] ?? null, fingers };
+    if (options.hands) options.hands[i] = handForShape(shape, seats[i], handProfileForTuning(tuning), new Map(), !!holds[i]);
     return shape.size ? shape : null;
   });
 }
@@ -2156,7 +2221,11 @@ export function scoreShapesAsDecided(shapes, columns, focusIdx, tuning, options 
   return mapped.map((shape) => {
     if (!shape) return UNPLAYED;
     const got = priced[next++];
-    return got && Number.isFinite(got.cost) ? got : UNPLAYED;
+    if (!got || !Number.isFinite(got.cost)) return UNPLAYED;
+    const hand = handForShape(shape, got.seat, handProfileForTuning(tuning));
+    if (!hand.playable) return UNPLAYED;
+    return { ...got, seat: hand.seat,
+      fingers: [...shape].map(([note, pos]) => [pos.string, hand.fingers.get(note) ?? 0]) };
   });
 }
 
@@ -2183,9 +2252,9 @@ export function voicingReviewMarks(notes, tuning, options = {}) {
   return marks;
 }
 
-// voiceNotes, plus the hand that played it: which finger took each note, and which
-// fret the hand was anchored on while it did. Same single pass — the fingering is a
-// by-product of the walk, so asking for it costs nothing beyond carrying it out.
+// voiceNotes, plus the physical hand that plays it. The register walk determines
+// positions; handForShape chooses finger contacts and their actual anchor as one
+// pose. Slide continuations then carry compatible fingers into the next grip.
 //
 // The board draws both, because "why did it choose that" is usually a question about
 // where the hand already was, and a fret diagram that shows only positions cannot
@@ -2206,7 +2275,7 @@ export function voiceNotesFingered(notes, tuning, cap = Infinity, options = {}) 
       if (hand.seat != null) seats.set(note, hand.seat);
     }
   });
-  carrySlideFingers(chosen, fingers, seats);
+  carrySlideFingers(chosen, fingers, seats, handProfileForTuning(tuning));
   return { voiced, fingers, seats };
 }
 
@@ -2217,7 +2286,7 @@ export function voiceNotesFingered(notes, tuning, cap = Infinity, options = {}) 
 // labels the target by fret distance — a 7→9 slide with the hand at 5 came out as
 // 3 → 4, and the board's digit changed under a finger that never lifted. The other
 // notes of a landing grip are counted from the seat the hand slid to.
-function carrySlideFingers(chosen, fingers, seats) {
+function carrySlideFingers(chosen, fingers, seats, profile) {
   for (let i = 1; i < chosen.length; i++) {
     const prev = chosen[i - 1], cur = chosen[i];
     if (!prev || !cur) continue;
@@ -2235,9 +2304,11 @@ function carrySlideFingers(chosen, fingers, seats) {
     }
     if (delta == null || seat == null) continue;
     seat += delta;
-    for (const [note, pos] of cur) {
-      seats.set(note, seat);
-      if (pos.fret > 0 && !carried.has(note)) fingers.set(note, Math.min(4, Math.max(1, pos.fret - seat + 1)));
+    const required = new Map([...carried].map(note => [note, fingers.get(note)]));
+    const hand = handForShape(cur, seat, profile, required);
+    for (const [note] of cur) {
+      seats.set(note, hand.seat);
+      if (hand.fingers.has(note)) fingers.set(note, hand.fingers.get(note));
     }
   }
 }

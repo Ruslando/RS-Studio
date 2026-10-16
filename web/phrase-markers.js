@@ -9,10 +9,10 @@ import { inTourCard, mmctx, phraseMarkerDelete, phraseMarkerPop, phraseMarkerPop
 import { draw } from "./repaint.js";
 import { STATE_RESTORED } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
-import { gridSegments, segBeatSec } from "./grid.js";
+import { snap } from "./grid.js";
 import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
-import { beatStartsFromScoreBars, normalizePhraseBoundaries } from "./section-marker-core.js";
+import { normalizePhraseBoundaries } from "./section-marker-core.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { timingIdOf, withTiming } from "./timing.js";
@@ -80,32 +80,10 @@ function applyTime() {
   changed(lane);
 }
 
-function phraseBeatStarts() {
-  const duration = Math.max(0,
-    Number(S.state?.duration) || Number(S.state?.scoreDuration) || 0);
-  const bars = S.state?.scoreBars || [];
-  if (bars.length) return beatStartsFromScoreBars(bars);
-  const starts = [];
-  const segments = gridSegments();
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index];
-    const end = segments[index + 1]?.t ?? duration;
-    const step = segBeatSec(segment);
-    if (!(step > 0)) continue;
-    for (let time = segment.t, guard = 0;
-      time < end - 1e-5 && time <= duration + 1e-5 && guard++ < 100000;
-      time += step) starts.push(Math.max(0, time));
-  }
-  return starts;
-}
-
 export function snapPhraseTime(value) {
   const duration = Number(S.state?.duration) || Number(S.state?.scoreDuration) || Infinity;
   const time = Math.max(0, Math.min(duration, Number(value) || 0));
-  const starts = phraseBeatStarts();
-  if (!starts.length) return time;
-  return starts.reduce((best, candidate) =>
-    Math.abs(candidate - time) < Math.abs(best - time) ? candidate : best, starts[0]);
+  return Math.max(0, Math.min(duration, snap(time)));
 }
 
 export function addPhraseBoundaryAtTime(time, clientX, clientY) {

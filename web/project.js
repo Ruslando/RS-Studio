@@ -251,8 +251,8 @@ export function mapLane(l) {
   // is a note however it got there.
   const notes = (l.notes || []).map(({ source, ...n }) => n);
   // An imported tab used to be an "exact" lane, whose positions were never voiced.
-  // They are pins now; ones saved without switches get a fresh override's, so the
-  // notes added around them follow them (defaultPinFlags).
+  // They are pins now; ones saved without switches get the current override
+  // defaults (defaultPinFlags).
   if (l.fingeringMode === "exact") for (const n of notes)
     if (n.pos && typeof n.pos.influenceNext !== "boolean") n.pos = { ...n.pos, ...defaultPinFlags() };
   migrateMotifs(notes);
