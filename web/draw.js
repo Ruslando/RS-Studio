@@ -17,7 +17,7 @@ import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } fro
 import { edgeOf, localXY, pickNote } from "./interaction.js";
 import { activeLane, canEditLane } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
-import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor } from "./references.js";
+import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";
 import { motifGroups, motifName } from "./motifs.js";
 import { songBarStarts } from "./song-bars.js";
 import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
@@ -283,6 +283,33 @@ function drawMotifs(vx0, vx1) {
   }
 }
 
+// A reference or motif being dragged in from the artifact pane: its notes as
+// ghosts where the drop would put them, framed as it will be (solid or dashed).
+function drawDropPreview() {
+  const preview = S.dropPreview;
+  if (!preview) return;
+  const h = S.state.rowH;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  sctx.save();
+  for (const n of preview.notes) {
+    const x = xOf(n.start), w = Math.max(1, xOf(n.end) - x), y = yOf(n.pitch);
+    sctx.globalAlpha = preview.blocked ? 0.4 : 1;
+    sctx.fillStyle = hexA(preview.color, WASH * 3); sctx.fillRect(x, y, w, h);
+    sctx.strokeStyle = preview.color; sctx.lineWidth = 1; sctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x + w); y0 = Math.min(y0, y); y1 = Math.max(y1, y + h);
+  }
+  if (preview.box) {   // a reference: its own box shape, as the stage will draw it
+    x0 = xOf(preview.box.t0); x1 = xOf(preview.box.t1); y0 = yOf(preview.box.pHi); y1 = yOf(preview.box.pLo) + h;
+  }
+  const motif = preview.kind === "motif", pad = motif ? 4 : 0;
+  // Over another reference the drop is refused, and the frame says so.
+  sctx.strokeStyle = preview.blocked ? PAINT.error : motif ? PAINT.motif : PAINT.ref; sctx.lineWidth = 2;
+  sctx.globalAlpha = 1;
+  if (motif) sctx.setLineDash([6, 4]);
+  sctx.strokeRect(x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad);
+  sctx.restore();
+}
+
 // The frame itself. Registered with repaint.js at boot; everything else asks for
 // a paint through draw()/drawNow() there and never imports this module.
 function paintFrame() {
@@ -510,6 +537,7 @@ function paintFrame() {
   sctx.globalAlpha = 1;
   sctx.textBaseline = "alphabetic";
   drawMotifs(vx0, vx1);
+  drawDropPreview();
   drawStackBadges(stackBadges, vx0, vx1);
   drawBendHandles();
   drawNoteFx();
@@ -806,6 +834,7 @@ export function init_draw() {
     if (e.ctrlKey || e.metaKey) cur = "pointer";             // Ctrl + click = seek
     else if (mkCur) cur = mkCur;                             // over a timing or section flag
     else if (mi >= 0) cur = "pointer";                       // hovering a suggestion
+    else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && refLockAt(x, y)) cur = "pointer";   // pitch lock toggle
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && refBadgeAt(x, y)) cur = "grab"; // reference badge (click = select, drag = move)
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (rbe = refBoxEdgeAt(x, y)))
       cur = refEdgeCursor(rbe.edge);                         // reference box edge or corner
@@ -817,6 +846,7 @@ export function init_draw() {
     else cur = "default";                                    // empty = scrub
     stage.style.cursor = cur;
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
+    S.refLockHover = refLockAt(x, y);
     S.mouseX = x;
     S.mouseY = y;
     S.hoverNote = hit ? hit.note : null;
@@ -826,7 +856,7 @@ export function init_draw() {
     S.pitchHoverClientY = null;
     stage.style.cursor = "default";
     cancelHoverPreview();
-    S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; S.refEdgeHover = null; draw();
+    S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; S.refEdgeHover = null; S.refLockHover = null; draw();
   });
   for (const scale of [ruler, rulerRight]) {
   scale.addEventListener("mousedown", (e) => {

@@ -66,6 +66,10 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
     "a note barely inside the box, or outside its pitches, is not part of the motif");
   assert.deepEqual(refOccurrences({ anchors: [0] }, [first], 0.25), []);
   assert.deepEqual(refOccurrences(null, [first], 0.25), []);
+  // A shifted occurrence's box sits at its own pitch: 12 up, the high note is inside it.
+  const raised = { start: 4.5, end: 5, pitch: 60 };
+  assert.deepEqual(refOccurrences({ ...group, transposable: true, shifts: [0, 12] }, [first, raised, second], 0.25), [[first], [raised]],
+    "a transposed occurrence holds the notes at its own pitch");
 
   // Two notes are "the same" for a reference when their effects are; where they are fretted is not an effect.
   assert.notEqual(effectSig({ slide: "shift" }), effectSig({}));

@@ -47,6 +47,21 @@ const OUTLINE = {
   chevronUp: '<path d="m6 15 6-6 6 6"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
 };
+// The same icon as an image for a canvas, in one colour and stroke width. Loads
+// asynchronously: `onload` is called once it can be drawn.
+const stageIcons = new Map();
+export function stageIcon(name, color, width = 1.8, onload = null) {
+  const key = `${name}|${color}|${width}`;
+  if (!stageIcons.has(key)) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${OUTLINE[name]}</svg>`;
+    const image = new Image();
+    if (onload) image.onload = onload;
+    image.src = "data:image/svg+xml," + encodeURIComponent(svg);
+    stageIcons.set(key, image);
+  }
+  return stageIcons.get(key);
+}
+
 export function icon(name, size = 16) {
   return `<svg class="ui-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${OUTLINE[name]}</svg>`;
 }

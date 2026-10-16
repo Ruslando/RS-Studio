@@ -249,7 +249,10 @@ as a number.
 9. A **destructive** action sits in the footer's left slot as an outlined
    button, far from the primary, and opens a confirmation whose confirming
    button is the filled `--destructive`. In a popover it is a compact icon
-   button beside the close button. The footer's left slot holds nothing else.
+   button beside the close button. The footer's left slot holds nothing else,
+   except in a confirmation that offers two answers (Detach / Move back): both
+   stand on the right, the alternative as a default button and then the
+   primary, and Cancel takes the left slot.
 10. The header names the object ("Note layer" plus its chip). The body does not
     repeat it.
 
@@ -684,15 +687,48 @@ New comments cite this document by section ("design.md 4.9").
 
 The right artifact pane is built like the layer sidebar (4.15): no pane title,
 each list under a `.side-header` / `.side-label` with its count in mono at the
-right, rows as in 4.13. An empty list shows only its header and a 0. A
+right, rows as in 4.13. An empty list is hidden, header included. Each entry looks like what it
+indexes on the stage, in that hue (`--stage-*`, a hand anchor its layer's colour):
+a marker's name is drawn as its flag, a tinted 24-high chip; a reference entry is
+framed solid, a motif dashed, at half strength and full under the pointer.
+Double-clicking a reference or motif entry moves there (on its name it renames).
+Dragging the entry onto the spectrogram pastes it where it is dropped: a
+reference as another linked occurrence, a motif as an independent copy; one
+undo step, and the clipboard is left as it was.
+The first note lands under the pointer. A motif keeps only its intervals, so it
+follows the pointer in pitch too (kept inside the spectrogram's range) and drops
+its string and fret for fingering to place again. A reference's pitch is locked
+by default; its menu's "Allow pitch changes" frees it.
+
+A freed reference (`transposable`) lets each occurrence sit some semitones off the
+group's pitch (`shifts[i]`, parallel to `anchors`): by dropping it higher or lower,
+or by dragging an occurrence's label up or down on the stage. Edits mirror relative
+to each box's shift, so the melody stays the same; effects mirror unchanged; a
+shifted copy is fingered anew. The stage label and the preview's counter show the
+offset ("+2"). "Lock pitch" with shifted occurrences asks first: Move back (to the
+earliest occurrence's pitch) or Detach them (their notes stay); one undo step.
+The lock is a padlock (icons.js's lock/unlock) at the right end of the box on
+the stage, above it like the label, and at the right of its artifact row. On the
+stage its state is said in words left of it ("Pitch locked" / "Pitch unlocked") only while
+it is pointed at and for 1.5 s after it was flipped. It is closed and plain when locked (the default), open when free;
+clicking either flips it, as the menu does.
+
+A reference never lands inside another one: a dropped reference or motif whose
+box would overlap a reference box is refused (the drop preview turns
+`--error`, a toast says why), and an occurrence dragged by its label stops at
+its last free place. Notes join a reference one at a time, drawn or pasted.
+While it is over the stage, the notes show as ghosts where the drop would put
+them (snapped exactly as the paste will snap them), framed as they will be: a
+reference in its own box shape, a motif dashed. A
 reference or motif row's head (`.artifact-row-head`) is the disclosure for its
-preview window. A marker row (`.artifact-marker-row`) is a 44 row: clicking it
-moves there; its compact Edit and Move to icon buttons appear on hover or focus. The pane follows the layer sidebar and fretboard interaction rules: a gap
+preview window. Rows are one line, 32 high: the name, and for a marker its time in mono at
+the right. Clicking a marker row moves there; its compact Edit and Move to icon
+buttons cover the time on hover or focus. The pane follows the layer sidebar and fretboard interaction rules: a gap
 splitter resizes it, dragging below the collapse threshold folds it to a frosted
 strip, and hovering peeks at its retained content. The edge chevron, toolbar
 toggle, strip click and splitter double-click restore it. Width and collapsed
 state persist across reloads. Collapsed content is inert. The list updates with project edits
-and undo; references on hidden lanes remain discoverable.
+and undo. It lists only the active layer's artifacts.
 
 Each reference row is its own preview window with its lane, a cropped track
 miniature, and a compact Move to control. Hovering never plays: the compact play
@@ -718,7 +754,7 @@ time, and switching its instance stops it. Instance choices survive list redraws
 
 The miniature crops the displayed audio track's spectrogram and overlays the
 owning lane's notes. Without audio it shows and plays the notes. Its height is
-`--h-artifact-preview` (96px); a cursor follows playback inside the crop.
+`--h-artifact-preview` (64px); a cursor follows playback inside the crop.
 Every expanded window has the same fixed height and full available width,
 including the same miniature width for single- and multiple-instance references.
 The navigation arrows sit on the miniature; under it, one footer line holds the
@@ -770,8 +806,8 @@ project save/load preserves it.
 
 Tempo/meter (including the start marker), sections, phrase boundaries and tone
 switches have separate collapsible artifact lists. Entries show their exact
-time and song/layer owner, sorted by time. The index includes every layer and
-each used timing plus the song timing, once per timing rather than per layer.
+time, sorted by time. Like every artifact list, they show only the active layer
+and the timing it follows; switching the active layer switches the lists.
 Edit and right-click open the timeline's existing marker editor, including its
 delete action. Move to seeks and smoothly scrolls horizontally, activating the
 owning layer for layer-specific markers. Marker rows resolve live data on every
@@ -783,4 +819,4 @@ existing `handHolds` field. The active visible layer's anchors occupy a compact
 20px marker rail, using the same tinted frame as other flags and a `Fret N`
 label. Click/right-click opens their editor; dragging snaps to beats. Fret and
 time edits, moves and deletion support undo. A separate collapsible Hand anchors
-artifact list indexes all layers and shares that editor and smooth Move to action.
+artifact list indexes the active layer and shares that editor and smooth Move to action.

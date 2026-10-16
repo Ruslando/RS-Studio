@@ -18,7 +18,7 @@ import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes,
 import { auditionNote, previewNotes, seekPlayback } from "./playback.js";
 import { toast } from "./notify.js";
 import { beginArtifactRename } from "./artifact-names.js";
-import { moveRefOccurrence, notesInBox, refBadgeAt, refBoxEdgeAt, resizeRefBox } from "./references.js";
+import { moveRefOccurrence, notesInBox, refBadgeAt, refBoxEdgeAt, refLockAt, resizeRefBox, shiftOf, toggleRefPitchLock } from "./references.js";
 import { lineXAtRow } from "./slice.js";
 import { beginNoteGesture, finishNoteGesture, updateNoteGesture } from "./note-motion.js";
 import { nid } from "./ids.js";
@@ -140,7 +140,7 @@ function updateDrag(x, y) {
     draw(); return;
   }
   if (S.drag.mode === "refBox") { resizeRefBox(S.drag, x, y); return; }
-  if (S.drag.mode === "refDrag") { moveRefOccurrence(S.drag, x); return; }
+  if (S.drag.mode === "refDrag") { moveRefOccurrence(S.drag, x, y); return; }
   if (S.drag.mode === "bendPoint") {
     // Drag one control point of the curve. Snapping lands on Guitar Pro's own
     // bend grid (12 columns x quarter-tones), which is all .gp5 can store; Alt
@@ -327,6 +327,8 @@ export function init_interaction() {
     // badge to relocate the whole occurrence (box + its notes) as a unit, leaving the
     // siblings untouched. The select happens up front, so a plain click just selects.
     if (plainSelect) {
+      const lock = refLockAt(x, y);
+      if (lock && canEditLane(lock.lane)) { toggleRefPitchLock(lock.lane, lock.ref); return; }
       const badge = refBadgeAt(x, y);
       if (badge && canEditLane(badge.lane)) {
         const inside = notesInBox(badge.box, badge.lane.notes);
@@ -335,8 +337,8 @@ export function init_interaction() {
         const group = badge.lane.refBoxes[badge.ref];
         S.drag = {
           mode: "refDrag", lane: badge.lane, ref: badge.ref, i: badge.i,
-          a0: group.anchors[badge.i], grabT: timeAt(x),
-          notes: inside.map((n) => ({ n, s: n.start, e: n.end })),
+          a0: group.anchors[badge.i], grabT: timeAt(x), grabP: pitchAt(y), s0: shiftOf(group, badge.i),
+          notes: inside.map((n) => ({ n, s: n.start, e: n.end, p: n.pitch, pos: n.pos, arrangement: n.arrangement })),
           prev: snapshotEdit(),
         };
         draw();
@@ -521,7 +523,7 @@ export function init_interaction() {
     if (!S.state || S.drag || sliceHeld || !["select", "trace"].includes(S.toolMode)) return;
     const [x, y] = localXY(e);
     // Reference labels and edges set their own cursor in draw.js's handler.
-    if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (refBadgeAt(x, y) || refBoxEdgeAt(x, y))) return;
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (refLockAt(x, y) || refBadgeAt(x, y) || refBoxEdgeAt(x, y))) return;
     const hit = pickNote(timeAt(x), pitchAt(y));
     stage.style.cursor = hit
       ? (!hit.grace && edgeOf(hit.note, x) ? "ew-resize" : "move")

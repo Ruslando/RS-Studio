@@ -35,11 +35,20 @@ export const inRefBox = (note, box, minIn) =>
 // box geometry and nothing of the editor's state.
 export function refOccurrences(group, notes, minIn) {
   if (!group || !Array.isArray(group.anchors) || typeof group.rt0 !== "number") return [];
-  return group.anchors.map((anchor) => notes
-    .filter((n) => inRefBox(n, {
-      t0: anchor + group.rt0, t1: anchor + group.rt1, pLo: group.pLo, pHi: group.pHi,
-    }, minIn))
+  return group.anchors.map((anchor, i) => notes
+    .filter((n) => inRefBox(n, occurrenceBox(group, i), minIn))
     .sort((a, b) => (a.start - b.start) || (a.pitch - b.pitch)));
+}
+
+// An occurrence may sit some semitones off the group's pitch when the reference
+// allows it (group.transposable); group.shifts runs parallel to group.anchors and
+// may be absent or sparse (a missing entry is 0).
+export const shiftOf = (group, i) => group?.shifts?.[i] || 0;
+
+// Occurrence i's box, unclamped: its anchor's time span at its own pitch.
+export function occurrenceBox(group, i) {
+  const a = group.anchors[i], s = shiftOf(group, i);
+  return { t0: a + group.rt0, t1: a + group.rt1, pLo: group.pLo + s, pHi: group.pHi + s };
 }
 
 export function effectSig(note, { includePos = false } = {}) {

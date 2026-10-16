@@ -3,7 +3,7 @@ import { stageMono, STAGE_ANCHORED } from "./constants.js";
 import { ensureTone, clearPreview, pauseTransport, previewNotes } from "./playback.js";
 import { releaseLaneSynth } from "./lanes.js";
 import { toast } from "./notify.js";
-import { noteBounds, notesInBox } from "./references.js";
+import { noteBounds, notesInBox, occurrenceBox, shiftOf } from "./references.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { dpr, fmtTime, noteName } from "./util.js";
@@ -59,11 +59,14 @@ function updateOccurrence(preview) {
   const position = Math.min(positions.get(refKey(lane, ref)) || 0, occurrences.length - 1);
   positions.set(refKey(lane, ref), position);
   preview.position = position;
-  preview.box = { index: occurrences[position].index,
-    t0: Math.max(0, occurrences[position].anchor + group.rt0),
-    t1: Math.min(S.state.duration, occurrences[position].anchor + group.rt1), pLo: group.pLo, pHi: group.pHi };
+  const index = occurrences[position].index, o = preview.motif ? null : occurrenceBox(group, index);
+  preview.box = preview.motif
+    ? { index, t0: Math.max(0, occurrences[position].anchor + group.rt0),
+      t1: Math.min(S.state.duration, occurrences[position].anchor + group.rt1), pLo: group.pLo, pHi: group.pHi }
+    : { ...o, index, t0: Math.max(0, o.t0), t1: Math.min(S.state.duration, o.t1) };
+  const shift = preview.motif ? 0 : shiftOf(group, index);
   preview.root.dataset.instance = String(position + 1);
-  preview.label.textContent = `${position + 1} / ${occurrences.length} · ${fmtTime(preview.box.t0)}–${fmtTime(preview.box.t1)}`;
+  preview.label.textContent = `${position + 1} / ${occurrences.length} · ${fmtTime(preview.box.t0)}–${fmtTime(preview.box.t1)}${shift ? ` · ${shift > 0 ? '+' : '−'}${Math.abs(shift)}` : ''}`;
   preview.previous.disabled = position === 0;
   preview.next.disabled = position === occurrences.length - 1;
   preview.previous.hidden = preview.next.hidden = occurrences.length === 1;

@@ -1,23 +1,29 @@
 // Project references, indexed directly from their persisted capture boxes.
 import { $, audio, scroll } from "./dom.js";
-import { xOf, yOf } from "./geometry.js";
-import { activateLane, canEditLane, renderLanes } from "./lanes.js";
+import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
+import { snap, snapNote } from "./grid.js";
+import { localXY } from "./interaction.js";
+import { activateLane, activeLane, canEditLane, renderLanes } from "./lanes.js";
 import { seekPlayback } from "./playback.js";
 import { refreshSaveState } from "./project.js";
-import { eachRefGroup, noteBounds, notesInBox } from "./references.js";
+import { eachRefGroup, noteBounds, notesInBox, occurrenceBox, overlapsRefBox, shiftOf, toggleRefPitchLock } from "./references.js";
+import { toast } from "./notify.js";
+import { icon } from "./icons.js";
 import { draw } from "./repaint.js";
 import { S, setSelection } from "./store.js";
 import { moveViewportTo, stopViewportMotion } from "./viewport-motion.js";
 import { initArtifactsPanel } from "./artifacts-panel.js";
 import { paintArtifactPreviews, referencePreview, resetArtifactPreviews, stopArtifactPreview, stopArtifactPreviewFor, removeArtifactPreview } from "./artifact-preview.js";
 
-import { openRefMenu, openMotifMenu } from "./edit.js";
+import { doCopy, doPaste, openRefMenu, openMotifMenu } from "./edit.js";
 
 import { motifGroups } from './motifs.js';
 import { artifactName, beginArtifactRename } from './artifact-names.js';
 import { initMarkerArtifacts, renderMarkerArtifacts, clearMarkerArtifacts } from './marker-artifacts.js';
 
 const rows = new Map();
+let dragged = null;
+const NO_DRAG_IMAGE = Object.assign(new Image(), { src: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });   // 1px transparent   // the reference or motif being dragged onto the stage
 const collapsedArtifacts = new Set();
 const disclosureIcon = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
@@ -25,8 +31,8 @@ function jumpToReference(lane, ref, index) {
   const group = lane.refBoxes?.[ref];
   if (!group || group.anchors[index] == null) return;
   stopArtifactPreview();
-  const box = { t0: Math.max(0, group.anchors[index] + group.rt0),
-    t1: Math.min(S.state.duration, group.anchors[index] + group.rt1), pLo: group.pLo, pHi: group.pHi };
+  const o = occurrenceBox(group, index);
+  const box = { ...o, t0: Math.max(0, o.t0), t1: Math.min(S.state.duration, o.t1) };
   revealArtifact(lane, box, notesInBox(box, lane.notes));
 }
 
@@ -44,8 +50,10 @@ export function renderArtifacts() {
   if (!$('artifactList')) return;
   const references = [], motifs = [];
   if (S.state) {
-    eachRefGroup((lane, ref) => references.push({lane, ref, kind:'reference'}));
-    for (const lane of S.state.editLanes) for (const [ref] of motifGroups(lane.notes)) motifs.push({lane, ref, kind:'motif'});
+    // Only the active layer's artifacts: the pane follows the edit target.
+    const active = activeLane();
+    eachRefGroup((lane, ref) => { if (lane === active) references.push({lane, ref, kind:'reference'}); });
+    if (active) for (const [ref] of motifGroups(active.notes)) motifs.push({lane: active, ref, kind:'motif'});
   }
   references.sort((a,b) => a.ref-b.ref);
   const entries = [...references, ...motifs];
@@ -53,18 +61,22 @@ export function renderArtifacts() {
   for (const [key, row] of rows) if (!liveKeys.has(key)) {
     removeArtifactPreview(row.querySelector('.artifact-preview')); row.remove(); rows.delete(key);
   }
-  for (const [countId, collection] of [['artifactCount',references],['motifCount',motifs]])
+  for (const [countId, collection] of [['artifactCount',references],['motifCount',motifs]]) {
     if ($(countId).textContent !== String(collection.length)) $(countId).textContent = String(collection.length);
+    // An empty list is not shown at all, header included.
+    const head = $(countId).closest('.side-header');
+    head.classList.toggle('is-empty', !collection.length); head.nextElementSibling.classList.toggle('is-empty', !collection.length);
+  }
   const orders = {reference:0, motif:0};
   for (const {lane, ref, kind} of entries) {
     const list = $(kind === 'motif' ? 'motifList' : 'artifactList');
     const order = orders[kind]++;
     const rowKey = `${kind}:${lane.id}:${ref}`;
     if (rows.has(rowKey)) {
-      const row = rows.get(rowKey), detail = row.querySelector('.artifact-detail'), name = row.querySelector('.artifact-name');
+      const row = rows.get(rowKey), name = row.querySelector('.artifact-name');
       const label = artifactName(kind, lane, ref);
       if (name.textContent !== label) name.textContent = label;
-      if (detail.textContent !== lane.name) { detail.textContent = lane.name; detail.title = lane.name; }
+      syncPitchLock(row, lane, ref);
       if (list.children[order] !== row) list.insertBefore(row, list.children[order] || null);
       continue;
     }
@@ -77,14 +89,26 @@ export function renderArtifacts() {
       const currentLane = S.state?.editLanes.find(item => item.id === lane.id);
       if (canEditLane(currentLane)) beginArtifactRename(kind, currentLane, ref, name.getBoundingClientRect());
     });
-    const detail = document.createElement("span"); detail.className = "artifact-detail"; detail.textContent = lane.name; detail.title = lane.name;
     const key = rowKey;
     row.dataset[kind] = String(ref);
     // The whole head is the disclosure, like a sidebar section header.
     const toggle = document.createElement('button'); toggle.type = 'button';
     toggle.className = 'artifact-row-head artifact-reference-toggle';
     toggle.innerHTML = disclosureIcon;
-    copy.append(name, detail); toggle.append(copy); row.append(toggle);
+    // Framed as on the stage: a reference solid gold, a motif dashed.
+    row.dataset.kind = kind;
+    copy.append(name); toggle.append(copy);
+    const bar = document.createElement('div'); bar.className = 'artifact-row-bar'; bar.append(toggle);
+    if (kind === 'reference') {
+      const lock = document.createElement('button'); lock.type = 'button';
+      lock.className = 'icon-btn icon-btn--compact artifact-pitch-lock';
+      lock.addEventListener('click', () => {
+        const currentLane = S.state?.editLanes.find(item => item.id === lane.id);
+        if (canEditLane(currentLane)) toggleRefPitchLock(currentLane, ref);
+      });
+      bar.append(lock);
+    }
+    row.append(bar);
     const occurrences = referencePreview(lane, ref, index => {
       const currentLane = S.state.editLanes.find(item => item.id === lane.id);
       if (kind === 'motif') {
@@ -121,18 +145,128 @@ export function renderArtifacts() {
       const ordered = group.anchors.map((anchor, index) => ({anchor, index})).sort((a,b) => a.anchor-b.anchor);
       const position = Math.min(Number(occurrences.dataset.instance || 1) - 1, ordered.length - 1);
       const {anchor, index} = ordered[position];
-      const box = {t0: Math.max(0, anchor + group.rt0), t1: Math.min(S.state.duration, anchor + group.rt1), pLo: group.pLo, pHi: group.pHi};
+      const o = occurrenceBox(group, index), box = {...o, t0: Math.max(0, o.t0), t1: Math.min(S.state.duration, o.t1)};
       activateLane(currentLane); setSelection(new Set(notesInBox(box, currentLane.notes))); draw();
       openRefMenu(event.clientX, event.clientY, {lane: currentLane, group, ref, i: index}, {origin: 'artifact'});
     });
-    row.append(occurrences); rows.set(rowKey, row);
+    // Double-click moves there, as Move to does (the name renames instead).
+    row.addEventListener('dblclick', event => {
+      if (event.target.closest('button:not(.artifact-reference-toggle), .artifact-name')) return;
+      occurrences.querySelector('.artifact-jump').click();
+    });
+    // Drag onto the spectrogram to place another copy where it is dropped.
+    row.draggable = true;
+    row.addEventListener('dragstart', event => {
+      dragged = {kind, laneId: lane.id, ref, position: Number(occurrences.dataset.instance || 1) - 1};
+      event.dataTransfer.effectAllowed = 'copy';
+      // The stage preview is the feedback; no ghost of the row follows the pointer.
+      event.dataTransfer.setDragImage(NO_DRAG_IMAGE, 0, 0);
+      event.dataTransfer.setData('text/plain', name.textContent);
+    });
+    row.addEventListener('dragend', () => { dragged = null; clearDropPreview(); });
+    row.append(occurrences); rows.set(rowKey, row); syncPitchLock(row, lane, ref);
     list.insertBefore(row, list.children[order] || null);
   }
   paintArtifactPreviews();
   renderMarkerArtifacts();
 }
 
+// The padlock beside a reference: closed and plain when its pitch is locked,
+// open when its occurrences may sit at other pitches.
+function syncPitchLock(row, lane, ref) {
+  const lock = row.querySelector('.artifact-pitch-lock');
+  if (!lock) return;
+  const free = !!lane.refBoxes?.[ref]?.transposable;
+  if (lock.dataset.free === String(free)) return;
+  lock.dataset.free = String(free);
+  lock.innerHTML = icon(free ? 'unlock' : 'lock', 14);
+  lock.title = free ? 'Pitch free: occurrences may sit at other pitches. Click to lock' : 'Pitch locked. Click to allow pitch changes';
+  lock.setAttribute('aria-label', free ? 'Lock pitch' : 'Allow pitch changes');
+  lock.setAttribute('aria-pressed', String(!free));
+}
+
+// The notes of a reference's displayed occurrence (with that occurrence's
+// shift), or of a motif.
+function artifactNotes({kind, lane, ref, position}) {
+  if (kind === 'motif') return {notes: motifGroups(lane.notes).get(ref) || [], shift: 0};
+  const group = lane.refBoxes?.[ref];
+  if (!group?.anchors?.length) return {notes: [], shift: 0};
+  const order = group.anchors.map((a, i) => i).sort((p, q) => group.anchors[p] - group.anchors[q]);
+  const index = order[Math.min(position, order.length - 1)];
+  return {notes: notesInBox(occurrenceBox(group, index), lane.notes), shift: shiftOf(group, index)};
+}
+
+// A drop at world (x, y) puts the first note under the pointer. A motif keeps
+// only its intervals, so it moves in pitch too; so does a reference whose pitch
+// is not locked.
+function dropPlacement(item, notes, x, y, lane) {
+  const first = [...notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch)[0];
+  const t = timeAt(x), dt = snap(Math.max(0, t)) - first.start;
+  if (item.kind !== 'motif' && !lane.refBoxes?.[item.ref]?.transposable) return { t, dt, shift: 0 };
+  const spec = S.state.spec, lo = Math.min(...notes.map(n => n.pitch)), hi = Math.max(...notes.map(n => n.pitch));
+  const shift = Math.max(spec.midi_low - lo, Math.min(spec.midi_high - hi, Math.round(pitchAt(y)) - first.pitch));
+  return { t, dt, shift };
+}
+
+// Where the drop would put the notes, worked out exactly as doPaste does:
+// a reference keeps its shape, a copy snaps each note onto the grid.
+function showDropPreview(item, x, y) {
+  const lane = S.state?.editLanes.find(l => l.id === item.laneId);
+  const { notes, shift: base } = lane ? artifactNotes({...item, lane}) : {};
+  if (!notes?.length) return;
+  const { dt, shift } = dropPlacement(item, notes, x, y, lane);
+  const key = `${item.kind}:${item.laneId}:${item.ref}:${item.position}:${dt}:${shift}`;
+  if (S.dropPreview?.key === key) return;
+  const moved = notes.map(n => {
+    const q = item.kind === 'reference' ? { start: n.start + dt, end: n.end + dt } : snapNote(n.start + dt, n.end + dt);
+    return { start: q.start, end: q.end, pitch: n.pitch + shift };
+  });
+  // A reference's new box is anchored at its earliest note, as linkPasteAsReference does.
+  const group = item.kind === 'reference' && lane.refBoxes?.[item.ref];
+  const at = group && Math.min(...moved.map(n => n.start));
+  const box = group ? { t0: at + group.rt0, t1: at + group.rt1, pLo: group.pLo + base + shift, pHi: group.pHi + base + shift } : null;
+  S.dropPreview = { key, kind: item.kind, color: lane.color, notes: moved, box,
+    blocked: overlapsRefBox(lane, box || noteBounds(moved)) };
+  draw();
+}
+
+function clearDropPreview() {
+  if (!S.dropPreview) return;
+  S.dropPreview = null; draw();
+}
+
+// Paste through the editor's own path (a reference as another linked occurrence,
+// a motif as an independent copy), leaving the user's clipboard as it was.
+async function dropArtifact(item, x, y) {
+  const lane = S.state?.editLanes.find(l => l.id === item.laneId);
+  const { notes, shift: base } = lane ? artifactNotes({...item, lane}) : {};
+  if (!notes?.length || !canEditLane(lane)) return;
+  const { t, shift } = dropPlacement(item, notes, x, y, lane);
+  const saved = [S.clipboard, S.clipboardSrc, S.clipboardRef];
+  try {
+    activateLane(lane); setSelection(new Set(notes)); doCopy();
+    await doPaste({mode: item.kind === 'reference' && S.clipboardRef ? 'reference' : 'copy', at: t, shift, refShift: base + shift});
+  } finally { [S.clipboard, S.clipboardSrc, S.clipboardRef] = saved; }
+}
+
 export function init_artifacts() {
+  // On the scroller, not the canvas: overlays above the canvas receive the events.
+  scroll.addEventListener('dragover', event => {
+    if (!dragged) return;
+    event.preventDefault();
+    showDropPreview(dragged, ...localXY(event));
+    event.dataTransfer.dropEffect = S.dropPreview?.blocked ? 'none' : 'copy';
+  });
+  scroll.addEventListener('dragleave', event => {
+    if (dragged && !scroll.contains(event.relatedTarget)) clearDropPreview();
+  });
+  scroll.addEventListener('drop', event => {
+    if (!dragged) return;
+    event.preventDefault();
+    const item = dragged, blocked = S.dropPreview?.blocked; dragged = null; clearDropPreview();
+    if (blocked) { toast('A reference cannot sit inside another reference'); return; }
+    dropArtifact(item, ...localXY(event));
+  });
   initArtifactsPanel();
   initMarkerArtifacts();
   for (const [toggleId, bodyId, name] of [['artifactReferencesToggle','artifactReferencesBody','references'],['artifactMotifsToggle','artifactMotifsBody','motifs']]) {

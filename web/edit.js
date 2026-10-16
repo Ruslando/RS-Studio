@@ -21,7 +21,7 @@ import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, tog
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, refMenuEntry, refName } from "./references.js";
+import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, refMenuEntry, refName, setRefPitchLock } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { beginArtifactRename } from "./artifact-names.js";
 import { splitNote } from "./slice.js";
@@ -289,7 +289,7 @@ export function confirmPasteMode({ signal } = {}) {
 
 // mode: "copy" | "reference" forces that result; undefined = auto — when the copy
 // came entirely from one reference, ask via confirmPasteMode, otherwise plain copy.
-export async function doPaste({ mode } = {}) {
+export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
   if (!S.clipboard.length || !S.state) return;
   if (mode == null) {
     if (S.clipboardRef == null) mode = "copy";
@@ -310,7 +310,7 @@ export async function doPaste({ mode } = {}) {
   // Anchor the paste at the current time: shift the whole clipboard so its
   // earliest note starts at the playhead, preserving relative timing + pitch.
   const anchor = Math.min(...S.clipboard.map((c) => c.start));
-  const dt = snap(Math.max(0, playbackTime())) - anchor;
+  const dt = snap(Math.max(0, at ?? playbackTime())) - anchor;
   // Preserve copied motifs, but mint new ids so the paste is independent from
   // the original. A partial copy keeps its annotation, including a single note.
   const pastedMotifIds = new Map();
@@ -324,13 +324,16 @@ export async function doPaste({ mode } = {}) {
       if (!pastedMotifIds.has(c.motifId)) pastedMotifIds.set(c.motifId, motifId());
       pastedMotifId = pastedMotifIds.get(c.motifId);
     }
-    return copyEffects(c, {
-      id: nid(), start: q.start, end: q.end, pitch: c.pitch,
+    const note = copyEffects(c, {
+      id: nid(), start: q.start, end: q.end, pitch: c.pitch + shift,
       ...(pastedMotifId ? { motifId: pastedMotifId } : {}),
     });
+    // A transposed copy cannot keep its string and fret; fingering places it anew.
+    if (shift) dropFingering(note);
+    return note;
   });
   lane.notes.push(...added);
-  if (asReference) linkPasteAsReference(added, lane);
+  if (asReference) linkPasteAsReference(added, lane, refShift);
   commit(prev);
   setSelection(new Set(added));
   S.state.lanes.forEach((l) => (l.active = l === lane));
@@ -340,10 +343,12 @@ export async function doPaste({ mode } = {}) {
 // Drop a new box over the just-pasted notes so they become another occurrence of
 // the copied group. If the source wasn't a reference, form a fresh group from the
 // still-present source notes + the paste. Returns the group number, or null.
-function linkPasteAsReference(added, lane) {
+function linkPasteAsReference(added, lane, refShift = 0) {
   const anchorNew = noteBounds(added).t0;
   if (S.clipboardRef && S.clipboardRef.lane === lane && lane.refBoxes && lane.refBoxes[S.clipboardRef.ref]) {
-    lane.refBoxes[S.clipboardRef.ref].anchors.push(anchorNew);
+    const group = lane.refBoxes[S.clipboardRef.ref];
+    group.anchors.push(anchorNew);
+    if (refShift) (group.shifts || (group.shifts = []))[group.anchors.length - 1] = refShift;
     return S.clipboardRef.ref;
   }
   const src = S.clipboardSrc.filter((n) => laneOf(n) === lane && !boxOfNote(n));
@@ -950,6 +955,9 @@ export function openRefMenu(clientX, clientY, occ, { origin = "editor" } = {}) {
   buildMenu(m, [
     { label: refName(occ.group, occ.ref), header: true },
     { label: "Rename", fn: () => beginArtifactRename("reference", occ.lane, occ.ref, { left: clientX, top: clientY, width: 0, height: 0 }) },
+    occ.group?.transposable
+      ? { label: "Lock pitch", fn: () => setRefPitchLock(occ.lane, occ.ref, true) }
+      : { label: "Allow pitch changes", fn: () => setRefPitchLock(occ.lane, occ.ref, false) },
     { sep: true },
     { label: "Copy", fn: () => doCopy() },
     { label: "Cut", fn: () => { doCopy(); deleteRefOccurrence(occ); } },

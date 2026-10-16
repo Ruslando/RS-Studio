@@ -27,10 +27,11 @@ const markerTime = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6,
 
 export function markerArtifacts() {
   if (!S.state) return [];
-  const entries = [], lanes = S.state.editLanes;
-  const timings = new Map([[SONG, lanes.find(lane => timingIdOf(lane) === SONG) || null]]);
-  for (const lane of lanes) if (!timings.has(timingIdOf(lane))) timings.set(timingIdOf(lane), lane);
-  for (const [timing, lane] of timings) {
+  // Only the active layer and the timing it follows.
+  const active = S.state.editLanes.find(lane => lane.active);
+  if (!active) return [];
+  const entries = [], lanes = [active];
+  for (const [timing, lane] of [[timingIdOf(active), active]]) {
     const data = timingData(timing), owner = timing === SONG ? 'Song' : lane.name;
     timingSegments(data).forEach((segment, index) => entries.push({
       key: `tempo:${timing}:${index}`, kind: 'tempo', timing, lane, owner,
@@ -101,7 +102,7 @@ export function initMarkerArtifacts() {
       toggle.setAttribute('aria-label', toggle.title);
     };
     toggle.addEventListener('click', () => { body.hidden = !body.hidden; sync(); }); sync();
-    sections.set(kind, {list, count});
+    sections.set(kind, {list, count, head, body});
   }
 }
 
@@ -109,17 +110,20 @@ export function renderMarkerArtifacts() {
   if (!sections.size) return;
   const entries = markerArtifacts(), live = new Set(entries.map(entry => entry.key));
   for (const [key, row] of rows) if (!live.has(key)) { row.remove(); rows.delete(key); }
-  for (const [kind, {list, count}] of sections) {
+  for (const [kind, {list, count, head, body}] of sections) {
     const group = entries.filter(entry => entry.kind === kind);
     setText(count, String(group.length));
+    head.classList.toggle('is-empty', !group.length); body.classList.toggle('is-empty', !group.length);
     group.forEach((entry, index) => {
       const key = entry.key;
       let row = rows.get(entry.key);
       if (!row) {
         row = document.createElement('li'); row.className = 'artifact-row artifact-marker-row'; row.dataset.markerKey = entry.key;
+        // The name is drawn as its flag is on the stage; a hand anchor takes its layer's colour.
+        row.dataset.kind = entry.kind;
         const copy = document.createElement('div'); copy.className = 'artifact-copy';
         const name = document.createElement('span'); name.className = 'artifact-name';
-        const detail = document.createElement('span'); detail.className = 'artifact-detail'; copy.append(name, detail);
+        const detail = document.createElement('span'); detail.className = 'artifact-detail artifact-time'; copy.append(name);
         const controls = document.createElement('div'); controls.className = 'artifact-marker-actions';
         for (const [edit, label, svg] of [[true, 'Edit', icon('edit', 14)], [false, 'Move to', icon('jump', 14)]]) {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-btn icon-btn--compact';
@@ -133,10 +137,11 @@ export function renderMarkerArtifacts() {
         row.addEventListener('contextmenu', event => {
           event.preventDefault(); event.stopPropagation(); actOnMarker(key, true, row, event);
         });
-        row.append(copy, controls); rows.set(entry.key, row);
+        row.append(copy, detail, controls); rows.set(entry.key, row);
       }
       setText(row.querySelector('.artifact-name'), entry.name);
-      setText(row.querySelector('.artifact-detail'), `${markerTime(entry.t)} · ${entry.owner}`);
+      setText(row.querySelector('.artifact-detail'), markerTime(entry.t));
+      if (entry.kind === 'anchor') row.style.setProperty('--mark', entry.lane.color);
       row.querySelector('.artifact-marker-edit').disabled = ['tone', 'phrase', 'anchor'].includes(entry.kind) && !canEditLane(entry.lane);
       if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
     });

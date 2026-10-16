@@ -46,7 +46,11 @@ export const S = {
   matchHover: -1,  // index of the suggestion under the cursor (-1 = none)
   matchFocus: -1,  // keyboard/button-focused suggestion (-1 = none)
   refBadges: [],  // clickable reference number badges: [{ x, y, w, h, notes }] (world px)
-  refEdgeHover: null,  // the reference box whose edge is under the pointer: lights up
+  refEdgeHover: null,
+  refLocks: [],
+  refLockHover: null,  // the padlock under the pointer: its state shows in words
+  refLockFlash: null,  // { lane, ref, until }: a just-flipped lock says its state for a moment  // pitch padlocks after reference labels: [{ x, y, w, h, lane, ref }] (world px)  // the reference box whose edge is under the pointer: lights up
+  dropPreview: null,  // a reference or motif dragged over the stage: { kind, color, notes } where it would land
   motifLabels: [],  // motif name labels on the stage: [{ lane, id, x, y, w, h }] (world px)
   refBoxRects: [],  // reference capture boxes for edge-resize: [{ ref, notes, x0, y0, x1, y1 }] (world px)
   hoverPreviewTimer: 0,  // delayed hover audition so pointer jitter doesn't restart audio

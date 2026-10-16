@@ -376,6 +376,215 @@ class EndToEndTests(unittest.TestCase):
         self.assertGreater(after[0], before[0])
         self.assertLess(after[1], before[1])
 
+    def test_reference_double_click_moves_and_drag_places_an_occurrence(self):
+        self.open_reference_project()
+        page = self.page
+        anchors = "async () => (await import('/store.js')).S.state.editLanes[0].refBoxes[1].anchors"
+        row = page.locator('.artifact-row[data-reference="1"]')
+        # Double-clicking the entry moves there, like Move to.
+        row.locator('.artifact-preview-canvas').dblclick()
+        page.wait_for_timeout(300)
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.scoreTime"), 2)
+        # Dropping it on the spectrogram adds a linked occurrence where it lands.
+        page.evaluate("""async () => {
+            const { xOf } = await import('/geometry.js');
+            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
+            const at = { clientX: r.left + xOf(12) - scroll.scrollLeft, clientY: r.top + r.height / 2 };
+            const dataTransfer = new DataTransfer();
+            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
+            const row = document.querySelector('.artifact-row[data-reference="1"]');
+            fire(row, 'dragstart'); fire(scroll, 'dragover', at);
+            window.dropDrag = { fire, row, scroll, at };
+        }""")
+        # While dragging, the stage previews exactly where the notes will land.
+        preview = page.evaluate("async () => (await import('/store.js')).S.dropPreview.notes.map(n => [n.start, n.pitch])")
+        self.assertEqual(len(preview), 6)
+        self.assertAlmostEqual(min(start for start, _ in preview), 12, delta=0.6)
+        page.evaluate("() => { const { fire, row, scroll, at } = window.dropDrag; fire(scroll, 'drop', at); fire(row, 'dragend'); }")
+        self.assertIsNone(page.evaluate("async () => (await import('/store.js')).S.dropPreview"))
+        expect(row.locator('.artifact-preview-title')).to_contain_text('/ 3')
+        landed = page.evaluate("""async () => (await import('/store.js')).S.selection.size
+            && [...(await import('/store.js')).S.selection].map(n => [n.start, n.pitch])""")
+        self.assertEqual(sorted(landed), sorted(preview))
+        self.assertTrue(any(abs(a - 12) < 0.6 for a in page.evaluate(anchors)), page.evaluate(anchors))
+        page.keyboard.press('Control+z')
+        expect(row.locator('.artifact-preview-title')).to_contain_text('/ 2')
+
+    def test_reference_pitch_can_be_freed_and_locked_again(self):
+        self.open_reference_project()
+        page = self.page
+        group = "async () => JSON.parse(JSON.stringify((await import('/store.js')).S.state.editLanes[0].refBoxes[1]))"
+        inside = """async (t0) => (await import('/store.js')).S.state.editLanes[0].notes
+            .filter(n => n.start >= t0 - 0.01 && n.start < t0 + 3).sort((a, b) => a.start - b.start).map(n => n.pitch)"""
+        row = page.locator('.artifact-row[data-reference="1"]')
+        menu = page.locator('.ctxmenu')
+        base = page.evaluate(inside, 2)
+        # Locked by default: the menu offers to free it.
+        row.locator('.artifact-preview').click(button='right')
+        menu.get_by_text('Allow pitch changes', exact=True).click()
+        self.assertTrue(page.evaluate(group)['transposable'])
+        # Drop a copy at 0:12, two semitones above the first note.
+        page.evaluate("""async (pitch) => {
+            const { xOf, yOf } = await import('/geometry.js');
+            const { S } = await import('/store.js');
+            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
+            const at = { clientX: r.left + xOf(12) - scroll.scrollLeft + 2,
+                clientY: r.top + yOf(pitch) + S.state.rowH / 2 - scroll.scrollTop };
+            const dataTransfer = new DataTransfer();
+            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
+            const row = document.querySelector('.artifact-row[data-reference="1"]');
+            fire(row, 'dragstart'); fire(scroll, 'dragover', at); fire(scroll, 'drop', at); fire(row, 'dragend');
+        }""", base[0] + 2)
+        expect(row.locator('.artifact-preview-title')).to_contain_text('/ 3')
+        g = page.evaluate(group)
+        self.assertEqual(len(g['anchors']), 3)
+        self.assertEqual(g['shifts'][2], 2)
+        self.assertEqual(page.evaluate(inside, 12), [p + 2 for p in base])
+        # An edit in the first occurrence mirrors into the shifted one, relative to its pitch.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { snapshotEdit, commit } = await import('/edit.js');
+            const lane = S.state.editLanes[0], prev = snapshotEdit();
+            const first = lane.notes.filter(n => n.start >= 1.99 && n.start < 5).sort((a, b) => a.start - b.start)[1];
+            first.pitch += 1;
+            commit(prev);
+        }""")
+        edited = page.evaluate(inside, 2)
+        self.assertEqual(page.evaluate(inside, 12), [p + 2 for p in edited])
+        self.assertEqual(page.evaluate(inside, 16), edited)
+        # Locking again asks; Move back returns the copy to the first's pitch.
+        row.locator('.artifact-preview').click(button='right')
+        menu.get_by_text('Lock pitch', exact=True).click()
+        expect(page.locator('#actionConfirmModal')).to_be_visible()
+        page.locator('#actionConfirmAccept').click()
+        self.assertEqual(page.evaluate(inside, 12), edited)
+        g = page.evaluate(group)
+        self.assertNotIn('shifts', g)
+        self.assertNotIn('transposable', g)
+        # Undo, then lock again and detach the shifted copy instead.
+        page.keyboard.press('Control+z')
+        self.assertEqual(page.evaluate(inside, 12), [p + 2 for p in edited])
+        row.locator('.artifact-preview').click(button='right')
+        menu.get_by_text('Lock pitch', exact=True).click()
+        page.locator('#actionConfirmDiscard').click()
+        self.assertEqual(len(page.evaluate(group)['anchors']), 2)
+        self.assertEqual(page.evaluate(inside, 12), [p + 2 for p in edited])
+
+    def test_reference_label_drag_moves_in_pitch_only_when_freed(self):
+        self.open_reference_project()
+        page = self.page
+        shifts = "async () => (await import('/store.js')).S.state.editLanes[0].refBoxes[1].shifts || []"
+        label = """async () => {
+            const { S } = await import('/store.js');
+            const r = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            const l = S.refBadges.find(b => b.ref === 1 && b.i === 0);
+            return [l.x + l.w / 2 - sc.scrollLeft + r.left, l.y + l.h / 2 - sc.scrollTop + r.top, S.state.rowH];
+        }"""
+        def drag_up(rows):
+            x, y, row_h = page.evaluate(label)
+            page.mouse.move(x, y); page.mouse.down()
+            page.mouse.move(x, y - rows * row_h, steps=5); page.mouse.up()
+        # Locked: dragging up changes nothing in pitch.
+        drag_up(3)
+        self.assertEqual(page.evaluate(shifts), [])
+        page.keyboard.press('Control+z')
+        page.locator('.artifact-row[data-reference="1"] .artifact-preview').click(button='right')
+        page.locator('.ctxmenu').get_by_text('Allow pitch changes', exact=True).click()
+        drag_up(3)
+        self.assertEqual(page.evaluate(shifts)[0], 3)
+        expect(page.locator('.artifact-row[data-reference="1"] .artifact-preview-title')).to_contain_text('+3')
+
+    def test_references_never_land_inside_another_reference(self):
+        self.open_reference_project()
+        page = self.page
+        anchors = "async () => (await import('/store.js')).S.state.editLanes[0].refBoxes[1].anchors"
+        # Dropping Reference #1 over its own second occurrence (0:16) is refused,
+        # and the preview says so while dragging.
+        blocked = page.evaluate("""async () => {
+            const { xOf, yOf } = await import('/geometry.js');
+            const { S } = await import('/store.js');
+            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
+            const at = { clientX: r.left + xOf(17) - scroll.scrollLeft + 2, clientY: r.top + 100 };
+            const dataTransfer = new DataTransfer();
+            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
+            const row = document.querySelector('.artifact-row[data-reference="1"]');
+            fire(row, 'dragstart'); fire(scroll, 'dragover', at);
+            const blocked = S.dropPreview.blocked;
+            fire(scroll, 'drop', at); fire(row, 'dragend');
+            return blocked;
+        }""")
+        self.assertTrue(blocked)
+        self.assertEqual(page.evaluate(anchors), [2, 16])
+        expect(page.locator('.toast').filter(has_text='inside another reference')).to_be_visible()
+        # Dragging an occurrence's label into the other one stops at its last free spot.
+        x, y, px = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { zoomCenter } = await import('/geometry.js');
+            zoomCenter('x', 0.3); document.querySelector('#scroll').scrollLeft = 0;
+            (await import('/repaint.js')).drawNow();
+            const r = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            const l = S.refBadges.find(b => b.ref === 1 && b.i === 0);
+            const { xOf } = await import('/geometry.js');
+            return [l.x + l.w / 2 - sc.scrollLeft + r.left, l.y + l.h / 2 - sc.scrollTop + r.top, xOf(1) - xOf(0)];
+        }""")
+        page.mouse.move(x, y); page.mouse.down()
+        page.mouse.move(x + 14.5 * px, y, steps=20); page.mouse.up()
+        first, second = sorted(page.evaluate(anchors))
+        self.assertEqual(second, 16)
+        self.assertLessEqual(first, 13 + 1e-6)
+
+    def test_reference_padlock_on_the_stage_flips_the_pitch_lock(self):
+        self.open_reference_project()
+        page = self.page
+        free = "async () => !!(await import('/store.js')).S.state.editLanes[0].refBoxes[1].transposable"
+        x, y = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const r = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            const box = S.refBoxRects.find(b => b.ref === 1 && b.i === 0), l = S.refLocks.find(b => b.ref === 1 && b.i === 0);
+            if (l.x + l.w < box.x1 - 4) throw new Error('the padlock is not at the right end of its box');
+            return [l.x + l.w / 2 - sc.scrollLeft + r.left, l.y + l.h / 2 - sc.scrollTop + r.top];
+        }""")
+        page.mouse.move(x, y)
+        expect(page.locator('#stage')).to_have_css('cursor', 'pointer')
+        page.mouse.click(x, y)
+        page.wait_for_function("() => document.querySelector('.artifact-pitch-lock').getAttribute('aria-pressed') === 'false'")
+        self.assertTrue(page.evaluate(free))
+        page.mouse.click(x, y)   # nothing is shifted, so locking needs no question
+        page.wait_for_function("() => document.querySelector('.artifact-pitch-lock').getAttribute('aria-pressed') === 'true'")
+        self.assertFalse(page.evaluate(free))
+
+    def test_motif_drop_keeps_its_intervals_at_the_pointers_pitch(self):
+        self.open_reference_project()
+        page = self.page
+        original = page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            const notes = [...lane.notes].sort((a, b) => a.start - b.start).slice(0, 3);
+            (await import('/motifs.js')).markMotif(notes, (await import('/ids.js')).motifId());
+            (await import('/repaint.js')).draw();
+            return notes.map(n => n.pitch);
+        }""")
+        row = page.locator('#motifList .artifact-row')
+        expect(row).to_have_count(1)
+        # Drag it to 0:13 (clear of any reference box), three semitones above its first note.
+        page.evaluate("""async (pitch) => {
+            const { xOf, yOf } = await import('/geometry.js');
+            const { S } = await import('/store.js');
+            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
+            const at = { clientX: r.left + xOf(13) - scroll.scrollLeft + 2,
+                clientY: r.top + yOf(pitch) + S.state.rowH / 2 - scroll.scrollTop };
+            const dataTransfer = new DataTransfer();
+            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
+            const row = document.querySelector('#motifList .artifact-row');
+            fire(row, 'dragstart'); fire(scroll, 'dragover', at); fire(scroll, 'drop', at); fire(row, 'dragend');
+        }""", original[0] + 3)
+        expect(row).to_have_count(2)
+        placed = page.evaluate("""async () => [...(await import('/store.js')).S.selection]
+            .sort((a, b) => a.start - b.start).map(n => [n.start, n.pitch, n.pos ?? null])""")
+        self.assertAlmostEqual(placed[0][0], 13, delta=0.3)
+        self.assertEqual([p for _, p, _ in placed], [p + 3 for p in original])
+        self.assertTrue(all(pos is None for _, _, pos in placed))
+
     def test_motifs_are_only_note_labels_and_live_artifacts(self):
         self.open_reference_project()
         page = self.page
@@ -484,21 +693,20 @@ class EndToEndTests(unittest.TestCase):
             lane.phraseBoundaries = [{id:'phrase_song', t:6}];
             const other = {...lane, id:'other', name:'Other guitar', active:false,
                 notes:[], refBoxes:{}, toneMarkers:[{id:'tone_other', t:10, tone:'clean'}],
-                phraseBoundaries:[{id:'phrase_other', t:14}]};
+                phraseBoundaries:[{id:'phrase_other', t:14}, {id:'phrase_other2', t:18}]};
             S.state.editLanes.push(other);
-            (await import('/timing.js')).splitTiming(other);
-            S.state.sectionMarkers = [{id:'section_other', t:16, text:'Solo', sectionType:'solo'}];
-            S.state.tempoMap = [];
             const {rebuildLanes, renderLanes} = await import('/lanes.js');
             rebuildLanes(); renderLanes();
             (await import('/section-markers.js')).sectionMarkersChanged();
             (await import('/repaint.js')).draw();
         }""")
         root = page.locator('#artifactMarkers')
-        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(3)
-        expect(root.locator('[data-marker-kind="section"] .artifact-row')).to_have_count(2)
-        expect(root.locator('[data-marker-kind="phrase"] .artifact-row')).to_have_count(2)
-        expect(root.locator('[data-marker-kind="tone"] .artifact-row')).to_have_count(3)
+        # Only the active layer's markers are listed.
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(2)
+        expect(root.locator('[data-marker-kind="section"] .artifact-row')).to_have_count(1)
+        expect(root.locator('[data-marker-kind="phrase"] .artifact-row')).to_have_count(1)
+        expect(root.locator('[data-marker-kind="tone"] .artifact-row')).to_have_count(2)
+        expect(root.locator('[data-marker-key$=":tone_other"]')).to_have_count(0)
         # Real editor dialog: the section can be renamed and undone from here.
         verse = root.locator('.artifact-row').filter(has_text='Verse')
         verse.locator('.artifact-marker-edit').click()
@@ -510,34 +718,31 @@ class EndToEndTests(unittest.TestCase):
         expect(root.locator('.artifact-name').filter(has_text='Opening verse')).to_have_count(1)
         page.keyboard.press('Control+z')
         expect(root.locator('.artifact-name').filter(has_text='Opening verse')).to_have_count(0)
-        # Jump switches to the marker's layer/timing and animates the viewport.
+        # Move to seeks and animates the viewport; clicking the row does the same.
         page.evaluate("async () => { const {S} = await import('/store.js'); S.zoomX = 8; (await import('/repaint.js')).draw(); }")
-        solo = root.locator('.artifact-row').filter(has_text='Solo')
-        solo.locator('.artifact-marker-jump').click()
-        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes.find(l => l.active).id"), 'other')
-        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 16)
-        page.wait_for_function("document.querySelector('#scroll').scrollLeft > 100")
-        # Clicking the row itself moves there too.
-        root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='Start').first.locator('.artifact-name').click()
-        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 0)
-        # Editing a tone from another layer selects its owner and updates its row.
         tone = root.locator('[data-marker-key$=":tone_song"]')
+        tone.locator('.artifact-marker-jump').click()
+        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 12)
+        page.wait_for_function("document.querySelector('#scroll').scrollLeft > 100")
+        root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='Start').locator('.artifact-name').click()
+        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 0)
         tone.locator('.artifact-marker-edit').click()
         page.locator('#toneMarkerPreset').select_option('bass')
         expect(tone.locator('.artifact-name')).to_have_text('Bass')
         page.locator('#toneMarkerPopClose').click()
-        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[1].toneMarkers[0].tone"), 'clean')
         # Right-click opens the same phrase editor, with time and delete actions.
-        phrase = root.locator('[data-marker-kind="phrase"] .artifact-row').filter(has_text='Other guitar')
+        phrase = root.locator('[data-marker-kind="phrase"] .artifact-row')
         phrase.click(button='right')
         expect(page.locator('#phraseMarkerPop')).to_be_visible()
         page.locator('#phraseMarkerTime').fill('15')
         page.locator('#phraseMarkerTime').press('Tab')
         expect(phrase.locator('.artifact-detail')).to_contain_text('0:15.000')
         page.locator('#phraseMarkerDelete').click()
-        expect(root.locator('[data-marker-kind="phrase"] .artifact-row')).to_have_count(1)
+        expect(root.locator('[data-marker-kind="phrase"] .artifact-row')).to_have_count(0)
+        # An empty list is hidden, header included.
+        expect(root.get_by_role('button', name='Collapse phrases', exact=True)).to_be_hidden()
         # The start tempo is present, editable, and cannot be deleted.
-        start = root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='Song').filter(has_text='Start')
+        start = root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='Start')
         start.locator('.artifact-marker-edit').click()
         expect(page.locator('#markerDelete')).to_be_hidden()
         page.locator('#markerPopClose').click()
@@ -547,9 +752,9 @@ class EndToEndTests(unittest.TestCase):
         page.locator('#markerTsNum').dispatch_event('input')
         expect(root.locator('[data-marker-kind="tempo"] .artifact-name').filter(has_text='5/4')).to_have_count(1)
         page.locator('#markerDelete').click()
-        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(2)
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(1)
         page.keyboard.press('Control+z')
-        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(3)
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(2)
         toggle = root.get_by_role('button', name='Collapse tone switches', exact=True)
         toggle.click()
         expect(page.locator('#artifact-tone-body')).to_be_hidden()
@@ -558,43 +763,29 @@ class EndToEndTests(unittest.TestCase):
         # Timeline-side edits also refresh an existing artifact row.
         page.evaluate("""async () => {
             const {S} = await import('/store.js');
-            S.state.editLanes[1].toneMarkers[0].tone = 'crunch';
+            S.state.editLanes[0].toneMarkers[1].tone = 'crunch';
             (await import('/repaint.js')).draw();
         }""")
-        expect(root.locator('[data-marker-kind="tone"] .artifact-row').filter(has_text='Other guitar').locator('.artifact-name')).to_have_text('Crunch')
+        expect(tone.locator('.artifact-name')).to_have_text('Crunch')
+        # Switching the active layer switches the list.
+        page.locator('#lanes .lane-row').filter(has_text='Other guitar').click()
+        expect(root.locator('[data-marker-kind="phrase"] .artifact-row')).to_have_count(2)
+        expect(root.locator('[data-marker-key$=":tone_other"]')).to_have_count(1)
+        expect(root.locator('[data-marker-key$=":tone_song"]')).to_have_count(0)
 
-    def test_song_marker_artifacts_edit_the_song_when_all_layers_have_own_timing(self):
+    def test_marker_artifacts_follow_the_active_layers_own_timing(self):
         self.open_reference_project()
         page = self.page
         page.evaluate("""async () => {
             const {S} = await import('/store.js');
             S.state.sectionMarkers = [{id:'song_section', t:4, text:'Song verse', sectionType:'verse', custom:true}];
-            S.state.tempoMap = [{t:12, bpm:120, tsNum:3, tsDen:4, subdiv:2}];
             (await import('/timing.js')).splitTiming(S.state.editLanes[0]);
             S.state.sectionMarkers = [{id:'own_section', t:8, text:'Layer solo', sectionType:'solo', custom:true}];
-            S.state.tempoMap = [{t:8, bpm:90, tsNum:4, tsDen:4, subdiv:2}];
             (await import('/repaint.js')).draw();
         }""")
         root = page.locator('#artifactMarkers')
-        song_section = root.locator('.artifact-row').filter(has_text='Song verse')
-        song_section.locator('.artifact-marker-edit').click()
-        page.locator('#sectionMarkerName').fill('Song chorus')
-        page.locator('#sectionMarkerName').press('Tab')
-        page.locator('#sectionMarkerPopClose').click()
-        expect(root.locator('.artifact-name').filter(has_text='Song chorus')).to_have_count(1)
         expect(root.locator('.artifact-name').filter(has_text='Layer solo')).to_have_count(1)
-        song_tempo = root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='3/4')
-        song_tempo.locator('.artifact-marker-edit').click()
-        page.locator('#markerTsNum').fill('7')
-        page.locator('#markerTsNum').dispatch_event('input')
-        page.locator('#markerPopClose').click()
-        expect(root.locator('[data-marker-kind="tempo"] .artifact-name').filter(has_text='7/4')).to_have_count(1)
-        self.assertEqual(page.evaluate("""async () => {
-            const {S} = await import('/store.js');
-            return [S.state.tempoMap[0].bpm, S.state.tempoMap[0].tsNum, S.state.sectionMarkers[0].text];
-        }"""), [90, 4, 'Layer solo'])
-        page.keyboard.press('Control+z')
-        expect(root.locator('[data-marker-kind="tempo"] .artifact-name').filter(has_text='3/4')).to_have_count(1)
+        expect(root.locator('.artifact-name').filter(has_text='Song verse')).to_have_count(0)
 
     def test_hand_anchors_have_live_artifacts_and_editable_timeline_markers(self):
         self.open_reference_project()
@@ -684,27 +875,23 @@ class EndToEndTests(unittest.TestCase):
             const {rebuildLanes, renderLanes} = await import('/lanes.js');
             rebuildLanes(); renderLanes(); (await import('/repaint.js')).draw();
         }""")
-        other = page.locator('[data-marker-kind="anchor"] .artifact-row').filter(has_text='Other guitar')
-        other.locator('.artifact-marker-edit').click()
+        anchors = page.locator('[data-marker-kind="anchor"] .artifact-row')
+        expect(anchors.locator('.artifact-name')).to_have_text(['Fret 5'])
+        page.locator('#lanes .lane-row').filter(has_text='Other guitar').click()
+        expect(anchors.locator('.artifact-name')).to_have_text(['Fret 3'])
+        anchors.first.locator('.artifact-marker-edit').click()
         page.locator('#handAnchorFret').fill('4')
         page.locator('#handAnchorFret').press('Tab')
         page.locator('#handAnchorPopClose').click()
-        expect(other.locator('.artifact-name')).to_have_text('Fret 4')
+        expect(anchors.first.locator('.artifact-name')).to_have_text('Fret 4')
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds[0].fret"), 5)
         page.evaluate("""async () => {
             const {S} = await import('/store.js'); S.state.editLanes[1].locked = true;
             (await import('/repaint.js')).draw();
         }""")
-        expect(other.locator('.artifact-marker-edit')).to_be_disabled()
-        other.click(button='right')
+        expect(anchors.first.locator('.artifact-marker-edit')).to_be_disabled()
+        anchors.first.click(button='right')
         expect(page.locator('#handAnchorPop')).to_be_hidden()
-        page.evaluate("""async () => {
-            const {S} = await import('/store.js'); S.state.editLanes[1].visible = false;
-            (await import('/repaint.js')).draw();
-        }""")
-        other.locator('.artifact-marker-jump').click()
-        self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[1].visible"))
-        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 4)
 
     def open_guitar_pro_project(self):
         page = self.page
