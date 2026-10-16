@@ -52,8 +52,7 @@ export function splitNote(note, at, minDuration, newId) {
   // grace note, or strum; the freshly sliced attack deliberately starts clean.
   for (const field of ATTACK_ONLY_FIELDS) delete right[field];
 
-  // A shape means one continuous fretting grip. A cut creates a new attack, so
-  // the integration layer removes any shape relationship from all its members.
+  // Drop legacy grip metadata. Pure motif labels remain on both halves.
   delete left.shapeId; delete left.shapeSource;
   delete right.shapeId; delete right.shapeSource;
 

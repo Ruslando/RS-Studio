@@ -3,13 +3,24 @@ import { stageMono, STAGE_ANCHORED } from "./constants.js";
 import { ensureTone, clearPreview, pauseTransport, previewNotes } from "./playback.js";
 import { releaseLaneSynth } from "./lanes.js";
 import { toast } from "./notify.js";
-import { notesInBox } from "./references.js";
+import { noteBounds, notesInBox } from "./references.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { dpr, fmtTime, noteName } from "./util.js";
 
 let audition = null, hoverTimer = 0, hoverTarget = null;
 const previews = new Map(), positions = new Map();
+import { motifGroups, motifLabel } from './motifs.js';
+const artifactName = preview => preview.motif ? motifLabel(preview.ref) : `Reference #${preview.ref}`;
+function groupFor(lane, preview) {
+  if (!preview.motif) return lane?.refBoxes?.[preview.ref];
+  const notes = motifGroups(lane?.notes).get(preview.ref);
+  if (!notes?.length) return null;
+  const box = noteBounds(notes);
+  return {rt0: 0, rt1: box.t1 - box.t0, anchors: [box.t0], pLo: box.pLo, pHi: box.pHi};
+}
+const memberNotes = (preview, box, lane = preview.lane) => preview.motif
+  ? motifGroups(lane.notes).get(preview.ref) || [] : notesInBox(box, lane.notes);
 const refKey = (lane, ref) => `${lane.id}:${ref}`;
 const arrowIcon = direction => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${direction < 0 ? 'm15 6-6 6 6 6' : 'm9 6 6 6-6 6'}"/></svg>`;
 
@@ -43,7 +54,7 @@ export function removeArtifactPreview(root) {
 
 function updateOccurrence(preview) {
   const lane = S.state?.editLanes.find(item => item.id === preview.lane.id);
-  const group = lane?.refBoxes?.[preview.ref], ref = preview.ref;
+  const group = groupFor(lane, preview), ref = preview.ref;
   if (!group?.anchors?.length) return false;
   preview.lane = lane;
   preview.geometry = JSON.stringify([group, S.state.duration]);
@@ -85,7 +96,7 @@ async function playPreview(preview) {
   pauseTransport();
   const state = S.state, { lane, box } = preview;
   const stem = state.stems.find(item => item.id === state.curStem) || state.stems[0];
-  const current = { preview, source: stem?.audioUrl || null, player: null, timer: 0, frame: 0, started: 0, noteSig: JSON.stringify(notesInBox(box, lane.notes)) };
+  const current = { preview, source: stem?.audioUrl || null, player: null, timer: 0, frame: 0, started: 0, noteSig: JSON.stringify(memberNotes(preview, box, lane)) };
   audition = current; syncPreviewState(preview, true);
   try {
     if (stem) {
@@ -101,7 +112,7 @@ async function playPreview(preview) {
       await ensureTone();
       if (window.Tone) await Tone.loaded();
       if (audition !== current || S.state !== state) return;
-      const notes = notesInBox(box, lane.notes).map(note => ({ ...note,
+      const notes = memberNotes(preview, box, lane).map(note => ({ ...note,
         start: Math.max(box.t0, note.start), end: Math.min(box.t1, note.end) }));
       previewNotes(notes, lane, { start: box.t0 });
     }
@@ -128,9 +139,9 @@ export function resetArtifactPreviews(clearSelection = false) {
   if (clearSelection) positions.clear();
 }
 
-export function referencePreview(lane, ref, moveTo) {
+export function referencePreview(lane, ref, moveTo, motif = false) {
   const root = document.createElement('section'); root.className = 'artifact-preview artifact-occurrences';
-  root.setAttribute('aria-label', `Reference #${ref} preview`);
+  root.setAttribute('aria-label', `${motif ? motifLabel(ref) : `Reference #${ref}`} preview`);
   const label = document.createElement('div'); label.className = 'artifact-time artifact-preview-title';
   label.setAttribute('aria-live', 'polite');
   const stage = document.createElement('div'); stage.className = 'artifact-preview-stage';
@@ -138,7 +149,7 @@ export function referencePreview(lane, ref, moveTo) {
   const previous = document.createElement('button'), next = document.createElement('button');
   const status = document.createElement('span'); status.className = 'artifact-detail artifact-preview-status';
   status.setAttribute('aria-live', 'polite');
-  const preview = {lane, ref, root, label, stage, previous, next, status, geometry: '', position: 0, box: null, key: '', image: null};
+  const preview = {lane, ref, motif, root, label, stage, previous, next, status, geometry: '', position: 0, box: null, key: '', image: null};
   const change = delta => {
     stopArtifactPreviewFor(root);
     positions.set(refKey(lane, ref), preview.position + delta);
@@ -147,14 +158,14 @@ export function referencePreview(lane, ref, moveTo) {
   };
   for (const [button, delta, name] of [[previous,-1,'Previous'],[next,1,'Next']]) {
     button.type = 'button'; button.className = `icon-btn icon-btn--compact artifact-instance-${delta < 0 ? 'previous' : 'next'}`;
-    button.innerHTML = arrowIcon(delta); button.title = `${name} instance of reference #${ref}`;
+    button.innerHTML = arrowIcon(delta); button.title = `${name} instance of ${artifactName(preview)}`;
     button.setAttribute('aria-label', button.title); button.addEventListener('click', () => change(delta));
   }
   const move = document.createElement('button'); move.type = 'button'; move.className = 'btn btn--compact btn--ghost artifact-jump';
-  move.textContent = 'Move to'; move.title = `Move to displayed instance of reference #${ref}`; move.setAttribute('aria-label', move.title);
+  move.textContent = 'Move to'; move.title = `Move to displayed instance of ${artifactName(preview)}`; move.setAttribute('aria-label', move.title);
   move.addEventListener('click', () => moveTo(preview.box.index));
   root.tabIndex = 0;
-  root.title = 'Hover for half a second to preview. Right-click for reference actions. Space toggles preview.';
+  root.title = `Hover for half a second to preview. Right-click for ${motif ? 'motif' : 'reference'} actions. Space toggles preview.`;
   root.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') queuePreview(preview); });
   root.addEventListener('pointerleave', () => stopArtifactPreviewFor(root));
   root.addEventListener('pointerdown', () => stopArtifactPreviewFor(root));
@@ -179,7 +190,7 @@ export function paintArtifactPreviews() {
   if (audition && audition.source !== (stem?.audioUrl || null)) { stopArtifactPreview(); return; }
   for (const [canvas, preview] of previews) {
     const lane = S.state.editLanes.find(item => item.id === preview.lane.id);
-    const group = lane?.refBoxes?.[preview.ref];
+    const group = groupFor(lane, preview);
     if (!group?.anchors?.length) continue;
     preview.lane = lane;
     if (preview.geometry !== JSON.stringify([group, S.state.duration])) {
@@ -189,11 +200,11 @@ export function paintArtifactPreviews() {
     const box = preview.box;
     const width = Math.round(canvas.clientWidth), height = canvas.clientHeight, dp = dpr();
     if (!width || !height || box.t1 <= box.t0) continue;
-    const notes = notesInBox(box, lane.notes);
+    const notes = memberNotes(preview, box, lane);
     if (audition?.preview === preview && audition.noteSig !== JSON.stringify(notes)) {
       stopArtifactPreview(); return;
     }
-    canvas.setAttribute("aria-label", `Reference #${preview.ref}, instance ${preview.position + 1} in ${lane.name}, ${notes.length} notes`);
+    canvas.setAttribute("aria-label", `${artifactName(preview)}, instance ${preview.position + 1} in ${lane.name}, ${notes.length} notes`);
     const playhead = audition?.preview === preview && audition.started ? (audition.player ? audition.player.currentTime
       : box.t0 + (performance.now() - audition.started) / 1000) : null;
     const key = JSON.stringify([width, height, dp, PAINT.ground, lane.color, playhead,

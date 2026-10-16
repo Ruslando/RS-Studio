@@ -3,16 +3,17 @@
 // minted ids from colliding with a reopened project's saved ids.
 
 import { S } from "./store.js";
+import { normalizeMotifIds } from "./motifs.js";
 
 // Every id in the project is `<prefix><n>` drawn from one counter, so
 // syncUidPastLoaded below can bump past the highest number it sees regardless of
-// which kind it belongs to. Mint ids through these — `shape_${S.uid++}` was
-// spelled out at two call sites in edit.js and is the same thing said twice.
+// which kind it belongs to. Motifs have their own project-local counter because
+// their number is also their visible name.
 export const nid = () => "n" + (S.uid++);
 
 export const laneId = () => "edit_" + (S.uid++);
 
-export const shapeId = () => "shape_" + (S.uid++);
+export const motifId = () => "motif_v2_" + (S.motifUid++);
 
 // Note ids ("n123") and lane ids ("edit_5") both draw from `uid`. A loaded project
 // keeps its saved ids, so `uid` must be bumped past the highest one or freshly
@@ -27,9 +28,10 @@ export function syncUidPastLoaded() {
   const lanes = S.state.editLanes;
   for (const lane of lanes) {
     consider(lane.id);
-    for (const n of lane.notes) { consider(n.id); consider(n.shapeId); }
+    for (const n of lane.notes) consider(n.id);
   }
   S.uid = Math.max(S.uid, max + 1);
+  S.motifUid = normalizeMotifIds(lanes);
 }
 
 // Repair duplicate ids baked into an older project by the uid-reset bug (a reloaded

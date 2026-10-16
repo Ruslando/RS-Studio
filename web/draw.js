@@ -12,13 +12,13 @@ import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
 import { drawFretboard } from "./fretboard.js";
 import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
-import { markerRails, overviewMarkerRails, railScale, railsBottom, railsHidden } from "./marker-rails.js";
+import { markerRails, overviewMarkerRails, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
 import { edgeOf, localXY, pickNote } from "./interaction.js";
 import { activeLane } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt } from "./references.js";
-import { shapeGroups } from "./shapes.js";
+import { motifGroups, motifLabel } from "./motifs.js";
 import { songBarStarts } from "./song-bars.js";
 import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
@@ -236,10 +236,9 @@ function drawBendHandles() {
   }
 }
 
-// A dashed purple envelope makes the otherwise independent note onsets read as
-// one maintained fretting shape. The notes themselves remain fully visible and
-// editable; this is relationship metadata, not a time/pitch selection box.
-function drawShapes(vx0, vx1) {
+// Outline the marked notes themselves. Unmarked notes between motif members
+// must not look as though they belong to the motif's bounding rectangle.
+function drawMotifs(vx0, vx1) {
   const active = activeLane();
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
@@ -248,7 +247,7 @@ function drawShapes(vx0, vx1) {
     // spread per comparison, so O(n log n) allocations every frame, on a path
     // that runs on every mousemove over the stage. Two of the four bounds were
     // then recomputed a third time inside the loop body.
-    const groups = [...shapeGroups(lane.notes).values()].map((notes) => {
+    const groups = [...motifGroups(lane.notes)].map(([id, notes]) => {
       let t0 = Infinity, t1 = -Infinity, pLo = Infinity, pHi = -Infinity;
       for (const n of notes) {
         if (n.start < t0) t0 = n.start;
@@ -256,9 +255,9 @@ function drawShapes(vx0, vx1) {
         if (n.pitch < pLo) pLo = n.pitch;
         if (n.pitch > pHi) pHi = n.pitch;
       }
-      return { notes, t0, t1, pLo, pHi };
+      return { id, notes, t0, t1, pLo, pHi };
     }).sort((a, b) => a.t0 - b.t0);
-    groups.forEach(({ t0, t1, pLo, pHi }, index) => {
+    groups.forEach(({ id, t0, t1, pLo, pHi }) => {
       const x0 = xOf(t0) - 4;
       const x1 = xOf(t1) + 4;
       if (x0 > vx1 || x1 < vx0) return;
@@ -267,17 +266,16 @@ function drawShapes(vx0, vx1) {
       const y1 = yOf(pLo) + S.state.rowH + 5;
       sctx.save();
       sctx.globalAlpha = lane === active ? 0.95 : 0.55;
-      sctx.strokeStyle = PAINT.shape; sctx.fillStyle = wash(PAINT.shape);
-      sctx.lineWidth = 1.5; sctx.setLineDash([6, 4]);
-      sctx.fillRect(x0, y0, Math.max(2, x1 - x0), Math.max(2, y1 - y0));
-      sctx.strokeRect(x0 + 0.5, y0 + 0.5, Math.max(1, x1 - x0 - 1), Math.max(1, y1 - y0 - 1));
+      sctx.strokeStyle = PAINT.motif; sctx.lineWidth = 1.5;
+      sctx.setLineDash([6, 4]);
+      sctx.strokeRect(x0, y0, Math.max(1, x1 - x0), y1 - y0);
       sctx.setLineDash([]);
-      const label = `Shape ${index + 1}`;
+      const label = motifLabel(id);
       // Drawn above the box, not inside it, so nothing clips it — free-floating 11.
       sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
       const labelX = Math.max(x0 + 3, vx0 + 3), labelY = y0 - 2;
       sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(label, labelX, labelY);
-      sctx.lineWidth = 1; sctx.fillStyle = PAINT.shape; sctx.fillText(label, labelX, labelY);
+      sctx.lineWidth = 1; sctx.fillStyle = PAINT.motif; sctx.fillText(label, labelX, labelY);
       sctx.restore();
     });
   }
@@ -509,7 +507,7 @@ function paintFrame() {
   }
   sctx.globalAlpha = 1;
   sctx.textBaseline = "alphabetic";
-  drawShapes(vx0, vx1);
+  drawMotifs(vx0, vx1);
   drawStackBadges(stackBadges, vx0, vx1);
   drawBendHandles();
   drawNoteFx();
@@ -569,48 +567,7 @@ function paintFrame() {
     sctx.restore();
   }
   sctx.restore();
-  drawHandHolds(vx0, vx1);
   drawMinimap();
-}
-
-// ---- where the hand was put by hand ----
-// A hold says "the fretting hand stands on this fret from this beat". That is a fact
-// about TIME and about the player, not about any one note — the voicer re-fingers a
-// whole phrase around it — so it is a mark at an instant and never a glyph on a bar.
-//
-// Pinned under the rails at the top of the viewport, which is where this app already
-// keeps everything anchored to time rather than to pitch, and 12 tall: findable at a
-// glance, over no note at any scroll position, and gone the moment the lane has no
-// holds (rule 24 — a mark that is always there says nothing).
-//
-// The layer's own hue, because a hand belongs to a layer exactly as its notes and its
-// grip on the neck do (rule 15), and the fret in mono because a fret is a value
-// (rule 6) — 11, not the note-anchored 9, which rule 6 grants only to text tied to a
-// pitch row. Haloed like every other glyph on the stage, or it is unreadable over a
-// bright partial.
-const HOLD_MARK_H = 12;
-function drawHandHolds(vx0, vx1) {
-  const top = scroll.scrollTop + (railsHidden() ? 0 : railsBottom());
-  sctx.font = stageMono(11);
-  sctx.textAlign = "left";
-  sctx.textBaseline = "top";
-  for (const lane of S.state.lanes) {
-    if (!lane.visible || !lane.handHolds?.length) continue;
-    for (const hold of lane.handHolds) {
-      const x = Math.round(xOf(Number(hold.t))) + 0.5;
-      if (x < vx0 - 32 || x > vx1 + 32) continue;
-      const label = String(Math.round(Number(hold.fret)));
-      sctx.beginPath();
-      sctx.moveTo(x, top); sctx.lineTo(x, top + HOLD_MARK_H);
-      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.stroke();
-      sctx.lineWidth = 1; sctx.strokeStyle = lane.color; sctx.stroke();
-      sctx.lineWidth = 2.5; sctx.strokeStyle = halo();
-      sctx.strokeText(label, x + 3, top);
-      sctx.lineWidth = 1; sctx.fillStyle = lane.color;
-      sctx.fillText(label, x + 3, top);
-    }
-  }
-  sctx.textBaseline = "alphabetic";
 }
 
 // ---- overview minimap: the whole song (spectrogram + notes) with a window ----
@@ -888,7 +845,7 @@ export function init_draw() {
   // panning the viewport reveals unpainted (dark) regions — repaint on scroll
   // (already one-per-frame via draw()'s coalescing).
   scroll.addEventListener("scroll", () => {
-    hideNoteMenu();
+    hideNoteMenu({ scroll: true });
     draw();
   }, { passive: true });
 }

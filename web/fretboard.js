@@ -37,7 +37,7 @@ import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
 import { assignFingers, chordColumns, handProfileForTuning, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
 import { columnAlternatives } from "./voicing.js";
-import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnInfluence, setColumnShape, setHandHold, setNotePosition } from "./edit.js";
+import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnInfluence, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { toast } from "./notify.js";
@@ -1760,7 +1760,7 @@ export function init_fretboard() {
     }
     const fret = fretUnder(e);
     if (fret <= 0) return;
-    setHandHold(lane, beatUnderBoard(), fret);
+    setHandAnchor(lane, beatUnderBoard(), fret);
   });
   fretboardEdit.addEventListener("click", () => {
     fretboardEdit.blur();            // or it eats the arrow keys that walk the song

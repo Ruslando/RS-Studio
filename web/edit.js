@@ -11,7 +11,7 @@ import { $, inTourCard, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBt
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
 import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapNote, snapStrayNotes } from "./grid.js";
-import { nid, shapeId } from "./ids.js";
+import { nid, motifId } from "./ids.js";
 import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addMarkerAtTime } from "./markers.js";
@@ -22,7 +22,7 @@ import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
 import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, refMenuEntry } from "./references.js";
-import { chooseShapePositions, cleanupShapeMembership, shapeGroups, ungroupShape } from "./shapes.js";
+import { markMotif, motifGroups, motifLabel, motifToExtend, unmarkMotif } from "./motifs.js";
 import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
@@ -221,25 +221,16 @@ export function sliceNoteCuts(cuts) {
   const entries = [...cuts.entries()].filter(([note, at]) => laneOf(note) && Number.isFinite(at));
   if (!entries.length) return [];
   const prev = snapshotEdit(), split = [];
-  const touchedShapeIds = new Map();
   for (const [note, at] of entries) {
     const lane = laneOf(note);
     if (!canEditLane(lane)) continue;
     const parts = splitNote(note, at, minDur(), nid);
     if (!parts) continue;
-    if (note.shapeId) {
-      if (!touchedShapeIds.has(lane)) touchedShapeIds.set(lane, new Set());
-      touchedShapeIds.get(lane).add(note.shapeId);
-    }
     const index = lane.notes.indexOf(note);
     lane.notes.splice(index, 1, parts.left, parts.right);
     split.push(parts);
   }
   if (!split.length) return [];
-  // Removing all members is safer than silently claiming that the original
-  // sustained grip now spans two separate attacks. Positions themselves remain.
-  for (const [lane, ids] of touchedShapeIds) for (const id of ids) ungroupShape(lane.notes, id);
-  for (const lane of editLanes()) cleanupShapeMembership(lane.notes);
   setSelection(new Set(split.map((parts) => parts.right)));
   commit(prev, undefined, new Set(split.map(parts => parts.right.id)));
   refreshCounts(); refreshTabIfOpen(); draw();
@@ -253,8 +244,7 @@ export function doCopy() {
   S.clipboardSrc = [...S.selection];
   S.clipboard = S.clipboardSrc.map((n) => copyEffects(n, {
     start: n.start, end: n.end, pitch: n.pitch,
-    ...(n.shapeId ? { shapeId: n.shapeId } : {}),
-    ...(n.shapeSource ? { shapeSource: n.shapeSource } : {}),
+    ...(n.motifId ? { motifId: n.motifId } : {}),
   }));
   // Remember the source occurrence when the whole copy sits inside one reference
   // box — that's when Paste offers the copy-vs-reference choice.
@@ -320,26 +310,22 @@ export async function doPaste({ mode } = {}) {
   // earliest note starts at the playhead, preserving relative timing + pitch.
   const anchor = Math.min(...S.clipboard.map((c) => c.start));
   const dt = snap(Math.max(0, playbackTime())) - anchor;
-  // Preserve copied shapes, but mint new ids so the paste is independent from
-  // the original. A partial copy needs at least two members to remain a shape.
-  const copiedShapeCounts = new Map();
-  for (const c of S.clipboard) if (c.shapeId)
-    copiedShapeCounts.set(c.shapeId, (copiedShapeCounts.get(c.shapeId) || 0) + 1);
-  const pastedShapeIds = new Map();
+  // Preserve copied motifs, but mint new ids so the paste is independent from
+  // the original. A partial copy keeps its annotation, including a single note.
+  const pastedMotifIds = new Map();
   const added = S.clipboard.map((c) => {
     // A reference paste must keep the group's shared shape (its anchor is already
     // snapped), so leave its notes relative; a plain paste pulls each note fully
     // onto the grid so nothing lands off-grid.
     const q = asReference ? { start: c.start + dt, end: c.end + dt } : snapNote(c.start + dt, c.end + dt);
-    let shapeId;
-    if ((copiedShapeCounts.get(c.shapeId) || 0) >= 2) {
-      if (!pastedShapeIds.has(c.shapeId)) pastedShapeIds.set(c.shapeId, shapeId());
-      shapeId = pastedShapeIds.get(c.shapeId);
+    let pastedMotifId;
+    if (c.motifId) {
+      if (!pastedMotifIds.has(c.motifId)) pastedMotifIds.set(c.motifId, motifId());
+      pastedMotifId = pastedMotifIds.get(c.motifId);
     }
     return copyEffects(c, {
       id: nid(), start: q.start, end: q.end, pitch: c.pitch,
-      ...(shapeId ? { shapeId } : {}),
-      ...(shapeId && c.shapeSource ? { shapeSource: c.shapeSource } : {}),
+      ...(pastedMotifId ? { motifId: pastedMotifId } : {}),
     });
   });
   lane.notes.push(...added);
@@ -379,7 +365,6 @@ export function doDelete() {
     if (!canEditLane(lane)) continue;   // hidden / locked lanes are disabled — never delete their notes
     const before = lane.notes.length;
     lane.notes = lane.notes.filter((n) => !S.selection.has(n));
-    cleanupShapeMembership(lane.notes);
     removed += before - lane.notes.length;
   }
   S.selection = new Set();
@@ -567,63 +552,30 @@ function setChoiceOnSelection(field, kind) {
   if (cleared) toast("Cleared conflicting effects");
 }
 
-// ---- explicit multi-note fretting shapes ----
-
-function groupSelectionIntoShape() {
-  const selected = [...S.selection].filter((note) => laneOf(note));
+// ---- annotation-only motifs ----
+export function markSelectionAsMotif() {
+  const selected = [...S.selection].filter(note => laneOf(note));
   const lanes = [...new Set(selected.map(laneOf))];
-  if (selected.length < 2) { toast("Select at least two notes to create a shape"); return false; }
-  if (lanes.length !== 1) { toast("A shape must stay within one note layer"); return false; }
-  const lane = lanes[0];
-  if (!canEditLane(lane)) return false;
-  const tuning = laneFretTuning(lane);
-  // Preserve a coherent authored/manual grip; otherwise one joint voicing.
-  const positions = chooseShapePositions(selected, tuning);
-  if (!positions) { toast("No playable shared shape was found for those notes"); return false; }
-  const prev = snapshotEdit(), id = shapeId();
-  for (const note of selected) {
-    const pos = positions.get(note);
-    note.shapeId = id;
-    note.shapeSource = "manual";
-    note.pos = { string: pos.string, fret: pos.fret, scope: "local" };
-    delete note.arrangement;
-  }
-  cleanupShapeMembership(lane.notes);
-  commit(prev); draw(); refreshTabIfOpen();
-  toast(`Created shape from ${selected.length} notes`);
+  if (!selected.length || lanes.length !== 1 || !canEditLane(lanes[0])) return false;
+  const previous = snapshotEdit();
+  markMotif(selected, motifToExtend(lanes[0].notes, selected) ?? motifId());
+  commit(previous); draw();
   return true;
 }
 
-function selectEntireShape() {
-  const selected = [...S.selection].filter((note) => laneOf(note));
-  const ids = [...new Set(selected.map((note) => note.shapeId).filter(Boolean))];
-  if (ids.length !== 1) return false;
-  const member = selected.find((note) => note.shapeId === ids[0]);
-  const lane = member && laneOf(member);
-  const members = lane ? shapeGroups(lane.notes).get(ids[0]) : null;
-  if (!members?.length) return false;
-  setSelection(new Set(members)); draw();
-  return true;
+function selectEntireMotif() {
+  const member = [...S.selection].find(note => note.motifId && laneOf(note));
+  if (!member) return;
+  setSelection(new Set(motifGroups(laneOf(member).notes).get(member.motifId) || [])); draw();
 }
 
-function ungroupSelectedShapes() {
-  const touched = new Map();
+function unmarkSelectedMotifs() {
+  const previous = snapshotEdit();
   for (const note of S.selection) {
     const lane = laneOf(note);
-    if (lane && note.shapeId) {
-      if (!touched.has(lane)) touched.set(lane, new Set());
-      touched.get(lane).add(note.shapeId);
-    }
+    if (lane && canEditLane(lane) && note.motifId) unmarkMotif(lane.notes, note.motifId);
   }
-  if (!touched.size) return false;
-  const prev = snapshotEdit();
-  for (const [lane, ids] of touched)
-    for (const note of lane.notes) if (ids.has(note.shapeId)) {
-      delete note.shapeId; delete note.shapeSource;
-    }
-  commit(prev); draw(); refreshTabIfOpen();
-  toast("Shape removed");
-  return true;
+  commit(previous); draw();
 }
 
 // ---- fingering / position override (manual pin over the auto voicing) ----
@@ -661,10 +613,6 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null) {
       !!a.adaptPrevious === flow.adaptPrevious && (a.adaptNext ?? a.adapt) === flow.adaptNext);
   if (colNotes.every((n) => same(n.pos || null, want(n)))) return;
   const prev = snapshotEdit();
-  for (const id of new Set(colNotes.map((n) => n.shapeId).filter(Boolean))) {
-    const lane = laneOf(colNotes.find((n) => n.shapeId === id));
-    if (lane) ungroupShape(lane.notes, id);
-  }
   for (const n of colNotes) {
     const p = want(n);
     if (p) n.pos = {
@@ -714,8 +662,12 @@ function writeAlternative(colNotes, choice, influence) {
   const lane = laneOf(colNotes?.[0]);
   if (!lane) return false;
   const flow = normalizeOverrideInfluence(influence || overrideFlow(colNotes));
-  for (const id of new Set(colNotes.map((n) => n.shapeId).filter(Boolean))) ungroupShape(lane.notes, id);
+  const markings = new Map(lane.notes.map(note => [note.id, note.motifId]));
   const { notes, column } = writeColumnOverride(lane.notes, colNotes, choice, flow, nid);
+  for (const note of notes) if (markings.has(note.id)) {
+    if (markings.get(note.id)) note.motifId = markings.get(note.id);
+    else delete note.motifId;
+  }
   const rewritten = notes !== lane.notes;
   lane.notes = notes;
   // Notes came or went, so the selection still points at objects that have left
@@ -751,7 +703,7 @@ function writeAlternative(colNotes, choice, influence) {
 // only way to ask for a note somewhere else; the neck now offers every position of a
 // note as a ring you click (setNotePosition), which moves the note and never touches
 // the hand. So the two edits are two gestures, and neither has to infer the other.
-export function setHandHold(lane, t, fret) {
+export function setHandAnchor(lane, t, fret) {
   if (!lane || !Number.isFinite(t) || !Number.isFinite(fret) || fret < 0) return;
   const near = (h) => Math.abs(Number(h.t) - t) <= 1e-6;
   const had = (lane.handHolds || []).find(near);
@@ -915,7 +867,10 @@ export function restrictContextMenuTo(action = null) {
   hideNoteMenu();
 }
 
-export function hideNoteMenu() { if (noteMenuEl) noteMenuEl.hidden = true; }
+export function hideNoteMenu({ scroll = false } = {}) {
+  if (scroll && noteMenuEl?.dataset.origin === "artifact") return;
+  if (noteMenuEl) noteMenuEl.hidden = true;
+}
 
 // Lazily create the shared context-menu element (reused by the note menu and the
 // empty-canvas menu) and wire its outside-click dismissal once.
@@ -929,6 +884,7 @@ function ensureCtxMenu() {
       if (noteMenuEl && !noteMenuEl.hidden && !noteMenuEl.contains(ev.target)) hideNoteMenu();
     });
   }
+  noteMenuEl.dataset.origin = "editor";
   return noteMenuEl;
 }
 
@@ -980,8 +936,9 @@ export function openCanvasMenu(clientX, clientY, atTime) {
 // effects and no filter box (those don't apply to a reference). Acts on the
 // occurrence the badge identifies (so it works even for an empty box); Detach
 // operates on the current selection, which the caller set to the box's notes.
-export function openRefMenu(clientX, clientY, occ) {
+export function openRefMenu(clientX, clientY, occ, { origin = "editor" } = {}) {
   const m = ensureCtxMenu(); m.innerHTML = "";
+  m.dataset.origin = origin;
   // Copy reads the current selection (the box's notes, set by the caller) and
   // remembers the source reference, so Paste can re-link it as a new occurrence.
   // Cut copies, then removes the whole occurrence (box + notes) — not just the
@@ -1000,6 +957,21 @@ export function openRefMenu(clientX, clientY, occ) {
   markWalkthroughMenu(m);
   menuOpenCount++;
   placeCtxMenu(m, clientX, clientY);
+}
+
+export function openMotifMenu(clientX, clientY, id) {
+  const menu = ensureCtxMenu(); menu.innerHTML = "";
+  menu.dataset.origin = "artifact";
+  buildMenu(menu, [
+    {label: motifLabel(id), header: true},
+    {label: "Copy", fn: doCopy},
+    {label: "Cut", fn: () => { doCopy(); doDelete(); }},
+    {sep: true},
+    {label: "Delete marked notes", fn: doDelete},
+    {label: "Unmark motif (keep notes)", fn: unmarkSelectedMotifs},
+  ]);
+  menuOpenCount++;
+  placeCtxMenu(menu, clientX, clientY);
 }
 
 // Human-readable names for the single-choice effects (used by the quick-remove
@@ -1092,12 +1064,12 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // reference return null here (managed via the badge → openRefMenu). Drop the entry
   // and its divider entirely when it doesn't apply.
   const refEntry = refMenuEntry(sel);
-  const selectedShapeIds = [...new Set(sel.map((n) => n.shapeId).filter(Boolean))];
+  const selectedMotifIds = [...new Set(sel.map((n) => n.motifId).filter(Boolean))];
   const oneLane = new Set(sel.map(laneOf)).size === 1;
-  const shapeActions = [
-    ...(sel.length >= 2 && oneLane ? [{ label: "Group into shape", fn: groupSelectionIntoShape }] : []),
-    ...(selectedShapeIds.length === 1 ? [{ label: "Select entire shape", fn: selectEntireShape }] : []),
-    ...(selectedShapeIds.length ? [{ label: "Ungroup shape", fn: ungroupSelectedShapes }] : []),
+  const motifActions = [
+    ...(sel.length >= 1 && oneLane ? [{ label: "Mark as motif", fn: markSelectionAsMotif }] : []),
+    ...(selectedMotifIds.length === 1 ? [{ label: "Select entire motif", fn: selectEntireMotif }] : []),
+    ...(selectedMotifIds.length ? [{ label: "Unmark motif", fn: unmarkSelectedMotifs }] : []),
   ];
   // "Return to automatic" is the one thing the deleted Tab preview sidebar owned
   // that the neck does not: a way back off an override. It shows only on a column
@@ -1119,10 +1091,10 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
       ? [{ label: "Return to automatic", kw: "reset unpin fingering position voicing",
         fn: () => applyColumnAlternative(pinnedCol.notes, null) }]
       : []),
-    ...(shapeActions.length === 1
-      ? [{ ...shapeActions[0], kw: "shape group arpeggio fingering" }]
-      : shapeActions.length > 1
-        ? [{ label: "Shape", kw: "group arpeggio fingering", children: shapeActions }]
+    ...(motifActions.length === 1
+      ? [{ ...motifActions[0], kw: "motif group phrase label" }]
+      : motifActions.length > 1
+        ? [{ label: "Motif", kw: "group phrase label", children: motifActions }]
         : []),
   ];
   const tree = [

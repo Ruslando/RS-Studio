@@ -562,8 +562,8 @@ export const TOURS = {
       },
       {
         target: "fretboardStage",
-        title: "Moving the hand",
-        body: "You can also just move the hand: click a fret, and RS Studio picks a fitting fingering for the notes around it.",
+        title: "Hand anchors",
+        body: "Click a fret to set a hand anchor, and RS Studio picks a fitting fingering for the notes around it. Hand anchors appear as small framed markers in the timeline and in Artifacts.",
         until: UNTIL.fretboardHandHold,
         task: "Click a fret to move the hand",
         optional: true,

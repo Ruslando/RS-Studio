@@ -19,6 +19,7 @@ import {
 } from "./section-marker-core.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
+import { SONG, withTiming } from "./timing.js";
 
 const SECTION_MARK_H = 25;
 const bandY = () => railBand("section").y;
@@ -26,6 +27,8 @@ const inBand = (localY) => inRailBand("section", localY);
 
 let markerRects = [];
 let editMarker = null;
+let editTiming = null;
+const inEditTiming = fn => (...args) => withTiming(editTiming || S.state.liveTiming || SONG, () => fn(...args));
 const commonSectionTypes = new Set(
   SECTION_GROUPS.flatMap(([, entries]) => entries.map(([value]) => value)));
 
@@ -37,7 +40,8 @@ const commonSectionTypes = new Set(
 // reverted back onto the stack.
 let popSnapshot = null;
 const beginPopEdit = () => { if (!popSnapshot) popSnapshot = snapshotEdit(); };
-const endPopEdit = () => { const prev = popSnapshot; popSnapshot = null; if (prev) commitStructure(prev); };
+const endPopEditInTiming = inEditTiming(() => { const prev = popSnapshot; popSnapshot = null; if (prev) commitStructure(prev); });
+const endPopEdit = () => { if (popSnapshot) endPopEditInTiming(); };
 
 function sectionMarkers() {
   if (!S.state.sectionMarkers) S.state.sectionMarkers = [];
@@ -93,8 +97,9 @@ function ensureImportedTypeOption(select, type) {
   select.append(option);
 }
 
-function openSectionMarkerPop(clientX, clientY, marker) {
+export function openSectionMarkerPop(clientX, clientY, marker, timing = S.state.liveTiming || SONG) {
   endPopEdit();   // opening a popover starts a session, so close whichever was open
+  editTiming = timing;
   editMarker = marker;
   const type = validSectionType(marker.sectionType || marker.text);
   ensureImportedTypeOption(sectionMarkerKind, type);
@@ -111,7 +116,7 @@ function openSectionMarkerPop(clientX, clientY, marker) {
   (kindIsCustom() ? sectionMarkerName : sectionMarkerKind).focus();
 }
 
-function closeSectionMarkerPop() {
+export function closeSectionMarkerPop() {
   sectionMarkerPop.hidden = true;
   editMarker = null;
   endPopEdit();
@@ -293,21 +298,21 @@ export function init_section_markers() {
     sectionMarkerType.append(typeGroup);
   }
   sectionMarkerKind.append(new Option("Custom…", "custom"));
-  sectionMarkerKind.addEventListener("change", () => { syncCustomFields(); syncSectionHelp(); applyFields(); });
+  sectionMarkerKind.addEventListener("change", inEditTiming(() => { syncCustomFields(); syncSectionHelp(); applyFields(); }));
   // `change`, not `input`: applyFields normalizes every marker in the project
   // and repaints the canvas, which is not something to do per keystroke.
   // syncSectionHelp on input keeps the help text live, and it is cheap.
   sectionMarkerName.addEventListener("input", syncSectionHelp);
-  sectionMarkerName.addEventListener("change", applyFields);
-  sectionMarkerType.addEventListener("change", () => { syncSectionHelp(); applyFields(); });
-  sectionMarkerTime.addEventListener("change", applyTime);
-  sectionMarkerDelete.addEventListener("click", () => {
+  sectionMarkerName.addEventListener("change", inEditTiming(applyFields));
+  sectionMarkerType.addEventListener("change", inEditTiming(() => { syncSectionHelp(); applyFields(); }));
+  sectionMarkerTime.addEventListener("change", inEditTiming(applyTime));
+  sectionMarkerDelete.addEventListener("click", inEditTiming(() => {
     if (!editMarker) return;
     beginPopEdit();   // closeSectionMarkerPop commits it, so the delete is one entry
     S.state.sectionMarkers = sectionMarkers().filter((marker) => marker !== editMarker);
     closeSectionMarkerPop();
     changed();
-  });
+  }));
   // Undo replaced S.state.sectionMarkers, so editMarker points at an object that
   // is no longer in it. Drop the session without committing and shut the popover.
   window.addEventListener(STATE_RESTORED, () => {

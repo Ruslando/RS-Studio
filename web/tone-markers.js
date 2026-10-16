@@ -15,6 +15,7 @@ import { refreshSaveState } from "./project.js";
 import { PAINT } from "./stage-paint.js";
 import { INTERNAL_TONE_PRESETS, normalizeToneMarkers, tonePresetLabel } from "./tone-marker-core.js";
 import { S } from "./store.js";
+import { timingIdOf, withTiming } from "./timing.js";
 
 const TONE_MARK_H = 22;
 const bandY = () => railBand("tone").y;
@@ -22,6 +23,8 @@ const inBand = (localY) => inRailBand("tone", localY);
 
 let markerRects = [];
 let editMarker = null;
+let editLaneId = null;
+const editingLane = () => S.state?.editLanes.find(lane => lane.id === editLaneId);
 
 function activeToneLane() {
   const lanes = S.state?.editLanes || [];
@@ -54,7 +57,8 @@ function changed(lane = activeToneLane()) {
   draw();
 }
 
-function openToneMarkerPop(clientX, clientY, marker) {
+export function openToneMarkerPop(clientX, clientY, marker, lane = activeToneLane()) {
+  editLaneId = lane?.id;
   editMarker = marker;
   toneMarkerPreset.value = marker.tone;
   toneMarkerTime.value = String(+Number(marker.t).toFixed(3));
@@ -88,13 +92,14 @@ export function addToneMarkerAtTime(time, clientX, clientY) {
 function applyPreset() {
   if (!editMarker) return;
   editMarker.tone = toneMarkerPreset.value;
-  changed();
+  changed(editingLane());
 }
 
 function applyTime() {
   if (!editMarker) return;
-  const lane = activeToneLane();
-  editMarker.t = snapToneTime(toneMarkerTime.value);
+  const lane = editingLane();
+  if (!lane) return;
+  editMarker.t = withTiming(timingIdOf(lane), () => snapToneTime(toneMarkerTime.value));
   toneMarkerTime.value = String(+editMarker.t.toFixed(3));
   changed(lane);
 }
@@ -189,7 +194,7 @@ export function init_tone_markers() {
   toneMarkerTime.addEventListener("change", applyTime);
   toneMarkerDelete.addEventListener("click", () => {
     if (!editMarker) return;
-    const lane = activeToneLane();
+    const lane = editingLane();
     if (!lane) return;
     lane.toneMarkers = markers(lane).filter((marker) => marker !== editMarker);
     closeToneMarkerPop();

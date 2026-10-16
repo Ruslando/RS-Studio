@@ -94,7 +94,16 @@ export const extraMarkers = () => (S.state && S.state.tempoMap) || [];
 
 export function gridSegments() {
   const seg0 = { t: gridOffset(), bpm: gridBpm(), tsNum: beatsPerBar(), tsDen: gridTsDen(), subdiv: gridSubdiv(), seg0: true };
-  const raw = extraMarkers()
+  return segmentsFrom(seg0, extraMarkers());
+}
+
+// Read another timing without switching the live editor grid during a paint.
+export function timingSegments(timing) {
+  return segmentsFrom({ ...timing.grid, t: Number(timing.grid.offset) || 0, seg0: true }, timing.tempoMap || []);
+}
+
+function segmentsFrom(seg0, markers) {
+  const raw = markers
     .map((m) => ({ t: +m.t, bpm: +m.bpm, tsNum: parseInt(m.tsNum, 10), tsDen: parseInt(m.tsDen, 10), subdiv: parseInt(m.subdiv, 10), ref: m }))
     .filter((m) => Number.isFinite(m.t) && m.t > seg0.t + 1e-6)
     .sort((a, b) => a.t - b.t);

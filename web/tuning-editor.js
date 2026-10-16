@@ -12,7 +12,7 @@
 import { confirmAction } from "./dialog.js";
 import { toast } from "./notify.js";
 import { icon } from "./icons.js";
-import { clearLaneShapes, renderLayerSettings } from "./lanes.js";
+import { renderLayerSettings } from "./lanes.js";
 import { refreshSaveState } from "./project.js";
 import { draw } from "./repaint.js";
 import { S } from "./store.js";
@@ -117,7 +117,7 @@ export async function saveTuningDraft() {
   replaceCustomTunings(draft);
   for (const lane of lanes) {
     const t = after.get(lane.tuning);
-    if (t && before.get(t.id) !== t.notes) { lane.customTuning = t.notes; clearLaneShapes(lane); }
+    if (t && before.get(t.id) !== t.notes) { lane.customTuning = t.notes; }
     // Bare strings a tuning now has are that tuning.
     if (lane.tuning === "custom") lane.tuning = tuningKeyFor(laneTuning(lane)) || "custom";
   }

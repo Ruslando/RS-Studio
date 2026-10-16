@@ -1,11 +1,9 @@
 // Extension points for the marker rail above the note grid, and for the
 // per-lane marker collections that feed it.
 //
-// Three rails register today: song sections, practice phrases and amp tone
-// switches. They stay a registry rather than three hardcoded strips because a
-// marker's meaning comes from whatever consumes it — the phrase and tone rails
-// exist for the Rocksmith export and nothing else reads them, so the modules
-// that own them keep their own drawing, hit-testing and menu entries.
+// Rails register for song sections, practice phrases, amp tone switches and hand
+// anchors. The modules that own their meaning keep their own drawing,
+// hit-testing and menu entries.
 //
 // This was built so those two could live outside the app entirely, and they did
 // for a while. The seam outlived the split: it is still what stops a rail's
@@ -67,7 +65,7 @@ export function setRailOrigin(y) {
   origin = Number(y) || 0;
 }
 
-// rail: { id, height, draw?, drawMinimap?, cursorAt?, mouseDown?,
+// rail: { id, height, draw?, drawMinimap?, cursorAt?, mouseDown?, contextMenu?,
 //          menuLabel?, addAt?(time, clientX, clientY) }
 // menuLabel + addAt contribute an entry to the canvas right-click menu.
 export function registerMarkerRail(rail) {

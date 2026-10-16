@@ -15,6 +15,7 @@ import { refreshSaveState } from "./project.js";
 import { beatStartsFromScoreBars, normalizePhraseBoundaries } from "./section-marker-core.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
+import { timingIdOf, withTiming } from "./timing.js";
 
 const PHRASE_MARK_H = 22;
 const bandY = () => railBand("phrase").y;
@@ -22,6 +23,8 @@ const inBand = (localY) => inRailBand("phrase", localY);
 
 let markerRects = [];
 let editBoundary = null;
+let editLaneId = null;
+const editingLane = () => S.state?.editLanes.find(lane => lane.id === editLaneId);
 
 function activePhraseLane() {
   const lanes = S.state?.editLanes || [];
@@ -54,7 +57,8 @@ function changed(lane = activePhraseLane()) {
   draw();
 }
 
-function openPhraseMarkerPop(clientX, clientY, boundary) {
+export function openPhraseMarkerPop(clientX, clientY, boundary, lane = activePhraseLane()) {
+  editLaneId = lane?.id;
   editBoundary = boundary;
   phraseMarkerTime.value = String(+Number(boundary.t).toFixed(3));
   phraseMarkerPop.hidden = false;
@@ -69,8 +73,9 @@ export function closePhraseMarkerPop() {
 
 function applyTime() {
   if (!editBoundary) return;
-  const lane = activePhraseLane();
-  editBoundary.t = snapPhraseTime(phraseMarkerTime.value);
+  const lane = editingLane();
+  if (!lane) return;
+  editBoundary.t = withTiming(timingIdOf(lane), () => snapPhraseTime(phraseMarkerTime.value));
   phraseMarkerTime.value = String(+editBoundary.t.toFixed(3));
   changed(lane);
 }
@@ -226,7 +231,7 @@ export function init_phrase_markers() {
   // where the section and tone rails keep theirs.
   phraseMarkerDelete.addEventListener("click", () => {
     if (!editBoundary) return;
-    const lane = activePhraseLane();
+    const lane = editingLane();
     if (!lane) return;
     lane.phraseBoundaries = boundaries(lane).filter((boundary) => boundary !== editBoundary);
     closePhraseMarkerPop();

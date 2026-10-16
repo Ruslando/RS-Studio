@@ -727,3 +727,48 @@ and resolve their targets again before an action. A changed source or passage
 stops any outdated audition. The row's right-click and keyboard context menu use
 the editor's `openRefMenu` and the displayed occurrence's actual note selection,
 so Copy, Cut, Delete and Detach have exactly the editor's effects and undo.
+
+## 11. Motifs
+
+Motifs replace the former authored Shape groups. A motif is only a `motifId`
+annotation on one or more notes in one layer. Marking or unmarking changes no
+pitch, onset, duration, effect, fingering or arrangement. It creates no shared
+grip and discovers or links no repeats. Single-note remnants remain marked.
+Mark as motif extends the existing motif when the selection contains all of its
+members and additional unmarked notes. Its ID and number stay unchanged. Partial
+motifs or selections spanning multiple motifs receive a new ID instead.
+Pitch, instrument, tuning, slicing and fingering edits do not clear annotations
+on surviving notes. A pasted selection receives a new independent motif ID.
+Old Shape membership loads as a motif, retaining existing authored fingering.
+The timeline draws a dashed enclosure around the motif's time and pitch bounds.
+Motif names use a project-local counter starting at 1, independent of note/lane
+IDs. On load, old shared-counter IDs migrate once to `motif_v2_N`; subsequent
+loads preserve these numbers, including gaps after deletion.
+
+Artifacts has independently collapsible References and Motifs sections in one
+scroll area. Motifs use the same fixed-size windows, hover preview, Move to,
+collapse and context-menu idiom. Their preview and actions read only notes
+carrying that motif ID, including when unmarked notes overlap their bounds.
+They update directly from project notes on the editor paint pass and undo/redo;
+no second note collection is stored. The motif menu offers Copy, Cut, Delete
+marked notes and Unmark motif (keep notes). Musical exports ignore the label;
+project save/load preserves it.
+
+### Marker artifacts
+
+Tempo/meter (including the start marker), sections, phrase boundaries and tone
+switches have separate collapsible artifact lists. Entries show their exact
+time and song/layer owner, sorted by time. The index includes every layer and
+each used timing plus the song timing, once per timing rather than per layer.
+Edit and right-click open the timeline's existing marker editor, including its
+delete action. Move to seeks and smoothly scrolls horizontally, activating the
+owning layer for layer-specific markers. Marker rows resolve live data on every
+paint and action; they store no copies. Popover edits remain bound to their
+original timing/layer, including song markers when all layers use own timings.
+
+Hand anchors are explicit fretting-hand positions, stored compatibly in the
+existing `handHolds` field. The active visible layer's anchors occupy a compact
+20px marker rail, using the same tinted frame as other flags and a `Fret N`
+label. Click/right-click opens their editor; dragging snaps to beats. Fret and
+time edits, moves and deletion support undo. A separate collapsible Hand anchors
+artifact list indexes all layers and shares that editor and smooth Move to action.

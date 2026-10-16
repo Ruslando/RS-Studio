@@ -37,7 +37,7 @@ import { normalizedLaneFields } from "./marker-rails.js";
 import { withStartTone } from "./tone-marker-core.js";
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars } from "./section-marker-core.js";
 import { inferTablatureEnabled } from "./layer-role.js";
-import { cleanupShapeMembership } from "./shapes.js";
+import { migrateMotifs } from "./motifs.js";
 import { defaultPinFlags } from "./voicing-core.js";
 import { isValidTuningKey, parseTuning, setView, tuningKeyFor } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
@@ -255,7 +255,7 @@ export function mapLane(l) {
   // notes added around them follow them (defaultPinFlags).
   if (l.fingeringMode === "exact") for (const n of notes)
     if (n.pos && typeof n.pos.influenceNext !== "boolean") n.pos = { ...n.pos, ...defaultPinFlags() };
-  cleanupShapeMembership(notes);
+  migrateMotifs(notes);
   // Keep a valid tuning key. Bare strings (an import, a custom tuning deleted
   // since) are looked up by those strings, so E A D G B E is E Standard; strings
   // no tuning has stay "custom" and show as their notes. Older projects had no

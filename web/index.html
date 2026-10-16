@@ -397,10 +397,15 @@
             <h2 id="artifactsTitle">Artifacts</h2>
           </header>
           <div class="artifact-panel-intro">Reusable pieces from this project.</div>
+          <div class="artifact-sections">
           <div class="artifact-section-head"><button type="button" id="artifactReferencesToggle" class="side-label" aria-controls="artifactReferencesBody" aria-expanded="true" aria-label="Collapse references" title="Collapse references"><svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span>References</span></button><span id="artifactCount" class="artifact-time" aria-live="polite">0</span></div>
           <div id="artifactReferencesBody" class="artifact-panel-body">
             <ul id="artifactList" class="artifact-list"></ul>
             <div id="artifactEmpty" class="artifact-empty"><strong>No references yet</strong><p>Select notes, then choose &ldquo;Group into reference&rdquo; from the note menu.</p></div>
+          </div>
+          <div class="artifact-section-head"><button type="button" id="artifactMotifsToggle" class="side-label" aria-controls="artifactMotifsBody" aria-expanded="true" aria-label="Collapse motifs" title="Collapse motifs"><svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span>Motifs</span></button><span id="motifCount" class="artifact-time" aria-live="polite">0</span></div>
+          <div id="artifactMotifsBody" class="artifact-panel-body"><ul id="motifList" class="artifact-list"></ul><div id="motifEmpty" class="artifact-empty"><strong>No motifs yet</strong><p>Select notes, then choose &ldquo;Mark as motif&rdquo;.</p></div></div>
+          <div id="artifactMarkers"></div>
           </div>
           </div>
         </aside>
@@ -566,6 +571,25 @@
       <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="A phrase boundary is per note layer and snaps to the beat grid." aria-label="A phrase boundary is per note layer and snaps to the beat grid.">i</span></span>
         <span class="pop-field"><input type="number" id="phraseMarkerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>
+    </div>
+  </div>
+
+  <div id="handAnchorPop" class="live-editor" hidden role="dialog" aria-label="Hand anchor">
+    <div class="pop-head">
+      <span class="pop-title">Hand anchor</span>
+      <span class="pop-head-actions">
+        <button id="handAnchorDelete" class="pop-x pop-del" title="Delete hand anchor" aria-label="Delete hand anchor"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="handAnchorPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+      </span>
+    </div>
+    <div class="dp-body">
+      <label class="field-group block">Fret
+        <input type="number" id="handAnchorFret" min="0" step="1" />
+      </label>
+      <label class="field-group block">Position
+        <span class="pop-field"><input type="number" id="handAnchorTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
+      </label>
+      <div class="artifact-detail">Sets the fretting hand from this beat onward.</div>
     </div>
   </div>
 

@@ -350,6 +350,333 @@ class EndToEndTests(unittest.TestCase):
         self.assertAlmostEqual(events[0]['time'], 16, delta=0.2)
         self.assertEqual(page.locator('#audio').evaluate('el => el.currentTime'), 0)
 
+    def test_motifs_are_only_note_labels_and_live_artifacts(self):
+        self.open_reference_project()
+        page = self.page
+        # Two non-adjacent notes: the unmarked note between them is not a member.
+        page.evaluate("""async () => {
+            const {S, setSelection} = await import('/store.js');
+            const notes = S.state.editLanes[0].notes;
+            window.motifMusicBefore = JSON.stringify(notes);
+            setSelection(new Set(notes.filter(n => n.start === 8 || n.start === 9)));
+            (await import('/edit.js')).openNoteMenu(600, 300);
+        }""")
+        page.locator('.ctxmenu').get_by_text('Mark as motif', exact=True).click()
+        expect(page.locator('#motifList .artifact-row')).to_have_count(1)
+        motif = page.locator('#motifList .artifact-row').first
+        expect(motif.locator('canvas')).to_have_attribute('aria-label', 'Motif #1, instance 1 in Guitar motif, 2 notes')
+        self.assertTrue(page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            return JSON.stringify(S.state.editLanes[0].notes.map(({motifId, ...note}) => note)) === window.motifMusicBefore;
+        }"""))
+        motif.locator('.artifact-jump').click()
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.selection.size"), 2)
+        motif.click(button='right')
+        page.locator('.ctxmenu').get_by_text('Copy', exact=True).click()
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.clipboard.length"), 2)
+        # A copy receives its own marking and neither motif constrains fingering.
+        page.evaluate("""async () => {
+            (await import('/playback.js')).seekPlayback(20);
+            await (await import('/edit.js')).doPaste({mode:'copy'});
+        }""")
+        expect(page.locator('#motifList .artifact-row')).to_have_count(2)
+        expect(page.locator('#motifList .artifact-name')).to_have_text(['Motif #1', 'Motif #2'])
+        page.evaluate("""async () => {
+            const {S, setSelection} = await import('/store.js');
+            const lane = S.state.editLanes[0], note = lane.notes.find(n => n.start === 8);
+            const {snapshotEdit, commit, doDelete} = await import('/edit.js');
+            const prev = snapshotEdit();
+            (await import('/lanes.js')).setLaneNotePitch(lane, note, 66);
+            commit(prev);
+            window.tagAfterPitchEdit = note.motifId;
+            setSelection(new Set([note])); doDelete();
+        }""")
+        self.assertTrue(page.evaluate('!!window.tagAfterPitchEdit'))
+        expect(motif.locator('canvas')).to_have_attribute('aria-label', re.compile(r', 1 notes$'))
+        page.keyboard.press('Control+z')
+        expect(motif.locator('canvas')).to_have_attribute('aria-label', re.compile(r', 2 notes$'))
+        page.evaluate("async () => { const p = await import('/project.js'); await p.saveToServer(); p.markSaved(); }")
+        page.reload()
+        page.locator(f'#recentList [data-job="{self.reference_job}"] .ri-open').click()
+        expect(page.locator('#motifList .artifact-row')).to_have_count(2)
+        expect(page.locator('#motifList .artifact-name')).to_have_text(['Motif #1', 'Motif #2'])
+        page.locator('#artifactMotifsToggle').click()
+        expect(page.locator('#artifactMotifsBody')).to_be_hidden()
+        page.locator('#artifactMotifsToggle').click()
+        page.locator('#motifList .artifact-row').first.click(button='right')
+        before = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.length")
+        page.locator('.ctxmenu').get_by_text('Unmark motif (keep notes)', exact=True).click()
+        expect(page.locator('#motifList .artifact-row')).to_have_count(1)
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.length"), before)
+        page.keyboard.press('Control+z')
+        expect(page.locator('#motifList .artifact-row')).to_have_count(2)
+        # A linked reference's sibling notes are not silently marked as a motif.
+        page.evaluate("""async () => {
+            const {S, setSelection} = await import('/store.js');
+            setSelection(new Set([S.state.editLanes[0].notes.find(n => n.start === 2)]));
+            (await import('/edit.js')).markSelectionAsMotif();
+        }""")
+        self.assertFalse(page.evaluate("async () => !!(await import('/store.js')).S.state.editLanes[0].notes.find(n => n.start === 16).motifId"))
+
+    def test_mark_as_motif_extends_a_fully_selected_motif(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S, setSelection} = await import('/store.js');
+            const {markSelectionAsMotif} = await import('/edit.js');
+            const notes = S.state.editLanes[0].notes;
+            setSelection(new Set(notes.filter(n => n.start === 8 || n.start === 9)));
+            markSelectionAsMotif();
+            window.originalMotifId = notes.find(n => n.start === 8).motifId;
+            setSelection(new Set(notes.filter(n => n.start >= 8 && n.start <= 9)));
+            (await import('/edit.js')).openNoteMenu(600, 300);
+        }""")
+        page.locator('.ctxmenu').get_by_text('Motif', exact=True).click()
+        page.locator('.ctxmenu').get_by_text('Mark as motif', exact=True).click()
+        motif = page.locator('#motifList .artifact-row')
+        expect(motif).to_have_count(1)
+        expect(motif.locator('canvas')).to_have_attribute('aria-label', 'Motif #1, instance 1 in Guitar motif, 3 notes')
+        self.assertTrue(page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            return S.state.editLanes[0].notes.filter(n => n.start >= 8 && n.start <= 9)
+                .every(n => n.motifId === window.originalMotifId) && S.motifUid === 2;
+        }"""))
+        page.keyboard.press('Control+z')
+        expect(motif.locator('canvas')).to_have_attribute('aria-label', re.compile(r'Motif #1,.*2 notes$'))
+        page.keyboard.press('Control+Shift+z')
+        expect(motif.locator('canvas')).to_have_attribute('aria-label', re.compile(r'Motif #1,.*3 notes$'))
+
+    def test_all_marker_artifacts_edit_jump_and_update_live(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            S.state.sectionMarkers = [{id:'section_song', t:4, text:'Verse', sectionType:'verse'}];
+            S.state.tempoMap = [{t:12, bpm:120, tsNum:3, tsDen:4, subdiv:2}];
+            lane.toneMarkers = [{id:'start', t:0, tone:'lead'}, {id:'tone_song', t:12, tone:'crunch'}];
+            lane.phraseBoundaries = [{id:'phrase_song', t:6}];
+            const other = {...lane, id:'other', name:'Other guitar', active:false,
+                notes:[], refBoxes:{}, toneMarkers:[{id:'tone_other', t:10, tone:'clean'}],
+                phraseBoundaries:[{id:'phrase_other', t:14}]};
+            S.state.editLanes.push(other);
+            (await import('/timing.js')).splitTiming(other);
+            S.state.sectionMarkers = [{id:'section_other', t:16, text:'Solo', sectionType:'solo'}];
+            S.state.tempoMap = [];
+            const {rebuildLanes, renderLanes} = await import('/lanes.js');
+            rebuildLanes(); renderLanes();
+            (await import('/section-markers.js')).sectionMarkersChanged();
+            (await import('/repaint.js')).draw();
+        }""")
+        root = page.locator('#artifactMarkers')
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(3)
+        expect(root.locator('[data-marker-kind="section"] .artifact-row')).to_have_count(2)
+        expect(root.locator('[data-marker-kind="phrase"] .artifact-row')).to_have_count(2)
+        expect(root.locator('[data-marker-kind="tone"] .artifact-row')).to_have_count(3)
+        # Real editor dialog: the section can be renamed and undone from here.
+        verse = root.locator('.artifact-row').filter(has_text='Verse')
+        verse.locator('.artifact-marker-edit').click()
+        expect(page.locator('#sectionMarkerPop')).to_be_visible()
+        page.locator('#sectionMarkerKind').select_option('custom')
+        page.locator('#sectionMarkerName').fill('Opening verse')
+        page.locator('#sectionMarkerName').press('Tab')
+        page.locator('#sectionMarkerPopClose').click()
+        expect(root.locator('.artifact-name').filter(has_text='Opening verse')).to_have_count(1)
+        page.keyboard.press('Control+z')
+        expect(root.locator('.artifact-name').filter(has_text='Opening verse')).to_have_count(0)
+        # Jump switches to the marker's layer/timing and animates the viewport.
+        page.evaluate("async () => { const {S} = await import('/store.js'); S.zoomX = 8; (await import('/repaint.js')).draw(); }")
+        solo = root.locator('.artifact-row').filter(has_text='Solo')
+        solo.locator('.artifact-marker-jump').click()
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes.find(l => l.active).id"), 'other')
+        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 16)
+        page.wait_for_function("document.querySelector('#scroll').scrollLeft > 100")
+        # Editing a tone from another layer selects its owner and updates its row.
+        tone = root.locator('[data-marker-key$=":tone_song"]')
+        tone.locator('.artifact-marker-edit').click()
+        page.locator('#toneMarkerPreset').select_option('bass')
+        expect(tone.locator('.artifact-name')).to_have_text('Bass')
+        page.locator('#toneMarkerPopClose').click()
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[1].toneMarkers[0].tone"), 'clean')
+        # Right-click opens the same phrase editor, with time and delete actions.
+        phrase = root.locator('[data-marker-kind="phrase"] .artifact-row').filter(has_text='Other guitar')
+        phrase.click(button='right')
+        expect(page.locator('#phraseMarkerPop')).to_be_visible()
+        page.locator('#phraseMarkerTime').fill('15')
+        page.locator('#phraseMarkerTime').press('Tab')
+        expect(phrase.locator('.artifact-detail')).to_contain_text('0:15.000')
+        page.locator('#phraseMarkerDelete').click()
+        expect(root.locator('[data-marker-kind="phrase"] .artifact-row')).to_have_count(1)
+        # The start tempo is present, editable, and cannot be deleted.
+        start = root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='Song').filter(has_text='Start')
+        start.locator('.artifact-marker-edit').click()
+        expect(page.locator('#markerDelete')).to_be_hidden()
+        page.locator('#markerPopClose').click()
+        tempo = root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='3/4')
+        tempo.locator('.artifact-marker-edit').click()
+        page.locator('#markerTsNum').fill('5')
+        page.locator('#markerTsNum').dispatch_event('input')
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-name').filter(has_text='5/4')).to_have_count(1)
+        page.locator('#markerDelete').click()
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(2)
+        page.keyboard.press('Control+z')
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-row')).to_have_count(3)
+        toggle = root.get_by_role('button', name='Collapse tone switches', exact=True)
+        toggle.click()
+        expect(page.locator('#artifact-tone-body')).to_be_hidden()
+        root.get_by_role('button', name='Expand tone switches', exact=True).click()
+        expect(page.locator('#artifact-tone-body')).to_be_visible()
+        # Timeline-side edits also refresh an existing artifact row.
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            S.state.editLanes[1].toneMarkers[0].tone = 'crunch';
+            (await import('/repaint.js')).draw();
+        }""")
+        expect(root.locator('[data-marker-kind="tone"] .artifact-row').filter(has_text='Other guitar').locator('.artifact-name')).to_have_text('Crunch')
+
+    def test_song_marker_artifacts_edit_the_song_when_all_layers_have_own_timing(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            S.state.sectionMarkers = [{id:'song_section', t:4, text:'Song verse', sectionType:'verse', custom:true}];
+            S.state.tempoMap = [{t:12, bpm:120, tsNum:3, tsDen:4, subdiv:2}];
+            (await import('/timing.js')).splitTiming(S.state.editLanes[0]);
+            S.state.sectionMarkers = [{id:'own_section', t:8, text:'Layer solo', sectionType:'solo', custom:true}];
+            S.state.tempoMap = [{t:8, bpm:90, tsNum:4, tsDen:4, subdiv:2}];
+            (await import('/repaint.js')).draw();
+        }""")
+        root = page.locator('#artifactMarkers')
+        song_section = root.locator('.artifact-row').filter(has_text='Song verse')
+        song_section.locator('.artifact-marker-edit').click()
+        page.locator('#sectionMarkerName').fill('Song chorus')
+        page.locator('#sectionMarkerName').press('Tab')
+        page.locator('#sectionMarkerPopClose').click()
+        expect(root.locator('.artifact-name').filter(has_text='Song chorus')).to_have_count(1)
+        expect(root.locator('.artifact-name').filter(has_text='Layer solo')).to_have_count(1)
+        song_tempo = root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='3/4')
+        song_tempo.locator('.artifact-marker-edit').click()
+        page.locator('#markerTsNum').fill('7')
+        page.locator('#markerTsNum').dispatch_event('input')
+        page.locator('#markerPopClose').click()
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-name').filter(has_text='7/4')).to_have_count(1)
+        self.assertEqual(page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            return [S.state.tempoMap[0].bpm, S.state.tempoMap[0].tsNum, S.state.sectionMarkers[0].text];
+        }"""), [90, 4, 'Layer solo'])
+        page.keyboard.press('Control+z')
+        expect(root.locator('[data-marker-kind="tempo"] .artifact-name').filter(has_text='3/4')).to_have_count(1)
+
+    def test_hand_anchors_have_live_artifacts_and_editable_timeline_markers(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const {setHandAnchor} = await import('/edit.js');
+            setHandAnchor(S.state.editLanes[0], 2, 5);
+            setHandAnchor(S.state.editLanes[0], 6, 9);
+        }""")
+        anchors = page.locator('[data-marker-kind="anchor"] .artifact-row')
+        expect(anchors).to_have_count(2)
+        expect(anchors.locator('.artifact-name')).to_have_text(['Hand anchor · Fret 5', 'Hand anchor · Fret 9'])
+        anchors.first.locator('.artifact-marker-edit').click()
+        expect(page.locator('#handAnchorPop')).to_be_visible()
+        page.locator('#handAnchorFret').fill('7')
+        page.locator('#handAnchorFret').press('Tab')
+        expect(anchors.first.locator('.artifact-name')).to_have_text('Hand anchor · Fret 7')
+        page.locator('#handAnchorPopClose').click()
+        page.keyboard.press('Control+z')
+        expect(anchors.first.locator('.artifact-name')).to_have_text('Hand anchor · Fret 5')
+        page.keyboard.press('Control+Shift+z')
+        expect(anchors.first.locator('.artifact-name')).to_have_text('Hand anchor · Fret 7')
+        anchors.last.locator('.artifact-marker-jump').click()
+        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 6)
+        page.wait_for_function("document.querySelector('#scroll').scrollLeft > 100")
+
+        def anchor_point(t):
+            return page.evaluate("""async t => {
+                (await import('/viewport-motion.js')).stopViewportMotion();
+                (await import('/repaint.js')).drawNow();
+                const {xOf} = await import('/geometry.js');
+                const {railBand} = await import('/marker-rails.js');
+                const r = document.querySelector('#stage').getBoundingClientRect();
+                return [r.left + xOf(t) - document.querySelector('#scroll').scrollLeft + 8,
+                    r.top + railBand('hand-anchor').y + 10];
+            }""", t)
+
+        # The framed timeline marker itself opens the same editor on right-click.
+        page.mouse.click(*anchor_point(6), button='right')
+        expect(page.locator('#handAnchorPop')).to_be_visible()
+        page.locator('#handAnchorTime').fill('8')
+        page.locator('#handAnchorTime').press('Tab')
+        page.locator('#handAnchorPopClose').click()
+        expect(anchors.last.locator('.artifact-detail')).to_contain_text('0:08.000')
+        # Clicking also edits; dragging is a beat-snapped move and one undo step.
+        page.mouse.click(*anchor_point(8))
+        expect(page.locator('#handAnchorPop')).to_be_visible()
+        page.locator('#handAnchorPopClose').click()
+        start, end = anchor_point(8), anchor_point(10)
+        page.mouse.move(*start); page.mouse.down()
+        page.mouse.move(*end, steps=5); page.mouse.up()
+        expect(anchors.last.locator('.artifact-detail')).to_contain_text('0:10.000')
+        page.keyboard.press('Control+z')
+        expect(anchors.last.locator('.artifact-detail')).to_contain_text('0:08.000')
+        # An existing beat cannot be overwritten accidentally through the editor.
+        anchors.last.locator('.artifact-marker-edit').click()
+        page.locator('#handAnchorTime').fill('2')
+        page.locator('#handAnchorTime').press('Tab')
+        expect(page.locator('#handAnchorTime')).to_have_value('8')
+        expect(anchors).to_have_count(2)
+        page.locator('#handAnchorDelete').click()
+        expect(anchors).to_have_count(1)
+        page.keyboard.press('Control+z')
+        expect(anchors).to_have_count(2)
+        # Existing project serialization preserves the anchors and their labels.
+        page.evaluate("async () => { const p = await import('/project.js'); await p.saveToServer(); p.markSaved(); }")
+        page.reload()
+        page.locator(f'#recentList [data-job="{self.reference_job}"] .ri-open').click()
+        expect(anchors).to_have_count(2)
+        expect(anchors.locator('.artifact-name')).to_have_text(['Hand anchor · Fret 7', 'Hand anchor · Fret 9'])
+        page.get_by_role('button', name='Collapse hand anchors', exact=True).click()
+        expect(page.locator('#artifact-anchor-body')).to_be_hidden()
+        page.get_by_role('button', name='Expand hand anchors', exact=True).click()
+        expect(page.locator('#artifact-anchor-body')).to_be_visible()
+
+    def test_hand_anchor_artifacts_target_their_layer_and_respect_locks(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.handHolds = [{t:2, fret:5}];
+            const other = {...lane, id:'anchor_other', name:'Other guitar', active:false,
+                notes:[], refBoxes:{}, handHolds:[{t:4, fret:3}]};
+            S.state.editLanes.push(other);
+            const {rebuildLanes, renderLanes} = await import('/lanes.js');
+            rebuildLanes(); renderLanes(); (await import('/repaint.js')).draw();
+        }""")
+        other = page.locator('[data-marker-kind="anchor"] .artifact-row').filter(has_text='Other guitar')
+        other.locator('.artifact-marker-edit').click()
+        page.locator('#handAnchorFret').fill('4')
+        page.locator('#handAnchorFret').press('Tab')
+        page.locator('#handAnchorPopClose').click()
+        expect(other.locator('.artifact-name')).to_have_text('Hand anchor · Fret 4')
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds[0].fret"), 5)
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js'); S.state.editLanes[1].locked = true;
+            (await import('/repaint.js')).draw();
+        }""")
+        expect(other.locator('.artifact-marker-edit')).to_be_disabled()
+        other.click(button='right')
+        expect(page.locator('#handAnchorPop')).to_be_hidden()
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js'); S.state.editLanes[1].visible = false;
+            (await import('/repaint.js')).draw();
+        }""")
+        other.locator('.artifact-marker-jump').click()
+        self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[1].visible"))
+        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 4)
+
     def open_guitar_pro_project(self):
         page = self.page
         with page.expect_file_chooser() as chooser:

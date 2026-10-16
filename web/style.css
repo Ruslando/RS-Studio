@@ -47,7 +47,7 @@
   --stage-section:     #ea580c;   /* section markers */
   --stage-phrase:      #0d9488;   /* practice-phrase boundaries */
   --stage-tone:        #9333ea;   /* amp tone switches */
-  --stage-shape:       #c4a7ff;   /* chord-shape boxes */
+  --stage-motif:       #c4a7ff;   /* motif annotations */
   --stage-trace:       #f0abfc;   /* find-similar suggestions */
   --stage-ref:         #e7c873;   /* linked reference groups */
   /* A runtime layout width the user drags. Not a design token — but declared here

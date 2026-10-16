@@ -1,10 +1,10 @@
 // Run: node tests/web/note-tools.test.mjs
-// The small rules notes are edited by: slicing, bend curves, references, shapes, chord names.
+// The small rules notes are edited by: slicing, bend curves, references, motifs, chord names.
 import assert from "node:assert/strict";
 import { BEND_PRESETS, bendAt, bendCurve, bendPeak, bendShape, normalizeCurve } from "../../web/bend.js";
 import { analyzeChord, detectChord } from "../../web/chords.js";
 import { effectSig, refOccurrences } from "../../web/reference-core.js";
-import { chooseShapePositions, cleanupShapeMembership, shapeGroups, ungroupShape } from "../../web/shapes.js";
+import { markMotif, migrateMotifs, motifGroups, unmarkMotif, normalizeMotifIds, motifLabel, motifToExtend } from "../../web/motifs.js";
 import { lineXAtRow, splitNote } from "../../web/slice.js";
 
 // ---- slicing --------------------------------------------------------------
@@ -76,34 +76,54 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
     effectSig({ pos: { string: 1, fret: 2, adaptNext: true, scope: "local" } }, { includePos: true }), "the old flag reads as the new one");
 }
 
-// ---- shapes ---------------------------------------------------------------
+// ---- motifs: labels must not alter the music -------------------------------
 {
-  const make = () => [{ shapeId: "shape_1" }, { shapeId: "shape_1", shapeSource: "x" }, { shapeId: "shape_2" }, { shapeId: "bogus" }, { shapeId: "bogus" }, {}];
-  let notes = make();
-  assert.deepEqual([...shapeGroups(notes).keys()], ["shape_1"], "one note is not a shape");
-  assert.equal(cleanupShapeMembership(notes), 3, "the lone member and the unreadable ids are released");
-  assert.deepEqual(notes.map((n) => n.shapeId), ["shape_1", "shape_1", undefined, undefined, undefined, undefined]);
-  assert.equal(ungroupShape(notes, "shape_1"), 2);
-  assert.ok(notes.every((n) => !("shapeId" in n) && !("shapeSource" in n)));
-  assert.equal(ungroupShape(notes, ""), 0);
+  const notes = [{pitch: 45, start: 0, end: .4, pos: {string: 5, fret: 5}},
+    {pitch: 88, start: 8, end: 9, arrangement: {notes: []}}];
+  const before = structuredClone(notes);
+  markMotif(notes, 'motif_1');
+  assert.deepEqual(notes.map(({motifId, ...n}) => n), before, 'even an unplayable spread is only tagged');
+  assert.equal(motifGroups(notes).get('motif_1').length, 2);
+  assert.equal(motifGroups(notes.slice(0, 1)).get('motif_1').length, 1, 'a single marked note remains a motif');
+  const {left, right} = splitNote(notes[0], .2, .1, () => 5);
+  assert.equal(left.motifId, 'motif_1'); assert.equal(right.motifId, 'motif_1');
+  unmarkMotif(notes, 'motif_1'); assert.deepEqual(notes, before);
+  const legacy = [{pitch: 40, shapeId: 'shape_9', shapeSource: 'manual', pos: {string:5, fret:0}},
+    {pitch:41, motifId:'motif_9'}, {pitch:42, motifId:'invalid'}];
+  migrateMotifs(legacy);
+  assert.equal(legacy[0].motifId, 'motif_legacy_9');
+  assert.deepEqual(legacy[0].pos, {string:5,fret:0}, 'loading preserves authored fingering');
+  assert.equal(motifGroups(legacy).size, 2, 'legacy and new markers cannot collide');
+  assert.ok(legacy.every(note => !('shapeId' in note) && !('shapeSource' in note)));
+}
 
-  const tuning = [64, 59, 55, 50, 45, 40];              // app order: string 0 = high E
-  const root = { pitch: 45, pos: { string: 5, fret: 5 } }, fifth = { pitch: 52, pos: { string: 4, fret: 7 } };
-  const pinned = chooseShapePositions([root, fifth], tuning);
-  assert.deepEqual([pinned.get(root), pinned.get(fifth)], [{ string: 5, fret: 5 }, { string: 4, fret: 7 }], "a playable grip the player chose is kept");
-  // A pin that does not sound the note's pitch is not a grip: one is worked out instead.
-  const wrong = { pitch: 45, pos: { string: 5, fret: 9 } };
-  const worked = chooseShapePositions([wrong, fifth], tuning);
-  for (const n of [wrong, fifth]) assert.equal(tuning[worked.get(n).string] + worked.get(n).fret, n.pitch);
-  assert.notEqual(worked.get(wrong).string, worked.get(fifth).string);
-  // Neither are two frets on one string.
-  const low = { pitch: 45, pos: { string: 5, fret: 5 } }, next = { pitch: 47, pos: { string: 5, fret: 7 } };
-  const spread = chooseShapePositions([low, next], tuning);
-  assert.notEqual(spread.get(low).string, spread.get(next).string);
-  assert.equal(chooseShapePositions([{ pitch: 45 }, { pitch: 45 }], tuning), null, "one pitch twice is not a grip");
+// Extending a complete motif keeps its identity; ambiguous selections do not.
+{
+  const a = {motifId:'motif_v2_1'}, b = {motifId:'motif_v2_1'}, fresh = {};
+  const other = {motifId:'motif_v2_2'}, notes = [a, b, fresh, other];
+  assert.equal(motifToExtend(notes, [a, b, fresh]), 'motif_v2_1');
+  assert.equal(motifToExtend(notes, [b, a]), 'motif_v2_1');
+  assert.equal(motifToExtend(notes, [a, fresh]), null, 'partial motifs are not silently extended');
+  assert.equal(motifToExtend(notes, [a, b, other]), null, 'multiple motifs have no implicit merge target');
+  assert.equal(motifToExtend(notes, [fresh]), null);
+  assert.equal(motifToExtend(notes, []), null);
 }
 
 // ---- chord names ----------------------------------------------------------
+{
+  const lanes = [{notes: [{id:'n17', motifId:'motif_18', written:[{motifId:'motif_18'}]},
+    {motifId:'motif_18'}]}, {notes:[{motifId:'motif_23'}, {motifId:'motif_legacy_18'}]}];
+  assert.equal(normalizeMotifIds(lanes), 4);
+  assert.equal(motifLabel(lanes[0].notes[0].motifId), 'Motif #1', 'note ids do not determine motif names');
+  assert.equal(lanes[0].notes[0].written[0].motifId, lanes[0].notes[1].motifId);
+  assert.equal(motifLabel(lanes[1].notes[0].motifId), 'Motif #2');
+  assert.equal(motifLabel(lanes[1].notes[1].motifId), 'Motif #3', 'old shape and motif identities stay distinct');
+  lanes[0].notes = [];
+  assert.equal(normalizeMotifIds(lanes), 4);
+  assert.equal(motifLabel(lanes[1].notes[0].motifId), 'Motif #2', 'reopening does not renumber modern motifs');
+  assert.equal(normalizeMotifIds([{notes:[{id:'n999'}]}]), 1, 'each project starts its own motif numbering');
+}
+
 {
   const name = (...pitches) => detectChord(pitches);
   assert.equal(name(48), "C");

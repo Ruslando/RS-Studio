@@ -8,7 +8,6 @@ import { draw } from "./repaint.js";
 import { icon } from "./icons.js";
 import { commitStructure, snapshotEdit, updateUndoButtons } from "./edit.js";
 import { emptyLaneFields } from "./marker-rails.js";
-import { ungroupShape } from "./shapes.js";
 import { refreshSaveState } from "./project.js";
 import { S, setSelection } from "./store.js";
 import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, tuningToNames } from "./tablature.js";
@@ -37,7 +36,6 @@ export function targetLane() {
 // A pitch edit leaves the note's old position behind; it no longer sounds the pitch,
 // so it lapses (lockedShape / pinnedPositions) and the note is fingered like any other.
 export function setLaneNotePitch(lane, note, desiredPitch) {
-  if (desiredPitch !== note.pitch && note.shapeId) ungroupShape(lane.notes, note.shapeId);
   if (Number.isFinite(note.soundingPitch)) note.soundingPitch += desiredPitch - note.pitch;
   note.pitch = desiredPitch;
 }
@@ -49,10 +47,7 @@ export function setLaneCapo(lane, capo) {
   if (moveCapo(lane, capo)) S.voicingRevision++;
 }
 
-export function clearLaneShapes(lane) {
-  for (const shapeId of new Set((lane?.notes || []).map((note) => note.shapeId).filter(Boolean)))
-    ungroupShape(lane.notes, shapeId);
-}
+
 
 // A lane is editable only when it's shown and not locked. Editing is further
 // scoped to the *active* lane (see pickNote / mousedown), so other visible lanes
@@ -518,7 +513,6 @@ export function init_lanes() {
       soundFollowsInstrument(lane);
       lane.tuning = INSTRUMENTS[layerInstr.value].tuning;   // instrument drives the default tuning
       lane.customTuning = tuningToNames(laneTuning(lane));  // materialize for portable GP export
-      clearLaneShapes(lane);
       renderLayerSettings(); draw(); refreshTabIfOpen();   // a new neck to draw
       refreshSaveState();
     });
@@ -527,7 +521,6 @@ export function init_lanes() {
       if (layerTun.value === "__manage") { renderLayerSettings(); openTuningManager(lane.tuning); return; }
       lane.tuning = layerTun.value;
       lane.customTuning = tuningToNames(laneTuning(lane));
-      clearLaneShapes(lane);
       renderLayerSettings(); refreshTabIfOpen();
       refreshSaveState();
     });

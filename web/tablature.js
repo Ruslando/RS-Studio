@@ -266,7 +266,6 @@ function buildSpecFromPrepared(prepared) {
           return copyEffects(n, {
             start: n.start, end: n.end, pitch: n.pitch,
             string: pos ? pos.string + 1 : null, fret: pos ? pos.fret : null,
-            ...(n.shapeId ? { shapeId: n.shapeId } : {}),
           });
         }), (note) => note),
       };

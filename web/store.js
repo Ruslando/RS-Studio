@@ -89,6 +89,7 @@ export const S = {
   scoreAnchorSong: 0,
   scoreAnchorClock: 0,
   uid: 1,
+  motifUid: 1,
   // The offset the edit-lane notes are currently aligned to. Changing the offset
   // slides authored notes by the delta so notes snapped to the old grid stay on the
   // new one (see the offsetInput "change" handler). Re-baselined on project load and

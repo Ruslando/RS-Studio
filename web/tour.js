@@ -371,7 +371,7 @@ const WAITS = {
     .map((note) => [note.id, effectSignatureFields(note)])),
   [UNTIL.menuOpened]: () => walkthroughMenuOpenCount(),
   [UNTIL.noteNavigation]: () => playbackTime(),
-  [UNTIL.shapeGroup]: () => new Set((tutorialEditLane()?.notes || []).map((note) => note.shapeId).filter(Boolean)).size,
+  [UNTIL.shapeGroup]: () => new Set((tutorialEditLane()?.notes || []).map((note) => note.motifId).filter(Boolean)).size,
   [UNTIL.refs]: () => (S.state?.editLanes || []).reduce((n, lane) => n + Object.keys(lane.refBoxes || {}).length, 0),
   // The one wait on a value rather than on a change: any keystroke in the field
   // changes the number, so "120" has to be the thing waited for or typing the 1

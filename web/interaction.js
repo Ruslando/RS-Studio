@@ -460,6 +460,7 @@ export function init_interaction() {
   stage.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     if (!S.state) return;
+    for (const rail of markerRails()) if (rail.contextMenu?.(e)) return;
     const [x, y] = localXY(e);
     // Right-click a bend control point removes it (the two end points pin the
     // curve to the note and stay) — otherwise fall through to the note menu.

@@ -17,7 +17,7 @@ import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { railScale, railsHidden, timedLaneMarkers } from "./marker-rails.js";
 import { editLanes } from "./lanes.js";
-import { onLiveTiming } from "./timing.js";
+import { onLiveTiming, SONG, withTiming } from "./timing.js";
 import { sectionMarkersChanged } from "./section-markers.js";
 import { gridDivLabelFor } from "./ui.js";
 import { refreshSaveState } from "./project.js";
@@ -26,6 +26,8 @@ export const MARK_H = 24;   // marker-flag band height (px), pinned to the viewp
 
 let markerRects = [];       // {seg, x0,x1,y0,y1} in world px, rebuilt each draw() for hit-testing
 let editSeg = null;         // the segment currently open in the popover
+let editTiming = null;
+const inEditTiming = fn => (...args) => withTiming(editTiming || S.state.liveTiming || SONG, () => fn(...args));
 
 // Editing in the popover is a session, not a keystroke: every character typed
 // into the BPM field fires an input event, and all of them are one Ctrl+Z. Take
@@ -35,14 +37,15 @@ let popSnapshot = null;
 let popSeg = null;          // the segment as it was when the session began: its bpm is the old tempo
 let popRiders = null;       // what a time edit carries along (spanRiders), taken at the session's first one
 const beginPopEdit = () => { if (!popSnapshot) { popSnapshot = snapshotEdit(); popSeg = editSeg; } };
-const endPopEdit = () => {
+const endPopEditInTiming = inEditTiming(() => {
   const prev = popSnapshot, seg = popSeg;
   popSnapshot = popSeg = popRiders = null;
   if (!prev) return;
   retimeSession(seg);
   commitStructure(prev);
   refreshTabIfOpen();
-};
+});
+const endPopEdit = () => { if (popSnapshot) endPopEditInTiming(); };
 
 // A BPM change re-times what sits under the marker, once, when the session ends —
 // not per keystroke, where typing "1" on the way to "125" would mean 1 BPM.
@@ -256,8 +259,9 @@ export function drawMinimapMarkers(sx) {
   }
 }
 
-function openMarkerPop(clientX, clientY, seg) {
+export function openMarkerPop(clientX, clientY, seg, timing = S.state.liveTiming || SONG) {
   endPopEdit();   // opening a popover starts a session, so close whichever was open
+  editTiming = timing;
   editSeg = seg;
   S.taps = [];
   document.getElementById("tapInfo").hidden = true;
@@ -317,7 +321,7 @@ export function openFirstMarkerPop() {
   openMarkerPop(rect?.left ?? box.left + 16, rect ? rect.top + rect.height : box.top + MARK_H, seg);
 }
 
-function closeMarkerPop() {
+export function closeMarkerPop() {
   markerPop.hidden = true;
   editSeg = null;
   endPopEdit();
@@ -408,15 +412,15 @@ export function init_markers() {
     if (markerAt(x, y)) return;   // dbl-click on a flag = edit, handled by mousedown
     addMarkerAtTime(timeAt(x), e.clientX, e.clientY);
   });
-  [markerBpm, markerTsNum, markerTsDen].forEach((el) => el.addEventListener("input", applyPop));
-  markerSubdiv.addEventListener("change", () => { syncSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap); applyPop(); });
-  markerSubdivCustom.addEventListener("input", applyPop);
-  markerTime.addEventListener("input", applyMarkerTime);
-  scrubField(markerTime, () => { applyMarkerTime(); syncReverts(); });
+  [markerBpm, markerTsNum, markerTsDen].forEach((el) => el.addEventListener("input", inEditTiming(applyPop)));
+  markerSubdiv.addEventListener("change", inEditTiming(() => { syncSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap); applyPop(); }));
+  markerSubdivCustom.addEventListener("input", inEditTiming(applyPop));
+  markerTime.addEventListener("input", inEditTiming(applyMarkerTime));
+  scrubField(markerTime, inEditTiming(() => { applyMarkerTime(); syncReverts(); }));
   markerPop.addEventListener("input", syncReverts);
   markerPop.addEventListener("change", syncReverts);
-  for (const b of revertBtns()) b.addEventListener("click", (e) => { e.preventDefault(); revertField(b.dataset.revert); });
-  markerDeleteBtn.addEventListener("click", () => { if (editSeg && editSeg.ref) { beginPopEdit(); removeMarker(editSeg.ref); closeMarkerPop(); draw(); refreshSaveState(); } });
+  for (const b of revertBtns()) b.addEventListener("click", inEditTiming((e) => { e.preventDefault(); revertField(b.dataset.revert); }));
+  markerDeleteBtn.addEventListener("click", inEditTiming(() => { if (editSeg && editSeg.ref) { beginPopEdit(); removeMarker(editSeg.ref); closeMarkerPop(); draw(); refreshSaveState(); } }));
   markerPopClose.addEventListener("click", closeMarkerPop);
   // Undo replaced S.state.tempoMap, so editSeg.ref points at an object no longer
   // in it. Drop the session without committing and shut the popover.
