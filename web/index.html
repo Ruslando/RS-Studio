@@ -357,6 +357,7 @@
             <div id="fretboardStage">
               <canvas id="fretboard"></canvas>
               <span id="fretboardResetStatus" role="status" hidden></span>
+              <span id="fretboardWarning" role="status" hidden></span>
               <!-- The wait names itself. A spinner alone says "not yet" but not what
                    for, and this element covers two waits of very different length:
                    fingering a whole song, and ranking one column's other positions.
@@ -371,11 +372,16 @@
               <button type="button" id="fretboardEdit" class="btn btn--compact" aria-pressed="false" title="Edit fingering">Edit</button>
               <div id="fretboardCapoField">
                 <label for="fretboardCapo">Capo</label>
-                <select id="fretboardCapo" aria-label="Capo fret"></select>
+                <button type="button" id="fretboardCapoPrev" class="icon-btn icon-btn--compact" aria-label="Lower capo">−</button>
+                <input type="text" id="fretboardCapo" inputmode="numeric" pattern="[0-9]+" aria-label="Capo fret" />
+                <button type="button" id="fretboardCapoNext" class="icon-btn icon-btn--compact" aria-label="Raise capo">+</button>
               </div>
               <div id="fretboardHandField">
                 <label for="fretboardHand">Hand</label>
-                <select id="fretboardHand" aria-label="Hand position"></select>
+                <button type="button" id="fretboardHandPrev" class="icon-btn icon-btn--compact" aria-label="Lower hand position">−</button>
+                <input type="text" id="fretboardHand" inputmode="numeric" pattern="[1-9][0-9]*" placeholder="Auto" aria-label="Hand position" title="Positive fret number; clear for Auto" />
+                <span id="fretboardHandAuto" aria-live="polite"></span>
+                <button type="button" id="fretboardHandNext" class="icon-btn icon-btn--compact" aria-label="Raise hand position">+</button>
               </div>
               <!-- Fingering controls are visible only in edit mode. -->
               <div id="fretboardPin" role="group" aria-label="Fingering" hidden>
@@ -551,7 +557,7 @@
       <label class="field-group block" id="sectionMarkerTypeWrap" hidden>Standard section type
         <select id="sectionMarkerType"></select>
       </label>
-      <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="Positions snap to score bar boundaries." aria-label="Positions snap to score bar boundaries.">i</span></span>
+      <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="Positions snap to the note grid." aria-label="Positions snap to the note grid.">i</span></span>
         <span class="pop-field"><input type="number" id="sectionMarkerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>
     </div>
@@ -571,7 +577,7 @@
       </span>
     </div>
     <div class="dp-body">
-      <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="A phrase boundary is per note layer and snaps to the beat grid." aria-label="A phrase boundary is per note layer and snaps to the beat grid.">i</span></span>
+      <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="A phrase boundary is per note layer and snaps to the note grid." aria-label="A phrase boundary is per note layer and snaps to the note grid.">i</span></span>
         <span class="pop-field"><input type="number" id="phraseMarkerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>
     </div>
@@ -613,7 +619,7 @@
       <label class="field-group block">Tone preset
         <select id="toneMarkerPreset"></select>
       </label>
-      <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="A tone switch is per note layer and snaps to the beat grid." aria-label="A tone switch is per note layer and snaps to the beat grid.">i</span></span>
+      <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="A tone switch is per note layer and snaps to the note grid." aria-label="A tone switch is per note layer and snaps to the note grid.">i</span></span>
         <span class="pop-field"><input type="number" id="toneMarkerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>
     </div>
@@ -1100,7 +1106,7 @@
       <div class="dialog-footer">
         <div class="dialog-actions">
           <button type="button" id="confirmCancel">Cancel</button>
-          <button type="button" id="confirmAppend">Append</button>
+          <button type="button" id="confirmAppend" title="Add new attacks without duplicating existing notes">Add new notes</button>
           <button type="button" id="confirmReplace" class="primary">Replace</button>
         </div>
       </div>

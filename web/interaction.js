@@ -1,3 +1,4 @@
+import { makeResizeRoom } from "./note-merge.js";
 // Pointer interaction: hit testing, the mousedown/move/up gesture state machine
 // (select / move / marquee / trace / frame), edge auto-scroll while dragging, and
 // the sidebar drag-to-resize / collapse.
@@ -12,7 +13,7 @@ import { draw } from "./repaint.js";
 import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { pitchAt, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, minDur, snap, snapNote } from "./grid.js";
-import { markerMouseDown } from "./markers.js";
+import { markerCursorAt, markerMouseDown } from "./markers.js";
 import { markerRails, railsBottom } from "./marker-rails.js";
 import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes, setLaneNotePitch, targetLane } from "./lanes.js";
 import { auditionNote, previewNotes, seekPlayback } from "./playback.js";
@@ -186,6 +187,8 @@ function updateDrag(x, y) {
         n.start = Math.min(oo.end - minDur(), Math.max(0, oo.start + dt));
       }
     }
+    S.drag.lane.notes = makeResizeRoom(S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig,
+      S.drag.edge, minDur(), note => !!boxOfNote(note)?.group.locked);
     updateNoteGesture(S.state, laneOf(S.drag.note), S.drag.notes);
     draw(); return;
   }
@@ -272,7 +275,23 @@ export function init_interaction() {
     draw();
   });
   stage.addEventListener("mousedown", (e) => {
-    if (!S.state || e.button !== 0 || e.ctrlKey || e.metaKey) return; // right-click handled by contextmenu
+    if (!S.state || e.button !== 0) return; // right-click handled by contextmenu
+    if (e.ctrlKey || e.metaKey) {
+      const [x, y] = localXY(e);
+      if (y - scroll.scrollTop <= railsBottom()) return;
+      const hit = pickNote(timeAt(x), pitchAt(y));
+      if (!hit) return;
+      e.preventDefault();
+      const selection = new Set(S.selection);
+      if (hit.lane !== activeLane()) {
+        selection.clear();
+        S.state.lanes.forEach(lane => { lane.active = lane === hit.lane; });
+        renderLanes();
+      }
+      if (selection.has(hit.note)) selection.delete(hit.note);
+      else selection.add(hit.note);
+      setSelection(selection); draw(); return;
+    }
     // Bottom-up: the lowest rail gets first refusal, then tempo/meter flags.
     const rails = markerRails();
     for (let i = rails.length - 1; i >= 0; i--) if (rails[i].mouseDown?.(e)) return;
@@ -419,7 +438,8 @@ export function init_interaction() {
         const notes = [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked);
         S.drag = {
           mode: "resize", edge, note: hit.note, prev: snapshotEdit(), notes,
-          orig: new Map(notes.map((n) => [n, { start: n.start, end: n.end }])),
+          lane: hit.lane, resizeLaneNotes: [...hit.lane.notes],
+          orig: new Map(hit.lane.notes.map((n) => [n, { start: n.start, end: n.end }])),
         };
       } else {
         S.drag = {
@@ -528,6 +548,8 @@ export function init_interaction() {
   stage.addEventListener("mousemove", (e) => {
     if (!S.state || S.drag || sliceHeld || !["select", "trace"].includes(S.toolMode)) return;
     const [x, y] = localXY(e);
+    const markerCursor = markerCursorAt(x, y) || markerRails().map(rail => rail.cursorAt?.(x, y)).find(Boolean);
+    if (markerCursor) { stage.style.cursor = markerCursor; return; }
     // Reference labels and edges set their own cursor in draw.js's handler.
     if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (refLockAt(x, y) || refBadgeAt(x, y) || refBoxEdgeAt(x, y))) return;
     const hit = pickNote(timeAt(x), pitchAt(y));
@@ -655,9 +677,11 @@ export function init_interaction() {
       // The moved/resized notes stay selected. Enforce full grid placement on the
       // final position so neither edge is left straddling a gridline (move already
       // snapped live; this is what pulls a resize's untouched edge on too). Then
-      // record the change for undo (overlaps are kept and flagged as stacks, never
-      // merged).
+      // Make room for a resized edge and record the entire gesture for undo.
       for (const n of S.drag.notes) { const q = snapNote(n.start, n.end); n.start = q.start; n.end = q.end; }
+      if (S.drag.mode === "resize") S.drag.lane.notes = makeResizeRoom(
+        S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig, S.drag.edge, minDur(),
+        note => !!boxOfNote(note)?.group.locked);
       updateNoteGesture(S.state, S.drag.lane || laneOf(S.drag.note), S.drag.notes);
       commitIfChanged();
     } else if (S.drag.mode === "bendPoint") {

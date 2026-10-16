@@ -1,8 +1,9 @@
 # Chord showcase
 
-24 Griffbilder in E-Standard (E A D G H E), 60 BPM, 4/4, ohne Audiodatei.
+24 Griffbilder und vier unspielbare Testakkorde in E-Standard (E A D G H E),
+60 BPM, 4/4, ohne Audiodatei.
 Jeder Akkord steht vier Sekunden: 3,5 Sekunden halten, dann 0,5 Sekunden Pause.
-Die Saiten und Bünde jeder Note sind als lokale Positionen fest vorgegeben.
+Bei den 24 Griffbildern sind Saiten und Bünde als lokale Positionen vorgegeben.
 Der Fingersatz wird von RS Studio berechnet; je nach Griff sind mehrere Fingersätze möglich.
 
 ## Öffnen und ansehen
@@ -63,3 +64,12 @@ from zipfile import ZipFile, ZIP_DEFLATED
 with ZipFile("RS Studio - Chord showcase.chart", "w", ZIP_DEFLATED) as bundle:
     bundle.write("examples/chord-showcase/project.json", "project.json")
 ```
+
+## Unspielbare Akkorde
+
+Ab 1:36 folgen vier Warnfälle: sieben gleichzeitige Noten (mehr als Saiten),
+zwei tiefe Noten, die beide die tiefe E-Saite benötigen, ein Ton über dem
+Griffbrett und ein fixierter Griff mit zu großer Spreizung. Alle Noten des
+betroffenen Akkords erhalten einen gemeinsamen Warnrahmen; auf dem Fretboard
+erscheint ebenfalls ein Warnzeichen. Die Prüfung berücksichtigt Stimmung,
+Kapodaster, Bundzahl und fixierte Positionen.

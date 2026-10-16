@@ -1,0 +1,24 @@
+import { chordColumns, unplayableColumn } from './voicing-core.js';
+
+const laneCache = new WeakMap();
+const shapeCache = new Map();
+
+// Both canvases use the same result. Repeated grips share the physical test;
+// gesture frames invalidate by their actual timing/pitches as well as revision.
+export function chordWarnings(lane, tuning, maxFret, revision = 0) {
+  if (!lane?.notes?.length) return [];
+  const signature = JSON.stringify([revision, tuning, maxFret,
+    lane.notes.map(n => [n.id, n.start, n.end, n.pitch, n.pos?.string, n.pos?.fret])]);
+  const cached = laneCache.get(lane);
+  if (cached?.signature === signature) return cached.warnings;
+  const warnings = chordColumns(lane.notes).filter(column => {
+    const key = JSON.stringify([tuning, maxFret, column.notes.map(n => [n.pitch, n.pos?.string, n.pos?.fret])]);
+    if (!shapeCache.has(key)) {
+      shapeCache.set(key, unplayableColumn(column.notes, tuning, maxFret));
+      if (shapeCache.size > 512) shapeCache.delete(shapeCache.keys().next().value);
+    }
+    return shapeCache.get(key);
+  });
+  laneCache.set(lane, { signature, warnings });
+  return warnings;
+}

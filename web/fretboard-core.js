@@ -282,6 +282,21 @@ function originFor(f, origins) {
   return origins.find((o) => o.fret > 0 && !o.dead && o.finger === f.finger) || null;
 }
 
+// Physical edges of the anchor band. Interpolating both edges keeps its width
+// and neck taper continuous while the hand moves between differently sized frets.
+const anchorAtSeat = (seat, s, opacity = 1) => seat > 0 ? {
+  x0: fretDistance(seat + (s.capo || 0) - 1, s.scale),
+  x1: fretDistance(seat + (s.capo || 0), s.scale), opacity,
+} : null;
+
+function movingAnchor(from, to, shift, s, fade = 1) {
+  const a = anchorAtSeat(from, s), b = anchorAtSeat(to, s);
+  if (!b) return null;
+  if (!a) return { ...b, opacity: fade };
+  return { x0: a.x0 + (b.x0 - a.x0) * shift,
+    x1: a.x1 + (b.x1 - a.x1) * shift, opacity: 1 };
+}
+
 // Where the hand is at time t: `{ pressed, marks }`, or null for an empty neck.
 //
 // Travel is tested before the grip is, because a shift now overlaps the note it is
@@ -318,7 +333,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
   if (before.length) {
     const strings = new Set(before.map((m) => m.string));
     const held = cur?.fingers.filter((f) => f.note?.end > t && !strings.has(f.string)).map((f) => markAt(f, s)) || [];
-    return { pressed: true, marks: [...held, ...before] };
+    return { pressed: true, marks: [...held, ...before], anchor: anchorAtSeat(next.seat, s) };
   }
 
   const hammersOn = cur && next?.fingers.some((f) => cur.fingers.some((g) =>
@@ -327,7 +342,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
   // Once the neck has gone empty, the old grip is no longer a visible origin.
   // Reappear at the destination instead, including when its shape is unchanged.
   const fresh = !cur || cur.end < next?.start - window;
-  if (next && (fresh || (!(cur && cur.shape === next.shape) && !slidesOn && !hammersOn))) {
+  if (next && (fresh || (!(cur && cur.shape === next.shape && cur.seat === next.seat) && !slidesOn && !hammersOn))) {
     if (t >= next.start - window) {
       // A PREBEND IS PUSHED BEFORE IT IS PICKED. Where the previous note has already
       // let go, the second half of that free time is spent pushing the string up, so
@@ -347,6 +362,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
         !next.fingers.some((f) => originFor(f, [m]))) || [] : [];
       return {
         pressed: false,
+        anchor: movingAnchor(fresh ? null : cur?.seat, next.seat, shift, s, u * u * (3 - 2 * u)),
         marks: [...held.map((m) => ({ ...m, pressed: true })), ...next.fingers.flatMap((f) => {
           const grace = graceBefore(f.note, next.eighth ? 30 / next.eighth : 120, f.fret);
           const b = markAt(grace ? { ...f, fret: f.fret + grace.offset } : f, s), a = originFor(f, origins);
@@ -369,7 +385,8 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
   }
   if (cur && t <= cur.end) {
     const prev = columns[i - 1];
-    return { pressed: true, marks: cur.fingers.map((f) => {
+    let anchorSlide = 0;
+    const marks = cur.fingers.map((f) => {
       const m = markAt(f, s);
       // Arrived by a legato slide: sounding, but not picked again, so no strike.
       m.slurred = !!prev?.fingers.some((g) => g.string === f.string && g.note?.slide === "legato");
@@ -404,7 +421,10 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
         const onto = SLIDES_TO_NEXT.has(note.slide) && next?.fingers.find((g) => g.string === f.string);
         const semi = slideAt(note, t - note.start, note.end - note.start,
           { to: onto ? onto.fret - f.fret : 0, steps: false, eighth: cur.eighth });
-        if (semi) m.x = fretCentre(Math.max(1, f.fret + semi), s);
+        if (semi) {
+          m.x = fretCentre(Math.max(1, f.fret + semi), s);
+          anchorSlide ||= semi;
+        }
       }
       const interval = trillInterval(note?.trill);
       if (interval && t >= note.start && t < note.end && f.fret + interval <= s.frets) {
@@ -415,7 +435,8 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
           down: !!trillOffsetAt(note, t - note.start, cur.eighth ? 30 / cur.eighth : 120) };
       }
       return m;
-    }) };
+    });
+    return { pressed: true, marks, anchor: anchorAtSeat(cur.seat > 0 ? Math.max(1, cur.seat + anchorSlide) : null, s) };
   }
   return null;
 }
@@ -427,7 +448,7 @@ export function handAt(columns, t, travel, s = GUITAR, animate = true) {
   if (!animate) {
     const col = columns[startedBy(columns, t)];
     const marks = col?.fingers.filter((f) => t <= (f.note?.end ?? col.end)).map((f) => markAt(f, s)) || [];
-    return marks.length ? { pressed: true, marks } : null;
+    return marks.length ? { pressed: true, marks, anchor: anchorAtSeat(col.seat, s) } : null;
   }
   const pose = handPoseAt(columns, t, travel, s);
   if (!(travel > 0)) return pose;
@@ -452,7 +473,7 @@ export function handAt(columns, t, travel, s = GUITAR, animate = true) {
       marks.push({ ...last, lift, pressed: true, releasing: true, opacity: 1 - u * u * (3 - 2 * u) });
     }
   }
-  return marks.length ? { pressed: pose?.pressed ?? true, marks } : null;
+  return marks.length ? { pressed: pose?.pressed ?? true, marks, anchor: pose?.anchor ?? null } : null;
 }
 
 // Sustaining strings and released tension outlive the displayed note column.

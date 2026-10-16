@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { barreGroups, barreSpanSupported } from "../../web/fretboard-core.js";
-import { assignFingers, fingeringOptions } from "../../web/voicing-core.js";
+import { assignFingers, fingeringOptions, voiceNotesFingered, chordColumns } from "../../web/voicing-core.js";
+import { readFileSync } from 'node:fs';
 
 const mark = (string, fret = 5, finger = 1, extra = {}) =>
   ({ string, fret, finger, note: { start: 0, end: 1 }, ...extra });
@@ -41,3 +42,23 @@ for (const bridge of [null, mark(4, 0, 0), mark(4, 3, 2), mark(4, 7, 3)]) {
   }
 }
 console.log("fretboard barre continuity and higher-fret coverage OK");
+
+// Exercise the production passage solver, not just its isolated grip scorer.
+const project = JSON.parse(readFileSync(new URL('../../examples/chord-showcase/project.json', import.meta.url)));
+const notes = project.editLanes[0].notes.filter(n => n.start >= 72 && n.start < 92);
+const tuning = [64, 59, 55, 50, 45, 40];
+const played = voiceNotesFingered(notes, tuning);
+for (const column of chordColumns(notes)) {
+  const contacts = column.notes.map(note => ({ note, ...played.voiced.get(note), finger: played.fingers.get(note) }));
+  const fretting = contacts.filter(c => c.fret > 0);
+  for (const finger of new Set(fretting.map(c => c.finger))) {
+    const held = fretting.filter(c => c.finger === finger);
+    assert.ok(finger >= 1 && finger <= 4);
+    assert.equal(new Set(held.map(c => c.fret)).size, 1, `one fret per finger at ${column.t0}`);
+    const groups = barreGroups(contacts).filter(g => g[0].finger === finger && g[0].fret > 0);
+    assert.equal(groups.length, 1, `one connected grip per finger at ${column.t0}`);
+  }
+  if (column.t0 === 72 || column.t0 === 76)
+    assert.equal(new Set(fretting.map(c => c.finger)).size, 4, 'E7#9 and B7 require four separate fingers');
+}
+console.log('showcase passage uses one connected grip per finger');

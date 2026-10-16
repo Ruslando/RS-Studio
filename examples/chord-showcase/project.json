@@ -4,7 +4,7 @@
   "created_at": "2026-10-16T18:51:36+00:00",
   "saved_at": "2026-10-16T18:54:44+00:00",
   "draft": false,
-  "duration": 96.0,
+  "duration": 112.0,
   "tempo": 60,
   "separated": false,
   "separator": null,
@@ -1777,6 +1777,117 @@
             "adaptPrevious": false,
             "adaptNext": false
           }
+        },
+        {
+          "id": "warning_96_0",
+          "start": 96.0,
+          "end": 99.5,
+          "pitch": 40
+        },
+        {
+          "id": "warning_96_1",
+          "start": 96.0,
+          "end": 99.5,
+          "pitch": 45
+        },
+        {
+          "id": "warning_96_2",
+          "start": 96.0,
+          "end": 99.5,
+          "pitch": 50
+        },
+        {
+          "id": "warning_96_3",
+          "start": 96.0,
+          "end": 99.5,
+          "pitch": 55
+        },
+        {
+          "id": "warning_96_4",
+          "start": 96.0,
+          "end": 99.5,
+          "pitch": 59
+        },
+        {
+          "id": "warning_96_5",
+          "start": 96.0,
+          "end": 99.5,
+          "pitch": 64
+        },
+        {
+          "id": "warning_96_6",
+          "start": 96.0,
+          "end": 99.5,
+          "pitch": 67
+        },
+        {
+          "id": "warning_100_0",
+          "start": 100.0,
+          "end": 103.5,
+          "pitch": 40
+        },
+        {
+          "id": "warning_100_1",
+          "start": 100.0,
+          "end": 103.5,
+          "pitch": 41
+        },
+        {
+          "id": "warning_100_2",
+          "start": 100.0,
+          "end": 103.5,
+          "pitch": 59
+        },
+        {
+          "id": "warning_104_0",
+          "start": 104.0,
+          "end": 107.5,
+          "pitch": 40
+        },
+        {
+          "id": "warning_104_1",
+          "start": 104.0,
+          "end": 107.5,
+          "pitch": 47
+        },
+        {
+          "id": "warning_104_2",
+          "start": 104.0,
+          "end": 107.5,
+          "pitch": 92
+        },
+        {
+          "id": "warning_108_0",
+          "start": 108.0,
+          "end": 111.5,
+          "pitch": 41,
+          "pos": {
+            "string": 5,
+            "fret": 1,
+            "scope": "local"
+          }
+        },
+        {
+          "id": "warning_108_1",
+          "start": 108.0,
+          "end": 111.5,
+          "pitch": 54,
+          "pos": {
+            "string": 4,
+            "fret": 9,
+            "scope": "local"
+          }
+        },
+        {
+          "id": "warning_108_2",
+          "start": 108.0,
+          "end": 111.5,
+          "pitch": 66,
+          "pos": {
+            "string": 0,
+            "fret": 2,
+            "scope": "local"
+          }
         }
       ],
       "refBoxes": {},
@@ -1990,10 +2101,42 @@
       "marker": "",
       "sectionType": "riff",
       "custom": true
+    },
+    {
+      "id": "section_warning_96",
+      "t": 96.0,
+      "text": "25. Unspielbar: sieben gleichzeitige Noten",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_warning_100",
+      "t": 100.0,
+      "text": "26. Unspielbar: zwei tiefe Noten auf einer Saite",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_warning_104",
+      "t": 104.0,
+      "text": "27. Unspielbar: Ton ausserhalb des Griffbretts",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
+    },
+    {
+      "id": "section_warning_108",
+      "t": 108.0,
+      "text": "28. Unspielbar: fixierter Griff mit zu grosser Spreizung",
+      "marker": "",
+      "sectionType": "riff",
+      "custom": true
     }
   ],
   "scoreBars": [],
-  "scoreDuration": 96.0,
+  "scoreDuration": 112.0,
   "timings": {},
   "mix": {
     "notes": {
