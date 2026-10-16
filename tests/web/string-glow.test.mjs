@@ -5,13 +5,15 @@ const mark = (extra = {}) => ({ start: 1, strikeStart: 1, string: 2,
   note: { start: 1, end: 3, ...extra } });
 assert.equal(stringGlow(mark(), 0.99), 0);
 assert.ok(stringGlow(mark(), 1) > 0, "bright immediately on the pick");
-assert.equal(stringGlow(mark(), 3), 0);
+assert.ok(stringGlow(mark(), 3) > 0, "release starts at the note end");
+assert.equal(stringGlow(mark(), 3.18), 0);
 const early = stringGlow(mark(), 1.04);
 assert.ok(early > stringGlow(mark(), 1.6), "brightness fades with ringing energy");
 assert.ok(stringGlow(mark({ fx: { ghost: true } }), 1.04) < early);
 assert.ok(stringGlow(mark({ fx: { accent: true } }), 1.04) > early);
 assert.ok(stringGlow(mark({ fx: { palmMute: true } }), 1.15) < stringGlow(mark(), 1.15));
-assert.equal(stringGlow(mark({ fx: { staccato: true } }), 1.2), 0);
+assert.ok(stringGlow(mark({ fx: { staccato: true } }), 1.2) > 0, "staccato releases after its short hold");
+assert.equal(stringGlow(mark({ fx: { staccato: true } }), 1.37), 0);
 assert.equal(stringGlow({ ...mark(), strikeStart: 1.08 }, 1.04), 0, "strum waits for its own pick");
 const tremolo = { ...mark(), tremoloStep: 0.125 };
 assert.ok(stringGlow(tremolo, 1.14) > stringGlow(tremolo, 1.12), "each tremolo pick refreshes the glow");
@@ -31,3 +33,16 @@ assert.equal(stringAttackPulse(mark(), 0.99), 0);
 assert.equal(stringAttackPulse({ ...mark(), slurred: true }, 1.01), 0, "hammer-on is not another pick");
 assert.equal(stringAttackPulse({ ...mark(), strikeStart: 1.08 }, 1.04), 0);
 assert.ok(stringAttackPulse(mark({ fx: { ghost: true } }), 1.01) < stringAttackPulse(mark(), 1.01));
+
+const short = mark({ end: 1.04 }), long = mark({ end: 10 });
+for (const t of [1, 1.01, 1.03, 1.04])
+  assert.equal(stringGlow(short, t), stringGlow(long, t), "same absolute sustain before release regardless of duration");
+let brightness = stringGlow(short, 1.04);
+for (const t of [1.05, 1.08, 1.12, 1.2]) {
+  const next = stringGlow(short, t);
+  assert.ok(next > 0 && next < brightness, "short note fades after its end");
+  brightness = next;
+}
+assert.equal(stringGlow(short, 1.23), 0);
+const shortTremolo = { ...short, tremoloStep: 0.01 };
+assert.ok(stringGlow(shortTremolo, 1.06) < stringGlow(shortTremolo, 1.04), "release does not invent further tremolo picks");

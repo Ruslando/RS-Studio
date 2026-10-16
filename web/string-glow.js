@@ -3,13 +3,18 @@
 import { strikeTime } from "./articulations.js";
 
 export function stringGlow(mark, t) {
-  const strike = strikeTime(mark, t);
-  if (strike == null) return 0;
-  const n = mark.note || {}, fx = n.fx || {}, age = t - strike;
-  const own = Math.max(0, (n.end ?? Infinity) - (n.start ?? mark.start));
-  const duration = fx.staccato ? Math.min(0.18, own * 0.45) : own;
-  const end = mark.soundingEnd ?? (n.start ?? mark.start) + duration;
-  if (t >= end) return 0;
+  const n = mark.note || {}, fx = n.fx || {};
+  const start = n.start ?? mark.start;
+  const end = mark.soundingEnd ?? (fx.staccato ? Math.min(n.end ?? Infinity, start + 0.18) : n.end ?? Infinity);
+  // Sustain decays in seconds since the pick. Release starts at the note's end,
+  // rather than shortening the attack envelope for short notes.
+  const releaseSeconds = 0.18;
+  if (t >= end + releaseSeconds) return 0;
+  const strike = strikeTime(mark, Math.min(t, end - 1e-8));
+  if (strike == null || t < strike) return 0;
+  const age = t - strike;
+  const u = Math.max(0, (t - end) / releaseSeconds);
+  const release = 1 - u * u * (3 - 2 * u);
   const decay = fx.dead ? 0.025 : fx.palmMute ? 0.065 : 0.7;
   let strength = fx.ghost ? 0.35 : fx.accent ? 1.3 : 1;
   // Repeated picks need a dim resting level so the separate attack flashes
@@ -18,7 +23,7 @@ export function stringGlow(mark, t) {
   if (mark.slurred) strength *= 0.75;
   if (n.slap === "slap" || n.slap === "pop") strength *= 1.2;
   return Math.min(1, 0.85 * strength * Math.exp(-age / decay)
-    * Math.min(1, Math.max(0, (end - t) / 0.06)));
+    * release);
 }
 
 export function stringAttackPulse(mark, t) {

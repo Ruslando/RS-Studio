@@ -3,17 +3,41 @@
 export function popPreparation(note, t, lead = 0.18) {
   if (note?.slap !== "pop") return 0;
   const age = t - note.start;
-  if (age < -lead || age >= 0.12) return 0;
-  if (age >= 0) return Math.exp(-age / 0.035) * Math.cos(2 * Math.PI * 18 * age);
+  if (age < -lead || age >= 0.14) return 0;
+  if (age >= 0) {
+    // Release quickly into the board, followed by a small damped rebound.
+    if (age < 0.018) {
+      const u = age / 0.018;
+      return 1 - 1.4 * u * u * (3 - 2 * u);
+    }
+    const rebound = age - 0.018;
+    return -0.4 * Math.exp(-rebound / 0.025) * Math.cos(2 * Math.PI * 20 * rebound);
+  }
   const u = (age + lead) / lead;
   return u * u * (3 - 2 * u);
 }
 
-// Depth is shown by thickness in the top view, strongest at the pulling finger.
-export function popThicknessAt(x, contact, amount, anchor = 0) {
+// The whole sounding segment lifts, with the fret and bridge fixed in place.
+export function popLiftAt(x, contact, amount, anchor = 0) {
   const shape = x <= contact ? (x - anchor) / Math.max(0.001, contact - anchor)
     : (1 - x) / Math.max(0.001, 1 - contact);
-  return 1 + 1.8 * amount * Math.max(0, Math.min(1, shape));
+  return amount * Math.max(0, Math.min(1, shape)) || 0;
+}
+
+export function popThicknessAt(x, contact, amount, anchor = 0) {
+  return 1 + 1.8 * popLiftAt(x, contact, amount, anchor);
+}
+
+// A hammer lands once; a tap sends out a larger pair of concentric rings.
+export function fingerPulseAt(mark, t) {
+  const kind = mark.note?.slap === "tap" ? "tap" : mark.hammerMotion === "hammer" ? "hammer" : null;
+  if (!kind || mark.dead || mark.releasing) return null;
+  const age = t - mark.start, duration = kind === "tap" ? 0.4 : 0.3;
+  if (age < 0 || age >= duration) return null;
+  const u = age / duration;
+  return { kind, progress: u, strength: (1 - u) ** 2,
+    radius: 1.05 + (kind === "tap" ? 2.2 : 1.5) * u,
+    rings: kind === "tap" ? 2 : 1 };
 }
 
 // Finger energy travels as light along the string, without displacing it.

@@ -276,30 +276,10 @@ export function bendLift(mark, t, strings) {
 const travelWindow = (cur, next, travel) =>
   Math.min(travel, cur ? (next.start - cur.start) / 2 : travel);
 
-// Where a finger travels *from*. Matching by finger number is the first choice,
-// but a finger number is only a label and two ordinary things leave it blank: an
-// open string, and a dead note — which the voicing model fingers as nothing at all,
-// deliberately, because a mute is played by relaxing the grip you already hold.
-//
-// Under a finger-only match a grip made entirely of muted strums offered no origin
-// for anything, so the whole hand *teleported* into the next chord with no motion at
-// all. That is what made the first D#→D#sus4 shift in The Dove look instant: ten
-// muted grips in a row, every finger nominally absent. So the fallback is
-// positional — the closest place the hand actually was — because the mark's job is to
-// say where the hand is, and the label is secondary. Only an open string in the
-// *target* stays put: no finger goes there, so nothing travels to it.
-const gripDistance = (o, f) => Math.abs(o.fret - f.fret) + Math.abs(o.string - f.string);
-
+// Only a known finger can carry its marker into the next position.
 function originFor(f, origins) {
-  if (!(f.fret > 0)) return null;
-  const down = origins.filter((o) => o.fret > 0);
-  if (f.finger) {
-    const same = down.find((o) => o.finger === f.finger);
-    if (same) return same;
-  }
-  let best = null;
-  for (const o of down) if (!best || gripDistance(o, f) < gripDistance(best, f)) best = o;
-  return best;
+  if (!(f.fret > 0) || !f.finger || f.dead) return null;
+  return origins.find((o) => o.fret > 0 && !o.dead && o.finger === f.finger) || null;
 }
 
 // Where the hand is at time t: `{ pressed, marks }`, or null for an empty neck.
@@ -312,7 +292,7 @@ function originFor(f, origins) {
 // A travelling finger is matched to the next grip by its finger number, so 1
 // slides to 1 and never to 3. Both its fret and its string interpolate, because a
 // finger crossing to another course moves diagonally.
-export function handAt(columns, t, travel, s = GUITAR) {
+function handPoseAt(columns, t, travel, s = GUITAR) {
   const i = startedBy(columns, t);
   const cur = i >= 0 ? columns[i] : null;
   const next = columns[i + 1];
@@ -363,14 +343,19 @@ export function handAt(columns, t, travel, s = GUITAR) {
       const v = lead > 0 ? Math.max(0, (t - (next.start - lead / 2)) / (lead / 2)) : 0;
       const push = v * v * (3 - 2 * v);   // smoothstep: a push starts and lands gently
       const origins = cur && !fresh ? cur.fingers : [];
+      const held = !fresh ? handPoseAt(columns, t, 0, s)?.marks.filter((m) =>
+        !next.fingers.some((f) => originFor(f, [m]))) || [] : [];
       return {
         pressed: false,
-        marks: next.fingers.map((f) => {
+        marks: [...held.map((m) => ({ ...m, pressed: true })), ...next.fingers.flatMap((f) => {
           const grace = graceBefore(f.note, next.eighth ? 30 / next.eighth : 120, f.fret);
           const b = markAt(grace ? { ...f, fret: f.fret + grace.offset } : f, s), a = originFor(f, origins);
           b.lift = bendLift(b, next.start, s.strings) * push;
-          if (fresh) b.opacity = u * u * (3 - 2 * u);
-          if (!a) return b;
+          // Unmatched fingers preview at their own destination without travelling.
+          if (!a) {
+            b.opacity = u * u * (3 - 2 * u);
+            return [b];
+          }
           const o = markAt(a, s);
           return {
             ...b,
@@ -378,7 +363,7 @@ export function handAt(columns, t, travel, s = GUITAR) {
             string: o.string + (b.string - o.string) * shift,
             x: o.x + (b.x - o.x) * shift,
           };
-        }),
+        })],
       };
     }
   }
@@ -435,6 +420,36 @@ export function handAt(columns, t, travel, s = GUITAR) {
   return null;
 }
 
+// Releases remain at their last played position for a short, smooth fade.
+// Keep this out of the paused/editing view, where travel is zero.
+export const MARK_RELEASE_SECONDS = 0.18;
+export function handAt(columns, t, travel, s = GUITAR) {
+  const pose = handPoseAt(columns, t, travel, s);
+  if (!(travel > 0)) return pose;
+  const marks = (pose?.marks || []).filter((m) => !m.note || t <= m.note.end);
+  const i = startedBy(columns, t);
+  for (let j = i; j >= 0; j--) {
+    const col = columns[j], next = columns[j + 1];
+    if (next && next.start <= t - MARK_RELEASE_SECONDS) break;
+    for (const f of col.fingers) {
+      const end = Math.min(f.note?.end ?? col.end, next?.start ?? Infinity);
+      if (t < end || t >= end + MARK_RELEASE_SECONDS) continue;
+      // A moving finger already owns its marker; do not leave a second one behind.
+      if (marks.some((m) => (f.finger && m.finger === f.finger && !m.dead && !f.dead)
+        || (m.string === f.string && m.fret === f.fret))) continue;
+      const last = handPoseAt(columns, end - 1e-8, 0, s)?.marks.find((m) =>
+        m.note === f.note && m.string === f.string);
+      if (!last) continue;
+      const u = (t - end) / MARK_RELEASE_SECONDS;
+      const release = f.soundingEnd ?? end;
+      const lift = t >= release ? bendLift(last, Math.min(release, f.note?.end ?? release), s.strings)
+        * bendSnapAt(t - release) : last.lift;
+      marks.push({ ...last, lift, pressed: true, releasing: true, opacity: 1 - u * u * (3 - 2 * u) });
+    }
+  }
+  return marks.length ? { pressed: pose?.pressed ?? true, marks } : null;
+}
+
 // Sustaining strings and released tension outlive the displayed note column.
 export function ringingMarksAt(fingers, t, s = GUITAR) {
   return fingers.filter((f) => f.note.end <= t && t < f.soundingEnd)
@@ -444,15 +459,31 @@ export function ringingMarksAt(fingers, t, s = GUITAR) {
     });
 }
 
-export function releasedBendsAt(fingers, t, s = GUITAR) {
+export function releasedStringsAt(fingers, t, s = GUITAR) {
   return fingers.filter((f) => {
     const end = f.soundingEnd ?? f.note.end;
-    return end <= t && t < end + 0.18;
+    return end <= t && t < end + MARK_RELEASE_SECONDS;
   }).map((f) => {
     const m = markAt(f, s);
-    m.lift = bendLift(m, f.note.end, s.strings) * bendSnapAt(t - (f.soundingEnd ?? f.note.end));
+    m.releasing = true;
+    m.lift = bendLift(m, f.note.end, s.strings) * bendSnapAt(t - (f.soundingEnd ?? f.note.end)) || 0;
     return m;
-  }).filter((m) => Math.abs(m.lift) > 0.001);
+  });
+}
+
+export function releasedBendsAt(fingers, t, s = GUITAR) {
+  return releasedStringsAt(fingers, t, s).filter((m) => Math.abs(m.lift) > 0.001);
+}
+
+// Sounding notes own their strings. Fading markers and upcoming finger positions
+// must not mask the string's release, even when the rest of a chord is still held.
+export function stringContactAt(now, string) {
+  const marks = now?.at?.marks.filter((m) => m.string === string) || [];
+  const pressed = marks.find((m) => !m.releasing && (m.pressed ?? now.at.pressed)
+    && (m.note?.start ?? m.start) <= now.t && now.t < (m.soundingEnd ?? m.note?.end ?? Infinity));
+  return pressed || now?.ringing?.find((m) => m.string === string)
+    || now?.releases?.find((m) => m.string === string)
+    || marks.find((m) => m.releasing) || marks[0];
 }
 
 // ---- every other place ONE note could go ----

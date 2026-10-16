@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { popPreparation, popThicknessAt, fingerLightAt, fingerWaveAt, bendSnapAt } from "../../web/string-techniques.js";
-import { ringingMarksAt, releasedBendsAt, GUITAR, fretCentre } from "../../web/fretboard-core.js";
+import { popPreparation, popThicknessAt, popLiftAt, fingerPulseAt, fingerLightAt, fingerWaveAt, bendSnapAt } from "../../web/string-techniques.js";
+import { ringingMarksAt, releasedBendsAt, releasedStringsAt, stringContactAt, handAt, handColumns, bendLift, GUITAR, fretCentre } from "../../web/fretboard-core.js";
 import { stringGlow } from "../../web/string-glow.js";
 import { letRingEnd } from "../../web/articulations.js";
 
@@ -49,3 +49,76 @@ assert.ok(releasedBendsAt([bent], 1, GUITAR)[0].lift > 0);
 assert.ok(releasedBendsAt([bent], 1.035, GUITAR)[0].lift < 0, "released tension snaps past rest briefly");
 assert.equal(releasedBendsAt([bent], 1.2).length, 0);
 console.log("string techniques OK");
+
+// Fading chord markers must not freeze one string while another already snaps.
+const chordFingers = [
+  { ...bent, finger: 1, string: 1 },
+  { ...bent, finger: 1, string: 2 },
+  { ...bent, finger: 3, string: 4 },
+];
+const chord = handColumns([{ start: 0, end: 1, fingers: chordFingers }]);
+for (const t of [1, 1.01, 1.035, 1.09, 1.17]) {
+  const now = { t, at: handAt(chord, t, 0.5), releases: releasedStringsAt(chordFingers, t) };
+  for (const finger of chordFingers) {
+    const contact = stringContactAt(now, finger.string);
+    assert.equal(contact.lift, bendLift(finger, 1, 6) * bendSnapAt(t - 1),
+      "all chord strings snap on the same release clock, regardless of marker grouping");
+  }
+}
+// Other held notes and previews cannot delay a released string's return.
+const heldElsewhere = { ...bent, string: 5, note: { start: 0, end: 2 }, lift: 0 };
+const fading = { ...bent, releasing: true, lift: 1 };
+const preview = { ...bent, pressed: false, note: { start: 1.1, end: 2 }, lift: 0 };
+for (const marks of [[fading, heldElsewhere], [preview, heldElsewhere]]) {
+  const releases = releasedStringsAt([bent], 1.035);
+  assert.equal(stringContactAt({ t: 1.035, at: { pressed: true, marks }, releases }, 2), releases[0]);
+}
+// Vibrato may finish above rest, and releases from that exact phase too.
+const vibrato = { ...bent, note: { start: 0, end: 1, fx: { vibrato: true } } };
+const displaced = bendLift(vibrato, 1, 6);
+assert.ok(displaced > 0);
+assert.equal(releasedStringsAt([vibrato], 1)[0].lift, displaced);
+assert.ok(releasedStringsAt([vibrato], 1.035)[0].lift < 0);
+assert.equal(releasedStringsAt([vibrato], 1.2).length, 0);
+const restingVibrato = { ...vibrato, note: { ...vibrato.note, end: 2 / 5.5 } };
+assert.ok(Math.abs(releasedStringsAt([restingVibrato], restingVibrato.note.end)[0].lift) < 1e-10);
+// A new pressed note takes precedence over the previous string's release.
+const active = { ...bent, start: 1, note: { start: 1, end: 2 }, lift: 0 };
+assert.equal(stringContactAt({ t: 1.035, at: { pressed: true, marks: [active] },
+  releases: releasedStringsAt([bent], 1.035) }, 2), active);
+// Ordinary and let-ring strings also retain a contact during the light's release.
+assert.equal(releasedStringsAt([{ ...bent, note: { start: 0, end: 1 } }], 1.05)[0].lift, 0);
+assert.ok(stringGlow(releasedStringsAt([f], 3.16)[0], 3.16) > 0);
+console.log("chord, vibrato and sustain releases OK");
+
+// Pop depth spans the sounding segment; the fretted side never moves.
+for (const amount of [1, -0.4]) {
+  assert.equal(popLiftAt(0.2, 0.85, amount, 0.4), 0);
+  assert.equal(popLiftAt(0.4, 0.85, amount, 0.4), 0);
+  assert.equal(popLiftAt(1, 0.85, amount, 0.4), 0);
+  for (const x of [0.45, 0.6, 0.8, 0.95])
+    assert.ok(popLiftAt(x, 0.85, amount, 0.4) * amount > 0,
+      "the whole segment lifts and rebounds with the pulling finger");
+}
+assert.ok(popPreparation(pop, 0.999) > 0.99, "lift is prepared before the strike");
+assert.equal(popPreparation(pop, 1), 1, "release begins from the raised position");
+assert.ok(popPreparation(pop, 1.018) < -0.39, "string strikes down promptly after release");
+assert.ok(Math.abs(popPreparation(pop, 1.1)) < 0.03, "rebound settles quickly");
+assert.equal(popPreparation(pop, 1.141), 0);
+
+const hammerImpact = { start: 1, hammerMotion: "hammer", note: { start: 1, end: 2 } };
+const tapImpact = { start: 1, note: { start: 1, end: 2, slap: "tap" } };
+assert.equal(fingerPulseAt(hammerImpact, 1.05).rings, 1);
+assert.equal(fingerPulseAt(tapImpact, 1.05).rings, 2);
+assert.ok(fingerPulseAt(tapImpact, 1.2).radius > fingerPulseAt(hammerImpact, 1.2).radius);
+for (const impact of [hammerImpact, tapImpact]) {
+  assert.equal(fingerPulseAt(impact, 0.99), null);
+  assert.equal(fingerPulseAt(impact, 1).strength, 1);
+  assert.ok(fingerPulseAt(impact, 1.1).strength < fingerPulseAt(impact, 1.02).strength);
+  assert.equal(fingerPulseAt(impact, 1.41), null);
+  assert.equal(fingerPulseAt({ ...impact, releasing: true }, 1.02), null);
+}
+assert.equal(fingerPulseAt({ ...hammerImpact, hammerMotion: "pull" }, 1.02), null);
+assert.equal(fingerPulseAt({ start: 1, note: { start: 1, end: 2 } }, 1.02), null,
+  "ordinary picked notes do not get a marker pulse");
+console.log("technique pulses and projected pop depth OK");
