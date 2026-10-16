@@ -315,6 +315,43 @@ class EndToEndTests(unittest.TestCase):
         self.assertTrue(result["seekEases"])
         self.assertTrue(result["manualEases"])
 
+    def test_artifact_previews_fit_when_sidebar_shrinks(self):
+        self.open_reference_project()
+        page = self.page
+        page.emulate_media(reduced_motion="reduce")
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { markMotif } = await import('/motifs.js');
+            markMotif(S.state.editLanes[0].notes.filter(n => n.start >= 8 && n.start < 12), 'motif_v2_1');
+            (await import('/artifacts.js')).renderArtifacts();
+        }""")
+        expect(page.locator('#motifList .artifact-preview')).to_have_count(1)
+        panel = page.locator('#artifactsPanel')
+        for width in [400, 280, 260, 240, 220, 300]:
+            grip = page.locator('#artifactsResize').bounding_box()
+            x, y = grip['x'] + grip['width'] / 2, grip['y'] + grip['height'] / 2
+            current = panel.bounding_box()['width']
+            page.mouse.move(x, y)
+            page.mouse.down()
+            page.mouse.move(x + current - width, y, steps=5)
+            page.mouse.up()
+            bounds = page.locator('.artifact-preview').evaluate_all("""previews => previews.map(preview => {
+                const row = preview.closest('.artifact-row').getBoundingClientRect();
+                const stage = preview.querySelector('.artifact-preview-stage').getBoundingClientRect();
+                const canvas = preview.querySelector('canvas').getBoundingClientRect();
+                const footer = preview.querySelector('.artifact-preview-footer').getBoundingClientRect();
+                const move = preview.querySelector('.artifact-jump').getBoundingClientRect();
+                return { rowLeft: row.left, rowRight: row.right, stageRight: stage.right,
+                    canvasLeft: canvas.left, canvasRight: canvas.right, footerRight: footer.right,
+                    moveRight: move.right, canvasWidth: canvas.width };
+            })""")
+            self.assertEqual(len(bounds), 3)
+            for box in bounds:
+                self.assertGreater(box['canvasWidth'], 0)
+                self.assertGreaterEqual(box['canvasLeft'], box['rowLeft'])
+                for key in ['stageRight', 'canvasRight', 'footerRight', 'moveRight']:
+                    self.assertLessEqual(box[key], box['rowRight'], f'{key} overflows at sidebar width {width}')
+
     def test_artifact_example_and_reference_navigation(self):
         self.open_reference_project()
         page = self.page

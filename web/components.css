@@ -568,7 +568,8 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 .artifact-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--hint); font-size: var(--text-caption); line-height: 1.4; }
 
 .artifact-preview {
-  display: grid; grid-template-rows: minmax(0, 1fr) var(--h-compact);
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) var(--h-compact);
+  min-width: 0;
   height: calc(var(--h-artifact-preview) + var(--h-compact) + var(--s-pair) + 2 * var(--s-pair) + 2px);
   gap: var(--s-pair); margin: 0 0 var(--s-sibling); padding: var(--s-pair);
   border: 1px solid var(--line); border-radius: var(--r-control); background: var(--surface-inset);
