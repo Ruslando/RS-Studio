@@ -1105,7 +1105,9 @@ class EndToEndTests(unittest.TestCase):
 
     def test_edits_undo_and_survive_saving(self):
         page = self.page
-        notes = lambda count: expect(page.locator("#lanes")).to_contain_text(re.compile(rf"\b{count} notes?\b"))
+        # The row's summary ("Lead · E Standard · 2 notes"), not the whole row: the
+        # volume's level follows it in the row's text with no space between.
+        notes = lambda count: expect(page.locator("#lanes .lane-row .count")).to_contain_text(re.compile(rf"\b{count} notes?\b"))
         self.new_audio_project()
         page.dblclick("#stage", position={"x": 300, "y": 300})
         notes(1)
