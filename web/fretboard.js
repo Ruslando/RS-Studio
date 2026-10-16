@@ -578,11 +578,12 @@ export function drawFretboard() {
   const originX = PAD + gutter + (w - 2 * PAD - gutter - boardLength(s) * scale) / 2
     + s.nutDepth * scale;
   const X = (mm) => originX + mm * scale;              // mm from the nut
-  const Y = (off) => h / 2 + off * scale;              // mm from the centreline
+  const direction = $("fretboardStringOrder")?.value === "low-top" ? -1 : 1;
+  const Y = (off) => h / 2 + off * scale * direction;              // mm from the centreline
   // Kept for the pointer, exactly as `alts.boxes` is: hit-testing against the frame
   // the pointer was resolved in cannot disagree with what is on screen, and a board
   // that has not been drawn yet has nothing to click.
-  view = { originX, scale, mid: h / 2, s };
+  view = { originX, scale, mid: h / 2, s, direction };
   const nutHalf = boardHalfWidthAt(0, s), endHalf = boardHalfWidthAt(last, s);
 
   // The slab: parallel behind the nut, tapered to the last fret, parallel again
@@ -666,14 +667,14 @@ export function drawFretboard() {
   ctx.fillStyle = hexA(PAINT.label, 0.6);
   for (let n = 1; n <= s.frets; n++) {
     const d = fretDistance(n, s.scale), half = boardHalfWidthAt(d, s);
-    ctx.fillRect(X(d) - (s.fretCrown * scale) / 2, Y(-half),
+    ctx.fillRect(X(d) - (s.fretCrown * scale) / 2, Math.min(Y(-half), Y(half)),
       Math.max(1, s.fretCrown * scale), half * 2 * scale);
   }
 
   // The nut is bone: lighter than the wire, and the only part of this that is
   // not metal.
   ctx.fillStyle = PAINT.text;
-  ctx.fillRect(X(-s.nutDepth), Y(-nutHalf), s.nutDepth * scale, nutHalf * 2 * scale);
+  ctx.fillRect(X(-s.nutDepth), Math.min(Y(-nutHalf), Y(nutHalf)), s.nutDepth * scale, nutHalf * 2 * scale);
 
   // The wood behind a capo is out of play: dimmed under the strings, so they still
   // read as running to the nut.
@@ -780,14 +781,14 @@ export function drawFretboard() {
   if (s.capo) {
     const x = capoLine(s), half = boardHalfWidthAt(x, s) + 1;
     ctx.fillStyle = PAINT.text;
-    ctx.fillRect(X(x) - 3 * scale, Y(-half), 6 * scale, half * 2 * scale);
+    ctx.fillRect(X(x) - 3 * scale, Math.min(Y(-half), Y(half)), 6 * scale, half * 2 * scale);
   }
   // Where a dragged capo would land: an outline, like the hand as it WOULD stand.
   if (capoDrag && capoDrag.lane === lane && capoDrag.at !== (s.capo || 0)) {
     const x = capoX(capoDrag.at, s), half = boardHalfWidthAt(Math.max(0, x), s) + 1;
     ctx.save();
     ctx.strokeStyle = lane.color || PAINT.accent; ctx.lineWidth = 1.8; ctx.setLineDash([3, 2]);
-    ctx.strokeRect(X(x) - 3 * scale, Y(-half), 6 * scale, half * 2 * scale);
+    ctx.strokeRect(X(x) - 3 * scale, Math.min(Y(-half), Y(half)), 6 * scale, half * 2 * scale);
     ctx.restore();
   }
 
@@ -803,7 +804,7 @@ export function drawFretboard() {
   for (const n of s.dots) {
     if (n <= fromCapo) continue;
     const cx = dotCentre(n, s);
-    ctx.fillText(String(n - fromCapo), X(cx), Y(boardHalfWidthAt(cx, s)) + 4);
+    ctx.fillText(String(n - fromCapo), X(cx), Math.max(Y(boardHalfWidthAt(cx, s)), Y(-boardHalfWidthAt(cx, s))) + 4);
   }
 
   // The tuning, at the nut, where a player looks for it — it is the one thing the
@@ -1194,7 +1195,7 @@ function drawAlternatives(ctx, s, scale, X, Y, lane, held) {
     const box = {
       choice,
       x0: X(mm.x0) - pad, x1: X(mm.x1) + pad,
-      y0: Y(mm.off0) - pad, y1: Y(mm.off1) + pad,
+      y0: Math.min(Y(mm.off0), Y(mm.off1)) - pad, y1: Math.max(Y(mm.off0), Y(mm.off1)) + pad,
     };
     if (boxes.length === found.hover) hovered = box;
     boxes.push(box);
@@ -1429,8 +1430,9 @@ function handNow(lane, s) {
   // THE HAND ONLY TRAVELS WHILE THE SONG DOES. Stopped, the board answers "what is
   // held here", and a finger drawn part-way to the next grip — which is where the
   // end of every note is — is a position nobody plays.
-  const moving = frozen == null && transportPlaying();
-  return { found, t, moving, at: handAt(found.columns, t, moving ? travelSeconds() : 0, s),
+  const animate = $("fretboardAnimations")?.checked !== false;
+  const moving = animate && frozen == null && transportPlaying();
+  return { found, t, moving, at: handAt(found.columns, t, moving ? travelSeconds() : 0, s, animate),
     ringing: moving ? ringingMarksAt(found.ringFingers || [], t, s) : [],
     releases: moving ? releasedStringsAt(found.releaseFingers || [], t, s) : [],
     preparations: moving ? (found.popFingers || []).filter((f) => Math.abs(popPreparation(f.note, t)) > 0.001) : [] };
@@ -1485,7 +1487,7 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
     if (extra) return [{ ...m, ...extra, lift: 0 }, m];
     return [m];
   });
-  drawGrip(ctx, s, scale, X, Y, marks, hue, at.pressed, { time: t, liveStrings: moving });
+  drawGrip(ctx, s, scale, X, Y, marks, hue, at.pressed, { time: $("fretboardAnimations")?.checked === false ? null : t, liveStrings: moving });
 }
 
 // ---- putting the hand somewhere ----
@@ -1606,7 +1608,7 @@ function gripUnder(e) {
   if (!lane || !view) return false;
   const r = fretboardEl.getBoundingClientRect();
   const px = e.clientX - r.left, py = e.clientY - r.top;
-  const X = (mm) => view.originX + mm * view.scale, Y = (off) => view.mid + off * view.scale;
+  const X = (mm) => view.originX + mm * view.scale, Y = (off) => view.mid + off * view.scale * view.direction;
   const onMark = (focusGrip(lane, view.s)?.marks || []).some((m) => Math.hypot(
     px - X(m.x), py - Y(stringOffsetAt(m.string, Math.max(0, m.x), view.s))) <= markRadius(m.x, view.scale, view.s) + 4);
   const seat = anchorFret(lane);

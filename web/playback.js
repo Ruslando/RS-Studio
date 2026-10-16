@@ -2,14 +2,14 @@
 // the metronome, and the per-stem mixer.
 
 import { LOOKAHEAD, MAX_METRONOME_BEATS, toneOf } from "./constants.js";
-import { audio, editorEl, metroOn, playBtn, scroll, seek, speedSel, timeEl } from "./dom.js";
+import { $, audio, editorEl, metroOn, playBtn, scroll, seek, speedSel, timeEl } from "./dom.js";
 import { draw, drawNow } from "./repaint.js";
 import { gridAt, gridSegments, segBeatSec } from "./grid.js";
 import { applyLaneVolume, disposeLaneSynth, editLanes, releaseLaneSynth, targetLane } from "./lanes.js";
 import { refreshSaveState, renderStemTabs } from "./project.js";
 import { S } from "./store.js";
 import { clamp, fmtTime, followerTrim, normLayerVolume, onsetSec, playheadScrollLeft, schedWindow } from "./util.js";
-import { viewportMoving } from "./viewport-motion.js";
+import { followViewportTo, stopViewportMotion, viewportFollowing, viewportMoving } from "./viewport-motion.js";
 import { busLevel } from "./volume.js";
 import { playbackEvents, playSampleEvent } from "./playback-effects.js";
 
@@ -531,6 +531,7 @@ export function playbackTime() {
 // and alphaTab. Updating the readout and scheduler here prevents a view-specific
 // cursor from moving while the actual playback clock remains somewhere else.
 export function seekPlayback(t) {
+  if (viewportFollowing("playback")) stopViewportMotion();
   const fallback = Number.isFinite(t) ? Math.max(0, t) : 0;
   const limit = S.state?.duration || (Number.isFinite(audio.duration) ? audio.duration : fallback);
   const next = clamp(fallback, 0, Math.max(0, limit));
@@ -550,15 +551,19 @@ export function seekPlayback(t) {
   return next;
 }
 
-// Reveal the authoritative transport position in the spectrogram. View switches
-// center it; continuous playback retains the familiar left-side lead-in.
+// View switches center explicitly; continuous following eases toward its left
+// margin and keeps retargeting as the transport moves, even during the catch-up.
 export function revealPlaybackPosition({ center = false, redraw = true } = {}) {
-  if (viewportMoving() || S.mmSeeking || S.mmDragging) return;
+  const mode = $("playbackScrollMode")?.value || "page";
+  if (viewportFollowing("playback") && (center || mode !== "follow")) stopViewportMotion();
+  if ((viewportMoving() && !viewportFollowing("playback")) || S.mmSeeking || S.mmDragging) return;
   if (!S.state || !scroll.clientWidth) return;
-  scroll.scrollLeft = playheadScrollLeft(
+  const target = playheadScrollLeft(
     playbackTime(), S.pxPerSec, scroll.clientWidth, scroll.scrollWidth,
-    scroll.scrollLeft, center,
+    scroll.scrollLeft, center, mode,
   );
+  if (mode === "follow" && !center) followViewportTo(target, scroll.scrollTop, "playback");
+  else scroll.scrollLeft = target;
   if (redraw) draw();
 }
 
@@ -610,8 +615,8 @@ function tick() {
   // tablature is active used to shrink and clear its backing canvas, producing a
   // black frame when switching back.
   if (!editorEl.hidden) {
-    drawNow();
     revealPlaybackPosition({ redraw: false });
+    drawNow();
   }
   if (!hasAudioTransport() && S.scorePlaying && ct >= duration) pauseTransport();
   else if (transportPlaying()) requestAnimationFrame(tick);

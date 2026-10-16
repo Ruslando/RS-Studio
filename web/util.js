@@ -64,12 +64,14 @@ export function songTimeToTabMs(time, offset = 0, scale = 1) {
   return (time - offset) * safeScale * 1000;
 }
 // Return the horizontal scroll position that reveals the playhead. `center` is
-// used on a view switch; normal playback keeps the established 60px lead-in and
-// leaves an already-visible playhead alone.
-export function playheadScrollLeft(time, pxPerSec, viewportWidth, scrollWidth, currentLeft = 0, center = false) {
+// used on a view switch. Playback can page at the edge, follow continuously
+// with a small left margin, or leave the viewport where the user put it.
+export function playheadScrollLeft(time, pxPerSec, viewportWidth, scrollWidth, currentLeft = 0, center = false, mode = "page") {
   const width = Math.max(0, viewportWidth || 0), max = Math.max(0, (scrollWidth || 0) - width);
   const x = Math.max(0, time || 0) * Math.max(0, pxPerSec || 0);
   if (center) return clamp(x - width / 2, 0, max);
+  if (mode === "off") return clamp(currentLeft, 0, max);
+  if (mode === "follow") return clamp(x - Math.min(60, width * 0.1), 0, max);
   if (x < currentLeft || x > currentLeft + width - 60) return clamp(x - 60, 0, max);
   return clamp(currentLeft, 0, max);
 }

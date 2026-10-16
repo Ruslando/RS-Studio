@@ -76,3 +76,21 @@ assert.equal(mixed.marks.find((m) => m.finger === 3).x, fretCentre(19));
 assert.equal(mixed.marks.find((m) => m.finger === 3).opacity, 0.5);
 assert.ok(mixed.marks.find((m) => m.finger === 1).x > fretCentre(2));
 console.log("fretboard entry, finger transitions and release OK");
+
+// Disabling animation shows only current authored positions and no technique motion.
+const expressive = grip(1, 2, 2, 7);
+expressive.fingers[0].note.bend = "full";
+expressive.fingers[0].note.fx = { vibrato: true };
+expressive.fingers[0].note.slide = "outUp";
+const staticCols = handColumns([expressive, grip(2, 3, 4, 12)]);
+assert.equal(handAt(staticCols, 0.9, 0.5, undefined, false), null, "no anticipation");
+for (const t of [1, 1.5, 1.95]) {
+  const pose = handAt(staticCols, t, 0.5, undefined, false);
+  assert.equal(pose.pressed, true);
+  assert.equal(pose.marks[0].x, fretCentre(7));
+  assert.equal(pose.marks[0].string, 2);
+  assert.equal(pose.marks[0].lift, undefined);
+  assert.equal(pose.marks[0].opacity, undefined);
+}
+assert.equal(handAt(staticCols, 2, 0.5, undefined, false).marks[0].x, fretCentre(12));
+assert.equal(handAt(staticCols, 3.05, 0.5, undefined, false), null, "no animated release tail");

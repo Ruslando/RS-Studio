@@ -27,6 +27,14 @@ import { fmtTime, followerTrim, isAudioFile, isGuitarProFile, noteName, noteToMi
   assert.equal(playheadScrollLeft(15, 100, 800, 4000, 200), 1440);
   assert.equal(playheadScrollLeft(100, 100, 800, 4000, 200), 3200, "never past the end");
   assert.equal(playheadScrollLeft(15, 100, 800, 4000, 0, true), 1100);
+  assert.equal(playheadScrollLeft(5, 100, 800, 4000, 200, false, "follow"), 440);
+  assert.ok(Math.abs(playheadScrollLeft(5.1, 100, 800, 4000, 440, false, "follow") - 450) < 1e-9);
+  assert.equal(playheadScrollLeft(0, 100, 800, 4000, 200, false, "follow"), 0);
+  assert.equal(playheadScrollLeft(100, 100, 800, 4000, 0, false, "follow"), 3200);
+  assert.equal(playheadScrollLeft(15, 100, 800, 4000, 200, false, "off"), 200);
+  assert.equal(playheadScrollLeft(0, 100, 800, 4000, 200, false, "off"), 200);
+  assert.equal(playheadScrollLeft(15, 100, 800, 4000, 0, true, "off"), 1100,
+    "an explicit view switch can still reveal the playhead");
   assert.deepEqual([volumeToDb(1), volumeToDb(0), Math.round(volumeToDb(0.5))], [0, -80, -6]);
   // A sample's attack starts where it first reaches half its early peak, not at its noise.
   const sample = new Float32Array(1000); sample[100] = 0.02; sample[200] = 0.6; sample[300] = 1;

@@ -3,14 +3,75 @@ import { motionTiming } from "./panel-motion.js";
 import { draw } from "./repaint.js";
 
 let frame = 0;
+let following = null;
+let playbackLock = null;
 export const viewportMoving = () => !!frame;
+export const viewportFollowing = (source) => following?.source === source || (source === "playback" && playbackLock !== null);
 export function stopViewportMotion() {
   cancelAnimationFrame(frame);
   frame = 0;
+  following = null;
+  playbackLock = null;
 }
 
-// Retarget from the currently visible position while scrubbing. Transport time
-// changes immediately; only the viewport travels to the new position.
+// Continuously retarget a short ease-out without restarting its clock on every
+// pointer event. Playback eases its initial offset once, then locks to the target.
+// Float positions avoid rounding stalls near the destination.
+export function followViewportTo(left, top = scroll.scrollTop, source = "pointer") {
+  const target = Math.max(0, Math.min(scroll.scrollWidth - scroll.clientWidth, left));
+  const targetTop = Math.max(0, Math.min(scroll.scrollHeight - scroll.clientHeight, top));
+  if (source === "playback" && playbackLock !== null && Math.abs(scroll.scrollLeft - playbackLock) < 1) {
+    scroll.scrollLeft = target; scroll.scrollTop = targetTop;
+    playbackLock = scroll.scrollLeft;
+    draw(); return;
+  }
+  if (following?.source === source) {
+    following.target = target;
+    following.targetTop = targetTop;
+    return;
+  }
+  stopViewportMotion();
+  const { duration, ease } = motionTiming();
+  if (!duration) {
+    scroll.scrollLeft = target; scroll.scrollTop = targetTop;
+    if (source === "playback") playbackLock = scroll.scrollLeft;
+    draw(); return;
+  }
+  following = { source, target, targetTop, left: scroll.scrollLeft, top: scroll.scrollTop,
+    time: performance.now() };
+  const tau = duration / 4;
+  const started = following.time;
+  const offsetLeft = following.left - target, offsetTop = following.top - targetTop;
+  const step = now => {
+    const f = following;
+    const alpha = 1 - Math.exp(-Math.max(0, Math.min(64, now - f.time)) / tau);
+    f.time = now;
+    const progress = Math.min(1, (now - started) / duration);
+    if (source === "playback") {
+      // Ease away only the initial offset. The moving target itself is followed
+      // directly, so the catch-up finishes even while the transport is running.
+      const remaining = 1 - ease(progress);
+      f.left = f.target + offsetLeft * remaining;
+      f.top = f.targetTop + offsetTop * remaining;
+    } else {
+      f.left += (f.target - f.left) * alpha;
+      f.top += (f.targetTop - f.top) * alpha;
+    }
+    const settled = source === "playback" ? progress >= 1
+      : Math.abs(f.target - f.left) < 0.5 && Math.abs(f.targetTop - f.top) < 0.5;
+    scroll.scrollLeft = settled ? f.target : f.left;
+    scroll.scrollTop = settled ? f.targetTop : f.top;
+    draw();
+    if (settled) {
+      if (source === "playback") playbackLock = scroll.scrollLeft;
+      frame = 0; following = null;
+    }
+    else frame = requestAnimationFrame(step);
+  };
+  frame = requestAnimationFrame(step);
+}
+
+// Discrete jumps animate from the currently visible position.
 export function moveViewportTo(left, top = scroll.scrollTop) {
   stopViewportMotion();
   const target = Math.max(0, Math.min(scroll.scrollWidth - scroll.clientWidth, left));

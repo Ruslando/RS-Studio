@@ -103,6 +103,218 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#lanes .lane-row")).to_be_visible()
         self.reference_job = page.evaluate("async () => (await import('/store.js')).S.state.job")
 
+    def test_minimap_eases_while_pointer_keeps_moving(self):
+        self.open_reference_project()
+        result = self.page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { MM_HEAD } = await import('/constants.js');
+            const { moveViewportTo, stopViewportMotion, viewportMoving } = await import('/viewport-motion.js');
+            const scroll = document.querySelector('#scroll');
+            const minimap = document.querySelector('#minimap');
+            const r = minimap.getBoundingClientRect();
+            const frame = () => new Promise(requestAnimationFrame);
+            const event = (target, type, fraction, y) => target.dispatchEvent(new MouseEvent(type,
+                { bubbles: true, button: 0, buttons: type === 'mouseup' ? 0 : 1,
+                  clientX: r.left + r.width * fraction, clientY: y }));
+            const samples = [];
+            for (const y of [r.top + MM_HEAD + 8, r.top + 3]) {
+                stopViewportMotion(); scroll.scrollLeft = 0;
+                moveViewportTo(scroll.scrollWidth - scroll.clientWidth);
+                event(minimap, 'mousedown', 1, y);
+                const immediate = scroll.scrollLeft;
+                const path = [];
+                // Continual events must not reset easing and stall its progress.
+                for (let i = 0; i < 8; i++) {
+                    event(window, 'mousemove', 1, y);
+                    await frame();
+                    path.push(scroll.scrollLeft);
+                }
+                const max = scroll.scrollWidth - scroll.clientWidth;
+                const beforeReverse = scroll.scrollLeft;
+                event(window, 'mousemove', 0, y);
+                const afterReverse = scroll.scrollLeft;
+                await frame(); await frame();
+                const reversed = scroll.scrollLeft;
+                event(window, 'mouseup', 0, y);
+                for (let i = 0; i < 120 && viewportMoving(); i++) await frame();
+                samples.push({ immediate, path, max, beforeReverse, afterReverse, reversed,
+                    finalLeft: scroll.scrollLeft, moving: viewportMoving() });
+            }
+            return { samples, dragging: S.mmDragging, seeking: S.mmSeeking };
+        }""")
+        for sample in result["samples"]:
+            self.assertEqual(sample["immediate"], 0, "viewport eases instead of jumping")
+            self.assertGreater(sample["max"], 0)
+            self.assertGreater(sample["path"][-1], sample["max"] * 0.4,
+                               "viewport follows even while mouse events keep arriving")
+            self.assertTrue(all(a <= b for a, b in zip(sample["path"], sample["path"][1:])))
+            self.assertLess(sample["path"][0], sample["max"], "first frame does not jump to the target")
+            self.assertEqual(sample["afterReverse"], sample["beforeReverse"])
+            self.assertLess(sample["reversed"], sample["beforeReverse"])
+            self.assertEqual(sample["finalLeft"], 0)
+            self.assertFalse(sample["moving"])
+        self.assertFalse(result["dragging"])
+        self.assertFalse(result["seeking"])
+        self.page.emulate_media(reduced_motion="reduce")
+        self.assertTrue(self.page.evaluate("""async () => {
+            const { followViewportTo, viewportMoving } = await import('/viewport-motion.js');
+            const scroll = document.querySelector('#scroll');
+            const target = scroll.scrollWidth - scroll.clientWidth;
+            followViewportTo(target);
+            return scroll.scrollLeft === target && !viewportMoving();
+        }"""))
+
+    def test_playback_and_fretboard_preferences(self):
+        self.open_reference_project()
+        page = self.page
+        page.click("#settingsMenuBtn")
+        expect(page.locator("#playbackScrollMode")).to_have_value("page")
+        expect(page.locator("#fretboardStringOrder")).to_have_value("low-bottom")
+        expect(page.locator("#fretboardAnimations")).to_be_checked()
+        page.select_option("#playbackScrollMode", "follow")
+        page.select_option("#fretboardStringOrder", "low-top")
+        page.uncheck("#fretboardAnimations")
+        page.click("#settingsCancel")
+        expect(page.locator("#playbackScrollMode")).to_have_value("page")
+        expect(page.locator("#fretboardStringOrder")).to_have_value("low-bottom")
+        expect(page.locator("#fretboardAnimations")).to_be_checked()
+        page.click("#settingsMenuBtn")
+        page.select_option("#playbackScrollMode", "follow")
+        page.select_option("#fretboardStringOrder", "low-top")
+        page.uncheck("#fretboardAnimations")
+        page.click("#settingsApply")
+        # Exercise the actual transport reveal path, including the no-follow mode.
+        positions = page.evaluate("""async () => {
+            const { seekPlayback, revealPlaybackPosition } = await import('/playback.js');
+            const { stopViewportMotion, viewportMoving } = await import('/viewport-motion.js');
+            stopViewportMotion();
+            const { S } = await import('/store.js');
+            const scroll = document.querySelector('#scroll');
+            seekPlayback(12);
+            scroll.scrollLeft = 0;
+            revealPlaybackPosition();
+            for (let i = 0; i < 120 && viewportMoving(); i++) await new Promise(requestAnimationFrame);
+            const followed = scroll.scrollLeft;
+            const expected = Math.min(scroll.scrollWidth - scroll.clientWidth, 12 * S.pxPerSec - 60);
+            document.querySelector('#playbackScrollMode').value = 'off';
+            seekPlayback(20); revealPlaybackPosition();
+            const unfollowed = scroll.scrollLeft;
+            document.querySelector('#playbackScrollMode').value = 'follow';
+            return { followed, expected, unfollowed };
+        }""")
+        self.assertAlmostEqual(positions["followed"], positions["expected"], delta=1)
+        self.assertEqual(positions["unfollowed"], positions["followed"])
+        # Flip the real canvas: tuning labels stay readable and swap vertical order.
+        labels = page.evaluate("""async () => {
+            const { setFretboardVisible, drawFretboard } = await import('/fretboard.js');
+            setFretboardVisible(true);
+            await new Promise(requestAnimationFrame);
+            const ctx = document.querySelector('#fretboard').getContext('2d');
+            const original = ctx.fillText;
+            const orders = [];
+            try {
+                for (const value of ['low-bottom', 'low-top']) {
+                    document.querySelector('#fretboardStringOrder').value = value;
+                    const texts = [];
+                    ctx.fillText = function(text, x, y, ...args) {
+                        if (/^[A-G]#?-?[0-9]$/.test(String(text))) texts.push({ text, y });
+                        return original.call(this, text, x, y, ...args);
+                    };
+                    drawFretboard();
+                    orders.push(texts);
+                }
+            } finally { ctx.fillText = original; }
+            return orders;
+        }""")
+        self.assertGreaterEqual(len(labels[0]), 4)
+        self.assertEqual([x["text"] for x in labels[0]], [x["text"] for x in labels[1]])
+        self.assertLess(labels[0][0]["y"], labels[0][-1]["y"])
+        self.assertGreater(labels[1][0]["y"], labels[1][-1]["y"])
+        page.reload()
+        expect(page.locator("#playbackScrollMode")).to_have_value("follow")
+        expect(page.locator("#fretboardStringOrder")).to_have_value("low-top")
+        expect(page.locator("#fretboardAnimations")).not_to_be_checked()
+
+    def test_playback_follow_eases_and_retargets(self):
+        self.open_reference_project()
+        result = self.page.evaluate("""async () => {
+            const { seekPlayback, revealPlaybackPosition } = await import('/playback.js');
+            const { stopViewportMotion, viewportMoving } = await import('/viewport-motion.js');
+            const { S } = await import('/store.js');
+            const scroll = document.querySelector('#scroll');
+            const mode = document.querySelector('#playbackScrollMode');
+            const frame = () => new Promise(requestAnimationFrame);
+            const target = t => Math.min(scroll.scrollWidth - scroll.clientWidth, t * S.pxPerSec - 60);
+            stopViewportMotion(); scroll.scrollLeft = 0;
+            mode.value = 'follow';
+            seekPlayback(8); revealPlaybackPosition();
+            const immediate = scroll.scrollLeft;
+            await frame(); revealPlaybackPosition();
+            const catchingUp = scroll.scrollLeft;
+            // Seek again during the ease: it must update the destination, not wait
+            // for the old destination or snap straight to the new one.
+            seekPlayback(16); revealPlaybackPosition();
+            const retargeted = scroll.scrollLeft;
+            const samples = [];
+            for (let i = 0; i < 8; i++) {
+                await frame(); revealPlaybackPosition(); samples.push(scroll.scrollLeft);
+            }
+            for (let i = 0; i < 120 && viewportMoving(); i++) await frame();
+            const settled = scroll.scrollLeft;
+            seekPlayback(4); revealPlaybackPosition();
+            await frame(); await frame();
+            mode.value = 'off'; revealPlaybackPosition();
+            const stopped = scroll.scrollLeft;
+            await frame(); await frame();
+            return { immediate, catchingUp, retargeted, samples, settled, target: target(16),
+                firstTarget: target(8), stopped, afterStop: scroll.scrollLeft, moving: viewportMoving() };
+        }""")
+        self.assertEqual(result["immediate"], 0)
+        self.assertGreater(result["catchingUp"], 0)
+        self.assertLess(result["catchingUp"], result["firstTarget"])
+        self.assertEqual(result["retargeted"], result["catchingUp"])
+        self.assertGreater(result["samples"][-1], result["firstTarget"])
+        self.assertTrue(all(a <= b for a, b in zip(result["samples"], result["samples"][1:])))
+        self.assertAlmostEqual(result["settled"], result["target"], delta=1)
+        self.assertEqual(result["stopped"], result["afterStop"])
+        self.assertFalse(result["moving"])
+
+    def test_playback_follow_locks_after_catchup(self):
+        self.open_reference_project()
+        result = self.page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { seekPlayback, revealPlaybackPosition } = await import('/playback.js');
+            const { stopViewportMotion, viewportMoving } = await import('/viewport-motion.js');
+            const scroll = document.querySelector('#scroll');
+            document.querySelector('#playbackScrollMode').value = 'follow';
+            stopViewportMotion(); scroll.scrollLeft = 0;
+            seekPlayback(8); revealPlaybackPosition();
+            const immediate = scroll.scrollLeft;
+            const samples = [];
+            for (let i = 0; i < 40; i++) {
+                await new Promise(requestAnimationFrame);
+                // Advance the clock without seeking: ordinary continuous playback.
+                S.scoreTime = 8 + i / 60;
+                revealPlaybackPosition();
+                const expected = Math.min(scroll.scrollWidth - scroll.clientWidth, S.scoreTime * S.pxPerSec - 60);
+                samples.push({ error: Math.abs(scroll.scrollLeft - expected), moving: viewportMoving() });
+            }
+            seekPlayback(16); revealPlaybackPosition();
+            const seekEases = viewportMoving();
+            for (let i = 0; i < 120 && viewportMoving(); i++) await new Promise(requestAnimationFrame);
+            scroll.scrollLeft = 0;
+            revealPlaybackPosition();
+            const manualEases = viewportMoving();
+            stopViewportMotion();
+            return { immediate, samples, seekEases, manualEases };
+        }""")
+        self.assertEqual(result["immediate"], 0)
+        for sample in result["samples"][-10:]:
+            self.assertLessEqual(sample["error"], 0.5, "locked following has no easing lag")
+            self.assertFalse(sample["moving"], "easing stays off once caught up")
+        self.assertTrue(result["seekEases"])
+        self.assertTrue(result["manualEases"])
+
     def test_artifact_example_and_reference_navigation(self):
         self.open_reference_project()
         page = self.page

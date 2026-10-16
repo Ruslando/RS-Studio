@@ -63,11 +63,17 @@ export function init_settings() {
   persistSetting($("traceSnap"), { mirror: $("traceSnapM"), bool: true });
   persistSetting($("traceRange"), { mirror: $("traceRangeM") });
   persistSetting($("traceThreshold"), { mirror: $("traceThresholdM") });
-  // The fretboard reads these two straight off the inputs while it draws, the way
+  // The fretboard reads its options straight off the inputs while it draws, the way
   // the voicing engine reads its own preferences — so persisting them and repainting
   // is the whole wiring. These controls live in Editor options.
   persistSetting($("fretboardOnionEnabled"), { bool: true });
   persistSetting($("fretNumbering"));
+  persistSetting($("playbackScrollMode"));
+  persistSetting($("fretboardStringOrder"));
+  persistSetting($("fretboardAnimations"), { bool: true });
+  for (const id of ["playbackScrollMode", "fretboardStringOrder", "fretboardAnimations"]) {
+    $(id).addEventListener(id === "fretboardAnimations" ? "change" : "input", draw);
+  }
   for (const id of ["onionAlphaPrev", "onionAlphaNext"]) {
     persistSetting($(id));
     const show = () => {

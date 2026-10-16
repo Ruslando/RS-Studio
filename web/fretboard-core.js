@@ -423,7 +423,12 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
 // Releases remain at their last played position for a short, smooth fade.
 // Keep this out of the paused/editing view, where travel is zero.
 export const MARK_RELEASE_SECONDS = 0.18;
-export function handAt(columns, t, travel, s = GUITAR) {
+export function handAt(columns, t, travel, s = GUITAR, animate = true) {
+  if (!animate) {
+    const col = columns[startedBy(columns, t)];
+    const marks = col?.fingers.filter((f) => t <= (f.note?.end ?? col.end)).map((f) => markAt(f, s)) || [];
+    return marks.length ? { pressed: true, marks } : null;
+  }
   const pose = handPoseAt(columns, t, travel, s);
   if (!(travel > 0)) return pose;
   const marks = (pose?.marks || []).filter((m) => !m.note || t <= m.note.end);

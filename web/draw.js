@@ -25,7 +25,7 @@ import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, hexA, noteName } from "./util.js";
-import { moveViewportTo } from "./viewport-motion.js";
+import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
 
 const overrideEffectCache = new WeakMap();
@@ -733,7 +733,7 @@ function minimapScrollTo(clientX) {
   const r = minimap.getBoundingClientRect();
   const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
   const max = scroll.scrollWidth - scroll.clientWidth;
-  moveViewportTo(Math.max(0, Math.min(max, f * songWidth() - scroll.clientWidth / 2)));
+  followViewportTo(Math.max(0, Math.min(max, f * songWidth() - scroll.clientWidth / 2)));
 }
 
 // Move the playhead to the time under the cursor (scrub) — drives the headroom pin.
@@ -741,7 +741,7 @@ function minimapSeekTo(clientX) {
   const r = minimap.getBoundingClientRect();
   const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
   setPlaybackCursor(f * (S.state.duration || 0));
-  moveViewportTo(f * songWidth() - scroll.clientWidth / 2);
+  followViewportTo(f * songWidth() - scroll.clientWidth / 2);
   draw();
 }
 

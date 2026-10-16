@@ -792,11 +792,31 @@
           </select>
           <input type="range" id="traceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" hidden />
 
-          </div><div class="pane-intro"><h2>Editor</h2><p>Set how tracing places notes and how adjacent chords appear on the fretboard.</p></div>
+          </div><div class="pane-intro"><h2>Editor</h2><p>Choose playback scrolling, note placement and the fretboard display.</p></div>
           <!-- Five groups, so it sections (rule 23). The captions name the part of
                the editor being changed: where a traced note lands, and what the
                fretboard draws. "Trace options" named the gesture and not the thing
                it decides, which is where a note ends up. -->
+          <div class="section">
+            <div class="section-head"><span>Playback</span></div>
+            <label class="field-group block"><span class="label">Timeline scrolling</span>
+              <select id="playbackScrollMode">
+                <option value="page">Page when the playhead reaches the edge</option>
+                <option value="follow">Follow the playhead near the left edge</option>
+                <option value="off">Do not follow the playhead</option>
+              </select>
+            </label>
+          </div>
+          <div class="section">
+            <div class="section-head"><span>Fretboard</span></div>
+            <label class="field-group block"><span class="label">String order</span>
+              <select id="fretboardStringOrder">
+                <option value="low-bottom">Lowest string at the bottom</option>
+                <option value="low-top">Lowest string at the top</option>
+              </select>
+            </label>
+            <label class="chk"><input type="checkbox" id="fretboardAnimations" checked /> Animate the fretboard during playback</label>
+          </div>
           <div class="section" id="tracePlacement">
             <div class="section-head"><span>Note placement</span></div>
             <!-- Rule 27: Range only qualifies Snap to pitch, so it rides on that
