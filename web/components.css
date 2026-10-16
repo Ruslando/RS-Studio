@@ -624,9 +624,11 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 }
 .artifact-sections .is-empty { display: none; }
 
-/* A reference's head shares its line with the pitch padlock. Locked is the
-   default, so it stays plain; it is not an "on" toggle that needs the accent. */
+/* The transposition toggle is highlighted only when independent pitches are enabled. */
 .artifact-row-bar { display: flex; align-items: center; gap: var(--s-pair); padding-right: var(--s-pair); }
 .artifact-row-bar .artifact-row-head { flex: 1; min-width: 0; }
-.artifact-pitch-lock[aria-pressed="true"] { background: transparent; color: var(--hint); }
-.artifact-pitch-lock[aria-pressed="false"] { color: var(--text); }
+.artifact-transpose[aria-pressed="false"] { background: transparent; color: var(--hint); }
+.artifact-transpose[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
+
+.artifact-edit-lock[aria-pressed="false"] { color: var(--hint); }
+.artifact-edit-lock[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }

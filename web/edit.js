@@ -21,7 +21,7 @@ import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, tog
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { boxOfNote, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock } from "./references.js";
+import { boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { beginArtifactRename } from "./artifact-names.js";
 import { splitNote } from "./slice.js";
@@ -76,6 +76,7 @@ export const STATE_RESTORED = "cw-state-restored";
 export function snapshotEdit() {
   const a = activeLane();
   const snap = {
+    lockedReferences: lockedReferenceSnapshot(),
     lanes: {}, boxes: {}, ui: {}, holds: {}, capo: {}, marks: {},
     active: a ? a.id : null,
     stem: S.state ? S.state.curStem : null,
@@ -85,7 +86,8 @@ export function snapshotEdit() {
     timing: S.state ? timingSnapshot() : null,   // which layer follows which timing, and the timings not live
   };
   for (const l of editLanes()) {
-    snap.lanes[l.id] = l.notes.map((n) => ({ ...n }));
+    snap.lanes[l.id] = snap.lockedReferences.some(r => r.lane === l.id)
+      ? cloneJson(l.notes) : l.notes.map((n) => ({ ...n }));
     snap.boxes[l.id] = l.refBoxes ? JSON.parse(JSON.stringify(l.refBoxes)) : {};
     // Where the hand was put. Not a note field, so nothing above captures it, and a
     // hold that undo cannot reach is an edit with no way back.
@@ -105,6 +107,7 @@ export function snapshotEdit() {
 // reconcileReferences mirrors from that one instead of guessing which box
 // changed. Only the refBox drag passes it (interaction.js).
 export function commit(prev, mirrorSource, cuts = null) {
+  if (rejectLockedEdit(prev)) return false;
   reconcileReferences(prev, mirrorSource);
   animateNoteChanges(prev, S.state, cuts);
   recordUndo(prev);
@@ -120,8 +123,18 @@ export function commitStructure(prev) {
   recordUndo(prev);
 }
 
+function rejectLockedEdit(prev) {
+  const ref = lockedReferenceFault(prev.lockedReferences);
+  if (ref == null) return false;
+  restore(prev);
+  toast(`Reference #${ref} is locked. Unlock it before editing.`, 2500);
+  return true;
+}
+
 function recordUndo(prev) {
-  if (S.state) eachTiming(editLanes(), snapStrayNotes);   // whatever the edit was, no note stays off its layer's grid
+  if (rejectLockedEdit(prev)) return;
+  if (S.state) eachTiming(editLanes(), snapStrayNotes);
+  if (rejectLockedEdit(prev)) return;
   S.voicingRevision++;
   S.undoStack.push(prev);
   if (S.undoStack.length > MAX_UNDO) S.undoStack.shift();
@@ -980,19 +993,20 @@ export function openRefMenu(clientX, clientY, occ, { origin = "editor" } = {}) {
   // notes, which would leave an empty box behind.
   buildMenu(m, [
     { label: refName(occ.group, occ.ref), header: true },
-    { label: "Rename", fn: () => beginArtifactRename("reference", occ.lane, occ.ref, { left: clientX, top: clientY, width: 0, height: 0 }) },
+    { label: occ.group.locked ? "Unlock reference" : "Lock reference", fn: () => toggleRefEditLock(occ.lane, occ.ref) },
+    { label: "Rename", disabled: !!occ.group.locked, fn: () => beginArtifactRename("reference", occ.lane, occ.ref, { left: clientX, top: clientY, width: 0, height: 0 }) },
     occ.group?.transposable
-      ? { label: "Lock pitch", fn: () => setRefPitchLock(occ.lane, occ.ref, true) }
-      : { label: "Allow pitch changes", fn: () => setRefPitchLock(occ.lane, occ.ref, false) },
+      ? { label: "Use the same pitch", disabled: !!occ.group.locked, fn: () => setRefPitchLock(occ.lane, occ.ref, true) }
+      : { label: "Allow transposition", disabled: !!occ.group.locked, fn: () => setRefPitchLock(occ.lane, occ.ref, false) },
     { sep: true },
     { label: "Copy", fn: () => doCopy() },
-    { label: "Cut", fn: () => { doCopy(); deleteRefOccurrence(occ); } },
+    { label: "Cut", disabled: !!occ.group.locked, fn: () => { doCopy(); deleteRefOccurrence(occ); } },
     { sep: true },
-    { label: "Delete this occurrence", fn: () => deleteRefOccurrence(occ) },
-    { label: "Delete entire reference", fn: () => deleteRefGroup(occ.lane, occ.ref) },
+    { label: "Delete this occurrence", disabled: !!occ.group.locked, fn: () => deleteRefOccurrence(occ) },
+    { label: "Delete entire reference", disabled: !!occ.group.locked, fn: () => deleteRefGroup(occ.lane, occ.ref) },
     { sep: true },
-    { label: "Detach this occurrence (keep notes)", fn: () => detachSelection() },
-    { label: "Detach entire reference (keep notes)", fn: () => detachRefGroup(occ.lane, occ.ref) },
+    { label: "Detach this occurrence (keep notes)", disabled: !!occ.group.locked, fn: () => detachSelection() },
+    { label: "Detach entire reference (keep notes)", disabled: !!occ.group.locked, fn: () => detachRefGroup(occ.lane, occ.ref) },
   ]);
   markWalkthroughMenu(m);
   menuOpenCount++;
@@ -1236,7 +1250,7 @@ function flattenActions(entries, crumb = "", crumbKw = "", crumbNote = undefined
     if (e.children) {
       if (e.family) out.push(...flattenActions(e.children));
       else out.push(...flattenActions(e.children, e.label.replace(/^✓ /, ""), e.kw || "", e.note));
-    } else if (e.fn) {
+    } else if (e.fn && !e.disabled) {
       const display = crumb ? `${crumb} · ${e.label}` : e.label;
       out.push({ display, note: e.note || crumbNote, search: `${crumb} ${e.label} ${crumbKw} ${e.kw || ""}`.toLowerCase(), fn: e.fn });
     }
@@ -1270,7 +1284,7 @@ function buildMenu(parent, entries) {
       wrap.append(row, child); parent.append(wrap);
       wireContextSubmenu(wrap, row, child);
     } else {
-      const b = document.createElement("button"); b.className = "ctxmenu-item"; labelItem(b, e.label, e.note);
+      const b = document.createElement("button"); b.className = "ctxmenu-item"; b.disabled = !!e.disabled; labelItem(b, e.label, e.note);
       b.onclick = () => { e.fn(); if (!e.keepOpen) hideNoteMenu(); };
       parent.append(b);
     }

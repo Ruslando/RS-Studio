@@ -6,7 +6,7 @@ import { localXY } from "./interaction.js";
 import { activateLane, activeLane, canEditLane, renderLanes } from "./lanes.js";
 import { seekPlayback } from "./playback.js";
 import { refreshSaveState } from "./project.js";
-import { eachRefGroup, laneClock, noteBounds, notesInBox, occurrenceBox, overlapsRefBox, shiftOf, spanAt, toggleRefPitchLock } from "./references.js";
+import { eachRefGroup, laneClock, noteBounds, notesInBox, occurrenceBox, overlapsRefBox, shiftOf, spanAt, toggleRefEditLock, toggleRefPitchLock } from "./references.js";
 import { toast } from "./notify.js";
 import { icon } from "./icons.js";
 import { draw } from "./repaint.js";
@@ -101,12 +101,19 @@ export function renderArtifacts() {
     const bar = document.createElement('div'); bar.className = 'artifact-row-bar'; bar.append(toggle);
     if (kind === 'reference') {
       const lock = document.createElement('button'); lock.type = 'button';
-      lock.className = 'icon-btn icon-btn--compact artifact-pitch-lock';
+      lock.className = 'icon-btn icon-btn--compact artifact-transpose';
       lock.addEventListener('click', () => {
         const currentLane = S.state?.editLanes.find(item => item.id === lane.id);
         if (canEditLane(currentLane)) toggleRefPitchLock(currentLane, ref);
       });
-      bar.append(lock);
+      const protect = document.createElement('button'); protect.type = 'button';
+      protect.className = 'icon-btn icon-btn--compact artifact-edit-lock';
+      protect.setAttribute('aria-label', 'Lock reference');
+      protect.addEventListener('click', () => {
+        const currentLane = S.state?.editLanes.find(item => item.id === lane.id);
+        if (canEditLane(currentLane)) toggleRefEditLock(currentLane, ref);
+      });
+      bar.append(lock, protect);
     }
     row.append(bar);
     const occurrences = referencePreview(lane, ref, index => {
@@ -157,6 +164,9 @@ export function renderArtifacts() {
     // Drag onto the spectrogram to place another copy where it is dropped.
     row.draggable = true;
     row.addEventListener('dragstart', event => {
+      if (kind === 'reference' && S.state?.editLanes.find(item => item.id === lane.id)?.refBoxes?.[ref]?.locked) {
+        event.preventDefault(); return;
+      }
       dragged = {kind, laneId: lane.id, ref, position: Number(occurrences.dataset.instance || 1) - 1};
       event.dataTransfer.effectAllowed = 'copy';
       // The stage preview is the feedback; no ghost of the row follows the pointer.
@@ -171,18 +181,28 @@ export function renderArtifacts() {
   renderMarkerArtifacts();
 }
 
-// The padlock beside a reference: closed and plain when its pitch is locked,
-// open when its occurrences may sit at other pitches.
+// Transposition is enabled when occurrences may use independent pitch offsets.
 function syncPitchLock(row, lane, ref) {
-  const lock = row.querySelector('.artifact-pitch-lock');
-  if (!lock) return;
-  const free = !!lane.refBoxes?.[ref]?.transposable;
-  if (lock.dataset.free === String(free)) return;
-  lock.dataset.free = String(free);
-  lock.innerHTML = icon(free ? 'unlock' : 'lock', 14);
-  lock.title = free ? 'Pitch free: occurrences may sit at other pitches. Click to lock' : 'Pitch locked. Click to allow pitch changes';
-  lock.setAttribute('aria-label', free ? 'Lock pitch' : 'Allow pitch changes');
-  lock.setAttribute('aria-pressed', String(!free));
+  const transpose = row.querySelector('.artifact-transpose');
+  if (!transpose) return;
+  const group = lane.refBoxes?.[ref], free = !!group?.transposable, locked = !!group?.locked;
+  row.draggable = !locked;
+  row.toggleAttribute('data-locked', locked);
+  transpose.disabled = locked;
+  if (transpose.dataset.free !== String(free)) {
+    transpose.dataset.free = String(free);
+    transpose.innerHTML = icon('transpose', 18);
+    transpose.title = free ? 'Transposable: instances may be transposed independently. Click to use the same pitch' : 'Same pitch for all instances. Click to allow independent transposition';
+    transpose.setAttribute('aria-label', 'Transposable');
+    transpose.setAttribute('aria-pressed', String(free));
+  }
+  const protect = row.querySelector('.artifact-edit-lock');
+  if (protect.dataset.locked !== String(locked)) {
+    protect.dataset.locked = String(locked);
+    protect.innerHTML = icon(locked ? 'lock' : 'unlock', 16);
+    protect.title = locked ? 'Reference locked: all instances are protected. Click to allow edits' : 'Lock reference: protect all instances from moving, editing and deletion';
+    protect.setAttribute('aria-pressed', String(locked));
+  }
 }
 
 // The notes of a reference's displayed occurrence (with that occurrence's

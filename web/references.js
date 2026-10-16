@@ -6,7 +6,7 @@ import { scroll, sctx } from "./dom.js";
 import { confirmChoice } from "./dialog.js";
 import { draw } from "./repaint.js";
 import { stageIcon } from "./icons.js";
-import { commit, snapshotEdit } from "./edit.js";
+import { commit, commitStructure, snapshotEdit } from "./edit.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
 import { gridAt, minDur, segStep, snap } from "./grid.js";
 import { nid } from "./ids.js";
@@ -128,6 +128,45 @@ export function eachRefGroup(cb) {
 }
 
 // Next free group number = 1 + the current max across every lane.
+// Capture protected content before an edit. JSON strings also protect nested
+// effects, which otherwise share objects with the ordinary undo snapshot.
+const lockShape = ({ locked, ...shape }) => JSON.stringify(shape);
+const lockNotes = notes => JSON.stringify([...notes].sort((a, b) => String(a.id).localeCompare(String(b.id))));
+export function lockedReferenceSnapshot() {
+  const protectedRefs = [];
+  eachRefGroup((lane, ref, group) => {
+    if (!group.locked) return;
+    const clock = laneClock(lane);
+    const boxes = group.anchors.map((_, i) => boxRect(group, i, clock));
+    protectedRefs.push({ lane: lane.id, ref, shape: lockShape(group), boxes,
+      notes: boxes.map(box => lockNotes(notesInBox(box, lane.notes))) });
+  });
+  return protectedRefs;
+}
+
+export function lockedReferenceFault(previous) {
+  for (const protectedRef of previous || []) {
+    const lane = editLanes().find(l => l.id === protectedRef.lane);
+    const group = lane?.refBoxes?.[protectedRef.ref];
+    if (!group || lockShape(group) !== protectedRef.shape) return protectedRef.ref;
+    const clock = laneClock(lane);
+    for (let i = 0; i < group.anchors.length; i++) {
+      const box = boxRect(group, i, clock);
+      if (JSON.stringify(box) !== JSON.stringify(protectedRef.boxes[i])
+        || lockNotes(notesInBox(box, lane.notes)) !== protectedRef.notes[i]) return protectedRef.ref;
+    }
+  }
+  return null;
+}
+
+export function toggleRefEditLock(lane, ref) {
+  const group = lane.refBoxes?.[ref];
+  if (!group) return;
+  const prev = snapshotEdit();
+  if (group.locked) delete group.locked; else group.locked = true;
+  commitStructure(prev);
+}
+
 export function nextRef() {
   let m = 0;
   eachRefGroup((l, ref) => { m = Math.max(m, ref); });
@@ -287,7 +326,7 @@ export function detachSelection() {
 // Detach a whole reference: every box goes, every note stays (now unlinked).
 export function detachRefGroup(lane, ref) {
   const group = lane.refBoxes && lane.refBoxes[ref];
-  if (!group) return;
+  if (!group || group.locked) return;
   const prev = snapshotEdit();
   delete lane.refBoxes[ref];
   commit(prev); draw();
@@ -307,7 +346,7 @@ export function detachRefGroup(lane, ref) {
 // the mousedown/mouseup that bracket the drag.
 export function moveRefOccurrence(drag, x, y) {
   const group = drag.lane.refBoxes[drag.ref];
-  if (!group) return;
+  if (!group || group.locked) return;
   freezeShape(drag.lane, group);
   const clock = laneClock(drag.lane);
   let dt = snap(drag.a0 + (timeAt(x) - drag.grabT)) - drag.a0;
@@ -339,14 +378,14 @@ export function moveRefOccurrence(drag, x, y) {
 // (their notes stay where they are). One undo step either way.
 export async function setRefPitchLock(lane, ref, lock) {
   const group = lane.refBoxes?.[ref];
-  if (!group) return;
+  if (!group || group.locked) return;
   const order = group.anchors.map((a, i) => i).sort((p, q) => group.anchors[p] - group.anchors[q]);
   const target = shiftOf(group, order[0]);
   const off = order.filter((i) => shiftOf(group, i) !== target);
   let choice = "confirm";
   if (lock && off.length) {
     choice = await confirmChoice({
-      title: "Lock pitch?",
+      title: "Use the same pitch for all instances?",
       message: `${off.length} occurrence${off.length === 1 ? "" : "s"} of ${refName(group, ref)} ${off.length === 1 ? "sits" : "sit"} at a different pitch than the first. `
         + `Move ${off.length === 1 ? "it" : "them"} back to the first occurrence's pitch, or detach ${off.length === 1 ? "it" : "them"} and keep the notes where they are?`,
       confirmLabel: "Move back",
@@ -378,6 +417,7 @@ export async function setRefPitchLock(lane, ref, lock) {
 // removed when its last box goes.
 export function deleteRefOccurrence(occ) {
   const { lane, group, ref, i } = occ;
+  if (group.locked) return;
   freezeShape(lane, group);
   const doomed = new Set(notesInBox(boxRect(group, i, laneClock(lane)), lane.notes));
   const prev = snapshotEdit();
@@ -394,7 +434,7 @@ export function deleteRefOccurrence(occ) {
 // Delete an entire reference group: every box and all the notes inside them.
 export function deleteRefGroup(lane, ref) {
   const group = lane.refBoxes && lane.refBoxes[ref];
-  if (!group) return;
+  if (!group || group.locked) return;
   const doomed = new Set();
   const clock = laneClock(lane);
   for (let i = 0; i < group.anchors.length; i++)
@@ -435,6 +475,7 @@ function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock) {
 // change (box added/removed) is left to its own handler — never auto-mirrored.
 export function reconcileReferences(prev, mirrorSource) {
   eachRefGroup((lane, ref, group) => {
+    if (group.locked) return;
     const prevNotes = (prev.lanes && prev.lanes[lane.id]) || [];
     const prevGroup = prev.boxes && prev.boxes[lane.id] && prev.boxes[lane.id][ref];
     const clock = laneClock(lane);
@@ -463,13 +504,11 @@ export function reconcileReferences(prev, mirrorSource) {
 // Paint each reference occurrence: a gold capture box plus its name, drawn like a
 // motif's. Hovering/selecting any note of a group spotlights all its occurrences;
 // the box under the pointer's edge (or being resized) lights up as a whole.
-// The padlock after a reference's label: icons.js's lock/unlock, haloed like
-// every glyph on the picture. Closed when its pitch is locked.
-const LOCK_PX = 12;
-function drawPadlock(x, y, locked, color) {
-  const name = locked ? "lock" : "unlock";
-  for (const image of [stageIcon(name, halo(), 5, draw), stageIcon(name, color, 2, draw)])
-    if (image.complete) sctx.drawImage(image, x, y - LOCK_PX, LOCK_PX, LOCK_PX);
+// The shared transposition glyph follows each reference label on the timeline.
+const TRANSPOSE_PX = 14;
+function drawTranspose(x, y, color) {
+  for (const image of [stageIcon("transpose", halo(), 5, draw), stageIcon("transpose", color, 2, draw)])
+    if (image.complete) sctx.drawImage(image, x, y - TRANSPOSE_PX, TRANSPOSE_PX, TRANSPOSE_PX);
 }
 
 export function drawReferences() {
@@ -502,19 +541,26 @@ export function drawReferences() {
       const tw = sctx.measureText(label).width;
       sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(label, lx, ly);
       sctx.fillStyle = on || lit ? REF_ACCENT : hexA(REF_ACCENT, 0.85); sctx.fillText(label, lx, ly);
-      // The pitch lock sits at the box's right end, above it like the label (never
+      // Transposition sits at the box's right end, above it like the label (never
       // over the label on a narrow box). Its state is said in words only while it
       // is pointed at, or for a moment after it was flipped.
-      const color = on || lit ? REF_ACCENT : hexA(REF_ACCENT, 0.85);
-      const kx = Math.max(x1 - LOCK_PX, lx + tw + 6);
-      drawPadlock(kx, ly, !group.transposable, color);
-      S.refLocks.push({ x: kx - 2, y: ly - LOCK_PX - 2, w: LOCK_PX + 4, h: LOCK_PX + 4, lane, ref, i });
+      const color = group.transposable ? REF_ACCENT : PAINT.hint;
+      const kx = Math.max(x1 - 2 * TRANSPOSE_PX - 4, lx + tw + 6);
+      drawTranspose(kx, ly, color);
+      S.refLocks.push({ x: kx - 2, y: ly - TRANSPOSE_PX - 2, w: TRANSPOSE_PX + 4, h: TRANSPOSE_PX + 4, lane, ref, i, kind: "transpose" });
+      const editX = kx + TRANSPOSE_PX + 4;
+      const editColor = group.locked ? REF_ACCENT : PAINT.hint;
+      for (const image of [stageIcon(group.locked ? "lock" : "unlock", halo(), 5, draw), stageIcon(group.locked ? "lock" : "unlock", editColor, 2, draw)])
+        if (image.complete) sctx.drawImage(image, editX, ly - TRANSPOSE_PX, TRANSPOSE_PX, TRANSPOSE_PX);
+      S.refLocks.push({ x: editX - 2, y: ly - TRANSPOSE_PX - 2, w: TRANSPOSE_PX + 4, h: TRANSPOSE_PX + 4, lane, ref, i, kind: "edit" });
       const hovered = S.refLockHover && S.refLockHover.lane === lane && S.refLockHover.ref === ref && S.refLockHover.i === i;
       const flashed = S.refLockFlash && S.refLockFlash.lane === lane && S.refLockFlash.ref === ref && performance.now() < S.refLockFlash.until;
       if (hovered || flashed) {
-        const words = group.transposable ? "Pitch unlocked" : "Pitch locked";
+        const words = hovered && S.refLockHover.kind === "edit"
+          ? (group.locked ? "Reference locked" : "Lock reference")
+          : (group.transposable ? "Transposable" : "Same pitch");
         sctx.save(); sctx.font = stageUi(11, 400); sctx.textAlign = "right";
-        const wx = kx - 4;   // left of the padlock, inside the box's width
+        const wx = kx - 4;   // left of the transposition glyph, inside the box's width
         sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(words, wx, ly);
         sctx.fillStyle = color; sctx.fillText(words, wx, ly);
         sctx.restore();
@@ -525,13 +571,13 @@ export function drawReferences() {
   sctx.restore();
 }
 
-// The pitch padlock under a world-space point, or null.
+// The transposition toggle under a world-space point, or null.
 export function refLockAt(x, y) {
   return S.refLocks?.find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
 }
 
 // Flip a reference's pitch lock (locking may ask first; see setRefPitchLock),
-// then say its new state beside the padlock for a moment.
+// then show its new transposition state beside the glyph for a moment.
 const LOCK_FLASH_MS = 1500;
 export async function toggleRefPitchLock(lane, ref) {
   const group = lane.refBoxes?.[ref];
@@ -571,7 +617,7 @@ export const refEdgeCursor = (edge) => edge.length === 2
 // mouseup (reconcile with the dragged box forced as the source).
 export function resizeRefBox(drag, x, y) {
   const group = drag.lane.refBoxes[drag.ref];
-  if (!group) return;
+  if (!group || group.locked) return;
   const a = group.anchors[drag.i], clock = laneClock(drag.lane);
   let [r0, r1] = beatShape(group, clock);
   const at = clock.beatAt(snap(timeAt(x))) - clock.beatAt(a);

@@ -20,6 +20,7 @@ function setName(kind, lane, ref, name) {
 
 // A text field laid over `rect` (client px). Enter or leaving commits, Escape cancels.
 export function beginArtifactRename(kind, lane, ref, rect) {
+  if (kind === "reference" && lane.refBoxes?.[ref]?.locked) return;
   const input = document.createElement("input");
   input.type = "text"; input.className = "artifact-rename";
   input.value = artifactName(kind, lane, ref);

@@ -37,6 +37,7 @@ const OUTLINE = {
   eye: '<path d="M2 12c3-5 6-7 10-7s7 2 10 7c-3 5-6 7-10 7S5 17 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
   unlock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 7-2.6M12 14v3"/>',
+  transpose: '<ellipse cx="5.5" cy="18" rx="3.5" ry="2.5" transform="rotate(-20 5.5 18)" fill="currentColor" stroke="none"/><path d="M8.5 17V3c0 4 6 3 4 8M19 3v18m-3-15 3-3 3 3m-6 12 3 3 3-3"/>',
   speaker: '<path d="M4 9h4l5-4v14l-5-4H4ZM16 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/>',
   speakerOff: '<path d="M4 9h4l5-4v14l-5-4H4Zm13 1 4 4m0-4-4 4"/>',
   edit: '<path d="m4 16 12-12a2.8 2.8 0 0 1 4 4L8 20l-5 1Zm10-10 4 4M3 21h18"/>',
@@ -53,7 +54,7 @@ const stageIcons = new Map();
 export function stageIcon(name, color, width = 1.8, onload = null) {
   const key = `${name}|${color}|${width}`;
   if (!stageIcons.has(key)) {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${OUTLINE[name]}</svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" color="${color}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${OUTLINE[name]}</svg>`;
     const image = new Image();
     if (onload) image.onload = onload;
     image.src = "data:image/svg+xml," + encodeURIComponent(svg);

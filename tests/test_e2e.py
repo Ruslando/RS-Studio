@@ -670,7 +670,7 @@ class EndToEndTests(unittest.TestCase):
         base = page.evaluate(inside, 2)
         # Locked by default: the menu offers to free it.
         row.locator('.artifact-preview').click(button='right')
-        menu.get_by_text('Allow pitch changes', exact=True).click()
+        menu.get_by_text('Allow transposition', exact=True).click()
         self.assertTrue(page.evaluate(group)['transposable'])
         # Drop a copy at 0:12, two semitones above the first note.
         page.evaluate("""async (pitch) => {
@@ -703,7 +703,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate(inside, 16), edited)
         # Locking again asks; Move back returns the copy to the first's pitch.
         row.locator('.artifact-preview').click(button='right')
-        menu.get_by_text('Lock pitch', exact=True).click()
+        menu.get_by_text('Use the same pitch', exact=True).click()
         expect(page.locator('#actionConfirmModal')).to_be_visible()
         page.locator('#actionConfirmAccept').click()
         self.assertEqual(page.evaluate(inside, 12), edited)
@@ -714,7 +714,7 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press('Control+z')
         self.assertEqual(page.evaluate(inside, 12), [p + 2 for p in edited])
         row.locator('.artifact-preview').click(button='right')
-        menu.get_by_text('Lock pitch', exact=True).click()
+        menu.get_by_text('Use the same pitch', exact=True).click()
         page.locator('#actionConfirmDiscard').click()
         self.assertEqual(len(page.evaluate(group)['anchors']), 2)
         self.assertEqual(page.evaluate(inside, 12), [p + 2 for p in edited])
@@ -738,7 +738,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate(shifts), [])
         page.keyboard.press('Control+z')
         page.locator('.artifact-row[data-reference="1"] .artifact-preview').click(button='right')
-        page.locator('.ctxmenu').get_by_text('Allow pitch changes', exact=True).click()
+        page.locator('.ctxmenu').get_by_text('Allow transposition', exact=True).click()
         drag_up(3)
         self.assertEqual(page.evaluate(shifts)[0], 3)
         expect(page.locator('.artifact-row[data-reference="1"] .artifact-preview-title')).to_contain_text('+3')
@@ -782,7 +782,137 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(second, 16)
         self.assertLessEqual(first, 13 + 1e-6)
 
-    def test_reference_padlock_on_the_stage_flips_the_pitch_lock(self):
+    def test_reference_edit_lock_protects_content_and_survives_reload(self):
+        self.open_reference_project()
+        page = self.page
+        row = page.locator('.artifact-row[data-reference="1"]')
+        lock = row.get_by_role('button', name='Lock reference', exact=True)
+        transpose = row.get_by_role('button', name='Transposable', exact=True)
+        expect(lock).to_have_attribute('aria-pressed', 'false')
+        lock.click()
+        expect(lock).to_have_attribute('aria-pressed', 'true')
+        expect(transpose).to_be_disabled()
+        expect(row).to_have_attribute('draggable', 'false')
+        page.evaluate('document.activeElement.blur()')
+        page.keyboard.press('Control+z')
+        expect(lock).to_have_attribute('aria-pressed', 'false')
+        page.keyboard.press('Control+Shift+z')
+        expect(lock).to_have_attribute('aria-pressed', 'true')
+        # Destructive actions are visibly unavailable, while Copy remains useful.
+        row.locator('.artifact-preview').click(button='right')
+        menu = page.locator('.ctxmenu')
+        expect(menu.get_by_text('Delete entire reference', exact=True)).to_be_disabled()
+        expect(menu.get_by_text('Allow transposition', exact=True)).to_be_disabled()
+        expect(menu.get_by_text('Copy', exact=True)).to_be_enabled()
+        page.keyboard.press('Escape')
+        # The commit boundary protects keyboard edits, effects, insertion and
+        # reference geometry, even if a caller bypasses the disabled controls.
+        checks = page.evaluate("""async () => {
+            const { S, setSelection } = await import('/store.js');
+            const { snapshotEdit, commit, doDelete } = await import('/edit.js');
+            const refs = await import('/references.js');
+            const lane = () => S.state.editLanes[0];
+            const group = () => lane().refBoxes[1];
+            const signature = () => JSON.stringify({ notes: lane().notes, group: group() });
+            const before = signature(), undo = S.undoStack.length;
+            const protectedNotes = () => refs.notesInBox(refs.occurrenceBox(group(), 0, refs.laneClock(lane())), lane().notes);
+            const results = [];
+            setSelection(new Set(protectedNotes())); doDelete(); results.push(signature() === before);
+            let prev = snapshotEdit();
+            protectedNotes()[0].pitch += 1; commit(prev); results.push(signature() === before);
+            prev = snapshotEdit();
+            const n = protectedNotes()[0]; n.fx ||= {}; n.fx.vibrato = true;
+            commit(prev); results.push(signature() === before);
+            prev = snapshotEdit();
+            lane().notes.push({ ...protectedNotes()[0], id: 'locked-insertion' });
+            commit(prev); results.push(signature() === before);
+            prev = snapshotEdit();
+            group().anchors[0] += 1; commit(prev); results.push(signature() === before);
+            refs.moveRefOccurrence({lane: lane(), ref: 1}, 0, 0);
+            refs.resizeRefBox({lane: lane(), ref: 1}, 0, 0);
+            refs.deleteRefGroup(lane(), 1); refs.detachRefGroup(lane(), 1);
+            await refs.setRefPitchLock(lane(), 1, false);
+            results.push(signature() === before);
+            const undoUnchanged = S.undoStack.length === undo;
+            // Other references and notes remain editable in the same layer.
+            prev = snapshotEdit();
+            const outside = lane().notes.find(n => n.start >= 8 && n.start < 9);
+            const outsideId = outside.id, oldPitch = outside.pitch;
+            outside.pitch += 1; commit(prev);
+            const unrelatedAllowed = lane().notes.find(n => n.id === outsideId)?.pitch === oldPitch + 1;
+            return { results, undoUnchanged, unrelatedAllowed };
+        }""")
+        self.assertTrue(all(checks['results']), checks)
+        self.assertTrue(checks['undoUnchanged'])
+        self.assertTrue(checks['unrelatedAllowed'])
+        # A note drag on the real canvas must not even start moving the note.
+        point = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { xOf, yOf } = await import('/geometry.js');
+            const n = S.state.editLanes[0].notes.find(n => n.start >= 2 && n.start < 3);
+            const rect = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            window.lockedNoteSignature = JSON.stringify(S.state.editLanes[0].notes);
+            return [rect.left + xOf((n.start + n.end) / 2) - sc.scrollLeft,
+                rect.top + yOf(n.pitch) + S.state.rowH / 2 - sc.scrollTop];
+        }""")
+        page.mouse.move(*point); page.mouse.down()
+        page.mouse.move(point[0] + 80, point[1] - 15, steps=5); page.mouse.up()
+        self.assertTrue(page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes) === window.lockedNoteSignature"))
+        page.evaluate("async () => { const p = await import('/project.js'); await p.saveToServer(); p.markSaved(); }")
+        page.reload()
+        page.locator(f'#recentList [data-job="{self.reference_job}"] .ri-open').click()
+        expect(lock).to_have_attribute('aria-pressed', 'true')
+        expect(transpose).to_be_disabled()
+        lock.click()
+        expect(lock).to_have_attribute('aria-pressed', 'false')
+        expect(transpose).to_be_enabled()
+        transpose.click()
+        expect(transpose).to_have_attribute('aria-pressed', 'true')
+        self.assertTrue(page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { snapshotEdit, commit } = await import('/edit.js');
+            const prev = snapshotEdit(), lane = S.state.editLanes[0];
+            const note = lane.notes.find(n => n.start >= 2 && n.start < 3), pitch = note.pitch;
+            note.pitch += 1; commit(prev);
+            return S.state.editLanes[0].notes.find(n => n.id === note.id)?.pitch === pitch + 1;
+        }"""))
+
+    def test_reference_edit_lock_on_timeline(self):
+        self.open_reference_project()
+        page = self.page
+        x, y = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const r = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            const l = S.refLocks.find(b => b.ref === 1 && b.i === 0 && b.kind === 'edit');
+            return [l.x + l.w / 2 - sc.scrollLeft + r.left, l.y + l.h / 2 - sc.scrollTop + r.top];
+        }""")
+        lock = page.locator('.artifact-row[data-reference="1"] .artifact-edit-lock')
+        page.mouse.click(x, y)
+        expect(lock).to_have_attribute('aria-pressed', 'true')
+        page.mouse.click(x, y)
+        expect(lock).to_have_attribute('aria-pressed', 'false')
+
+    def test_reference_transpose_toggle_describes_pitch_without_a_padlock(self):
+        self.open_reference_project()
+        page = self.page
+        row = page.locator('.artifact-row[data-reference="1"]')
+        toggle = row.get_by_role('button', name='Transposable', exact=True)
+        expect(toggle).to_have_attribute('aria-pressed', 'false')
+        expect(toggle).to_have_attribute('title', re.compile('Same pitch for all instances'))
+        expect(toggle.locator('svg ellipse')).to_have_count(1)
+        expect(toggle.locator('svg rect')).to_have_count(0)
+        toggle.click()
+        expect(toggle).to_have_attribute('aria-pressed', 'true')
+        expect(toggle).to_have_attribute('title', re.compile('transposed independently'))
+        page.evaluate('document.activeElement.blur()')
+        page.keyboard.press('Control+z')
+        expect(toggle).to_have_attribute('aria-pressed', 'false')
+        page.keyboard.press('Control+Shift+z')
+        expect(toggle).to_have_attribute('aria-pressed', 'true')
+        toggle.click()
+        expect(toggle).to_have_attribute('aria-pressed', 'false')
+
+    def test_reference_transpose_on_the_stage_flips_transposability(self):
         self.open_reference_project()
         page = self.page
         free = "async () => !!(await import('/store.js')).S.state.editLanes[0].refBoxes[1].transposable"
@@ -790,16 +920,16 @@ class EndToEndTests(unittest.TestCase):
             const { S } = await import('/store.js');
             const r = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
             const box = S.refBoxRects.find(b => b.ref === 1 && b.i === 0), l = S.refLocks.find(b => b.ref === 1 && b.i === 0);
-            if (l.x + l.w < box.x1 - 4) throw new Error('the padlock is not at the right end of its box');
+            if (l.x + l.w < box.x1 - 24) throw new Error('the transposition icon is not at the right end of its box');
             return [l.x + l.w / 2 - sc.scrollLeft + r.left, l.y + l.h / 2 - sc.scrollTop + r.top];
         }""")
         page.mouse.move(x, y)
         expect(page.locator('#stage')).to_have_css('cursor', 'pointer')
         page.mouse.click(x, y)
-        page.wait_for_function("() => document.querySelector('.artifact-pitch-lock').getAttribute('aria-pressed') === 'false'")
+        page.wait_for_function("() => document.querySelector('.artifact-transpose').getAttribute('aria-pressed') === 'true'")
         self.assertTrue(page.evaluate(free))
         page.mouse.click(x, y)   # nothing is shifted, so locking needs no question
-        page.wait_for_function("() => document.querySelector('.artifact-pitch-lock').getAttribute('aria-pressed') === 'true'")
+        page.wait_for_function("() => document.querySelector('.artifact-transpose').getAttribute('aria-pressed') === 'false'")
         self.assertFalse(page.evaluate(free))
 
     def test_reference_keeps_its_rhythm_under_another_tempo(self):

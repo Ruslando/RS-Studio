@@ -18,7 +18,7 @@ import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes,
 import { auditionNote, previewNotes, seekPlayback } from "./playback.js";
 import { toast } from "./notify.js";
 import { beginArtifactRename } from "./artifact-names.js";
-import { moveRefOccurrence, notesInBox, refBadgeAt, refBoxEdgeAt, refLockAt, resizeRefBox, shiftOf, toggleRefPitchLock } from "./references.js";
+import { boxOfNote, toggleRefEditLock, moveRefOccurrence, notesInBox, refBadgeAt, refBoxEdgeAt, refLockAt, resizeRefBox, shiftOf, toggleRefPitchLock } from "./references.js";
 import { lineXAtRow } from "./slice.js";
 import { beginNoteGesture, finishNoteGesture, updateNoteGesture } from "./note-motion.js";
 import { nid } from "./ids.js";
@@ -77,7 +77,7 @@ export function edgeOf(note, x) {
 function bendHandleAt(x, y) {
   const grab = BEND_HANDLE_R + 3;
   for (const n of S.selection) {
-    if (!n.bend || !canEditLane(laneOf(n))) continue;
+    if (!n.bend || !canEditLane(laneOf(n)) || boxOfNote(n)?.group.locked) continue;
     for (const h of bendHandles(n)) {
       if (Math.abs(x - h.x) <= grab && Math.abs(y - h.y) <= grab) return h;
     }
@@ -90,7 +90,7 @@ function bendHandleAt(x, y) {
 function bendCurveAt(x, y, grab = 6) {
   for (const n of S.selection) {
     const pts = bendCurve(n);
-    if (!pts || !canEditLane(laneOf(n))) continue;
+    if (!pts || !canEditLane(laneOf(n)) || boxOfNote(n)?.group.locked) continue;
     const x0 = xOf(n.start), w = Math.max(2, xOf(n.end) - x0);
     if (x < x0 - grab || x > x0 + w + grab) continue;
     const t = clamp((x - x0) / w, 0, 1);
@@ -328,13 +328,18 @@ export function init_interaction() {
     // siblings untouched. The select happens up front, so a plain click just selects.
     if (plainSelect) {
       const lock = refLockAt(x, y);
-      if (lock && canEditLane(lock.lane)) { toggleRefPitchLock(lock.lane, lock.ref); return; }
+      if (lock && canEditLane(lock.lane)) {
+        if (lock.kind === "edit") toggleRefEditLock(lock.lane, lock.ref);
+        else toggleRefPitchLock(lock.lane, lock.ref);
+        return;
+      }
       const badge = refBadgeAt(x, y);
       if (badge && canEditLane(badge.lane)) {
         const inside = notesInBox(badge.box, badge.lane.notes);
         S.state.lanes.forEach((l) => (l.active = l === badge.lane)); renderLanes();
         setSelection(new Set(inside));
         const group = badge.lane.refBoxes[badge.ref];
+        if (group.locked) { draw(); return; }
         S.drag = {
           mode: "refDrag", lane: badge.lane, ref: badge.ref, i: badge.i,
           a0: group.anchors[badge.i], grabT: timeAt(x), grabP: pitchAt(y), s0: shiftOf(group, badge.i),
@@ -346,7 +351,7 @@ export function init_interaction() {
       }
       // Grab a reference box edge to resize its capture region (mirrors to siblings).
       const redge = refBoxEdgeAt(x, y);
-      if (redge && canEditLane(redge.lane)) { S.drag = { mode: "refBox", ...redge, prev: snapshotEdit() }; draw(); return; }
+      if (redge && canEditLane(redge.lane) && !redge.lane.refBoxes?.[redge.ref]?.locked) { S.drag = { mode: "refBox", ...redge, prev: snapshotEdit() }; draw(); return; }
     }
   
     // Grab a detect-frame handle to resize that edge (works in Select or Frame,
@@ -408,9 +413,10 @@ export function init_interaction() {
       // Click-to-hear: audition the clicked note's pitch (also unlocks audio on
       // this gesture so a follow-up vertical drag can play landing pitches).
       auditionNote(hit.note, hit.lane);
+      if (boxOfNote(hit.note)?.group.locked) { draw(); return; }
       const edge = hit.grace ? null : edgeOf(hit.note, x);
       if (edge) {
-        const notes = [...S.selection].filter((n) => hit.lane.notes.includes(n));
+        const notes = [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked);
         S.drag = {
           mode: "resize", edge, note: hit.note, prev: snapshotEdit(), notes,
           orig: new Map(notes.map((n) => [n, { start: n.start, end: n.end }])),
@@ -419,7 +425,7 @@ export function init_interaction() {
         S.drag = {
           mode: "move", startX: x, startY: y, moved: false, prev: snapshotEdit(),
           lane: hit.lane, lastRow: 0,
-          notes: [...S.selection].filter((n) => hit.lane.notes.includes(n)),
+          notes: [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked),
           orig: new Map([...S.selection].map((n) => [n, { start: n.start, end: n.end, pitch: n.pitch }])),
         };
       }
