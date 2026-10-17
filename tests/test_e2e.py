@@ -159,7 +159,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardPin')).to_be_visible()
         expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
-        expect(page.locator('#fretboardChoose')).to_be_disabled()
+        expect(page.locator('#fretboardChoose')).to_be_hidden()
         page.locator('#fretboardAltNext').click()
         expect(page.locator('#fretboardAltCount')).to_have_text('1 / 2')
         expect(page.locator('#fretboardEdit')).to_have_attribute('aria-pressed', 'true')
@@ -167,7 +167,12 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '1')
         page.locator('#fretboardAltNext').click()
         expect(page.locator('#fretboardAltCount')).to_have_text('2 / 2')
-        expect(page.locator('#fretboardAltNext')).to_be_disabled()
+        page.locator('#fretboardAltNext').click()
+        expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
+        expect(page.locator('#fretboardChoose')).to_be_hidden()
+        page.locator('#fretboardAltPrev').click()
+        expect(page.locator('#fretboardAltCount')).to_have_text('2 / 2')
+        expect(page.locator('#fretboardChoose')).to_be_visible()
         page.keyboard.press('ArrowLeft')
         expect(page.locator('#fretboardAltCount')).to_have_text('1 / 2')
         page.keyboard.press('ArrowRight')
@@ -314,6 +319,70 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(times, [[2,3.5],[3.5,4]])
         page.keyboard.press('Control+z')
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n=>[n.start,n.end])"), [[2,3],[3,4]])
+
+    def test_fretboard_toolbar_light_mode_and_responsive_layout(self):
+        page = self.page
+        bundle = self.data / 'toolbar-showcase.chart'
+        with zipfile.ZipFile(bundle, 'w') as archive:
+            archive.write(Path(__file__).resolve().parents[1] / 'examples/chord-showcase/project.json', 'project.json')
+        with page.expect_file_chooser() as chooser: page.click('#welcomeOpen')
+        chooser.value.set_files(bundle)
+        expect(page.locator('#lanes .lane-row')).to_be_visible()
+        self.fretboard_hover_points(80)
+        page.evaluate("() => { const theme = document.querySelector('#themeSelect'); theme.value = 'light'; theme.dispatchEvent(new Event('change')); }")
+        page.locator('#fretboardEdit').click()
+        expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
+        expect(page.locator('#fretboardChoose')).to_be_hidden()
+        for width, height in [(1920,1080), (1280,1024), (1024,768), (900,1100)]:
+            page.set_viewport_size({'width':width, 'height':height})
+            page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+            geometry = page.evaluate("""async () => {
+                const canvas = document.querySelector('#fretboard'), ctx = canvas.getContext('2d');
+                const original = ctx.fillText, xs = [];
+                ctx.fillText = function(text, x, y, ...args) {
+                    if (this.textBaseline === 'top' && ['3','21'].includes(String(text))) xs.push(x);
+                    return original.call(this, text, x, y, ...args);
+                };
+                try { (await import('/fretboard.js')).drawFretboard(); } finally { ctx.fillText = original; }
+                const stage = canvas.getBoundingClientRect(), controls = document.querySelector('#fretboardControls').getBoundingClientRect();
+                return {width:stage.width, span:Math.max(...xs)-Math.min(...xs), bottom:stage.bottom, controlsTop:controls.top,
+                    capoBorder:getComputedStyle(document.querySelector('#fretboardHandField')).borderLeftWidth,
+                    shapeGrouped:document.querySelector('#fretboardShape').parentElement === document.querySelector('#fretboardAlternatives').parentElement};
+            }""")
+            self.assertGreater(geometry['span'], geometry['width'] * .65, (width, height, geometry))
+            self.assertLessEqual(geometry['bottom'], geometry['controlsTop'] + 1, geometry)
+            self.assertEqual(geometry['capoBorder'], '1px')
+            self.assertTrue(geometry['shapeGrouped'])
+            shot = Path(__file__).resolve().parents[1] / '.runs' / f'fretboard-toolbar-{width}x{height}.png'
+            shot.parent.mkdir(exist_ok=True)
+            page.locator('#fretboardPanel').screenshot(path=str(shot))
+        page.set_viewport_size({'width':1440, 'height':900})
+        # Audit the actual visible buttons, including hovered engaged controls.
+        for selector in ['#fretboardEdit', '#fretboardShape']:
+            if selector.endswith('Shape'):
+                page.locator(selector).click()
+            page.locator(selector).hover()
+            colors = page.locator(selector).evaluate("el => { const s=getComputedStyle(el); return {ink:s.color,background:s.backgroundColor,on:getComputedStyle(document.documentElement).getPropertyValue('--on-engaged').trim()}; }")
+            self.assertEqual(colors['ink'], 'rgb(255, 255, 255)', colors)
+        page.keyboard.press('Escape')
+        page.mouse.move(5,5)
+        audit_script = """() => {
+            const ctx = document.createElement('canvas').getContext('2d');
+            const rgb = s => { ctx.clearRect(0,0,1,1); ctx.fillStyle=s; ctx.fillRect(0,0,1,1); const c=[...ctx.getImageData(0,0,1,1).data]; return [...c.slice(0,3),c[3]/255]; };
+            const over = (a,b) => a.slice(0,3).map((v,i)=>v*a[3]+b[i]*(1-a[3]));
+            const lum = c => c.map(v=>{v/=255; return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((v,x,i)=>v+x*[.2126,.7152,.0722][i],0);
+            return [...document.querySelectorAll('button')].filter(el=>!el.disabled && el.getClientRects().length && getComputedStyle(el).visibility==='visible').map(el=>{
+                const chain=[]; for(let p=el;p;p=p.parentElement) chain.push(rgb(getComputedStyle(p).backgroundColor));
+                let bg=[255,255,255]; for(const c of chain.reverse()) bg=over(c,bg);
+                const text=over(rgb(getComputedStyle(el).color),bg), a=lum(text),b=lum(bg);
+                const visibleText = [...el.childNodes].some(n => n.nodeType===3 ? n.textContent.trim() : n.textContent.trim() && Number(getComputedStyle(n).opacity)>0);
+                return {id:el.id||el.getAttribute('aria-label'),text:visibleText?el.textContent.trim().slice(0,40):'',ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
+            }).filter(x=>x.ratio < (x.text?4.5:3));
+        }"""
+        self.assertEqual(page.evaluate(audit_script), [], 'Visible light-mode buttons need readable foregrounds')
+        page.click('#settingsMenuBtn')
+        self.assertEqual(page.evaluate(audit_script), [], 'Light-mode settings buttons need readable foregrounds')
+        page.click('#settingsCancel')
 
     def test_fretboard_label_choices_and_custom_shape_targets(self):
         page = self.page
@@ -558,7 +627,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardPin')).to_be_visible()
         expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
-        expect(page.locator('#fretboardChoose')).to_be_disabled()
+        expect(page.locator('#fretboardChoose')).to_be_hidden()
         page.locator('#fretboardAltNext').click()
         expect(page.locator('#fretboardAltCount')).to_have_text(re.compile(r'1 / [1-9][0-9]*'))
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '1')

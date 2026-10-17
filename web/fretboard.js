@@ -46,7 +46,7 @@ import { toast } from "./notify.js";
 // = --s-group. A canvas cannot read a token, which is the same concession rule 15
 // already makes for the stage's colours and constants.js makes for its fonts.
 const PAD = 16;
-const controlsHeight = () => Math.max(40, $("fretboardControls").offsetHeight + 8);
+const controlsHeight = () => Math.max(36, $("fretboardControls").offsetHeight);
 
 // Off at launch: the neck is a second view of the song, and the editor opens on the
 // song. A session toggle either way — like the marker lanes, and like zoom.
@@ -227,7 +227,8 @@ function selectAlternative(key, items) {
 
 function stepAlternative(delta) {
   if (!alternativeCount) return;
-  alternativeIndex = Math.max(-1, Math.min(alternativeCount - 1, alternativeIndex + delta));
+  // Original is part of the cycle: Original → alternatives → Original.
+  alternativeIndex = ((alternativeIndex + 1 + delta + alternativeCount + 1) % (alternativeCount + 1)) - 1;
   previewAlternative = alternativeIndex >= 0;
   drawFretboard();
 }
@@ -431,18 +432,10 @@ export const fretboardVisible = () => visible;
 // subtracted: it costs the board about 2px of height, and asking the panel for the
 // height a slightly wider board wanted just leaves that 2px as slack it centres in.
 const boardHeight = (w, s) =>
-  Math.round(boardWidth(s) * ((w - 2 * PAD) / boardLength(s)) + 2 * PAD + controlsHeight(w));
+  Math.round(boardWidth(s) * ((w - 2 * PAD) / boardLength(s)) + 2 * PAD + controlsHeight());
 
-// THE PANEL IS AS TALL AS THE TALLER OF ITS TWO HALVES. It used to be the board's own
-// height alone, which is a number the strip beside it has no say in — and the strip is
-// content: three groups while editing, five on an overridden column, against a bass
-// board that comes out around 140px. The panel clips (it has to, so the collapse can
-// slide over it), so the overflow landed as a chord name with its top and bottom cut
-// off. Growing instead costs the song a few pixels while the neck is being worked on
-// and gives them straight back; the stylesheet's 50% cap still has the last word.
-//
-// The board does not stretch into the extra room: both mm to px scales are bound by
-// whichever axis is tighter, so a height-rich panel simply centres the neck in it.
+// Add the toolbar's measured rows below a neck sized for the available width.
+// Control wrapping changes panel height without changing the neck's proportions.
 const preferredHeight = (w, s) => boardHeight(w, s);
 
 // Two ways in — the View menu item and the panel's own chevron — so both go
@@ -495,9 +488,9 @@ function layoutFretboard(slide = false) {
   const spec = laneSpec(currentLane());
   // The strip that folds the panel sits above the board, in the panel's own padding.
   const edge = parseFloat(getComputedStyle(fretboardPanel).getPropertyValue("--w-edge")) || 0;
-  const height = userHeight
-    ? Math.min(Math.max(userHeight, HEIGHT_MIN), editorEl.clientHeight * 0.7)
-    : Math.min(preferredHeight(cssW, spec) + edge, editorEl.clientHeight / 2);
+  // Wrapping controls adds panel height, never takes it away from the neck.
+  const required = preferredHeight(cssW, spec) + edge;
+  const height = Math.max(required, Math.min(userHeight || required, editorEl.clientHeight * 0.7));
   // Resize observers also fire while adjacent panels move. Repainting the same
   // destination must not cancel a reveal that is already running — and neither must
   // the drag that started it: a panel pulled open off its handle keeps tweening
@@ -509,7 +502,8 @@ function layoutFretboard(slide = false) {
   // The board's box is pinned to the height the panel has *open*, so that closing the
   // panel slides it out of view instead of squashing it: the flex row would otherwise
   // stretch a neck into the collapsed bar while closing.
-  fretboardStage.style.height = Math.max(0, height - edge - parseFloat(getComputedStyle(fretboardPanel).borderTopWidth)) + "px";
+  fretboardStage.style.height = Math.max(0, height - edge - controlsHeight()
+    - parseFloat(getComputedStyle(fretboardPanel).borderTopWidth)) + "px";
   // Restored on the next frame, not on this one: put back in the same task and the
   // style recalc that re-enables it has not happened yet, so the browser can still
   // animate from the old height. One frame later the new height is settled and the
@@ -588,7 +582,7 @@ export function drawFretboard() {
   auto.textContent = `(${seatNow || '\u2013'})`;
   $("fretboardHandPrev").disabled = disabled;
   $("fretboardHandNext").disabled = disabled || Number(held?.fret || seatNow) >= maxHand;
-  const neckH = Math.max(2 * PAD + 1, h - controlsHeight(w));
+  const neckH = Math.max(2 * PAD + 1, h);
   warning.style.top = `${neckH / 2}px`;
   const rowPx = (s.spreadAtNut / (s.strings - 1))
     * Math.min((w - 2 * PAD) / boardLength(s), (neckH - 2 * PAD) / boardWidth(s));
@@ -929,8 +923,9 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   $("fretboardAlternatives").hidden = playing || !!shaping || unplayable;
   $("fretboardAltCount").textContent = alternativeCount ? (alternativeIndex < 0 ? `Original · ${alternativeCount} alternatives` : `${alternativeIndex + 1} / ${alternativeCount}`)
     : chord && (alts?.note !== focusNote(lane) || alts?.rev !== S.voicingRevision) ? "Original · Loading..." : "Original · No alternatives";
-  $("fretboardAltPrev").disabled = alternativeCount === 0 || alternativeIndex < 0;
-  $("fretboardAltNext").disabled = alternativeCount === 0 || alternativeIndex >= alternativeCount - 1;
+  $("fretboardAltPrev").disabled = alternativeCount === 0;
+  $("fretboardAltNext").disabled = alternativeCount === 0;
+  $("fretboardChoose").hidden = !activeAlternative;
   $("fretboardChoose").disabled = !activeAlternative;
   fretboardApply.hidden = !shaping || !!placing;
   fretboardAuto.hidden = !overridden;

@@ -290,6 +290,7 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 }
 .icon-btn[aria-expanded="true"] { background: var(--selection); color: var(--text); }
 .icon-btn[aria-pressed="true"], .btn[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
+:is(.icon-btn, .btn)[aria-pressed="true"]:is(:hover, :active):not(:disabled) { background: var(--accent-hover); color: var(--on-engaged); }
 
 /* Shared production components. Legacy markup aliases below share these rules. */
 .t-title    { font: 700 var(--text-title)/1.2 var(--font-ui); letter-spacing:-.02em; }
