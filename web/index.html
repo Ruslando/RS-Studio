@@ -388,7 +388,11 @@
               <!-- Fingering controls are visible only in edit mode. -->
               <div id="fretboardPin" role="group" aria-label="Fingering" hidden>
                 <div id="fretboardShapeActions" role="group" aria-label="Shape">
-                <span id="fretboardName" aria-live="polite" hidden></span>
+                <div id="fretboardShapeNotes" role="group" aria-label="Custom shape notes" hidden>
+                  <button type="button" id="fretboardShapePrev" class="icon-btn icon-btn--compact" aria-label="Previous note" title="Previous note (Left arrow)"><span data-ui-icon="chevronUp" aria-hidden="true"></span></button>
+                  <span id="fretboardName" aria-live="polite" hidden></span>
+                  <button type="button" id="fretboardShapeNext" class="icon-btn icon-btn--compact" aria-label="Next note" title="Next note (Right arrow)"><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
+                </div>
                 <div id="fretboardAlternatives" role="group" aria-label="Alternative positions" hidden>
                   <button type="button" id="fretboardAltPrev" class="icon-btn icon-btn--compact" aria-label="Previous alternative" title="Previous alternative (Left arrow)"><span data-ui-icon="chevronUp" aria-hidden="true"></span></button>
                   <span id="fretboardAltCount" role="status" aria-live="polite">0 / 0</span>
@@ -397,7 +401,7 @@
                 </div>
                 <button type="button" id="fretboardShape" class="btn btn--compact" aria-pressed="false" hidden
                         title="Place every note of the chord by hand">Custom shape</button>
-                <button type="button" id="fretboardApply" class="btn btn--compact btn--primary" hidden>Apply</button>
+                <button type="button" id="fretboardApply" class="btn btn--compact btn--primary" hidden>Done</button>
                 </div>
                 <div id="fretboardInfluence" role="group" aria-label="Apply to neighbouring notes">
                 <button type="button" id="fretboardReachPrev" class="icon-btn icon-btn--compact" aria-pressed="false" title="Also use for the same notes before" aria-label="Also use for the same notes before"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5v14"/><path d="M11 12H4"/><path d="M7 9l-3 3 3 3"/></svg></button>
