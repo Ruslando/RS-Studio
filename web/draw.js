@@ -475,19 +475,15 @@ function paintFrame() {
         sctx.beginPath(); sctx.moveTo(x + 0.5, y + 2); sctx.lineTo(x + 0.5, y + rowH - 2); sctx.stroke();
         sctx.restore();
       }
-      const overrideEffect = n.pos || n.arrangement
-        ? "direct"
-        : voicingMarks?.effects.get(n);
-      if (overrideEffect) {                       // changed fingering: asterisk above the bar
-        // red = directly overridden; orange = automatic choice changed by an override
-        // (sits on the row the note's tail ends on, so it stays on a bent bar)
+      if (n.pos || n.arrangement) {  // Only explicitly stored overrides get a star.
+        // The mark follows the end of a bent note's bar.
         // Drawn above-left, outside the bar, so it never competes with the
         // note's own fill color or the name label.
         const py = curve ? y - curve[curve.length - 1][1] * rowH : y;
         sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "alphabetic";
         sctx.lineWidth = 2.5; sctx.strokeStyle = halo();
         sctx.strokeText("*", x, py - 1);           // dark halo for legibility over the spectrogram
-        sctx.lineWidth = 1; sctx.fillStyle = overrideEffect === "direct" ? PAINT.error : PAINT.warn;
+        sctx.lineWidth = 1; sctx.fillStyle = PAINT.error;
         sctx.fillText("*", x, py - 1);
         sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
       }

@@ -1504,6 +1504,7 @@ export function placementLimits(columns, index, tuning, positionOf, maxFret = MA
       onto: rule.link && after.length ? {
         fretted: rule.link === "fretted", pitches: after.map((n) => n.pitch),
         strings: held ? new Set([...held.values()].map((p) => p.string)) : null,
+        positions: held ? [...held.values()] : null,
       } : null,
     });
   }
@@ -1534,9 +1535,10 @@ export function placementFault(limit, pitch, string, tuning, maxFret = MAX_FRET)
   if (limit.from != null && limit.from !== string)
     return `${name} is slid or hammered onto, so it stays on the string it comes from`;
   const onto = limit.onto;
-  if (onto && (onto.strings ? !onto.strings.has(string) : !onto.pitches.some((p) => {
-    const f = p - tuning[string];
-    return f >= (onto.fretted ? 1 : 0) && f <= maxFret;
+  if (onto && !(onto.positions ? onto.positions.some(p => p.string === string
+    && p.fret >= (onto.fretted ? 1 : 0) && p.fret <= maxFret) : onto.pitches.some(p => {
+    const fret = p - tuning[string];
+    return fret >= (onto.fretted ? 1 : 0) && fret <= maxFret;
   }))) return `${name} slides or hammers into a note that cannot follow on that string`;
   return null;
 }

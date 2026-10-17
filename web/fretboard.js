@@ -1,3 +1,4 @@
+import { positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { fretboardHandKey } from "./fretboard-cache.js";
 import { chordWarnings } from "./chord-warnings.js";
 import { overrideResetPreview } from './override-reset.js';
@@ -37,7 +38,7 @@ import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulation
 import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
-import { assignFingers, chordColumns, handForShape, handProfileForTuning, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
+import { assignFingers, chordColumns, handForShape, handProfileForTuning, needsFret, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
 import { columnAlternatives } from "./voicing.js";
 import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnInfluence, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
@@ -77,6 +78,37 @@ const laneSpec = (lane) => {
 };
 const currentLane = () => (S.state ? selectedTablatureLane(editLanes()) : null);
 let laidOut = null;
+
+let sharedSelection = null;
+function selectedPositions(lane) {
+  if (!sharedSelection || sharedSelection.lane !== lane || sharedSelection.selection !== S.selection
+    || sharedSelection.notes !== lane?.notes || sharedSelection.revision !== S.voicingRevision) {
+    const group = positionSelection(lane, S.selection);
+    sharedSelection = { lane, notes: lane?.notes, selection: S.selection,
+      revision: S.voicingRevision, group, checks: new Map(), failures: new Set(), unchanged: false,
+      key: [...S.selection].map(n => n.id).join(",") };
+  }
+  return sharedSelection.group;
+}
+
+function sharedShapeAllowed(lane, notes, shape) {
+  const group = selectedPositions(lane);
+  if (!group.multiple) return true;
+  if (group.error) return false;
+  const found = gripsFor(lane);
+  if (!found) return false;
+  const key = `${found.key}:${[...shape].map(([n, p]) => `${n.pitch}:${p?.string}:${p?.fret}`).sort().join("|")}`;
+  if (!sharedSelection.checks.has(key)) {
+    const plan = sharedPositionPlan(lane, S.selection, notes, shape, laneFretTuning(lane),
+      note => found.voiced?.get(note), laneFretCount(lane));
+    const changed = plan.changes.some(({ note, pos }) =>
+      note.arrangement || !note.pos || Object.keys(pos).some(k => note.pos[k] !== pos[k]));
+    if (plan.error) sharedSelection.failures.add(plan.error);
+    else if (!changed) sharedSelection.unchanged = true;
+    sharedSelection.checks.set(key, !plan.error && changed);
+  }
+  return sharedSelection.checks.get(key);
+}
 
 // The selected tablature lane's fingering, as a timeline of grips. Voicing a whole
 // lane runs in a worker, so this is filled in asynchronously and the board draws
@@ -197,8 +229,24 @@ function limitsFor(lane, note) {
   limitsMemo = { key: found.key, limits };
   return limits;
 }
-const allowedAt = (lane, tuning, s) => (p) =>
-  !placementFault(limitsFor(lane, p.note)?.get(p.note), p.note.pitch, p.string, tuning, s.frets);
+const allowedAt = (lane, tuning, s) => (p) => {
+  let limit = limitsFor(lane, p.note)?.get(p.note);
+  // While staging a shared chord, linked neighbours may also be moving. Check
+  // intrinsic effects now and the complete prospective links on Apply.
+  const group = selectedPositions(lane);
+  if (group.multiple) {
+    if (group.error) return false;
+    const source = group.columns.find(c => c.notes.includes(p.note));
+    if (!source) return false;
+    const index = [...source.notes].sort((a, b) => a.pitch - b.pitch).indexOf(p.note);
+    return group.columns.every(c => {
+      const target = [...c.notes].sort((a, b) => a.pitch - b.pitch)[index];
+      return !placementFault({ fretted: needsFret(target), reach: target.trill === "whole" ? 2 : target.trill ? 1 : 0 },
+        target.pitch, p.string, tuning, s.frets);
+    });
+  }
+  return !placementFault(limit, p.note.pitch, p.string, tuning, s.frets);
+};
 
 // How long a shift takes: one beat. A hand moves in musical time, not in the
 // interface's 90ms — and taking it from the grid means a slow song shows the
@@ -270,7 +318,7 @@ const boardTime = () => playbackTime() + (transportPlaying() ? 0 : 1e-3);
 // nothing is asking, and a focus that lags the song is a focus that hands the strip a
 // column that has already gone past.
 function focusNote(lane) {
-  for (const n of S.selection) if (Number.isFinite(n.pitch)) return n;
+  for (const n of S.selection) if (Number.isFinite(n.pitch) && lane?.notes.includes(n)) return n;
   const found = lane && gripsFor(lane);
   const i = found ? gripIndex(found.columns, boardTime()) : -1;
   return i >= 0 ? found.columns[i].note || null : null;
@@ -289,7 +337,7 @@ function frozenAt(lane) {
   // pause.
   if (transportPlaying()) return null;
   if (!altsOn) return null;
-  if (alts?.rev === S.voicingRevision && alts.lane === lane) return alts.t0;
+  if (alts?.rev === S.voicingRevision && alts.lane === lane && alts.note === focusNote(lane)) return alts.t0;
   const note = focusNote(lane), found = lane && gripsFor(lane);
   if (!note || !found) return null;
   const i = gripIndex(found.columns, note.start + 1e-6);
@@ -401,6 +449,12 @@ function drawShaping(ctx, s, scale, X, Y, lane) {
   const opts = cur
     ? notePlacements([...placed.filter(m => m.note !== cur), ...asking], tuning, s.frets, asking)
       .filter(allowedAt(lane, tuning, s))
+      .filter(p => {
+        if (!selectedPositions(lane).multiple) return true;
+        const shape = new Map(shaping.picked);
+        shape.set(p.note, { string: p.string, fret: p.fret });
+        return shape.size < shaping.notes.length || sharedShapeAllowed(lane, shaping.notes, shape);
+      })
       .map((p) => spotBox({ ...p, mm: fretCentre(p.fret, s) }, scale, s, X, Y))
     : [];
   spots = [...opts, ...placed.filter(m => m.note !== cur).map((m) => spotBox(m, scale, s, X, Y))];
@@ -593,12 +647,13 @@ export function drawFretboard() {
   const handControl = $("fretboardHand");
   const maxHand = Math.max(1, lane ? laneFretCount(lane) : s.frets);
   if (document.activeElement !== handControl) handControl.value = held ? String(held.fret) : "";
-  handControl.disabled = disabled;
+  const shared = selectedPositions(lane).multiple;
+  handControl.disabled = disabled || shared;
   const auto = $("fretboardHandAuto"), seatNow = impossible ? 0 : anchorFret(lane);
   auto.hidden = !!held;
   auto.textContent = `(${seatNow || '\u2013'})`;
-  $("fretboardHandPrev").disabled = disabled;
-  $("fretboardHandNext").disabled = disabled || Number(held?.fret || seatNow) >= maxHand;
+  $("fretboardHandPrev").disabled = disabled || shared;
+  $("fretboardHandNext").disabled = disabled || shared || Number(held?.fret || seatNow) >= maxHand;
   const neckH = Math.max(2 * PAD + 1, h);
   warning.style.top = `${neckH / 2}px`;
   const rowPx = (s.spreadAtNut / (s.strings - 1))
@@ -894,7 +949,7 @@ export function drawFretboard() {
 // `written` behind — so there the bundle offers the way back alone.
 function refreshPinControls(lane, show) {
   const col = show ? pinnedColumn(lane) : null;
-  const pinned = !!col?.notes.some((n) => n.pos || n.arrangement);
+  const pinned = !selectedPositions(lane).multiple && !!col?.notes.some((n) => n.pos || n.arrangement);
   for (const [button] of PIN_SWITCHES) button.hidden = !pinned;
   if (!pinned) return;
   const reach = overrideInfluence(col.notes);
@@ -928,8 +983,12 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   const shown = editing;
   fretboardPin.hidden = !shown;
   if (!shown) { endResetPreview(); return; }
+  const group = selectedPositions(lane);
   const column = (editing) && !shaping && !playing ? pinnedColumn(lane) : null;
-  const overridden = (editing) && !shaping && !playing && (!!column || !!held);
+  const selectedOverride = group.multiple && !group.error
+    && group.columns.some(c => c.notes.some(n => n.pos || n.arrangement || n.written));
+  const overridden = (editing) && !shaping && !playing
+    && (group.multiple ? selectedOverride : !!column || !!held);
   // While a shape is being built the bundle names the note being placed, which is
   // the one thing you need to know and the reason no sentence says what to do.
   fretboardName.hidden = !placing;
@@ -939,16 +998,27 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   $("fretboardShapeNext").disabled = !shaping || shaping.index === shaping.notes.length - 1;
   // Chords only: a lone note has every position on the board already.
   fretboardShape.hidden = !(editing) || playing || (!chord && !shaping);
-  fretboardShape.disabled = unplayable;
+  fretboardShape.disabled = unplayable || !!group.error;
   $("fretboardAlternatives").hidden = playing || !!shaping || unplayable;
   $("fretboardAltCount").textContent = alternativeCount ? (alternativeIndex < 0 ? `${alternativeCount} alternatives` : `${alternativeIndex + 1} / ${alternativeCount}`)
     : chord && (alts?.note !== focusNote(lane) || alts?.rev !== S.voicingRevision) ? "Loading alternatives..." : "No alternatives";
+  if (group.multiple) {
+    const reasons = [...sharedSelection.failures];
+    $("fretboardAltCount").title = group.error || [
+      `Applies to all ${group.columns.length} selected positions`, ...reasons,
+    ].join("\n");
+    if (group.error) $("fretboardAltCount").textContent = group.error;
+    else if (!alternativeCount) $("fretboardAltCount").textContent = chord && !alts
+      ? "Loading alternatives..." : reasons.length ? reasons[0]
+        : sharedSelection.unchanged ? "All selected notes already use this position" : "No position works for the whole selection";
+  } else $("fretboardAltCount").title = "";
   $("fretboardAltPrev").disabled = alternativeCount === 0;
   $("fretboardAltNext").disabled = alternativeCount === 0;
   $("fretboardChoose").hidden = !activeAlternative;
   $("fretboardChoose").disabled = !activeAlternative;
   fretboardApply.hidden = !shaping;
-  fretboardApply.disabled = !shaping || shaping.picked.size !== shaping.notes.length;
+  fretboardApply.disabled = !shaping || shaping.picked.size !== shaping.notes.length
+    || (group.multiple && !sharedShapeAllowed(lane, shaping.notes, shaping.picked));
   fretboardAuto.hidden = !overridden;
   refreshPinControls(lane, overridden);   // before measuring: they change its width
   if (!overridden || unplayable) endResetPreview();
@@ -959,13 +1029,14 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   if (!resetPeeking || !overridden) return;
 
   const time = beatUnderBoard();
-  const key = `${handKey(lane)}:${column?.t0 ?? focus?.start}:${time}:${songBarStarts().join(',')}`;
+  const key = `${handKey(lane)}:${column?.t0 ?? focus?.start}:${time}:${songBarStarts().join(',')}:${sharedSelection.key}`;
   if (resetPreview?.key !== key) {
     resetPreview?.controller.abort();
     const controller = new AbortController();
     const request = { key, controller, pending: true, columns: null };
     resetPreview = request;
-    Promise.resolve().then(() => laneFingering(overrideResetPreview(lane, column?.notes, time), controller.signal)).then(fingering => {
+    Promise.resolve().then(() => laneFingering(group.multiple ? { ...lane, notes: resetSharedPositions(lane, S.selection).notes }
+      : overrideResetPreview(lane, column?.notes, time), controller.signal)).then(fingering => {
       if (resetPreview !== request) return;
       request.columns = gripsFrom(fingering); request.pending = false;
       drawFretboard();
@@ -1234,10 +1305,22 @@ function drawAlternatives(ctx, s, scale, X, Y, lane, held) {
   const heldKey = held ? placeKey(held.marks) : "";
   const boxes = [];
   const limits = limitsFor(lane, found.notes?.[0]);
-  for (const choice of found.ranked || []) {
+  const shared = selectedPositions(lane).multiple;
+  const choices = [...(found.ranked || [])];
+  if (shared) {
+    const voiced = gripsFor(lane)?.voiced;
+    const shape = new Map(found.notes.flatMap(n => voiced?.get(n) ? [[n, voiced.get(n)]] : []));
+    if (shape.size === found.notes.length && !choices.some(c => placeKey([...c.shape.values()]) === placeKey([...shape.values()])))
+      choices.unshift({ notes: found.notes, shape, seat: anchorFret(lane) });
+  }
+  for (const choice of choices) {
     const positions = [...choice.shape.values()];
-    if (placeKey(positions) === heldKey) continue;
-    if (choice.notes.some((voice, k) => {
+    if (!shared && placeKey(positions) === heldKey) continue;
+    if (shared) {
+      const shape = new Map(found.notes.map((note, k) => [note, choice.shape.get(choice.notes[k])]));
+      if (!sharedShapeAllowed(lane, found.notes, shape)) continue;
+    }
+    if (!shared && choice.notes.some((voice, k) => {
       const p = choice.shape.get(voice), note = found.notes[k];
       return p && note && placementFault(limits?.get(note), note.pitch, p.string, found.tuning, s.frets);
     })) continue;
@@ -1247,7 +1330,7 @@ function drawAlternatives(ctx, s, scale, X, Y, lane, held) {
     boxes.push({ choice, x0: X(mm.x0) - pad, x1: X(mm.x1) + pad,
       y0: Math.min(Y(mm.off0), Y(mm.off1)) - pad, y1: Math.max(Y(mm.off0), Y(mm.off1)) + pad });
   }
-  const box = selectAlternative(`chord:${lane.id}:${found.note?.id}:${found.rev}`, boxes);
+  const box = selectAlternative(`chord:${lane.id}:${found.note?.id}:${found.rev}:${sharedSelection.key}`, boxes);
   found.boxes = box ? [box] : [];
   found.hover = box ? 0 : -1;
   return box ? { box, tuning: found.tuning } : null;
@@ -1312,17 +1395,29 @@ function spotBox(p, scale, s, X, Y) {
 function notePlaces(lane, s, at) {
   const tuning = lane && laneFretTuning(lane);
   if (!at || !tuning || tuning.length !== s.strings) return null;
-  return { at, out: notePlacements(at.marks, tuning, laneFretCount(lane))
-    .filter(allowedAt(lane, tuning, s))
+  const multiple = selectedPositions(lane).multiple;
+  const positions = notePlacements(at.marks, tuning, laneFretCount(lane));
+  // The focused note's current position can still be a change for the other
+  // selected occurrences, so it must be available as a batch destination.
+  if (multiple) positions.unshift(...at.marks.map(m => ({ note: m.note, string: m.string, fret: m.fret })));
+  return { at, out: positions
+    .filter(p => {
+      if (!selectedPositions(lane).multiple) return allowedAt(lane, tuning, s)(p);
+      const notes = at.marks.map(m => m.note);
+      const shape = new Map(at.marks.map(m => [m.note, m.note === p.note
+        ? { string: p.string, fret: p.fret } : { string: m.string, fret: m.fret }]));
+      return sharedShapeAllowed(lane, notes, shape);
+    })
     .map((p) => ({ ...p, mm: fretCentre(p.fret, s) })) };
 }
 
 // Single notes use the same navigator, with one possible position at a time.
 function drawNotePlaces(ctx, s, scale, X, Y, lane, at) {
+  selectedPositions(lane);
   const got = notePlaces(lane, s, at);
   if (!got) return null;
   const list = got.out.map((p) => spotBox(p, scale, s, X, Y));
-  const hovered = selectAlternative(`note:${lane.id}:${got.at.marks[0]?.note?.id}:${S.voicingRevision}`, list);
+  const hovered = selectAlternative(`note:${lane.id}:${got.at.marks[0]?.note?.id}:${S.voicingRevision}:${sharedSelection.key}`, list);
   spots = hovered ? [hovered] : [];
   if (!hovered) return null;
   const shape = new Map(got.at.marks.map(mark => [mark.note, mark.note === hovered.note
@@ -1592,6 +1687,7 @@ export function init_fretboard() {
   // the shape exactly as it is — only the blast radius moves.
   for (const [button, side] of PIN_SWITCHES) {
     button.addEventListener("click", () => {
+      if (selectedPositions(currentLane()).multiple) return;
       const col = pinnedColumn(currentLane());
       if (!col) return;
       button.blur();                   // or it eats the arrow keys that walk the song
@@ -1682,6 +1778,7 @@ export function init_fretboard() {
       const lane = currentLane();
       if (!editing || !canEditLane(lane) || transportPlaying()) return;
       const hand = kind === "Hand", max = hand ? laneFretCount(lane) : MAX_CAPO;
+      if (hand && selectedPositions(lane).multiple) return;
       const text = control.value.trim();
       let value;
       if (delta !== null) {
@@ -1731,7 +1828,7 @@ export function init_fretboard() {
   fretboardApply.addEventListener("click", () => {
     fretboardApply.blur();
     const col = shaping && columnOf(shaping.notes[0])?.col;
-    if (!col || shaping.picked.size !== shaping.notes.length) return;
+    if (fretboardApply.disabled || !col || shaping.picked.size !== shaping.notes.length) return;
     const lane = currentLane();
     const wrong = setColumnShape(col.notes, shaping.picked, limitsFor(lane, col.notes[0]), laneFretCount(lane));
     if (wrong) { toast(wrong); return; }
