@@ -1,6 +1,6 @@
 // The voicing cost engine: pure note→(string,fret) assignment, no DOM. Split from
 // voicing.js (which keeps the chord-preview UI and re-exports everything here) so
-// the model is importable headless — tests/voicing.test.mjs runs it under node.
+// the model is importable headless — tests/web runs it under node.
 
 import { noteName } from "./util.js";
 import { OVERLAP_EPS } from "./constants.js";
@@ -9,10 +9,8 @@ import { SLIDES_TO_NEXT as SLIDE_TO_NEXT } from "./bend.js";
 
 // One source of truth for string/fret choice, shared by the chord preview and
 // (via buildTabSpec) the Guitar Pro export, so what you see is what you export.
-// Notes are grouped into onset columns; each column is voiced as a playable
-// shape (one note per string, hand within reach, no dropped notes) by a small
-// backtracking search; a DP across columns then picks the sequence of shapes
-// that minimizes hand movement.
+// Notes are grouped into onset columns. The register engine plans positions per
+// bar; a separate, small grip model assigns fingers and checks alternatives.
 export const MAX_FRET = 24;
 
 // Fretting fingers, index through little. The thumb is not modeled, and a barre
@@ -26,261 +24,25 @@ export const SHAPES_PER_COL = 6; // alternatives shown in the chord preview
 export const DP_SHAPES_PER_COL = 18; // final context-aware search set
 export const DP_CONTEXT_POOL = 48;   // broader pool inspected before neighbouring context prunes it
 
-// Biomechanical cost model — "Model v2". String/fret shapes remain the public
-// format, but the optimizer expands them into explicit finger assignments. See
-// docs/voicing-cost-model.md §8. Four ideas drive it:
-//   1. Position is NOT a standing tax. Where the hand sits barely matters; what
-//      matters is assigned-finger reach in physical millimetres, finger
-//      interaction, barres, muting/clearance, and how far the hand must MOVE.
-//   2. The hand is a RANGE, not a point: with the index at fret h the fingers cover
-//      h..h+COMFORT_REACH, so any next shape reachable from where the hand already
-//      sits costs no movement — a 5-6-7-8 run in one position is free, as it should
-//      be. Movement is the gap between reach windows (frets) + string distance,
-//      scaled by the time available: a big jump between fast notes is dear, the same
-//      jump across a rest is cheap.
-//   3. Open strings don't involve the fretting hand: an all-open column is
-//      TRANSPARENT — the hand neither moves to "fret 0" nor gets pulled anywhere,
-//      it just holds its position through the note. Whether to *use* opens at all
-//      is decided by the cost model like everything else, not by a preference.
-export const COMFORT_REACH = 3;  // index→pinky comfortably covers ~4 frets (span ≤ 3)
+// The register engine chooses strings/frets. This small, independent grip model
+// assigns fingers and filters alternatives; it does not plan a second passage.
+export const COMFORT_REACH = 3;
 
-export const HIGH_GATE = 12;     // flat one-shot penalty once the hand climbs past fret 12 (Heijink & Meulenbroek: where reaching over the guitar body kicks in)
-
-// Weights are starting values, tuned against the r12 bass phrase; `home`, `stick`
-// and the timeFactor bounds are the load-bearing knobs (docs/voicing-cost-model.md §6).
-// `home` = gentle pull toward the resting register (auto). `stick` = the stronger
-// pull a forward pin exerts over its segment, holding the passage near the pinned
-// fret so a manual "play it up here" actually carries into the later notes.
-// `slide` = fallback penalty only when source data has no legal connected-slide
-// route. Whenever a physical route exists, illegal edges are removed outright.
+// Movement weights retained by the public transition helpers and hand anchoring.
 export const COST_W = {
-  finger: 0.26,
-  barreString: 0.05,
-  mute: 0.52, innerSkip: 0.85, strokeSkip: 1.65,
-  openClearance: 0.34, edgeControl: 0.10,
-  // `stick` reads as dead in every corpus sweep and is not: it weights the pull
-  // toward a PINNED fret (see repeatedFingeringPlan), and no benchmark tab contains
-  // a pin. Same blind spot as `unplayable` and `slide` -- a term the corpus cannot
-  // reach is untested, not inert.
-  // THE NUT PULL, AND IT CARRIES TWICE WHAT IT USED TO because the thing that was
-  // quietly doing half its job is gone. While a remembered pitch was a hard constraint
-  // (see MEMO_SLACK), the first placement of every pitch in a lane was stamped on all
-  // the later ones — and the first bar of a song is usually the lowest, so the memory
-  // was an accidental anchor at the nut. Freed, the hand drifted up the neck: Stairway's
-  // fingerpicked acoustic moved a passage from frets 0-3 onto the A string at 7, which
-  // is not a fingerpicked part any more. At 0.15 that lane comes back and nothing else
-  // moves; the corpus is flat from 0.08 to 0.30 (65.1 to 64.1 points of melody
-  // agreement) so this is the middle of a plateau, not a peak. It was 0.05.
-  high: 2, home: 0.15, stick: 0.35,
-  // Three nudges decide WHERE on the neck a passage sits, and until now only two
-  // existed — as one axis, not two. For a given pitch, one string thicker is
-  // exactly +5 frets, so "toward the nut" and "toward the thick strings" are the
-  // same line read from opposite ends: their sum stays linear and only an END of
-  // it can ever win. That is why every miss in the melody corpus ran the same
-  // direction (want s1f10 got s0f5, want s2f7 got s1f3, want s3f5 got s2f0 —
-  // one string thinner, five frets lower, every time). `home` owned the low end
-  // and nothing pulled back.
-  //
-  //   stringSide  per shape, toward the thicker strings
-  //   highRamp    per fret above highKnee, back toward the nut
-  //   home        the gentle standing pull toward the nut (unchanged)
-  //
-  // The ramp is what makes an interior answer reachable at all: a cliff at
-  // highGate cannot separate candidates that all sit below it, and a bass D#2 on
-  // D1 / A6 / E11 is exactly that case. A knee at 7 rising gradually gives the
-  // middle option somewhere to win. highGate keeps its own flat charge on top —
-  // reaching over the guitar body is a real discontinuity, not a slope.
-  // `stringSide` IS GONE — the standing pull toward the thick strings, 0.15 per string
-  // for every shape in the app. It was measured while a remembered pitch was a hard
-  // constraint (see MEMO_SLACK), which is to say while most notes were not being chosen
-  // at all, and freed of that it is worth -0.8 points of melody agreement, -0.8 of
-  // chord and +0.8 points of leap rate: deleting it is better on every figure the
-  // corpus reports. What it was for survives as stringSideMono below, which is the
-  // same pull scoped to the register where a player actually makes that choice.
-  highRamp: 0.05, highKnee: 5,
-  // A single note and a chord want opposite things from the two rules above, so
-  // each gets its own. A chord keeps the shared settings; a single note gets:
-  //
-  //   gateMono 15   the fret the high-fret charge fires at, not 12. 12 was one
-  //                 fret under where a lead line actually sits, so the charge
-  //                 was shoving whole solos off the neck for no gain anywhere
-  //                 else: it cost the corpus's lead lane 10 points on its own.
-  //                 It stays 12 for chords, where nothing wanted it moved and
-  //                 where it is what keeps an unreachable grip priced above a
-  //                 merely hard one (tests/voicing.test.mjs).
-  //   stringSideMono / sidePitchGate
-  //                 the thick-string pull, but only above B4. Below that it is
-  //                 the shared 0.15. Applied to every single note it destroys a
-  //                 fingerpicked part — an arpeggio in open position is single
-  //                 notes too, and dragging those onto wound strings cost the
-  //                 acoustic lane 32 points. Register is the axis that separates
-  //                 them, not chord-vs-note. Above B4 the note exists on the top
-  //                 two or three strings only, and the choice is exactly the one
-  //                 a player makes by feel: the B string up the neck rather than
-  //                 the top E in the middle of it, because the thicker string
-  //                 gives a bend something to push against. Under B4 the same
-  //                 pull reaches the wound strings and stops being that choice.
-  //
-  // Every number here is the corpus optimum with no lane regressing: the lead
-  // lane gains 15.6 points, and the acoustic, the bass and all 3269 chord-corpus
-  // fingerings do not move at all.
-  // AND IT IS EXACTLY FIVE TIMES `home`, which is not a fit — it is the one value that
-  // makes the axis balance. One string thicker is the same pitch five frets up, so a
-  // pull of 5 x home per string is precisely the nut pull cancelled: above B4 the
-  // engine is indifferent between the thick string up the neck and the thin string in
-  // the middle of it, and the choice falls to the transition and the grip, which is
-  // where a lead player leaves it. Swept independently the corpus peaks at 0.75-1.0
-  // and falls away either side, so the derived value sits inside the measured plateau
-  // rather than being argued into it. It was 0.5, from before `home` doubled.
-  stringSideMono: 0.75,
-  sidePitchGate: 71,
-  // THE CLIMB. For one pitch the neighbouring thicker string is the same note
-  // five frets up, and a player takes it — while it lands somewhere comfortable.
-  // Measured off the corpus, counting only notes where both options existed:
-  //
-  //   thinner option sits at   open   1-2    3-4    5-7    8-11    12+
-  //   bass took the thicker     88%   57%     0%     0%      -       -
-  //   lead took the thicker     95%  100%    75%    27%     67%     15%
-  //
-  // So it is not a standing preference for thick strings — stringSide already
-  // is one, and being linear it can only ever pick an end (see above). It is a
-  // bonus that switches off once the destination climbs past climbFret, which
-  // is what gives the axis an interior answer instead of two extremes.
-  //
-  // climbStep is what stops it wrecking a fingerpicked part. The acoustic lane
-  // takes the thicker string 13% of the time at the very bottom of the neck
-  // where the other two take it 88-95%, because its single notes are not a line
-  // at all — they are one chord shape picked apart, 85% of its intervals being
-  // leaps of a third or more against a median of 2 semitones on the other two.
-  // The string of an arpeggiated note is set by the shape the hand is holding,
-  // so nothing should be bidding on it per note. Requiring a semitone neighbour
-  // is a narrow test for "this is a melody", and a narrow one is what is wanted:
-  // ungated, the climb cost the acoustic 13.6 points; at a whole tone, 2.7; at a
-  // semitone, one note.
-  //
-  // climbBonus is capped by the hand, not by the corpus: 0.2 and 0.3 score the
-  // same here, but at 0.3 the credit outgrows what it costs to move, and a
-  // chromatic run sitting comfortably at frets 5-8 breaks off mid-run for the
-  // same notes lower down (tests/voicing.test.mjs, the run-in-one-position
-  // case). The climb decides between placements of a note the hand is free to
-  // put anywhere; it must never outbid staying where the hand already is.
-  // mstring was fitted while a crossing was a flat COUNT of strings; measured, the
-  // same 0.35 became 0.45 on a bass and cost that lane 0.8 points. Refitted it lands
-  // at 0.30 and every lane returns to the number it had, which is what a units fix
-  // should do: the model stops depending on the instrument by accident, and nothing
-  // on screen moves. The corpus is flat from 0.25 to 0.30 and falls above it, so this
-  // is the dear end of the range the evidence allows.
-  mfret: 1, mstring: 0.30, fingerMove: 0.48,
-  // What ONE FINGER moving sideways costs against the same finger sliding the same
-  // distance along the neck. It lived inline in transitionResult as a bare 0.65 and
-  // is a weight, not a ratio of millimetres: 7mm across the strings is nothing like
-  // 7mm along them, so it does not become 0.19 just because that is the geometry.
-  // What it now multiplies IS measured — see stringTravelUnits.
-  fingerSide: 0.65,
-  place: 0.12, pivot: 0.30, slide: 8,
-  glide: 0.45,
-  // What arm travel costs when the grip rides along unchanged, as a fraction
-  // of the same distance travelled while also re-forming the hand. See the
-  // glide term in transitionResult.
-  // Relearning an exact repeated motif is real player effort. Keep this finite
-  // so pins, sustains, and a materially safer route can still override it.
-  repeat: 1.5,
-  // THE SPIKE IS DELETED. `spike * (scaled - 3.5)^2` used to say that one brutal
-  // jump is worse than several modest shifts. Two things were wrong with it.
-  // It is a quadratic on DISTANCE, and distance is the cheap part of a shift:
-  // sliding the arm eight frets along one string is a single practised gesture,
-  // not eight times a one-fret move. And it is measured on 2565 corpus notes to
-  // do nothing whatever — zeroing it left every lane's agreement, both gates and
-  // all 28 tests byte-identical — while charging 6.75 on the one case it did
-  // reach, a bass line dropping from fret 11 to fret 3 on the E string to take
-  // a low G that exists nowhere else on the instrument.
-  // It was also a landmine under every other movement weight: because it is
-  // convex on the SUM, raising any travel cost pushed ordinary chord changes
-  // over the gate and detonated it — a 1.5x string-crossing multiplier, harmless
-  // on its own, took chord agreement from 92.4% to 41.9% with the spike still in.
-  // What is genuinely worth pricing is repetition, not magnitude: jump, then
-  // jump again, then again. That was built too (cost proportional to this shift
-  // times the previous one, carried on the DP node beside `lastTime`) and it is
-  // NOT here either — it helps chords by 1.8 points and moves the bass the wrong
-  // way, because the bass already shifts less than the transcriber does
-  // (148 against 201) and charging repeated shifts widens that gap.
-  // REACH — how far a finger sits from the hand's own seat, beyond the span a
-  // relaxed hand already covers. Measured in millimetres against real fret
-  // positions, so the same fret count costs more on a long-scale bass and more
-  // near the nut, where the frets are physically wider.
-  //
-  // This is the only term that prices a LONE note. The pose model cannot: with
-  // one finger down it can always pick a seat and tilt that put that finger
-  // exactly on its slot, so every fingering of a single note scored an identical
-  // 0.410 and the choice fell entirely to movement — which always prefers not
-  // moving. That is why a bass line would park the hand at fret 5 and take fret
-  // 8 with the pinky four times running instead of shifting and using the index.
-  //
-  // `fingerPitchMm` is the relaxed spacing between adjacent fingertips along the
-  // neck. It is the one number separating an instrument that wants to stretch
-  // from one that wants to shift: lower favours stretching (guitar), higher
-  // favours shifting (bass).
-  reach: 0.6, fingerPitchMm: 28,
-  // TWO TERMS, because what used to be one called `weakFinger` was two things
-  // wearing one name — and the name was the wrong one of the two. See gripParts.
-  //
-  //   seatIdle  per fret the INDEX idles behind the note. This is PLACEMENT, and
-  //             for a lone note it is the only thing saying the hand should sit
-  //             under what it is playing: seat = fret - (finger - 1), so
-  //             `finger - 1` IS `fret - seat`. It reads as finger strength only
-  //             by coincidence, and reading it that way is a trap — the corpus
-  //             surface here is a staircase, and softening this ramp because the
-  //             ring finger is not really weak takes the fingerpicked acoustic
-  //             lane from 84.9% agreement to 21.9%. It needs to be steep, and
-  //             what it is holding up is open position, not the ring finger.
-  //   pinky     what the FOURTH finger costs on top, and nothing else does. This
-  //             is the physiology the name used to claim: the pinky is short and
-  //             shares an extensor with the ring, the middle and ring are not
-  //             meaningfully weaker than the index, and a linear ramp said all
-  //             three were weak in equal steps.
-  //
-  // Unlike every other knob in this neighbourhood, `pinky` HAS NO CLIFF: flat from
-  // 0.15 to 2.0 on all four corpus lanes. That flatness is the evidence for it, and
-  // the agreement number is NOT: mono goes 77.0 -> 78.2 and the melody gate's floor
-  // is cleared for the first time, but every one of those 15 notes is the 16-note
-  // 12-string lane flipping wholesale from 0% to 100%, the acoustic and the bass do
-  // not move at all, and the lead loses one note. Read it as "costs nothing", not as
-  // "is better". What it costs is 0.05 frets/column of extra hand travel and 0.1
-  // point of repeat consistency, because a dear pinky shifts instead of reaching —
-  // which is the trade it exists to make.
-  seatIdle: 0.25, pinky: 0.35,
-  // Per fret a column's hand sits away from THE BAR'S OWN PLANNED SEAT (planSeats).
-  // The one number that makes the walk answerable to something longer than the four
-  // columns it can see. Deliberately small: the plan says where the bar wants the
-  // hand, not which grip to hold, and a pull heavy enough to overrule a sustain or a
-  // slide leg would be the plan deciding notes it never looked at.
-  plan: 0.18,
-  // Reversing finger order at a shared fret, per string the reversal spans.
-  stringOrder: 0.9,
-  // Charged once per column that has no playable fingering at all (bad import,
-  // full-mix transcription). Far above any real grip so such a column is never
-  // preferred, but finite so it cannot delete the whole passage.
-  unplayable: 100,
+  mfret: 1, mstring: 0.30, fingerMove: 0.48, fingerSide: 0.65,
+  place: 0.12, pivot: 0.30, slide: 8, glide: 0.45, plan: 0.18,
 };
 
-// The furthest a hand reaches from its own seat to its outermost fingertip. A
-// hard limit, and NOT scaled by instrument: a hand is the same hand on a bass.
-// The pairwise model published 110mm as the comfortable index-to-pinky maximum;
-// past ~115 the grip stops existing rather than getting dearer. Needed once
-// finger slots became millimetres — the relaxed hand then covers 84mm, and a
-// quadratic on top of that let an 8-fret span high on the neck (124mm at frets
-// 12-20, where the frets are narrow) read as merely expensive.
 const MAX_HAND_SPAN_MM = 115;
 const MAX_BARRE_SPAN_BY_FINGER = { 1: Infinity, 2: 3, 3: 3, 4: 3 };
 
 export const GUITAR_HAND_PROFILE = Object.freeze({
   id: "guitar6", stringCount: 6, scaleLengthMm: 648, stringSpacingMm: 7,
-  highGate: HIGH_GATE,
 });
 
 export const BASS_HAND_PROFILE = Object.freeze({
   id: "bass4", stringCount: 4, scaleLengthMm: 864, stringSpacingMm: 9,
-  highGate: HIGH_GATE,
 });
 
 const PROFILE_CACHE = new Map();
@@ -502,7 +264,7 @@ function fingerGroupings(shape) {
 }
 
 // Compatibility helper: callers that only ask for groups receive the smallest
-// valid grouping, while the v2 scorer considers every grouping and fingering.
+// valid grouping, while the scorer considers every grouping and fingering.
 function fingerGroups(shape) {
   const choices = fingerGroupings(shape);
   if (!choices.length) return groupsAtEachFret(shape).flatMap((x) => x[0] || []);
@@ -517,7 +279,7 @@ function fingerGroups(shape) {
 // GRIP COST — what one shape costs the hand, in isolation
 // A shape is a Map of note -> {string, fret}. Costing it means choosing a
 // fingering for it (fingeringOptions), measuring the hand pose that fingering
-// implies (postureParts), and taking the cheapest. Everything
+// requires, and taking the cheapest. Everything
 // here is per-shape; nothing knows about neighbours yet.
 // ============================================================================
 
@@ -545,258 +307,78 @@ export function stringStates(shape, fingering, profile = GUITAR_HAND_PROFILE) {
   return states;
 }
 
-function gripParts(shape, fingering, profile) {
-  const groups = fingering.groups;
-  const parts = {
-    // No flat pinky surcharge: POSE_W already has an opinion about which finger
-    // belongs where, so charging one on top would double-count.
-    fingers: groups.length * COST_W.finger,
-    stringOrder: 0, reach: 0, seatIdle: 0, pinky: 0,
-    stretch: 0, curl: 0, rotation: 0, splay: 0,
-    barre: 0, muting: 0, rightHand: 0, clearance: 0, high: 0, open: 0,
-  };
-  for (const g of groups) {
-    g.string = g.members.reduce((sum, e) => sum + e.string, 0) / g.members.length;
-    g.barreSpan = g.members.length > 1
-      ? Math.max(...g.members.map((e) => e.string)) - Math.min(...g.members.map((e) => e.string)) + 1 : 1;
-    // Barring with anything but the index means holding that finger flat while
-    // the others stay arched over it. Possible, and players do it, but dear:
-    // priced gently, a ring barre beat an ordinary three-finger ladder.
-    // Charged once here; nothing scales it afterwards
-    // instead, because these grips are cached per shape and a preference baked
-    // into the cache would not take effect until the cache was dropped.
-    if (g.members.length > 1) parts.barre += POSE_W.barre
-      + stringTravelUnits(Math.max(0, g.barreSpan - 1), profile) * COST_W.barreString
-      + Math.max(0, g.finger - 1) * POSE_W.barreFinger;
-  }
-  // Finger-order limits complement the reach model: crossing along the neck
-  // is impossible; at a shared fret the grouping and planted index determine
-  // whether an inversion is possible or merely awkward.
-  const pose = postureParts(groups, profile, fingering.seat);
-  if (!pose) return null;
-  parts.stretch = pose.stretch; parts.curl = pose.curl; parts.rotation = pose.rotation;
-  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++)
-    parts.splay += fingerSplayCost(groups[i], groups[j], profile);
-  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) {
-    const a = groups[i], b = groups[j];
-    // Fingers do not pass each other along the neck: the middle cannot press a
-    // fret behind the index while both are down. Priced as merely expensive it
-    // kept surfacing in the alternatives list, where a cheap transition can
-    // outrank any grip cost. Every finger assignment of a shape is enumerated
-    // and sorting the fingers by fret always yields a legal one, so rejecting
-    // this never costs a shape — only the assignment no hand can make.
-    if ((a.fret - b.fret) * (a.finger - b.finger) < 0) return null;
-    if (a.fret === b.fret && (a.finger - b.finger) * (a.string - b.string) > 0) {
-      // An index tucked between fingertips at the same fret (e.g. open A) is
-      // different from crossing the outer fingers over a lower, planted index.
-      // A flat barre cannot thread between another finger at this fret either.
-      const plantedIndex = Math.min(a.finger, b.finger) > 1 && groups.some(group => group.finger === 1 && group.fret < a.fret);
-      if (plantedIndex || a.members.length > 1 || b.members.length > 1) return null;
-      parts.stringOrder += COST_W.stringOrder * stringTravelUnits(Math.abs(a.string - b.string), profile);
-    }
-  }
-  // Charged against the seat the DP itself uses, so comfort and movement agree on
-  // where the hand is — and ONLY for a shape with one finger down, which is
-  // exactly where postureParts is blind. With two fingers the seat is a median of
-  // their implied anchors, so a higher-numbered finger drags it nutward and makes
-  // its own reach read as free: applied to every group this term started
-  // preferring the pinky, fingering two notes at fret 9 as ring + pinky instead of
-  // index + middle. Multi-finger spans are priced by the pose below, in the same
-  // millimetres.
-  if (groups.length === 1 && groups[0].fret > 0 && Number.isFinite(fingering.seat)) {
-    const g = groups[0];
-    // WHICH FINGER DOES THE WORK. Index free, then one step per finger. For a lone
-    // note `seat = fret - (finger - 1)`, so `finger - 1` IS `fret - seat`: the same
-    // number reads as "how weak a finger you are using" and as "how many frets the
-    // index is idling behind the note", and one term buys both readings.
-    //
-    // Without it the four fingerings of a single note differ ONLY by how far the
-    // hand has to travel to seat them, and travel always prefers not moving — so a
-    // phrase whose every note is at fret 8 was played with the ring from a hand
-    // parked at 6, with the index on a fret nothing uses. `reach` cannot fix that:
-    // it prices a fingertip stretched PAST its relaxed slot, and at these positions
-    // it runs 0.088 for the ring against 0.13 for the pinky — flat, because it is a
-    // square of a small overage. It sees a stretched hand; it cannot see a weak
-    // finger.
-    //
-    // Charged PER NOTE while a shift is paid once, which is the whole economics: at
-    // 0.12 a single note is worth 0.24 against ~1.84 to move two frets, so the hand
-    // does not chase one note, and a bar's worth of them is worth moving for. No bar
-    // detection needed for that — the existing window already sees far enough.
-    //
-    // One finger down only, and that scope is the code's own: postureParts has an
-    // opinion about which finger belongs where in a GRIP, so charging this on a
-    // chord would double-count. It is blind with one finger down, which is exactly
-    // the hole. Chords are untouched, and chord-corpus is the control that says so.
-    parts.seatIdle = COST_W.seatIdle * (g.finger - 1);
-    if (g.finger === 4) parts.pinky = COST_W.pinky;
-    const over = (fretXmm(g.fret, profile) - fretXmm(Math.max(1, fingering.seat), profile))
-      - (g.finger - 1) * COST_W.fingerPitchMm;
-    if (over > 0) parts.reach += COST_W.reach * (over / COST_W.fingerPitchMm) ** 2;
-  }
-  const fretted = [...shape.values()].filter((p) => p.fret > 0);
-  if (fretted.length) {
-    const lowest = Math.min(...fretted.map((p) => p.fret));
-    parts.high = Math.max(0, lowest - COST_W.highKnee) * COST_W.highRamp
-      + (shape.size === 1 ? 0 : (lowest > profile.highGate ? COST_W.high : 0));
-  }
-  const states = stringStates(shape, fingering, profile);
-  const explicitStroke = [...shape.keys()].some((note) => !!note?.stroke);
-  for (const state of states) {
-    if (state.state === "mute-left") parts.muting += COST_W.mute;
-    else if (state.state === "skip-right" && state.method !== "outside-attack") parts.rightHand += explicitStroke ? COST_W.strokeSkip : COST_W.innerSkip;
-    else if (state.state === "skip-right" && explicitStroke) parts.rightHand += COST_W.edgeControl;
-  }
-  const entries = [...shape.values()];
-  for (const open of entries.filter((p) => p.fret === 0)) {
-    if (entries.some((p) => p.fret > 0 && Math.abs(p.string - open.string) === 1)) parts.clearance += COST_W.openClearance;
-  }
-  return parts;
-}
-
-// A finger physically cannot cover more strings than it is long. True whichever
-// cost model is scoring the grip.
-const barreSpansFit = (groups) => groups.every((group) => group.members.length < 2
-  || Math.max(...group.members.map((e) => e.string)) - Math.min(...group.members.map((e) => e.string)) + 1
-    <= (MAX_BARRE_SPAN_BY_FINGER[group.finger] ?? 1));
-
-// ── The hand pose ─────────────────────────────────────────────────────────
-//
-// This replaced a model that scored a grip as a web of pairwise fingertip
-// distances. That web had no notion of how the hand is HELD, so it could not tell
-// "index at 8, pinky at 11" — a relaxed hand, one finger per fret — from "index
-// at 8, ring at 11", the same hand with the ring stretched past its slot. Both
-// fall inside their comfortable millimetre range, so both score zero and the
-// choice comes down to whichever incidental weight breaks the tie.
-//
-// This model gives the hand two variables instead: where it sits (`seat`) and
-// how far it is slanted along the neck (`tilt`). At tilt 1 the fingers lie one
-// per fret, the relaxed posture; at tilt 0 the wrist is rotated square and all
-// four land on a single fret. Finger k is expected at seat + (k-1)·tilt, and the
-// grip costs what it takes to hold the fingers away from those slots:
-//
-//   stretch   a finger reaching PAST its slot, toward the bridge. Expensive, and
-//             past MAX_STRETCH_MM no hand does it at all.
-//   curl      a finger drawn back toward the nut. Ordinary; nearly free.
-//   rotation  squaring the hand is what lets several fingers share one fret, but
-//             it swings the short fingers toward the treble side. A square hand
-//             asking a high finger to reach the bass strings is charged; the same
-//             grip on a slanted hand is not.
-//
-// Distances are millimetres against real fret positions, so one set of constants
-// describes a short-scale guitar and a long-scale bass, and a stretch near the
-// nut costs more than the same fret count up at the twelfth.
-// Swept against all 3269 fingered positions of chords-db (tests/chord-corpus.test.mjs).
-// `barre` and `barreFinger` are what a barre costs: at the old flat 0.22,
-// barring was cheaper than using separate fingers and A major came out as a
-// one-finger barre.
-//
-// `curl` sits ABOVE `stretch` on purpose: drawing a finger back toward the nut
-// costs more than reaching past its slot. That reads backwards until you notice
-// the hand's resting posture is fingers extended along the neck, not curled — so
-// pulling one behind where the hand has placed it is the less natural of the two.
-// The corpus agrees, and keeps agreeing past curl 6, but everything above 3 buys
-// rank-1 agreement while top-3 and mean rank stay flat and the hand-verified
-// grips start slipping. That is reshuffling near-ties, not understanding, so 3 is
-// where it stops.
-export const POSE_W = {
-  stretch: 1.4, curl: 3, rotation: 0.05,
-  splay: 0.4,
-  barre: 0.6, barreFinger: 1.4, maxStretchMm: 46, maxCurlMm: 46,
+// Conservative defaults for ordinary playing, not anatomical limits. Each row
+// is [maximum fret difference, maximum longitudinal mm, lateral comfort mm].
+// Inspired by Radicioni/Lombardo's pair constraints; middle/ring is deliberately
+// allowed one fret (their zero would reject the conventional open C fingering).
+const FINGER_REACH = Object.freeze({
+  '1:2': [2, 60, 20], '1:3': [3, 85, 30], '1:4': [4, 105, 40],
+  '2:3': [1, 38, 18], '2:4': [3, 75, 32], '3:4': [1, 38, 16],
+});
+const pairKey = (a, b) => [a.finger, b.finger].sort((x, y) => x - y).join(':');
+const stringGap = (a, b) => {
+  const aa = a.members.map(e => e.string), bb = b.members.map(e => e.string);
+  // A finger over a barre need not reach across the whole barre.
+  return Math.max(0, Math.min(...aa) - Math.max(...bb), Math.min(...bb) - Math.max(...aa));
 };
 
-// Initial heuristic comfort widths across the strings, not individual anatomical
-// limits. In particular, middle/pinky can fan apart more freely than ring/pinky.
-// This is a soft tension cost; it never declares a grip unplayable by itself.
-const FINGER_SPLAY_COMFORT_MM = Object.freeze({
-  '1:2': 20, '1:3': 30, '1:4': 40,
-  '2:3': 18, '2:4': 32, '3:4': 16,
-});
-
+// Also exposed for callers inspecting lateral tension in isolation.
 export function fingerSplayCost(a, b, profile = GUITAR_HAND_PROFILE) {
-  if (a.finger === b.finger) return 0;
-  const key = [a.finger, b.finger].sort((x, y) => x - y).join(':');
-  const comfort = FINGER_SPLAY_COMFORT_MM[key];
-  if (!comfort) return 0;
-  // A barre occupies an interval. Measure the gap between contact intervals,
-  // not their centres: a finger beside/over a barre does not span its full width.
-  const stringsA = a.members.map(member => member.string), stringsB = b.members.map(member => member.string);
-  const gap = Math.max(0, Math.min(...stringsA) - Math.max(...stringsB), Math.min(...stringsB) - Math.max(...stringsA));
-  const acrossMm = gap * profile.stringSpacingMm;
-  const excess = Math.max(0, acrossMm - comfort) / comfort;
-  return POSE_W.splay * excess ** 2;
+  const reach = FINGER_REACH[pairKey(a, b)];
+  if (!reach) return 0;
+  return Math.max(0, stringGap(a, b) * profile.stringSpacingMm / reach[2] - 1) ** 2;
 }
-const POSE_TILTS = [0, 0.25, 0.5, 0.75, 1];
 
-const NO_POSE = Object.freeze({ total: 0, stretch: 0, curl: 0, rotation: 0, tilt: 1, seat: null });
-
-function postureParts(groups, profile, fixedSeat = null) {
-  // An all-open shape has no groups to seat. The fretting hand is not involved,
-  // so there is no pose to charge — and returning nothing here would have made
-  // every open string unplayable.
-  if (!groups.length) return NO_POSE;
-  const limit = POSE_W.maxStretchMm;
-  // Curl is priced as ordinary but it was not BOUNDED, and only bounded terms
-  // reject. So a grip the hand cannot form — index at 12, ring at 18, pinky at
-  // 20 — escaped by seating the hand up at the pinky and calling the index a
-  // deep curl: quadratic, uncapped, and cheaper than the impossible stretch it
-  // stood in for. A finger drawn this far behind its slot is no more a hand than
-  // one reaching that far past it.
-  const curlLimit = POSE_W.maxCurlMm;
-  // Lean: a higher-numbered finger reaching to the BASS side of a lower one
-  // (string 0 is the treble e, so bass is the larger index). Slanting the hand
-  // buys some of this — the middle finger taking the low E behind the index is
-  // ordinary G major — but how much it buys depends entirely on WHICH pair, and
-  // that single fact carries the model.
-  //
-  // Anchored on the index the hand rolls freely: open C puts the ring three
-  // strings bass-ward of the index at two frets' remove and is the first chord
-  // anyone learns. Anchored on the ring nothing rolls, because the ring and
-  // pinky share a flexor tendon — and a grip with those same three strings and
-  // two frets between ring and pinky is one no player can form. Identical
-  // geometry, opposite verdicts, so no measure blind to finger identity can
-  // separate them. Hence both the amount (lower finger squared) and the relief
-  // slanting grants (tilt / lower finger) key off the anchoring finger.
-  const leans = [];
-  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) {
-    const lower = groups[i].finger < groups[j].finger ? groups[i] : groups[j];
-    const higher = lower === groups[i] ? groups[j] : groups[i];
-    const across = Math.max(0, higher.string - lower.string);
-    if (across > 0) leans.push({
-      amount: across * (higher.finger - lower.finger) * lower.finger ** 2,
-      anchor: lower.finger,
-    });
-  }
-  let best = null;
-  for (const tilt of POSE_TILTS) {
-    const rotation = POSE_W.rotation
-      * leans.reduce((sum, l) => sum + l.amount * (1 - tilt / l.anchor), 0);
-    if (best && rotation >= best.total) continue;
-    // The seat that minimises a sum of convex per-finger costs sits at one of the
-    // frets the fingers themselves imply, so only those need testing.
-    const anchors = fixedSeat == null ? groups.map(group => group.fret - (group.finger - 1) * tilt) : [fixedSeat];
-    for (const seat of anchors) {
-      if (seat < 0.5) continue;
-      let stretch = 0, curl = 0, over = false;
-      for (const g of groups) {
-        // The relaxed hand is a fixed span of KNUCKLES, not a fixed number of
-        // frets. Computing the slot in fret space and only then converting to
-        // millimetres made one-finger-per-fret free on a 34" bass and a 25.5"
-        // guitar alike, cancelling the one physical difference between them —
-        // the same 3-fret span is 79mm on a guitar and 106mm on a bass.
-        const d = fretXmm(g.fret, profile)
-          - (fretXmm(seat, profile) + (g.finger - 1) * tilt * COST_W.fingerPitchMm);
-        if (d > limit || d < -curlLimit) { over = true; break; }
-        if (fretXmm(g.fret, profile) - fretXmm(seat, profile) > MAX_HAND_SPAN_MM) { over = true; break; }
-        if (d > 0) stretch += POSE_W.stretch * (d / limit) ** 2;
-        else curl += POSE_W.curl * (-d / limit) ** 2;
-      }
-      if (over) continue;
-      const total = stretch + curl + rotation;
-      if (!best || total < best.total) best = { total, stretch, curl, rotation, tilt, seat };
+function gripParts(shape, fingering, profile) {
+  const groups = fingering.groups;
+  const parts = { fingers: groups.reduce((sum, g) => sum + 0.25 + 0.1 * (g.finger - 1), 0), stretch: 0, barre: 0, control: 0 };
+  for (const g of groups) {
+    g.string = g.members.reduce((sum, e) => sum + e.string, 0) / g.members.length;
+    g.barreSpan = Math.max(...g.members.map(e => e.string)) - Math.min(...g.members.map(e => e.string)) + 1;
+    if (g.members.length > 1) {
+      if (g.barreSpan > MAX_BARRE_SPAN_BY_FINGER[g.finger]) return null;
+      parts.barre += 0.8 * g.finger + 0.05 * (g.barreSpan - 1);
     }
   }
-  return best;
+  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) {
+    const a = groups[i], b = groups[j];
+    if ((a.fret - b.fret) * (a.finger - b.finger) < 0) return null;
+    if (a.fret === b.fret && (a.finger - b.finger) * (a.string - b.string) > 0) {
+      // Keep the ordinary tucked index of open A, but no crossed fingers over
+      // a planted index or threading another fingertip through a barre.
+      if (a.members.length > 1 || b.members.length > 1 ||
+          (Math.min(a.finger, b.finger) > 1 && groups.some(g => g.finger === 1 && g.fret < a.fret))) return null;
+      parts.control += stringGap(a, b);
+    }
+    const [frets, mm, across] = FINGER_REACH[pairKey(a, b)];
+    if (Math.abs(a.fret - b.fret) > frets) return null;
+    // Length and width share one reach budget. A barre leaves less freedom
+    // to stretch; a wide split cannot hide behind individually legal axes.
+    const barre = a.members.length > 1 || b.members.length > 1;
+    const along = Math.abs(fretXmm(a.fret, profile) - fretXmm(b.fret, profile)) / (mm * (barre ? 0.85 : 1));
+    const sideways = stringGap(a, b) * profile.stringSpacingMm / (2 * across);
+    const reach = Math.hypot(along, sideways);
+    if (reach > 1) return null;
+    // Ordinary C/D fingerings sit near 90% of the conservative middle/ring
+    // budget at the nut. Do not replace their ring finger with the pinky just
+    // to save a tiny amount of stretch; charge only the last tenth of reach.
+    parts.stretch = Math.max(parts.stretch, 2 * Math.max(0, (reach - 0.9) / 0.1) ** 2);
+    // Higher fingers reaching bass-ward of a planted outer finger are awkward.
+    const low = a.finger < b.finger ? a : b, high = low === a ? b : a;
+    parts.control += Math.max(0, high.string - low.string) * (low.finger - 1) * 0.25;
+  }
+  if (groups.length === 1 && Number.isFinite(fingering.seat)) {
+    const g = groups[0], distance = g.fret - fingering.seat;
+    if (distance < 0 || distance > g.finger ||
+        fretXmm(g.fret, profile) - fretXmm(fingering.seat, profile) > MAX_HAND_SPAN_MM) return null;
+    parts.stretch += 0.5 * Math.abs(distance - (g.finger - 1));
+  }
+  const stroke = [...shape.keys()].some(n => !!n.stroke);
+  for (const state of stringStates(shape, fingering, profile)) {
+    if (state.state === 'mute-left') parts.control += 0.5;
+    if (state.state === 'skip-right' && state.method !== 'outside-attack') parts.control += stroke ? 1.5 : 0.75;
+  }
+  return parts;
 }
 
 const FINGERING_CACHE = new WeakMap();
@@ -816,27 +398,10 @@ export function fingeringOptions(shape, profile = GUITAR_HAND_PROFILE) {
           const fingers = new Map(openFingers);
           const groups = grouping.map((g, k) => ({ ...g, finger: assigned[k], members: g.members.map((e) => ({ ...e })) }));
           for (const g of groups) for (const e of g.members) fingers.set(e.note, g.finger);
-          if (!barreSpansFit(groups)) return;
           const bases = groups.map((g) => g.fret - (g.finger - 1)).sort((a, b) => a - b);
           const rawSeat = bases.length ? Math.round(bases[(bases.length - 1) >> 1]) : null;
-          // A player anchors a position shift with the index, so a LONE note is
-          // taken by the index unless the hand is already seated for something
-          // else. Fret 1 with the pinky implies the index two frets behind the
-          // nut, which is not a cheap grip — it is not a grip. Clamping it to
-          // seat 1 said the opposite: below fret 4 every finger reported the same
-          // seat, so swapping fingers there cost no hand movement and the same
-          // string crossing came out 0.590 at fret 1 against 0.662 everywhere
-          // else. A flat 12% discount on the first three frets, and for a
-          // monophonic line — where every grip costs an identical 0.260 whatever
-          // the position — that artifact was most of what decided where the hand
-          // went.
-          //
-          // Only when one finger is down. With several the hand is already
-          // seated and the fingers bunch (tilt < 1), so the rigid fret-(finger-1)
-          // spacing this seat is derived from stops describing the shape: applied
-          // to chords as well it drops chords-db "offered at all" from 98.5% to
-          // 92.4%. Scoped to a single group it leaves every corpus figure
-          // untouched to the decimal.
+          // Do not invent a hand position behind the nut for a single contact.
+          // Chords can bunch their fingers, so only lone contacts use this rule.
           if (rawSeat !== null && rawSeat < 1 && groups.length === 1) return;
           const index = groups.find(group => group.finger === 1);
           const seat = index ? index.fret : rawSeat === null ? null : Math.max(1, rawSeat);
@@ -867,10 +432,6 @@ export function fingeringOptions(shape, profile = GUITAR_HAND_PROFILE) {
     base = diverse;
     byProfile.set(profile.id, base);
   }
-  // Returned straight from the cache. This used to map every entry to add an
-  // open-string charge and a barre scale from the user's preferences; with those
-  // gone the map was the identity, and the grip cost a shape has is now the one
-  // gripParts computed for it.
   return base;
 }
 
@@ -922,7 +483,7 @@ export function fingersAtSeat(shape, seat, profile = GUITAR_HAND_PROFILE, requir
 
 // Intrinsic difficulty of a single shape (lower = easier to fret): choose the
 // cheapest feasible concrete fingering, then sum named ergonomic, string-control,
-// register, and open-preference contributions. Raw fret span is only a coarse
+// and control contributions. Raw fret span is only a coarse
 // enumeration guard; it is no longer charged as comfort by itself.
 export function shapeCost(shape, profile = GUITAR_HAND_PROFILE) {
   return gripCostBreakdown(shape, profile).total;

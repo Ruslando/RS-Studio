@@ -118,7 +118,6 @@ self.onmessage = (ev) => {
   const choices = pool
     .map((choice, i) => ({ choice, priced: priced[i] }))
     .filter((x) => Number.isFinite(x.priced.cost))
-    .sort((a, b) => a.priced.cost - b.priced.cost)
     .map(({ choice, priced: got }) => ({
       kind: choice.kind,
       current: !!choice.current,
@@ -131,6 +130,7 @@ self.onmessage = (ev) => {
         gripParts: gripCostBreakdown(choice.shape, profile).parts,
         passage: got.cost,
       },
-    }));
+    }))
+    .sort((a, b) => a.costs.grip - b.costs.grip || a.costs.passage - b.costs.passage);
   self.postMessage({ choices });
 };
