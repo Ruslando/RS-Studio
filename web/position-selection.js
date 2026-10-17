@@ -4,6 +4,13 @@ import { chordColumns, placementLimits, shapeFault, writeColumnOverride } from '
 const pitchKey = notes => notes.map(n => n.pitch).sort((a, b) => a - b).join(',');
 const ordered = notes => [...notes].sort((a, b) => a.pitch - b.pitch);
 
+// These are the occurrences a fretboard edit changes, not the notes sounding
+// at one point in time. Invalid shared selections have no editable targets.
+export function positionEditTargets(group, focusedNotes = []) {
+  if (group.error) return new Set();
+  return new Set(group.multiple ? group.columns.flatMap(c => c.notes) : focusedNotes);
+}
+
 // Batch edits contain either standalone single notes or complete chords.
 // Chord voices cannot be treated as standalone notes in this mode.
 export function positionSelection(lane, selection) {

@@ -507,7 +507,14 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #fretboardName { padding: 0 var(--s-pair); font: 600 var(--text-body)/1 var(--font-mono); color: var(--stage-text); }
 #fretboardResetStatus.busy::before { border-color: var(--stage-hint); border-top-color: var(--stage-text); }
 #fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
-#fretboardWarning { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1; padding: var(--s-sibling) var(--s-row); border: 1px solid var(--stage-warn); border-radius: var(--r-control); background: var(--stage); color: var(--stage-warn); font-size: var(--text-control); white-space: nowrap; pointer-events: none; }
+#fretboardWarning { position: absolute; z-index: 3; top: 50%; left: 50%; transform: translate(-50%, -50%); width: max-content; max-width: calc(100% - 48px); padding: 8px 12px; border-radius: var(--r-control); background: var(--stage); color: var(--stage-warn); font-size: var(--text-control); text-align: center; overflow-wrap: anywhere; pointer-events: none; }
+/* Paint above the canvas and toolbars: an outline on the panel is covered by
+   its own opaque children along the inset sides and bottom. */
+#fretboardPanel::before { content: ""; position: absolute; inset: 2px; z-index: 20; border: 2px dashed var(--spectral-text); border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity var(--dur-panel) var(--ease-panel); }
+#fretboardPanel[data-editing]::before { opacity: 1; }
+#fretboardPanel[data-edit-blocked] :is(#fretboardSetup, #fretboardPin, #fretboardBusy, #fretboardResetStatus, #fretboardChevron),
+#fretboardPanel:not([data-editing]) :is(#fretboardSetup, #fretboardPin) { display: none; }
+@media (prefers-reduced-motion: reduce) { #fretboardPanel::before { transition: none; } }
 
 #fretboardStage { opacity: 1; transform: translateY(0); transition: opacity var(--dur-panel) var(--ease-panel), transform var(--dur-panel) var(--ease-panel); }
 #fretboardPanel[data-collapsed] #fretboardStage {
@@ -1274,26 +1281,30 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 
 #fretboardPin #fretboardChoose:not(:disabled) { color: var(--stage-text); }
 
-/* Controls occupy their own rows; wrapping never reduces the neck's height. */
+/* One continuous toolbar. Use natural group widths; a large flex basis made
+   alternatives wrap even when all visible controls fitted on one line. */
 #fretboardControls {
-  flex: none; z-index: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px;
+  flex: none; z-index: 2; display: flex; align-items: center; flex-wrap: nowrap; gap: 12px;
   padding: 6px 12px; background: var(--stage); border-top: 1px solid var(--stage-line);
+  overflow-x: auto; scrollbar-width: thin;
 }
-#fretboardSetup { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+#fretboardPanel:not([data-editing]) #fretboardControls { border-top-color: transparent; background: transparent; }
+#fretboardSetup { display: flex; align-items: center; gap: 8px; flex: none; }
 #fretboardSetup > * { flex: none; }
-#fretboardEdit { min-width: 58px; }
+#fretboardEdit { flex: none; min-width: 58px; white-space: nowrap; }
 #fretboardCapoField, #fretboardHandField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
+#fretboardSetup > :first-child { border-left: 0; padding-left: 0; }
 #fretboardCapoField label, #fretboardHandField label { color: var(--stage-label); font-size: var(--text-caption); }
 #fretboardCapo, #fretboardHand { width: 46px; min-width: 0; text-align: center; padding-inline: 4px; }
 #fretboardHandAuto { color: var(--stage-label); font-size: var(--text-caption); white-space: nowrap; }
 #fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField) { display: none; }
 #fretboardControls #fretboardPin {
-  position: static; flex: 1 1 600px; min-width: 0; max-width: 100%; flex-wrap: wrap;
+  position: static; flex: 1 0 auto; min-width: max-content; max-width: none; flex-wrap: nowrap;
   padding: 0; border: 0; border-radius: 0; background: transparent; gap: 12px;
-  overflow-x: auto; scrollbar-width: thin;
+  overflow: visible;
 }
 #fretboardShapeActions, #fretboardInfluence { display: flex; align-items: center; gap: 4px; flex: none; }
-#fretboardShapeActions { max-width: 100%; flex-wrap: wrap; }
+#fretboardShapeActions { flex-wrap: nowrap; }
 #fretboardInfluence { margin-left: auto; padding-left: 12px; border-left: 1px solid var(--stage-line); }
 #fretboardInfluence:not(:has(> button:not([hidden]))) { display: none; }
 #fretboardShape { margin-left: 4px; }

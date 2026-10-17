@@ -355,9 +355,9 @@
                  the spinner is placed against the canvas and not against the panel,
                  and so the panel can shrink over it while it keeps its size. -->
             <div id="fretboardStage">
+              <span id="fretboardWarning" role="status" hidden></span>
               <canvas id="fretboard"></canvas>
               <span id="fretboardResetStatus" role="status" hidden></span>
-              <span id="fretboardWarning" role="status" hidden></span>
               <!-- The wait names itself. A spinner alone says "not yet" but not what
                    for, and this element covers two waits of very different length:
                    fingering a whole song, and ranking one column's other positions.
@@ -369,8 +369,8 @@
               </div>
             </div>
             <div id="fretboardControls" role="group" aria-label="Fretboard controls">
+              <button type="button" id="fretboardEdit" class="btn btn--compact" aria-pressed="false">Switch to edit mode</button>
               <div id="fretboardSetup" role="group" aria-label="Hand and capo">
-              <button type="button" id="fretboardEdit" class="btn btn--compact" aria-pressed="false" title="Edit fingering">Edit</button>
               <div id="fretboardCapoField">
                 <label for="fretboardCapo">Capo</label>
                 <button type="button" id="fretboardCapoPrev" class="icon-btn icon-btn--compact" aria-label="Lower capo">−</button>

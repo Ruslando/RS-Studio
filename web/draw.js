@@ -11,7 +11,7 @@ import { bendHandles, collectStacks, drawDetectRegion, drawGrid, drawNoteFx, dra
 import { editorEl, minimap, mmctx, overviewRuler, overviewRulerCtx, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
-import { drawFretboard } from "./fretboard.js";
+import { drawFretboard, fretboardEditTargets } from "./fretboard.js";
 import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
 import { markerRails, overviewMarkerRails, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
@@ -390,6 +390,7 @@ function paintFrame() {
   // for octave digits that line up down a column.
   sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
   const actLane = activeLane();
+  const editTargets = fretboardEditTargets();
   const omittedCrosses = [];
   const outOfRange = [];
   const ghostNotes = [];
@@ -428,6 +429,7 @@ function paintFrame() {
       // so the drawn pitch always matches what's exported. A prebend's bar sits
       // flat but *above* the fretted row, which is what it actually sounds.
       const curve = bendCurve(n) || ribbon?.points;
+      const active = editTargets.has(n);
       const glow = notePlaybackGlow(lane, n);
       if (glow > 0) {
         sctx.beginPath();
@@ -440,6 +442,18 @@ function paintFrame() {
       // pitch trace remains visible for precise curve placement.
       sctx.globalAlpha = laneAlpha * motion.alpha * (curve && S.selection.has(n) ? 0.5 : 1);
       const drop = curve ? bendPeak(curve) * rowH : 0;
+      // Dashed outer frames mark edit recipients, including distant occurrences
+      // in a shared selection. Playback retains its separate soft glow.
+      if (active && curve) {
+        sctx.save();
+        sctx.globalAlpha = 1;
+        sctx.lineCap = "butt"; sctx.lineJoin = "round";
+        sctx.beginPath(); traceBendPath(x, w, y + rowH / 2, curve, rowH);
+        sctx.lineWidth = rowH + 7; sctx.strokeStyle = PAINT.ink; sctx.stroke();
+        sctx.setLineDash([5, 3]);
+        sctx.lineWidth = rowH + 4; sctx.strokeStyle = PAINT.accent; sctx.stroke();
+        sctx.restore();
+      }
       if (curve) {
         sctx.lineCap = "butt"; sctx.lineJoin = "round";
         sctx.beginPath(); traceBendPath(x, w, y + rowH / 2, curve, rowH);
@@ -461,6 +475,15 @@ function paintFrame() {
       } else {
         const inset = Math.min(2, rowH * .12) * (1 - motion.reveal);
         paintNoteBar(sctx, x, y + inset, w, rowH - 2 * inset, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis);
+      }
+      if (active && !curve) {
+        sctx.save();
+        sctx.globalAlpha = 1;
+        sctx.beginPath(); sctx.roundRect(x - 3, y - 3, w + 6, rowH + 6, 4);
+        sctx.lineWidth = 4; sctx.strokeStyle = PAINT.ink; sctx.stroke();
+        sctx.setLineDash([5, 3]);
+        sctx.lineWidth = 2; sctx.strokeStyle = PAINT.accent; sctx.stroke();
+        sctx.restore();
       }
       if (motion.cut > 0) {
         sctx.save();

@@ -1,10 +1,25 @@
 import assert from 'node:assert/strict';
-import { applySharedPositionPlan, positionSelection, resetSharedPositions, sharedPositionPlan } from '../../web/position-selection.js';
+import { applySharedPositionPlan, positionEditTargets, positionSelection, resetSharedPositions, sharedPositionPlan } from '../../web/position-selection.js';
 import { chordColumns, placementFault, placementLimits, voiceNotes } from '../../web/voicing-core.js';
 
 const tuning = [64, 59, 55, 50, 45, 40];
 const note = (start, pitch, extra = {}) => ({ start, end: start + .4, pitch, ...extra });
 const flags = { influencePrevious: true, influenceNext: true, adaptPrevious: true, adaptNext: true };
+
+// Edit highlighting follows every recipient, including occurrences away from
+// the playhead, and never advertises edits for an invalid shared selection.
+{
+  const a = note(0, 52), b = note(8, 52), other = note(4, 55);
+  const lane = { notes: [a, other, b] };
+  assert.deepEqual([...positionEditTargets(positionSelection(lane, new Set([a, b])), [a])], [a, b]);
+  assert.equal(positionEditTargets(positionSelection(lane, new Set([a, other])), [a]).size, 0);
+  assert.deepEqual([...positionEditTargets(positionSelection(lane, new Set()), [other])], [other]);
+  const chord = [note(0, 52), note(0, 55), note(0, 59)];
+  const repeat = chord.map(n => note(12, n.pitch));
+  const chords = { notes: [...chord, ...repeat] };
+  assert.deepEqual([...positionEditTargets(positionSelection(chords, new Set(chords.notes)), chord)], chords.notes);
+  assert.deepEqual([...positionEditTargets(positionSelection(chords, new Set([chord[0]])), chord)], chord);
+}
 const plan = (lane, selection, source, shape, maxFret = 22) => {
   const voiced = voiceNotes(lane.notes, tuning);
   return sharedPositionPlan(lane, selection, source, shape, tuning, n => voiced.get(n), maxFret);
