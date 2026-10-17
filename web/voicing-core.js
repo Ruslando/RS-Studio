@@ -1593,7 +1593,7 @@ function registerColumns(columns, tuning, options = {}) {
       return fret > frets || (fret === 0 && rules[k] && rules[k].fretted);
     }) ? spread[i] : null;
     const locked = pins[i] || handed;
-    const flow = locked ? overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes) : null;
+    const flow = locked ? normalizeOverrideInfluence(overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes)) : null;
     return {
       hold: holds[i],
       pitches: notes.map((n) => n.pitch),
@@ -1653,22 +1653,10 @@ function registerColumns(columns, tuning, options = {}) {
   // re-fingering its neighbours with that switched off.
   for (const c of input) c.aside = c.adaptNext === false;
 
-  // AN OVERRIDE THE OTHERS ADAPT TO TAKES THE HAND WITH IT, when it is out of the
-  // hand's reach from where the hand was. That is exactly what a hold says — "the
-  // hand is on this fret from here" — so it is said with one: the notes after it in
-  // the bar are played from there, and the bars after that are solved knowing it.
-  // Inside the reach nothing is implied; the note is simply taken where the hand is.
-  //
-  // BEFORE AND AFTER ARE WHERE THE HOLD STARTS AND STOPS. Notes after adapt: it starts
-  // on the override. Notes before adapt as well: it starts at the bar line, so the
-  // hand is already up there for the notes leading in. Before only: it starts at the
-  // bar line and is cut straight after the override, where the next note opens a
-  // block of its own and goes back to wherever the music wants it.
-  // Limitation: "before" reaches to the bar line and no further, and not at all on a
-  // lane with no bar lines — a hold is a bar's, like every other decision here.
-  //
-  // Whether it is out of reach is read off a first solve, against the nearest fretted
-  // column beside it: one more pass, and only for a lane that has such an override.
+  // Adapting to an override uses the same hold as a directly placed hand.
+  // Read the override's physical hand anchor from a first solve, then start a
+  // hold there regardless of the distance to a neighbouring note. Before-only
+  // holds start at the bar line and end immediately after the override.
   const seats = [];
   let voiced = null;
   const adapting = (c) => c.fixed && !c.hold && (c.adaptNext === true || c.adaptPrev);
@@ -1680,29 +1668,20 @@ function registerColumns(columns, tuning, options = {}) {
       return b;
     };
     const todo = input.map(adapting);     // decided before any hold is implied
-    const first = voiceRegister(low, input, undefined, seats, options.bars, frets);
-    const span = (i) => {
-      let lo = Infinity, hi = -Infinity;
-      (first[i] || []).forEach((p, k) => {
-        if (p.fret <= 0 || (input[i].rules[k] && input[i].rules[k].free)) return;
-        lo = Math.min(lo, p.fret); hi = Math.max(hi, p.fret);
-      });
-      return Number.isFinite(lo) ? { lo, hi } : null;
-    };
-    const beside = (i) => {
-      for (let j = i - 1; j >= 0; j--) { const got = span(j); if (got) return got; }
-      for (let j = i + 1; j < input.length; j++) { const got = span(j); if (got) return got; }
-      return null;
-    };
+    // Measure the chosen grip before adaptation, so switching adaptation on
+    // cannot itself change the anchor that it is meant to follow.
+    const first = voiceRegister(low, input.map(c => c.fixed ? { ...c, aside: true } : c),
+      undefined, seats, options.bars, frets);
     let moved = false;
     input.forEach((c, i) => {
       if (!todo[i] || c.hold) return;
-      const own = span(i), near = own && beside(i);
-      if (!near || Math.max(own.hi, near.hi) - Math.min(own.lo, near.lo) < SPAN) return;
+      const shape = pins[i] || spread[i];
+      const anchor = handForShape(shape, seats[i], handProfileForTuning(tuning)).seat;
+      if (!Number.isFinite(anchor)) return;
       let from = i;
       if (c.adaptPrev && bars)
         while (from > 0 && !input[from - 1].hold && barOf(from - 1) === barOf(i)) from--;
-      input[from].hold = { fret: own.lo };
+      input[from].hold = { fret: anchor, local: c.adaptNext !== true };
       if (c.adaptNext !== true && input[i + 1] && !input[i + 1].hold) input[i + 1].cut = true;
       moved = true;
     });
@@ -2114,12 +2093,10 @@ const STICK = 16;
 const seamFactor = (silence, jump) =>
   (silence >= 0.25 ? 0.25 : 1) * (jump === 0 ? 4 : jump > 12 ? 0.5 : 1);
 
-// AND AN OPEN STRING IS CHARGED IN FULL, which was tried the other way and is
-// not close. Capping it at 2 frets — so a hand at the 3rd takes the open string
-// beside it rather than climbing to the 5th, which is what a bassist does —
-// reads well on a walking bass line and costs NINE POINTS over the corpus
-// (74.2% -> 65.3%). The standalone analysis liked the cap; the engine, which
-// also has the grip search and the effect rules, does not. Measured, not argued.
+// Chord open strings need no fretting-hand movement and carry no register cost.
+// Single notes retain their existing preference for a fretted placement.
+const registerDistance = (pitches, fret, register) =>
+  fret === 0 && pitches.length > 1 ? 0 : Math.abs(fret - register);
 
 // WHAT ONE ALREADY-DECIDED ASSIGNMENT COSTS at register T — the same two terms
 // gripAt charges, with the strings handed in instead of searched for. It exists for
@@ -2140,7 +2117,7 @@ function priceAssignment(tuning, pitches, strings, T, prev, span, maxFret) {
     if (st == null || st < 0) return null;
     const f = pitches[i] - tuning[st];
     if (f < 0 || f > maxFret) return null;      // not on this instrument's neck
-    let d = Math.abs(f - T);                    // an open string is charged in full, as above
+    let d = registerDistance(pitches, f, T);
     if (prev != null && f > 0) d += STICK * Math.max(0, Math.abs(f - prev) - SPAN);
     cost += d;
     if (f > 0) { if (f < lo) lo = f; if (f > hi) hi = f; }
@@ -2188,8 +2165,8 @@ export function fitAtRegister(tuning, pitches, T, o = {}) {
   // promise about the next one.
   const placed = best || gripAt(tuning, pitches, T, o, 1, maxFret + 1, maxFret)
     || gripAt(tuning, pitches, T, { ...o, rules: o.rules }, 1, maxFret + 1, maxFret, true);
-  // Open strings are unavailable to automatic placement when that pitch can be
-  // fretted anywhere else on the instrument. Explicit pins bypass this search.
+  // Single notes avoid open strings when a fretted placement exists. Chords
+  // may use open strings freely unless a written technique requires a fret.
   return (placed || { out: new Array(pitches.length).fill(-1) }).out;
 }
 
@@ -2242,7 +2219,7 @@ function gripAt(tuning, pitches, T, o, g, span, maxFret, loose = false) {
     const reach = (rule && rule.reach) || 0;
     if (f < 0 || f + reach > maxFret) return -1;
     if (f === 0 && rule && rule.fretted) return -1;
-    if (f === 0 && hasFrettedPlacement(pitches[i], tuning, maxFret, reach)) return -1;
+    if (pitches.length === 1 && f === 0 && hasFrettedPlacement(pitches[i], tuning, maxFret, reach)) return -1;
     // A note that continues onto this string has to be able to LEAVE on it: a
     // slide slides along one string, so a source seated where its target is open
     // (or off the neck) is not a legal seat for the source, however near the
@@ -2269,14 +2246,14 @@ function gripAt(tuning, pitches, T, o, g, span, maxFret, loose = false) {
       if (s == null || s < 0 || used[s] || out[i] >= 0) continue;
       const f = fretOn(i, s, true);
       if (f < 0) continue;
-      used[s] = true; out[i] = s; cost += Math.abs(f - T);
+      used[s] = true; out[i] = s; cost += registerDistance(pitches, f, T);
     }
   }
   for (let i = 0; i < pitches.length; i++) {
     if (out[i] >= 0) continue;
     const rule = rules ? rules[i] : null;
     const reach = (rule && rule.reach) || 0;
-    let bestS = -1, bestD = Infinity;
+    let bestS = -1, bestD = Infinity, bestRank = Infinity;
     for (let s = 0; s < tuning.length; s++) {          // fattest first, so it takes ties
       if (used[s]) continue;
       const f = fretOn(i, s, false);
@@ -2284,9 +2261,11 @@ function gripAt(tuning, pitches, T, o, g, span, maxFret, loose = false) {
       // A trill is held by one hand together with its own target, so the string
       // has to suit both frets; everywhere else reach is 0 and this is |f - T|.
       // The iteration order makes the fattest string win an exact tie.
-      let d = Math.max(Math.abs(f - T), Math.abs(f + reach - T));
+      let d = f === 0 && pitches.length > 1 ? 0
+        : Math.max(Math.abs(f - T), Math.abs(f + reach - T));
       if (prev != null && f > 0) d += STICK * Math.max(0, Math.abs(f - prev) - SPAN);
-      if (d < bestD) { bestD = d; bestS = s; }
+      const rank = d - (o.recall?.(i, s) || 0) / MEMORY_REGISTER_WEIGHT;
+      if (rank < bestRank) { bestRank = rank; bestD = d; bestS = s; }
     }
     if (bestS < 0) return null;
     used[bestS] = true; out[i] = bestS; cost += bestD;
@@ -2294,9 +2273,7 @@ function gripAt(tuning, pitches, T, o, g, span, maxFret, loose = false) {
   return { out, cost };
 }
 
-// What a block of music costs at register T. Open strings are considered only
-// for pitches with no fretted placement; deliberate open choices are made by
-// the player with a fingering pin.
+// Whether a single note has a fretted alternative to an open string.
 function hasFrettedPlacement(pitch, tuning, maxFret, reach = 0) {
   return tuning.some((open) => {
     const fret = pitch - open;
@@ -2307,10 +2284,8 @@ function hasFrettedPlacement(pitch, tuning, maxFret, reach = 0) {
 function blockCost(tuning, cols, T, maxFret) {
   let cost = 0;
   for (const c of cols) {
-    // Already decided, so it pays nothing — unless the others are to carry on as if
-    // the override were not there, in which case the bar's register is still chosen
-    // with this note in it: dropping it moved the register, and that moved them.
-    if (c.fixed && !c.aside) continue;
+    // Keep every pitch in the register estimate, even when its position is
+    // pinned. A positional override must not erase context before its onset.
     const used = new Array(tuning.length).fill(false);
     for (let i = 0; i < c.pitches.length; i++) {
       let best = Infinity, bs = -1;
@@ -2318,7 +2293,7 @@ function blockCost(tuning, cols, T, maxFret) {
         if (used[s]) continue;
         const f = c.pitches[i] - tuning[s];
         if (f < 0 || f > maxFret) continue;
-        if (f === 0 && hasFrettedPlacement(c.pitches[i], tuning, maxFret)) continue;
+        if (c.pitches.length === 1 && f === 0 && hasFrettedPlacement(c.pitches[i], tuning, maxFret)) continue;
         const d = f === 0 ? 0 : Math.abs(f - T);
         if (d < best) { best = d; bs = s; }
       }
@@ -2515,6 +2490,125 @@ function medianOfFlat(tuning, columns, blocks, bar, maxFret) {
   return seen.length ? seen[seen.length >> 1] : 0;
 }
 
+// Memory is rebuilt once, chronologically, per solve. Speculative lookahead
+// never trains it, so optimizer iterations cannot amplify their own guesses.
+const MEMORY_LOOKAHEAD = 8;
+const MEMORY_BEAM = 12;
+const MEMORY_REGISTER_WEIGHT = 0.25;
+const MEMORY_SHIFT = 5;
+const MEMORY_STRENGTH = 4;
+const memoryShiftCost = (from, to) => from == null || from === to ? 0
+  : MEMORY_SHIFT + .1 * Math.abs(from - to);
+
+const memoryEntries = c => [
+  ...c.pitches.map((pitch, k) => [`n:${pitch}`, k]),
+  ...(c.pitches.length > 1 ? [[`c:${c.pitches.join(",")}`, -1]] : []),
+];
+
+function rememberedBonus(memory, c, out) {
+  let bonus = 0;
+  for (const [key, k] of memoryEntries(c)) {
+    if (k >= 0 && (c.rules?.[k]?.free || c.dead?.[k] || out[k] < 0)) continue;
+    const entry = memory.get(key);
+    const count = entry?.counts.get(k < 0 ? out.join(",") : String(out[k])) || 0;
+    if (count) bonus += MEMORY_STRENGTH * Math.log2(1 + count)
+      * count / entry.total * (k < 0 ? 1.5 : 1 / c.pitches.length);
+  }
+  return bonus;
+}
+
+function learnPlacement(memory, c, out, weight) {
+  for (const [key, k] of memoryEntries(c)) {
+    if (k >= 0 && (c.rules?.[k]?.free || c.dead?.[k] || out[k] < 0)) continue;
+    if (k < 0 && out.some(s => s < 0)) continue;
+    let entry = memory.get(key);
+    if (!entry) memory.set(key, entry = { counts: new Map(), total: 0 });
+    const position = k < 0 ? out.join(",") : String(out[k]);
+    entry.counts.set(position, (entry.counts.get(position) || 0) + weight);
+    entry.total += weight;
+  }
+}
+
+function linkedStrings(tuning, c, got, next, maxFret) {
+  if (!next || !c.rules) return null;
+  let carry = null;
+  c.rules.forEach((rule, k) => {
+    if (!rule?.link || got[k] < 0) return;
+    carry ||= new Array(next.pitches.length).fill(null);
+    for (let j = 0; j < next.pitches.length; j++) {
+      const fret = next.pitches[j] - tuning[got[k]];
+      if (carry[j] != null || fret < 0 || fret > maxFret || (rule.link === "fretted" && fret === 0)) continue;
+      carry[j] = got[k]; break;
+    }
+  });
+  return carry;
+}
+
+function rememberAhead(tuning, columns, start, registers, memory, stand, directed, carry, span, maxFret) {
+  let beam = [{ g: stand, carry, cost: 0, first: null }];
+  for (let i = start; i < Math.min(columns.length, start + MEMORY_LOOKAHEAD); i++) {
+    const c = columns[i];
+    if (i > start && (c.hold || c.cut)) break;
+    const states = new Map();
+    for (const state of beam) {
+      const T = directed && state.g != null ? state.g + ((span - 1) >> 1) : registers[i];
+      const opts = { rules: c.rules, forced: state.carry, pinned: c.pinned,
+        next: columns[i + 1]?.pitches, span, maxFret,
+        recall: (k, string) => {
+          if (c.rules?.[k]?.free || c.dead?.[k]) return 0;
+          const entry = memory.get(`n:${c.pitches[k]}`);
+          const count = entry?.counts.get(String(string)) || 0;
+          return count ? MEMORY_STRENGTH * Math.log2(1 + count) * count / entry.total / c.pitches.length : 0;
+        } };
+      const yields = c.soft && state.carry && state.carry.some((s, k) => s != null && s !== c.fixed[k]);
+      const fixed = c.fixed && !c.aside && !yields;
+      const anchored = i === start && c.hold;
+      const candidates = anchored ? [state.g] : Array.from({ length: handCeiling(maxFret) }, (_, k) => k + 1);
+      for (const g of candidates) {
+        let placed;
+        if (fixed) {
+          const frets = c.fixed.map((s, k) => c.pitches[k] - tuning[s]).filter(f => f > 0);
+          if (frets.some(f => f < g || f >= g + span)) continue;
+          placed = { out: c.fixed.slice(), cost: priceAssignment(tuning, c.pitches, c.fixed, T, null, span, maxFret)?.cost || 0 };
+        } else placed = gripAt(tuning, c.pitches, T, opts, g, span, maxFret);
+        // Whole chord memories compete as whole shapes, not as independently
+        // chosen voices. Revalidate every technique and occupied string here.
+        if (!fixed && c.pitches.length > 1) {
+          const known = memory.get(`c:${c.pitches.join(",")}`);
+          for (const key of known?.counts.keys() || []) {
+            const given = key.split(",").map(Number);
+            if (given.some((s, k) => (state.carry?.[k] != null && state.carry[k] !== s)
+              || (c.pinned?.[k] != null && c.pinned[k] !== s)
+              || (!c.rules?.[k]?.free && c.pitches[k] - tuning[s] > 0
+                && (c.pitches[k] - tuning[s] < g || c.pitches[k] - tuning[s] + (c.rules?.[k]?.reach || 0) >= g + span)))) continue;
+            const recalled = gripAt(tuning, c.pitches, T, { ...opts, forced: given }, g, span, maxFret);
+            if (!recalled || recalled.out.some((s, k) => s !== given[k])) continue;
+            if (!placed || recalled.cost * MEMORY_REGISTER_WEIGHT - rememberedBonus(memory, c, recalled.out)
+              < placed.cost * MEMORY_REGISTER_WEIGHT - rememberedBonus(memory, c, placed.out)) placed = recalled;
+          }
+        }
+        if (!placed) continue;
+        const shift = anchored ? 0 : memoryShiftCost(state.g, g);
+        const cost = state.cost + placed.cost * MEMORY_REGISTER_WEIGHT + shift
+          - rememberedBonus(memory, c, placed.out);
+        const nextCarry = linkedStrings(tuning, c, placed.out, columns[i + 1], maxFret);
+        const key = `${g}:${nextCarry?.join(",") || ""}`;
+        if (!states.has(key) || cost < states.get(key).cost) states.set(key, {
+          g, carry: nextCarry, cost, first: state.first || { out: placed.out, g },
+        });
+      }
+    }
+    if (!states.size) break;
+    beam = [...states.values()].sort((a, b) => a.cost - b.cost).slice(0, MEMORY_BEAM);
+  }
+  if (beam[0].first) return beam[0].first;
+  const c = columns[start], T = registers[start];
+  const opts = { rules: c.rules, forced: carry, pinned: c.pinned, next: columns[start + 1]?.pitches, span, maxFret };
+  const fallback = stand != null && gripRun(tuning, c.pitches, T, opts, stand, span, maxFret);
+  return fallback ? { out: fallback.out, g: fallback.g }
+    : { out: fitAtRegister(tuning, c.pitches, T, opts), g: stand };
+}
+
 /**
  * @param tuning  open-string MIDI pitches, physical order, index 0 = fattest
  *                string. Standard guitar is [40,45,50,55,59,64].
@@ -2577,106 +2671,56 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
   const home = homeRegister(tuning, sorted, flat.blocks, flat.bar, maxFret);
   const registers = solveRegisters(tuning, sorted, blocks, bar, MU, home, maxFret);
 
-  // Place every column at its bar's register, carrying forward the one thing a
-  // register cannot express: a note that continues onto a NAMED string, because
-  // a slide slides along one string and a hammer-on lands on the one already
-  // held. The window model priced a break in its transition; here the constraint
-  // is simply handed to the next column, which is what actually happens.
-  const strings = new Array(n);
-  // Where the hand stood for each column of a HELD block, which is not the same as the
-  // read-back below: it is the grip the placement actually used, so it can say that the
-  // hand started at the fret the player named and moved at the column that made it move.
-  const stood = new Array(n).fill(null);
-  let carry = null, prevFret = null;
-  for (let b = 0; b < blocks.length; b++) {
-    const T = registers[b];
-    // A HOLD IS THE WHOLE BLOCK'S, not just the column it was placed on. "My hand is
-    // on fret 9 here" is a statement about the hand, and the hand does not move again
-    // until the next bar line or the next hold — which is what a block already is.
-    const grip = holdOf(sorted, blocks[b])?.grip ?? null;
-    // The hand the hold put down, and wherever it has since had to move to. It carries
-    // forward rather than snapping back to the named fret: "play from 3 until that stops
-    // working, then shift" is one shift, and a hand that returned to 3 the moment it
-    // could would be a hand hopping back and forth mid-phrase.
-    let stand = grip;
-    // LEAVING A HELD BLOCK IS A SHIFT TOO, and the register has already decided where
-    // to. Carrying the held fret in as "where the hand just was" let the continuity
-    // term veto that decision a note at a time: after a hold at the 17th the next bar
-    // came down 17, 15, 12, 10 — four positions for one hand in one bar.
-    if (grip == null && b > 0 && holdOf(sorted, blocks[b - 1])?.grip != null) prevFret = null;
-    for (const i of blocks[b]) {
-      const c = sorted[i];
-      const after = sorted[i + 1];
-      // Before the placement, so `prevFret` is still the hand this column arrives
-      // with — the offers and the grip that is taken are then on one scale.
-      if (price && price.index === i) {
-        price.out = price.shapes.map((given) =>
-          priceAssignment(tuning, c.pitches, c.idx.map((k) => given[k]), T, prevFret, span, maxFret));
-      }
-      // A HELD BLOCK IS PLACED WITH NO MEMORY OF WHERE THE HAND WAS. STICK exists to
-      // stop the engine teleporting the hand for no reason, and a hold is a reason: it
-      // is the player saying the shift happens here. Left in, it wins — a hand pinned
-      // to fret 2 one beat after fret 12 was charged 48 for the drop and played at 7
-      // instead, which is a pin that visibly does not do what it says.
-      const opts = {
-        rules: c.rules, forced: carry, pinned: c.pinned, span, maxFret,
-        next: after ? after.pitches : null, prev: grip != null ? null : prevFret,
-      };
-      let got;
-      // A grip handed on from an override elsewhere gives way to a slide or hammer
-      // arriving on a named string; one the player put on this very column does not.
-      const yields = c.soft && carry && carry.some((s, k) => s != null && s !== c.fixed[k]);
-      if (c.fixed && !yields) got = c.fixed.slice();
-      else if (stand != null) {
-        const run = gripRun(tuning, c.pitches, T, opts, stand, span, maxFret);
-        // Null means no grip on the neck can hold this column at all — a chord no hand
-        // takes. The free search below says so honestly instead of pretending the hold
-        // still applies, and the hand keeps its last real position.
-        if (run) { got = run.out; stand = run.g; }
-        else got = fitAtRegister(tuning, c.pitches, T, opts);
-        stood[i] = stand;
-      } else got = fitAtRegister(tuning, c.pitches, T, opts);
-      // The searches above seat pinned notes first, but their last-resort fallback
-      // seats nothing; a pin is never the thing that gives way.
-      if (c.pinned) c.pinned.forEach((s, k) => { if (s != null) got[k] = s; });
-      // Nothing placeable at all: a chord no instrument can hold. Say so with -1
-      // rather than silently inventing a shape.
-      if (got.some((s) => s < 0)) got = placeAnyway(tuning, c.pitches, got, maxFret);
-      strings[i] = got;
-      // Where the fretting hand just was, for the continuity term above. A note
-      // the fretting hand never held does not count: a tapped note is the other
-      // hand reaching wherever it likes, and letting it set this stranded the
-      // fretting hand up at the tap and would not let it come back.
-      {
-        let lo = Infinity;
-        for (let k = 0; k < got.length; k++) {
-          if (got[k] < 0 || (c.rules && c.rules[k] && c.rules[k].free)) continue;
-          const fr = c.pitches[k] - tuning[got[k]];
-          if (fr > 0 && fr < lo) lo = fr;
-        }
-        if (Number.isFinite(lo) && !c.aside) prevFret = lo;
-      }
-      // Which strings the next column has to keep, and for which of its notes.
-      carry = null;
-      const next = after;
-      if (c.rules && next) {
-        for (let k = 0; k < c.rules.length; k++) {
-          const link = c.rules[k] && c.rules[k].link;
-          if (!link || got[k] < 0) continue;
-          if (!carry) carry = new Array(next.pitches.length).fill(null);
-          // The target is whichever of the next column's notes that string can
-          // sound; a legato slide's target must also land fretted.
-          for (let j = 0; j < next.pitches.length; j++) {
-            if (carry[j] != null) continue;
-            const f = next.pitches[j] - tuning[got[k]];
-            if (f < 0 || f > maxFret) continue;
-            if (link === "fretted" && f === 0) continue;
-            carry[j] = got[k];
-            break;
-          }
-        }
-      }
+  // Global registers remain a prior. Placement uses chronological memory and a
+  // short joint search, rather than binding isolated matching fragments.
+  const strings = new Array(n), stood = new Array(n).fill(null);
+  const registerAt = new Array(n);
+  blocks.forEach((idx, b) => idx.forEach(i => { registerAt[i] = registers[b]; }));
+  let memory = new Map(), stand = null, directed = false, carry = null;
+  let resume = null;
+  for (let i = 0; i < n; i++) {
+    const c = sorted[i];
+    if (c.cut) {
+      if (resume) ({ memory, stand, directed } = resume);
+      else { memory = new Map(); stand = null; directed = false; }
+      resume = null;
     }
+    if (c.hold) {
+      resume = c.hold.local ? { memory, stand, directed } : null;
+      memory = new Map();
+      stand = Math.max(1, Math.round(c.hold.fret));
+      directed = true;
+    }
+    const T = directed && stand != null ? stand + ((span - 1) >> 1) : registerAt[i];
+    if (price && price.index === i) {
+      price.out = price.shapes.map(given => {
+        const assignment = c.idx.map(k => given[k]);
+        const got = priceAssignment(tuning, c.pitches, assignment, T, null, span, maxFret);
+        if (!got) return null;
+        const fretted = assignment.map((s, k) => c.rules?.[k]?.free || c.dead?.[k] ? 0 : c.pitches[k] - tuning[s]).filter(f => f > 0);
+        const lo = Math.max(1, Math.max(...fretted, 1) - span + 1);
+        const hi = Math.min(handCeiling(maxFret), Math.min(...fretted, handCeiling(maxFret)));
+        const target = Math.max(lo, Math.min(hi, stand ?? lo));
+        return { ...got, cost: got.cost * MEMORY_REGISTER_WEIGHT
+          + memoryShiftCost(stand, target) - rememberedBonus(memory, c, assignment) };
+      });
+    }
+    const chosen = rememberAhead(tuning, sorted, i, registerAt, memory,
+      stand, directed, carry, span, maxFret);
+    let got = chosen.out;
+    const yields = c.soft && carry && carry.some((s, k) => s != null && s !== c.fixed[k]);
+    if (c.fixed && !yields) got = c.fixed.slice();
+    if (c.pinned) c.pinned.forEach((s, k) => { if (s != null) got[k] = s; });
+    if (got.some(s => s < 0)) got = placeAnyway(tuning, c.pitches, got, maxFret);
+    strings[i] = got;
+    // Local pins are exceptions: the hypothetical automatic placement supplies
+    // continuity and learning, while the authored placement alone is displayed.
+    stand = chosen.g;
+    if (!c.aside) {
+      if (directed) stood[i] = stand;
+      learnPlacement(memory, c, got, directed ? 2 : 1);
+    } else learnPlacement(memory, c, chosen.out, 1);
+    carry = linkedStrings(tuning, c, got, sorted[i + 1], maxFret);
   }
 
   // The hand the board draws. The register is a centroid, not a finger — an
@@ -2684,14 +2728,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
   // anchor is read back off what was actually played. See planHand.
   if (seats) {
     const named = new Array(n).fill(null);
-    for (let b = 0; b < blocks.length; b++) {
-      // A HELD BLOCK REPORTS THE HAND IT WAS GIVEN and never reads it back off the
-      // notes: a hand gripping 9 to 12 whose lowest note is at 10 would report 10 —
-      // true of the notes, and one fret from the band the player just pointed at.
-      // Per column, because inside a held block the hand can shift (gripRun).
-      const grip = holdOf(sorted, blocks[b])?.grip ?? null;
-      if (grip != null) for (const i of blocks[b]) named[i] = stood[i] ?? grip;
-    }
+    for (let i = 0; i < n; i++) if (stood[i] != null) named[i] = stood[i];
     const reach = sorted.map((c, i) => {
       let lo = Infinity, hi = -Infinity;
       for (let k = 0; k < c.pitches.length; k++) {
@@ -2805,7 +2842,7 @@ function placeAnyway(tuning, pitches, out = null, maxFret = DEFAULT_NECK_FRETS) 
       if (used[s]) continue;
       const f = pitches[i] - tuning[s];
       if (f < 0 || f > maxFret) continue;
-      if (f === 0 && hasFrettedPlacement(pitches[i], tuning, maxFret)) continue;
+      if (pitches.length === 1 && f === 0 && hasFrettedPlacement(pitches[i], tuning, maxFret)) continue;
       used[s] = true;
       seated[i] = s;
       break;

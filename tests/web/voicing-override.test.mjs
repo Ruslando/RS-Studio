@@ -1,7 +1,7 @@
 // Run: node tests/web/voicing-override.test.mjs
 // What an override reaches, and what a technique forbids an override to offer.
 import assert from "node:assert/strict";
-import { chordColumns, overrideFlow, overrideInfluence, placementFault, placementLimits, shapeFault, voiceNotes, voiceNotesFingered } from "../../web/voicing-core.js";
+import { chordColumns, overrideFlow, overrideInfluence, placementFault, placementLimits, scoreShapesAsDecided, shapeFault, voiceNotes, voiceNotesFingered } from "../../web/voicing-core.js";
 
 const tuning = [64, 59, 55, 50, 45, 40];              // app order: string 0 = high E
 const note = (start, pitch, extra = {}) => ({ start, end: start + 0.4, pitch, ...extra });
@@ -74,7 +74,7 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   // Both: the whole bar.
   const both = solve(true, true);
   assert.ok(both.frets.slice(0, 4).every((f) => f >= 12), `got ${both.frets}`);
-  assert.deepEqual(both.frets.slice(4), base.slice(4), "the next bar is its own");
+  assert.ok(both.frets.slice(4).every(f => f >= 12), "forward adaptation persists across the next bar");
 }
 
 // The same chord again follows; a different chord does not.
@@ -197,4 +197,57 @@ console.log("ok");
   ];
   const { seats } = voiceNotesFingered(lane, tuning, Infinity, { bars: [0, 4] });
   assert.deepEqual(lane.map((n) => seats.get(n)), [7, 7, 7, 7, 7]);
+}
+
+// The showcase's small shift must follow the same hand as a direct hand hold,
+// for both a single-note pin and a chord pin. Earlier bars stay untouched.
+for (const chordPin of [false, true]) {
+  const lane = [note(0, 52), note(1, 55), note(2, 57),
+    ...[52, 55, 59].map(p => note(3, p)),
+    note(4, 52), note(5, 55), note(6, 57),
+    ...[52, 55, 59].map(p => note(7, p))];
+  const time = chordPin ? 3 : 4;
+  const selected = lane.filter(n => n.start === time);
+  const positions = new Map([[52, [3, 2]], [55, [2, 0]], [59, [1, 0]]]);
+  for (const n of selected) {
+    const [string, fret] = positions.get(n.pitch);
+    n.pos = pin(string, fret, { influencePrevious: false, influenceNext: false,
+      adaptPrevious: false, adaptNext: false });
+  }
+  const options = { bars: [0, 4, 8], instrument: "electric" };
+  const before = voiceNotesFingered(lane, tuning, Infinity, options);
+  const anchor = before.seats.get(selected[0]);
+  assert.equal(anchor, 2);
+  const direct = voiceNotesFingered(lane, tuning, Infinity,
+    { ...options, holds: [{ t: time, fret: anchor }] });
+  for (const n of selected) n.pos.adaptNext = true;
+  const adapted = voiceNotesFingered(lane, tuning, Infinity, options);
+  for (const n of lane) {
+    assert.deepEqual(adapted.voiced.get(n), direct.voiced.get(n),
+      `same positions as direct hand hold (chord=${chordPin}, t=${n.start})`);
+    assert.equal(adapted.seats.get(n), direct.seats.get(n),
+      `same hand as direct hand hold (chord=${chordPin}, t=${n.start})`);
+    if (n.start < time) assert.deepEqual(adapted.voiced.get(n), before.voiced.get(n),
+      "forward adaptation leaves the approach unchanged");
+  }
+}
+
+// From hand position 2, the exact E3/G3/B3 chord may use D2/G0/B0.
+// Single G3 still avoids its open string; chord techniques still require frets.
+{
+  const lane = [note(0, 52), note(1, 55), note(2, 57),
+    ...[52, 55, 59].map(p => note(3, p))];
+  const options = { bars: [0, 4], holds: [{ t: 0, fret: 2 }] };
+  const { voiced, seats } = voiceNotesFingered(lane, tuning, Infinity, options);
+  assert.notEqual(voiced.get(lane[1]).fret, 0, "single notes keep the open-string restriction");
+  assert.deepEqual(lane.slice(3).map(n => at(voiced, n)), ["3:2", "2:0", "1:0"]);
+  assert.equal(seats.get(lane[3]), 2, "the chord needs no shift away from hand position 2");
+  const columns = chordColumns(lane);
+  const shape = new Map(lane.slice(3).map(n => [n, voiced.get(n)]));
+  const [offer] = scoreShapesAsDecided([shape], chordColumns(lane.slice(3)), 0, tuning,
+    { bars: [0, 4], holds: [{ t: 3, fret: 2 }] });
+  assert.equal(offer.cost, .25, "only D2's weighted distance to register 3 is charged; chord opens cost zero");
+  lane[4].slide = "outUp";
+  const constrained = voiceNotes(lane, tuning, Infinity, options);
+  assert.notEqual(constrained.get(lane[4]).fret, 0, "a chord slide still requires a fret");
 }
