@@ -451,12 +451,12 @@ export function deleteRefGroup(lane, ref) {
 // Replay `pattern` (relative to its source anchor) into the box at `anchor`,
 // overwriting whatever was there. Reuses existing note objects by order so identity
 // (selection / undo) survives where the counts allow.
-function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock) {
+function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock, mintId = nid) {
   const ordered = [...oldNotes].sort(noteOrder), b = clock.beatAt(anchor);
   for (let k = 0; k < pattern.length; k++) {
     const p = pattern[k];
     let nn = ordered[k];
-    if (!nn) { nn = { id: nid() }; lane.notes.push(nn); }
+    if (!nn) { nn = { id: mintId() }; lane.notes.push(nn); }
     nn.start = clock.timeAt(b + p.dt); nn.end = clock.timeAt(b + p.dt + p.dur); nn.pitch = p.pitch + shift;
     for (const f of EFFECT_FIELDS) delete nn[f];
     copyEffects(p.src, nn);
@@ -473,32 +473,42 @@ function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock) {
 // The source box is the one whose contents changed vs prev (or `forced` = { ref, i }
 // after a resize); its contents are replayed into every other box. A structural
 // change (box added/removed) is left to its own handler — never auto-mirrored.
+function reconcileRefGroup(lane, ref, group, prevNotes, prevGroup, mirrorSource, mintId = nid) {
+  if (group.locked) return;
+  const clock = laneClock(lane);
+  const contents = group.anchors.map((a, i) => notesInBox(boxRect(group, i, clock), lane.notes));
+  let src = mirrorSource && mirrorSource.ref === ref ? mirrorSource.i : -1;
+  if (src < 0 && prevGroup && prevGroup.anchors.length === group.anchors.length) {
+    for (let i = 0; i < group.anchors.length; i++) {
+      // A box whose shift changed was moved, not edited: it is never the source.
+      if (shiftOf(group, i) !== shiftOf(prevGroup, i)) continue;
+      const before = notesInBox(boxRect(prevGroup, i, clock), prevNotes);
+      if (boxSig(contents[i], group.anchors[i], shiftOf(group, i), true, clock) !== boxSig(before, prevGroup.anchors[i], shiftOf(prevGroup, i), true, clock)) { src = i; break; }
+    }
+  }
+  if (src < 0) return;
+  const srcShift = shiftOf(group, src);
+  const pattern = relPattern(contents[src], group.anchors[src], srcShift, clock);
+  for (let j = 0; j < group.anchors.length; j++) {
+    if (j === src) continue;
+    const shift = shiftOf(group, j), same = shift === srcShift;
+    if (boxSig(contents[j], group.anchors[j], shift, same, clock) === boxSig(contents[src], group.anchors[src], srcShift, same, clock)) continue;
+    mirrorBox(lane, group.anchors[j], contents[j], pattern, shift, srcShift, clock, mintId);
+  }
+}
+
 export function reconcileReferences(prev, mirrorSource) {
-  eachRefGroup((lane, ref, group) => {
-    if (group.locked) return;
-    const prevNotes = (prev.lanes && prev.lanes[lane.id]) || [];
-    const prevGroup = prev.boxes && prev.boxes[lane.id] && prev.boxes[lane.id][ref];
-    const clock = laneClock(lane);
-    const contents = group.anchors.map((a, i) => notesInBox(boxRect(group, i, clock), lane.notes));
-    let src = mirrorSource && mirrorSource.ref === ref ? mirrorSource.i : -1;
-    if (src < 0 && prevGroup && prevGroup.anchors.length === group.anchors.length) {
-      for (let i = 0; i < group.anchors.length; i++) {
-        // A box whose shift changed was moved, not edited: it is never the source.
-        if (shiftOf(group, i) !== shiftOf(prevGroup, i)) continue;
-        const before = notesInBox(boxRect(prevGroup, i, clock), prevNotes);
-        if (boxSig(contents[i], group.anchors[i], shiftOf(group, i), true, clock) !== boxSig(before, prevGroup.anchors[i], shiftOf(prevGroup, i), true, clock)) { src = i; break; }
-      }
-    }
-    if (src < 0) return;
-    const srcShift = shiftOf(group, src);
-    const pattern = relPattern(contents[src], group.anchors[src], srcShift, clock);
-    for (let j = 0; j < group.anchors.length; j++) {
-      if (j === src) continue;
-      const shift = shiftOf(group, j), same = shift === srcShift;
-      if (boxSig(contents[j], group.anchors[j], shift, same, clock) === boxSig(contents[src], group.anchors[src], srcShift, same, clock)) continue;
-      mirrorBox(lane, group.anchors[j], contents[j], pattern, shift, srcShift, clock);
-    }
-  });
+  eachRefGroup((lane, ref, group) => reconcileRefGroup(lane, ref, group,
+    prev.lanes?.[lane.id] || [], prev.boxes?.[lane.id]?.[ref], mirrorSource));
+}
+
+// Use the same reference propagation as commit, on detached preview data.
+// Preview-only ids must never advance the editor's real note id counter.
+export function previewPositionReferences(original, preview) {
+  let id = 0;
+  for (const [ref, group] of Object.entries(preview.refBoxes || {}))
+    reconcileRefGroup(preview, ref, group, original.notes, original.refBoxes?.[ref],
+      null, () => `position-preview-${++id}`);
 }
 
 // Paint each reference occurrence: a gold capture box plus its name, drawn like a

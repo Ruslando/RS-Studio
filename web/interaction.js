@@ -455,8 +455,8 @@ export function init_interaction() {
       draw();
     } else {
       // empty space: move the time cursor, drag to scrub
-      seekPlayback(t);
       setSelection(new Set());
+      seekPlayback(t);
       S.drag = { mode: "scrub" };
     }
   });
