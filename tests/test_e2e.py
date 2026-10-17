@@ -103,6 +103,47 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#lanes .lane-row")).to_be_visible()
         self.reference_job = page.evaluate("async () => (await import('/store.js')).S.state.job")
 
+    def test_trace_accepts_cells_shorter_than_fifty_ms(self):
+        self.open_reference_project()
+        result = self.page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { bpmInput, offsetInput, tsDenInput, traceSnapInput } = await import('/dom.js');
+            const { setSubdiv, gridStep } = await import('/grid.js');
+            const { syncRowHeight, xOf, yOf } = await import('/geometry.js');
+            const { notesFromTrace, prepareSpectSample } = await import('/tracing.js');
+            bpmInput.value = '173'; offsetInput.value = '0'; tsDenInput.value = '4';
+            setSubdiv(8);
+            S.state.spec = { midi_low: 24, midi_high: 96 };
+            syncRowHeight();
+            const image = document.createElement('canvas');
+            image.width = 500; image.height = 73;
+            const ctx = image.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 500, 73);
+            S.spectImg = image; prepareSpectSample();
+            const step = gridStep(), y = yOf(60) + S.state.rowH / 2;
+            const trace = (cells) => [[xOf(step * 8), y], [xOf(step * (8 + cells)), y]];
+            const trials = [];
+            for (const snap of [true, false]) {
+                traceSnapInput.checked = snap;
+                trials.push({ single: notesFromTrace(trace(1)), long: notesFromTrace(trace(8)) });
+            }
+            traceSnapInput.checked = false;
+            const changing = notesFromTrace([
+                [xOf(step * 8), y], [xOf(step * 9), y],
+                [xOf(step * 9), y - S.state.rowH], [xOf(step * 10), y - S.state.rowH]
+            ]);
+            return { step, trials, changing };
+        }""")
+        self.assertLess(result['step'], 0.05)
+        for trial in result['trials']:
+            for key, cells in [('single', 1), ('long', 8)]:
+                self.assertEqual(len(trial[key]), 1)
+                note = trial[key][0]
+                self.assertAlmostEqual(note['end'] - note['start'], result['step'] * cells)
+        self.assertEqual([n['pitch'] for n in result['changing']], [60, 61])
+        for note in result['changing']:
+            self.assertAlmostEqual(note['end'] - note['start'], result['step'])
+
     def fretboard_hover_points(self, time=2):
         page = self.page
         page.emulate_media(reduced_motion="reduce")

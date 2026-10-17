@@ -242,7 +242,9 @@ export function notesFromTrace(points) {
   const maxX = Math.min(songWidth(), Math.max(...points.map((p) => p[0])));
   const minT = Math.max(0, timeAt(minX));
   const maxT = Math.min(S.state.duration, timeAt(maxX));
-  if (maxT - minT < MIN_DUR) return [];
+  // Fine grids can have valid cells shorter than the generic 50 ms minimum
+  // (173 BPM / 8 = 43 ms). Keep those drawable too.
+  if (maxT - minT < Math.min(MIN_DUR, step) - 1e-6) return [];
 
   const startIdx = Math.max(0, Math.floor((minT - off) / step));
   const notes = [];
@@ -265,7 +267,9 @@ export function notesFromTrace(points) {
     }
     const start = Math.max(0, t0);
     const end = Math.min(S.state.duration, t1);
-    if (end - start < MIN_DUR) continue;
+    // Accept every non-empty grid cell before joining equal-pitch neighbours.
+    // Filtering by MIN_DUR here discarded the entire trace on fine grids.
+    if (end - start <= 1e-6) continue;
     const conf = +(clamp(found.own / 255, 0, 1)).toFixed(3);
     if (cur && cur.pitch === found.pitch && Math.abs(cur.end - start) < 0.001) {
       cur.end = end;
