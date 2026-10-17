@@ -39,17 +39,8 @@ export function columnVoicingState(colNotes, tuning, voiced) {
   return { cur, choices, curIdx: choices.findIndex((sh) => shapeKey(sh) === curKey), pinned: !!lockedShape(colNotes, tuning) };
 }
 
-// The distinct candidates, cheapest passage first. Every one of them is the written
-// pitches in another place (the worker no longer enumerates re-voicings), so the
-// drift tiers that used to order this list are all zero and cost is the whole sort.
-// `skipKey` drops the shape the caller is already showing.
-//
-// The RANK is still never printed — a printed 1st/2nd/3rd invites reading a model
-// estimate as a verdict on which shape is correct. The COST now is, on the board (see
-// drawCost): the stage marks columns where the voicer reused a remembered grip while
-// a cheaper one was on offer, and a mark asserting "there was a better answer here"
-// with no way to see how much better is that same verdict with its evidence withheld.
-// A number invites arithmetic; an ordinal invites obedience.
+// Prefer the least demanding grip; passage cost breaks ergonomic ties.
+// Deduplicate by string/fret positions, excluding `skipKey` when supplied.
 function rankArrangements(all, skipKey = "") {
   const seen = new Set([skipKey]);
   const overall = (choice) => finiteCost(choice, "passage") ?? Infinity;
@@ -59,7 +50,8 @@ function rankArrangements(all, skipKey = "") {
       if (seen.has(key)) return false;
       seen.add(key); return true;
     })
-    .sort((a, b) => overall(a) - overall(b));
+    .sort((a, b) => (finiteCost(a, "grip") ?? Infinity) - (finiteCost(b, "grip") ?? Infinity)
+      || overall(a) - overall(b));
 }
 
 // Every other way to play one column, for a caller that draws it itself: the
