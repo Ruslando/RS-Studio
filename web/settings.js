@@ -4,9 +4,10 @@
 // lock-step and changes are persisted by the input's id.
 
 import { $ } from "./dom.js";
-import { drawFretboard } from "./fretboard.js";
+import { drawFretboard, drawFretboardLabelPreviews } from "./fretboard.js";
 import { refreshStagePaint } from "./stage-paint.js";
 import { draw } from "./repaint.js";
+import { initTimelineScrollPreview, refreshTimelineScrollPreview } from "./timeline-scroll-preview.js";
 
 const KEY = "cw.settings";
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
@@ -45,6 +46,8 @@ function setTheme(t) {
   if (v === "light") document.documentElement.dataset.theme = "light";
   else delete document.documentElement.dataset.theme;
   refreshStagePaint();
+  refreshTimelineScrollPreview();
+  drawFretboardLabelPreviews();
   draw();
   try { localStorage.setItem(THEME_KEY, v); } catch { /* private mode / quota */ }
   if ($("themeSelect").value !== v) $("themeSelect").value = v;
@@ -69,8 +72,32 @@ export function init_settings() {
   persistSetting($("fretboardOnionEnabled"), { bool: true });
   persistSetting($("fretNumbering"));
   persistSetting($("playbackScrollMode"));
+  // Migrate the former Off preference to Page. Manual scrolling now suspends
+  // following for just the current playback run, independently of this choice.
+  const scrollMode = $("playbackScrollMode");
+  if (!["page", "follow"].includes(scrollMode.value)) {
+    scrollMode.value = "page"; store.playbackScrollMode = "page"; persist();
+  }
+  const scrollChoices = [...document.querySelectorAll('input[name="playbackScrollMode"]')];
+  const syncScrollChoices = () => scrollChoices.forEach(radio => { radio.checked = radio.value === scrollMode.value; });
+  syncScrollChoices();
+  scrollMode.addEventListener("input", syncScrollChoices);
+  for (const radio of scrollChoices) radio.addEventListener("input", () => {
+    if (!radio.checked) return;
+    scrollMode.value = radio.value; scrollMode.dispatchEvent(new Event("input"));
+  });
+  initTimelineScrollPreview();
   persistSetting($("fretboardStringOrder"));
   persistSetting($("fretboardAnimations"), { bool: true });
+  const labelChoices = [...document.querySelectorAll('input[name="fretboardLabels"]')];
+  const savedLabels = ["fingers", "notes", "both", "none"].includes(store.fretboardLabels) ? store.fretboardLabels : "both";
+  for (const radio of labelChoices) {
+    radio.checked = radio.value === savedLabels;
+    radio.addEventListener("input", () => {
+      if (!radio.checked) return;
+      store.fretboardLabels = radio.value; persist(); drawFretboard();
+    });
+  }
   for (const id of ["playbackScrollMode", "fretboardStringOrder", "fretboardAnimations"]) {
     $(id).addEventListener(id === "fretboardAnimations" ? "change" : "input", draw);
   }

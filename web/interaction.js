@@ -26,6 +26,7 @@ import { nid } from "./ids.js";
 import { S, setSelection } from "./store.js";
 import { acceptMatch, addTracePoint, clearMatches, matchAt, notesFromTrace } from "./tracing.js";
 import { clamp } from "./util.js";
+import { manualViewportNavigation } from "./viewport-motion.js";
 
 let sliceHeld = false;
 
@@ -239,6 +240,7 @@ function startAutoScroll() {
     const max = scroll.scrollWidth - scroll.clientWidth;
     const next = Math.max(0, Math.min(max, scroll.scrollLeft + S.autoScrollVel));
     if (next !== scroll.scrollLeft) {
+      manualViewportNavigation();
       scroll.scrollLeft = next;
       // Cursor is stationary but the canvas moved under it — refresh from it:
       // continue an active drag, or just keep the hover cursor line aligned.

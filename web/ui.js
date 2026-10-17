@@ -9,6 +9,8 @@ import { ZOOM_STEP } from "./constants.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { $, inTourCard, stage } from "./dom.js";
 import { draw } from "./repaint.js";
+import { drawFretboardLabelPreviews } from "./fretboard.js";
+import { setTimelineScrollPreviewVisible } from "./timeline-scroll-preview.js";
 import { doCopy, doCut, doDelete, doPaste, redo, undo, updateUndoButtons } from "./edit.js";
 import { resetZoom, zoomCenter } from "./geometry.js";
 import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey } from "./keymap.js";
@@ -103,14 +105,15 @@ let spSection = "trace";
 // The Tunings page keeps its own draft (tuning-editor.js), so it stays out of this.
 const snapshotInputs = (root) => [...root.querySelectorAll("input, select")]
   .filter((el) => !el.closest("[hidden]") && !el.closest("#spTunings"))
-  .map((el) => ({ el, v: el.type === "checkbox" ? el.checked : el.value }));
+  .map((el) => ({ el, v: ["checkbox", "radio"].includes(el.type) ? el.checked : el.value }));
 
 // Put each value back and re-fire the event that applied it, so persistence and
 // live preview walk backwards together — no second code path to keep in sync.
 function revertInputs(snap) {
   for (const { el, v } of snap || []) {
-    if ((el.type === "checkbox" ? el.checked : el.value) === v) continue;
-    if (el.type === "checkbox") el.checked = v; else el.value = v;
+    const checked = ["checkbox", "radio"].includes(el.type);
+    if ((checked ? el.checked : el.value) === v) continue;
+    if (checked) el.checked = v; else el.value = v;
     for (const type of ["input", "change"]) el.dispatchEvent(new Event(type, { bubbles: true }));
   }
 }
@@ -155,6 +158,8 @@ function showSettingsPane(section) {
   if (section === "acceleration") renderAcceleration();
   if (section === "tunings" && !tuningDraftOpen()) beginTuningDraft(tuningSelect);
   if (section === "keys") { setKeyTab("edit"); renderKeymap(); }
+  if (section === "trace") drawFretboardLabelPreviews();
+  setTimelineScrollPreviewVisible(section === "trace");
 }
 
 let tuningSelect = null;   // the tuning the Tunings page opens on
@@ -188,8 +193,8 @@ function setKeyTab(name) {
 
 // Closing stops the Models poll: a closed window that keeps asking the server
 // every second is a window that never actually closed.
-function closeSettingsModal() { spSnapshot = null; stopModelPolling(); settingsModalBackdrop.hidden = true; }
-function cancelSettingsModal() { revertSettings(); dropTuningDraft(); stopModelPolling(); settingsModalBackdrop.hidden = true; }
+function closeSettingsModal() { spSnapshot = null; stopModelPolling(); setTimelineScrollPreviewVisible(false); settingsModalBackdrop.hidden = true; }
+function cancelSettingsModal() { revertSettings(); dropTuningDraft(); stopModelPolling(); setTimelineScrollPreviewVisible(false); settingsModalBackdrop.hidden = true; }
 // Project details is the one pane whose values live on the server, so its
 // primary is the only one that has work left to do when it is pressed.
 async function applySettingsModal() {
