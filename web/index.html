@@ -815,16 +815,49 @@
                it decides, which is where a note ends up. -->
           <div class="section">
             <div class="section-head"><span>Playback</span></div>
-            <label class="field-group block"><span class="label">Timeline scrolling</span>
-              <select id="playbackScrollMode">
-                <option value="page">Page when the playhead reaches the edge</option>
-                <option value="follow">Follow the playhead near the left edge</option>
-                <option value="off">Do not follow the playhead</option>
-              </select>
-            </label>
+            <select id="playbackScrollMode" hidden aria-hidden="true">
+              <option value="page">Page</option><option value="follow">Follow</option>
+            </select>
+            <fieldset class="timeline-scroll-setting">
+              <legend>Timeline scrolling</legend>
+              <div class="timeline-scroll-choices">
+                <label class="timeline-scroll-choice">
+                  <span><input type="radio" name="playbackScrollMode" value="page" checked /> Page</span>
+                  <canvas id="timelineScrollPreview" data-scroll-preview="page" role="img" aria-label="Page scrolling: the view jumps when the playhead reaches the edge"></canvas>
+                </label>
+                <label class="timeline-scroll-choice">
+                  <span><input type="radio" name="playbackScrollMode" value="follow" /> Follow</span>
+                  <canvas id="timelineScrollPreviewFollow" data-scroll-preview="follow" role="img" aria-label="Follow scrolling: the playhead stays near the left edge"></canvas>
+                </label>
+              </div>
+              <div class="timeline-scroll-footer">
+                <button type="button" id="timelineScrollPreviewToggle" class="link">Pause previews</button>
+              </div>
+            </fieldset>
           </div>
           <div class="section">
             <div class="section-head"><span>Fretboard</span></div>
+            <fieldset class="fretboard-label-setting">
+              <legend>Note labels</legend>
+              <div class="fretboard-label-choices">
+                <label class="fretboard-label-choice">
+                  <span><input type="radio" name="fretboardLabels" value="fingers" /> Finger positions</span>
+                  <canvas data-fretboard-labels="fingers" aria-hidden="true"></canvas>
+                </label>
+                <label class="fretboard-label-choice">
+                  <span><input type="radio" name="fretboardLabels" value="notes" /> Note names</span>
+                  <canvas data-fretboard-labels="notes" aria-hidden="true"></canvas>
+                </label>
+                <label class="fretboard-label-choice">
+                  <span><input type="radio" name="fretboardLabels" value="both" checked /> Both</span>
+                  <canvas data-fretboard-labels="both" aria-hidden="true"></canvas>
+                </label>
+                <label class="fretboard-label-choice">
+                  <span><input type="radio" name="fretboardLabels" value="none" /> None</span>
+                  <canvas data-fretboard-labels="none" aria-hidden="true"></canvas>
+                </label>
+              </div>
+            </fieldset>
             <label class="field-group block"><span class="label">String order</span>
               <select id="fretboardStringOrder">
                 <option value="low-bottom">Lowest string at the bottom</option>

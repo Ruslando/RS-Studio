@@ -397,7 +397,10 @@ function drawShaping(ctx, s, scale, X, Y, lane) {
     ctx.arc((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, Math.max(1, p.r - 0.9), 0, Math.PI * 2);
     ctx.stroke();
   }
-  drawGrip(ctx, s, scale, X, Y, placed, hue, true, { digits: false });
+  // These are placement targets, so identify their pitch even when labels are
+  // hidden for playback. A finger has not been assigned to this draft yet.
+  drawGripNoteNames(ctx, s, scale, X, Y, opts.map(p => ({ ...p, x: p.mm })), hue, false);
+  drawGrip(ctx, s, scale, X, Y, placed, hue, true, { digits: false, labels: "notes" });
   return cur;
 }
 
@@ -994,10 +997,8 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
 // middle. Two discs labelled 1 say "finger 1 twice", which is not a thing a hand can
 // do — the bar is what says they are held by the same finger.
 
-// A marker is as wide as the room between two strings where it sits, so the marks of
-// a full chord touch and never overlap. The board sets the size, not taste — and the
-// candidate shapes are drawn with the same one, because they are the same object
-// offered somewhere else.
+// Marker size follows the space between strings; candidate shapes use the same
+// dimensions. Pitch labels sit separately so the finger contacts keep their size.
 const markRadius = (mm, scale, s) =>
   (Math.abs(stringOffsetAt(1, mm, s) - stringOffsetAt(0, mm, s)) * 0.9 * scale) / 2;
 
@@ -1011,17 +1012,15 @@ function markPath(ctx, x, y0, y1, r) {
   ctx.closePath();
 }
 
-// An open string rings end to end, so that is how it is drawn: the whole string, in
-// the grip's colour, instead of a disc parked on the nut. The disc was the first
-// answer and it was a riddle — a circle behind the first fret with a `0` in it, which
-// reads as "a finger here" on the one string nothing is holding. Under the marks,
-// because a barre at fret 1 sits over the string it is sounding.
+// An open string rings end to end in the grip's colour. Its pitch label is drawn
+// separately beside the current grip, without a finger number. Under the marks, because a
+// barre at fret 1 sits over the string it is sounding.
 //
 // Wider than the wire it covers, by a hair: at the top string's real gauge the glow
 // would be a 1px line, and 1px of hue on 1px of nickel is not a signal.
 function glowString(ctx, s, scale, X, Y, i, hue) {
   const end = fretDistance(s.frets, s.scale) + s.overhang;
-  const start = s.capo ? capoLine(s) : -s.nutDepth;    // an open string rings from the capo
+  const start = s.capo ? capoLine(s) : 0;    // the sounding length starts at the nut/capo
   ctx.strokeStyle = hue;
   ctx.lineWidth = Math.max(1.5, s.gauges[Math.round(i)] * scale);
   ctx.beginPath();
@@ -1043,13 +1042,13 @@ function onHue(hex) {
 // One grip, drawn: the hand's own, or a candidate under the pointer. Filled means the
 // hand is holding it; outlined means it is not — travelling, or on offer.
 //
-// A disc is a finger, and nothing else is: an open alive string is the string itself
-// glowing (glowString above), so the only circles on the board are places something is
-// pressed. A muted string keeps its disc and its X, at whatever fret it is played,
-// because a mute *is* a hand on the string — the tab writes X there and so does this
-// (rule 25). A muted open string is therefore the one circle that lands on the nut,
-// and it carries the X that says why.
-function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time = null, liveStrings = false } = {}) {
+// Finger numbers stay inside the contacts. Pitch labels replace those contacts
+// in names-only mode and sit beside them in Both. Open labels are centered text.
+const fretboardLabels = () => document.querySelector('input[name="fretboardLabels"]:checked')?.value || "both";
+
+function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time = null, liveStrings = false, labels = null } = {}) {
+  const mode = labels ?? (digits ? fretboardLabels() : "none");
+  const showFingers = digits && (mode === "fingers" || mode === "both");
   for (const m of marks) if (!(m.fret > 0) && !m.dead && !liveStrings) {
     ctx.save(); ctx.globalAlpha *= (m.opacity ?? 1) * (m.note?.fx?.ghost ? 0.4 : 1);
     glowString(ctx, s, scale, X, Y, m.string, hue); ctx.restore();
@@ -1066,7 +1065,8 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineWidth = 1.8;
-  for (const g of barreGroups(marks.filter((m) => m.fret > 0 || m.dead), filled)) {
+  for (const g of barreGroups(marks.filter((m) => (m.fret > 0 || m.dead)
+    && !(mode === "notes" && gripPitchLabel(m))), filled)) {
     const pts = g.map((m) => ({
       m, x: X(m.x), y: Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s)),
       r: markRadius(m.x, scale, s),
@@ -1111,7 +1111,7 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
     // at its middle, and dropped when the body is narrower than the glyph, as the
     // stage drops a note label too wide for its note.
     let glyph = !digits ? "" : g[0].dead ? FX_GLYPHS.dead : g[0].note?.harmonic === "pinch" ? "✦"
-      : g[0].finger > 0 ? String(g[0].finger) : "";
+      : showFingers && g[0].finger > 0 ? String(g[0].finger) : "";
     if (ghost && glyph && !g[0].dead) {
       glyph = `(${glyph})`;
       ctx.font = stageMono(STAGE_ANCHORED * style.size * 0.8, 600);
@@ -1119,6 +1119,83 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
     if (glyph && r >= STAGE_ANCHORED * style.size / 2) ctx.fillText(glyph, x, (y0 + y1) / 2 + 0.5);
     ctx.restore();
   }
+  if (mode === "notes" || mode === "both") drawGripNoteNames(ctx, s, scale, X, Y, marks, hue, true, mode === "notes");
+}
+
+// Use the real contacts and labels in Settings, so previews track their rendering.
+export function drawFretboardLabelPreviews() {
+  const s = fretboardFor("electric"), scale = 1.65;
+  const hue = currentLane()?.color || PAINT.ok;
+  const X = mm => 12 + mm * scale, Y = off => 38 + off * scale;
+  const width = 84, height = 76;
+  const marks = [
+    { string: 0, fret: 1, x: fretCentre(1, s), pitch: 65, finger: 1 },
+    { string: 1, fret: 0, x: fretCentre(0, s), pitch: 59, finger: 0 },
+  ];
+  for (const canvas of document.querySelectorAll("canvas[data-fretboard-labels]")) {
+    canvas.width = width * dpr(); canvas.height = height * dpr();
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr(), dpr());
+    ctx.fillStyle = PAINT.chrome; ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = PAINT.hint; ctx.lineWidth = 1;
+    for (let string = 0; string < s.strings; string++) {
+      ctx.beginPath();
+      ctx.moveTo(X(0), Y(stringOffsetAt(string, 0, s)));
+      ctx.lineTo(width, Y(stringOffsetAt(string, (width - 12) / scale, s))); ctx.stroke();
+    }
+    for (let fret = 0; fret <= 1; fret++) {
+      const x = X(fretDistance(fret, s.scale));
+      ctx.lineWidth = fret ? 2 : 4;
+      ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x, 74); ctx.stroke();
+    }
+    // Limit the open-string glow to the miniature neck.
+    ctx.save(); ctx.beginPath(); ctx.rect(X(0), 0, width - X(0), height); ctx.clip();
+    drawGrip(ctx, s, scale, X, Y, marks, hue, true, { labels: canvas.dataset.fretboardLabels });
+    ctx.restore();
+  }
+}
+
+// A quiet, borderless pitch label beside each contact. Open strings follow the
+// lowest fretted contact rather than leaving their names behind at the nut.
+function gripPitchLabel(mark) {
+  const writtenPitch = mark.pitch ?? mark.note?.pitch;
+  const pitch = writtenPitch + (mark.graceTarget ? mark.fret - mark.graceTarget.fret : 0);
+  return Number.isFinite(pitch) && !mark.dead && !mark.releasing && mark.noteLabel !== false ? noteName(pitch) : "";
+}
+
+function drawGripNoteNames(ctx, s, scale, X, Y, marks, hue, followOpen = true, replaceContact = false) {
+  ctx.save();
+  ctx.font = stageMono(STAGE_ANCHORED, 400);
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  const contacts = marks.filter(mark => mark.fret > 0 && gripPitchLabel(mark));
+  const openX = contacts.length ? Math.min(...contacts.map(mark => mark.x)) : fretCentre(1, s);
+  for (const mark of marks) {
+    const text = gripPitchLabel(mark);
+    if (!text) continue;
+    const mm = mark.fret > 0 || !followOpen ? mark.x : openX;
+    const x = X(mm), y = Y(stringOffsetAt(mark.string + (mark.lift || 0), Math.max(0, mm), s));
+    const radius = markRadius(mm, scale, s);
+    const width = ctx.measureText(text).width + 8;
+    const height = Math.max(STAGE_ANCHORED + 1, Math.min(STAGE_ANCHORED + 4, 2 * radius));
+    const open = !(mark.fret > 0), filled = replaceContact && !open;
+    let left = replaceContact || open ? x - width / 2 : x + radius + 3;
+    if (!replaceContact && !open && left + width > ctx.canvas.width / dpr() - 4) left = x - radius - 3 - width;
+    ctx.save();
+    ctx.globalAlpha *= (mark.opacity ?? 1) * (mark.note?.fx?.ghost ? 0.4 : 1);
+    if (filled) {
+      ctx.beginPath(); ctx.roundRect(left, y - height / 2, width, height, 3);
+      ctx.fillStyle = hue; ctx.fill();
+    } else {
+      // Clear the string immediately behind the letters without a label box.
+      ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.strokeStyle = PAINT.chrome;
+      ctx.strokeText(text, left + width / 2, y + 0.5);
+    }
+    ctx.fillStyle = filled ? onHue(hue) : PAINT.text;
+    ctx.fillText(text, left + width / 2, y + 0.5);
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 // Where a set of marks is, ignoring which finger goes there and in what order —
@@ -1174,6 +1251,7 @@ function drawOffer(ctx, s, scale, X, Y, hovered, lane) {
     const p = choice.shape.get(n);
     return p ? [{
       string: p.string, fret: p.fret,
+      pitch: n.pitch,
       finger: (loose ? loose.get(n) : choice.fingers.get(p.string)) || 0,
       dead: !!n.dead, x: fretCentre(p.fret, s),
     }] : [];
@@ -1392,12 +1470,12 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
   // The low finger stays planted. A second finger taps/releases the upper fret;
   // its fill follows the same sixteenth-note phase as the audible trill.
   const marks = at.marks.flatMap((m) => {
-    if (m.graceTarget) return [m, { ...m, ...m.graceTarget, lift: 0, pressed: false, opacity: 0.55 }];
-    if (m.graceOrigin) return [{ ...m, ...m.graceOrigin, lift: 0 }, m];
-    if (m.trill) return [m, { ...m, ...m.trill, trill: undefined, lift: 0, pressed: m.trill.down,
+    if (m.graceTarget) return [m, { ...m, ...m.graceTarget, noteLabel: false, lift: 0, pressed: false, opacity: 0.55 }];
+    if (m.graceOrigin) return [{ ...m, ...m.graceOrigin, noteLabel: false, lift: 0 }, m];
+    if (m.trill) return [m, { ...m, ...m.trill, noteLabel: false, trill: undefined, lift: 0, pressed: m.trill.down,
       opacity: m.trill.down ? 1 : 0.55 }];
     const extra = m.hammerSupport || m.hammerTarget;
-    if (extra) return [{ ...m, ...extra, lift: 0 }, m];
+    if (extra) return [{ ...m, ...extra, noteLabel: false, lift: 0 }, m];
     return [m];
   });
   drawGrip(ctx, s, scale, X, Y, marks, hue, at.pressed, { time: $("fretboardAnimations")?.checked === false ? null : t, liveStrings: moving });

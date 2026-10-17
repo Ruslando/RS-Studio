@@ -315,6 +315,94 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press('Control+z')
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n=>[n.start,n.end])"), [[2,3],[3,4]])
 
+    def test_fretboard_label_choices_and_custom_shape_targets(self):
+        page = self.page
+        bundle = self.data / 'label-showcase.chart'
+        with zipfile.ZipFile(bundle, 'w') as archive:
+            archive.write(Path(__file__).resolve().parents[1] / 'examples/chord-showcase/project.json', 'project.json')
+        with page.expect_file_chooser() as chooser: page.click('#welcomeOpen')
+        chooser.value.set_files(bundle)
+        expect(page.locator('#lanes .lane-row')).to_be_visible()
+        self.fretboard_hover_points(20)
+
+        def painted_labels():
+            return page.evaluate("""async () => {
+                const { UI_PAINT: paint } = await import('/stage-paint.js');
+                const ctx = document.querySelector('#fretboard').getContext('2d');
+                const original = ctx.fillText, stroke = ctx.stroke, roundRect = ctx.roundRect;
+                const fingers = [], notes = [], inks = [], noteInks = [], noteX = {}, fingerX = [], dotted = [], boxes = [];
+                ctx.roundRect = function(x, y, w, h, ...args) {
+                    if (w < 40 && h < 20) boxes.push({x, y, w, h});
+                    return roundRect.call(this, x, y, w, h, ...args);
+                };
+                ctx.stroke = function(...args) {
+                    if (this.getLineDash().length) dotted.push(this.getLineDash());
+                    return stroke.apply(this, args);
+                };
+                ctx.fillText = function(text, x, y, ...args) {
+                    if (this.textBaseline === 'middle' && this.globalAlpha > .9) {
+                        if (/^[1-4]$/.test(String(text))) { fingers.push(text); fingerX.push(x); inks.push(this.fillStyle); }
+                        if (/^[A-G]#?[0-9]$/.test(String(text)) && ['#0f1012', '#edeef0', paint.text].includes(this.fillStyle)) {
+                            notes.push(text); noteInks.push(this.fillStyle); noteX[text] = x;
+                        }
+                    }
+                    return original.call(this, text, x, y, ...args);
+                };
+                try { (await import('/fretboard.js')).drawFretboard(); } finally { ctx.fillText = original; ctx.stroke = stroke; ctx.roundRect = roundRect; }
+                return {fingers, notes, inks, noteInks, noteX, fingerX, dotted, boxes, textInk: paint.text};
+            }""")
+
+        page.click('#settingsMenuBtn')
+        expect(page.locator('input[name=fretboardLabels][value=both]')).to_be_checked()
+        self.assertEqual(page.locator('canvas[data-fretboard-labels]').count(), 4)
+        self.assertEqual(page.get_by_text('Each preview shows a fretted note and an open string.').count(), 0)
+        shot = Path(__file__).resolve().parents[1] / '.runs' / 'fretboard-label-settings.png'
+        shot.parent.mkdir(exist_ok=True)
+        page.locator('#settingsModal').screenshot(path=str(shot))
+        for mode, fingers, notes in [('fingers', 3, 0), ('notes', 0, 6), ('both', 3, 6), ('none', 0, 0)]:
+            page.locator(f'input[name=fretboardLabels][value={mode}]').check()
+            actual = painted_labels()
+            self.assertEqual(len(actual['fingers']), fingers, mode)
+            self.assertEqual(len(actual['notes']), notes, mode)
+            if notes:
+                self.assertTrue({'D3', 'G3', 'B3'}.issubset(actual['notes']))
+                self.assertEqual(len(actual['dotted']), 0, 'Open strings are plain text')
+                self.assertEqual(len(actual['boxes']), 3 if mode == 'notes' else 0)
+            if mode == 'fingers':
+                contact_x = sorted(actual['fingerX'])
+            if mode == 'notes':
+                self.assertEqual(sorted(actual['noteX'][pitch] for pitch in ['G2', 'B2', 'G4']), contact_x)
+            if mode == 'both':
+                for pitch in ['D3', 'G3', 'B3']:
+                    self.assertEqual(actual['noteX'][pitch], min(contact_x))
+        # Contrast follows the selected layer hue in both labels and previews.
+        page.evaluate("async () => { const {S} = await import('/store.js'); S.state.editLanes[0].color = '#2b7a53'; }")
+        page.locator('input[name=fretboardLabels][value=both]').check()
+        self.assertEqual(set(painted_labels()['inks']), {'#edeef0'})
+        self.assertEqual(set(painted_labels()['noteInks']), {painted_labels()['textInk']})
+        page.evaluate("() => { const theme = document.querySelector('#themeSelect'); theme.value = 'light'; theme.dispatchEvent(new Event('change')); }")
+        page.locator('#settingsModal').screenshot(path=str(shot.with_name('fretboard-label-settings-light.png')))
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js'); S.state.editLanes[0].color = '#64ecc0';
+            const theme = document.querySelector('#themeSelect'); theme.value = 'dark'; theme.dispatchEvent(new Event('change'));
+        }""")
+        self.assertEqual(set(painted_labels()['inks']), {'#0f1012'})
+        page.click('#settingsCancel')
+        expect(page.locator('input[name=fretboardLabels][value=both]')).to_be_checked()
+        self.assertEqual(len(painted_labels()['notes']), 6)
+        page.click('#settingsMenuBtn')
+        page.locator('input[name=fretboardLabels][value=none]').check()
+        page.click('#settingsApply')
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.settings')).fretboardLabels"), 'none')
+        page.click('#fretboardEdit')
+        page.click('#fretboardShape')
+        actual = painted_labels()
+        self.assertTrue(actual['notes'], 'Custom-shape placement rings must identify their note even with playback labels off')
+        self.assertEqual(actual['fingers'], [])
+        page.locator('#fretboardPanel').screenshot(path=str(shot.with_name('fretboard-custom-labels.png')))
+        page.reload()
+        expect(page.locator('input[name=fretboardLabels][value=none]')).to_be_checked()
+
     def test_showcase_hand_poses_are_rendered_with_matching_anchors(self):
         page = self.page
         bundle = self.data / 'joint-hand-showcase.chart'
@@ -628,6 +716,65 @@ class EndToEndTests(unittest.TestCase):
             return scroll.scrollLeft === target && !viewportMoving();
         }"""))
 
+    def test_timeline_scrolling_preview_animation(self):
+        self.open_reference_project()
+        page = self.page
+        before = page.evaluate("async () => (await import('/playback.js')).playbackTime()")
+        page.click('#settingsMenuBtn')
+        preview = page.locator('#timelineScrollPreview')
+        expect(preview).to_be_visible()
+        expect(preview).to_have_attribute('data-running', 'true')
+        boundary = page.evaluate("""async () => {
+            const canvas = document.querySelector('#timelineScrollPreview');
+            let lastHead = 0;
+            while (!Number(canvas.dataset.scroll)) {
+                lastHead = Number(canvas.dataset.playhead);
+                await new Promise(requestAnimationFrame);
+            }
+            const viewport = canvas.clientWidth - 16;
+            const referenceWidth = document.querySelector('#scroll').clientWidth;
+            return {lastHead, viewport, expected:viewport * (1 - 60 / referenceWidth)};
+        }""")
+        self.assertGreater(boundary['lastHead'], boundary['viewport'] * .85)
+        self.assertAlmostEqual(boundary['lastHead'], boundary['expected'], delta=8)
+        self.assertEqual(page.get_by_text('Scrolling manually stops following until you pause and play again.').count(), 0)
+        page.click('#timelineScrollPreviewToggle')
+        expect(preview).to_have_attribute('data-running', 'false')
+        paused = preview.evaluate('(canvas) => canvas.toDataURL()')
+        page.evaluate('() => new Promise(resolve => setTimeout(resolve, 150))')
+        self.assertEqual(preview.evaluate('(canvas) => canvas.toDataURL()'), paused)
+        shot = Path(__file__).resolve().parents[1] / '.runs' / 'timeline-scroll-preview.png'
+        shot.parent.mkdir(exist_ok=True)
+        page.locator('#settingsModal').screenshot(path=str(shot))
+        page.locator('input[name=playbackScrollMode][value=follow]').check()
+        page.click('#timelineScrollPreviewToggle')
+        follow = page.locator('#timelineScrollPreviewFollow')
+        expect(follow).to_have_attribute('data-running', 'true')
+        sample = follow.evaluate("""canvas => ({head:Number(canvas.dataset.playhead), width:canvas.clientWidth,
+            referenceWidth:document.querySelector('#scroll').clientWidth})""")
+        self.assertAlmostEqual(sample['head'], (sample['width'] - 16) * min(60 / sample['referenceWidth'], .1), delta=1)
+        self.assertEqual(page.locator('input[name=playbackScrollMode]').count(), 2)
+        page.click('[data-settings-pane=appearance]')
+        expect(preview).to_have_attribute('data-running', 'false')
+        page.click('[data-settings-pane=trace]')
+        expect(preview).to_have_attribute('data-running', 'true')
+        page.click('#settingsCancel')
+        expect(preview).to_have_attribute('data-running', 'false')
+        expect(page.locator('#playbackScrollMode')).to_have_value('page')
+        after = page.evaluate("async () => (await import('/playback.js')).playbackTime()")
+        self.assertEqual(after, before, 'The preview must not move the project playhead')
+        page.emulate_media(reduced_motion='reduce')
+        page.reload()
+        page.click('#welcomeSettingsBtn')
+        page.click('[data-settings-pane=trace]')
+        expect(preview).to_have_attribute('data-running', 'false')
+        expect(page.locator('#timelineScrollPreviewToggle')).to_have_text('Play previews')
+        page.click('#timelineScrollPreviewToggle')
+        expect(preview).to_have_attribute('data-running', 'true')
+        page.wait_for_function("Number(document.querySelector('#timelineScrollPreview').dataset.playhead) > 10")
+        page.click('#settingsCancel')
+        expect(preview).to_have_attribute('data-running', 'false')
+
     def test_playback_and_fretboard_preferences(self):
         self.open_reference_project()
         page = self.page
@@ -635,7 +782,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#playbackScrollMode")).to_have_value("page")
         expect(page.locator("#fretboardStringOrder")).to_have_value("low-bottom")
         expect(page.locator("#fretboardAnimations")).to_be_checked()
-        page.select_option("#playbackScrollMode", "follow")
+        page.locator("input[name=playbackScrollMode][value=follow]").check()
         page.select_option("#fretboardStringOrder", "low-top")
         page.uncheck("#fretboardAnimations")
         page.click("#settingsCancel")
@@ -643,11 +790,11 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#fretboardStringOrder")).to_have_value("low-bottom")
         expect(page.locator("#fretboardAnimations")).to_be_checked()
         page.click("#settingsMenuBtn")
-        page.select_option("#playbackScrollMode", "follow")
+        page.locator("input[name=playbackScrollMode][value=follow]").check()
         page.select_option("#fretboardStringOrder", "low-top")
         page.uncheck("#fretboardAnimations")
         page.click("#settingsApply")
-        # Exercise the actual transport reveal path, including the no-follow mode.
+        # Exercise the actual transport reveal path.
         positions = page.evaluate("""async () => {
             const { seekPlayback, revealPlaybackPosition } = await import('/playback.js');
             const { stopViewportMotion, viewportMoving } = await import('/viewport-motion.js');
@@ -660,14 +807,9 @@ class EndToEndTests(unittest.TestCase):
             for (let i = 0; i < 120 && viewportMoving(); i++) await new Promise(requestAnimationFrame);
             const followed = scroll.scrollLeft;
             const expected = Math.min(scroll.scrollWidth - scroll.clientWidth, 12 * S.pxPerSec - 60);
-            document.querySelector('#playbackScrollMode').value = 'off';
-            seekPlayback(20); revealPlaybackPosition();
-            const unfollowed = scroll.scrollLeft;
-            document.querySelector('#playbackScrollMode').value = 'follow';
-            return { followed, expected, unfollowed };
+            return { followed, expected };
         }""")
         self.assertAlmostEqual(positions["followed"], positions["expected"], delta=1)
-        self.assertEqual(positions["unfollowed"], positions["followed"])
         # Flip the real canvas: tuning labels stay readable and swap vertical order.
         labels = page.evaluate("""async () => {
             const { setFretboardVisible, drawFretboard } = await import('/fretboard.js');
@@ -699,6 +841,102 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#fretboardStringOrder")).to_have_value("low-top")
         expect(page.locator("#fretboardAnimations")).not_to_be_checked()
 
+    def test_legacy_no_follow_preference_becomes_page(self):
+        page = self.page
+        page.evaluate("localStorage.setItem('cw.settings', JSON.stringify({playbackScrollMode:'off'}))")
+        page.reload()
+        expect(page.locator('#playbackScrollMode')).to_have_value('page')
+        expect(page.locator('input[name=playbackScrollMode][value=page]')).to_be_checked()
+        self.assertEqual(page.locator('input[name=playbackScrollMode]').count(), 2)
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.settings')).playbackScrollMode"), 'page')
+
+    def test_manual_scrolling_suspends_playback_follow_until_restart(self):
+        self.open_reference_project()
+        self.page.emulate_media(reduced_motion='reduce')
+        results = self.page.evaluate("""async () => {
+            const { playTransport, pauseTransport, seekPlayback, revealPlaybackPosition } = await import('/playback.js');
+            const { stopViewportMotion, followViewportTo } = await import('/viewport-motion.js');
+            const scroll = document.querySelector('#scroll');
+            const { S } = await import('/store.js');
+            const frame = () => new Promise(requestAnimationFrame);
+            const results = [];
+            for (const mode of ['page', 'follow']) for (const gesture of ['wheel', 'overview', 'scrollbar']) {
+                pauseTransport(); stopViewportMotion();
+                document.querySelector('#playbackScrollMode').value = mode;
+                seekPlayback(12); scroll.scrollLeft = 0;
+                await playTransport(); await frame(); await frame();
+                const before = scroll.scrollLeft;
+                if (gesture === 'wheel') {
+                    scroll.dispatchEvent(new WheelEvent('wheel', {deltaY:-180, bubbles:true, cancelable:true}));
+                } else if (gesture === 'overview') {
+                    followViewportTo(100);
+                } else {
+                    const rect = scroll.getBoundingClientRect();
+                    scroll.dispatchEvent(new PointerEvent('pointerdown', {clientX:rect.left+20, clientY:rect.top+scroll.clientHeight+1}));
+                    scroll.scrollLeft = 100;
+                }
+                const manual = scroll.scrollLeft;
+                seekPlayback(20); revealPlaybackPosition();
+                await frame(); await frame();
+                const held = scroll.scrollLeft;
+                pauseTransport(); scroll.scrollLeft = 0;
+                await playTransport(); await frame(); await frame();
+                const resumed = scroll.scrollLeft;
+                results.push({mode, gesture, before, manual, held, resumed});
+            }
+            pauseTransport();
+            return results;
+        }""")
+        for result in results:
+            self.assertGreater(result['before'], 100, result)
+            self.assertNotEqual(result['before'], result['manual'], result)
+            self.assertEqual(result['held'], result['manual'], result)
+            self.assertGreater(result['resumed'], result['manual'] + 100, result)
+
+    def test_playback_scrolling_resumes_after_two_seconds_with_playhead_in_frame(self):
+        self.open_reference_project()
+        self.page.emulate_media(reduced_motion='reduce')
+        results = self.page.evaluate("""async () => {
+            const { playTransport, pauseTransport, seekPlayback, playbackTime } = await import('/playback.js');
+            const { manualViewportNavigation, stopViewportMotion } = await import('/viewport-motion.js');
+            const { S } = await import('/store.js');
+            const scroll = document.querySelector('#scroll'), audio = document.querySelector('#audio');
+            const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const originalRate = audio.playbackRate, results = [];
+            try {
+                // Keep the playhead in the paging edge zone for the full idle
+                // interval, so both Page and Follow have a visible resume.
+                audio.playbackRate = .125;
+                for (const mode of ['page', 'follow']) {
+                    pauseTransport(); stopViewportMotion();
+                    document.querySelector('#playbackScrollMode').value = mode;
+                    seekPlayback(12); await playTransport();
+                    manualViewportNavigation(); scroll.scrollLeft = 0;
+                    await wait(2150);
+                    const outside = scroll.scrollLeft;
+                    manualViewportNavigation();
+                    scroll.scrollLeft = playbackTime() * S.pxPerSec - scroll.clientWidth + 45;
+                    const returned = scroll.scrollLeft;
+                    await wait(1000);
+                    const beforeTimeout = scroll.scrollLeft;
+                    // More movement restarts the complete two-second window.
+                    scroll.scrollLeft += 30;
+                    const moved = scroll.scrollLeft;
+                    await wait(1300);
+                    const afterMovement = scroll.scrollLeft;
+                    await wait(1050);
+                    const resumed = scroll.scrollLeft;
+                    results.push({mode, outside, returned, beforeTimeout, moved, afterMovement, resumed});
+                }
+            } finally { pauseTransport(); audio.playbackRate = originalRate; }
+            return results;
+        }""")
+        for result in results:
+            self.assertEqual(result['outside'], 0, result)
+            self.assertEqual(result['beforeTimeout'], result['returned'], result)
+            self.assertEqual(result['afterMovement'], result['moved'], result)
+            self.assertGreater(result['resumed'], result['moved'] + 100, result)
+
     def test_playback_follow_eases_and_retargets(self):
         self.open_reference_project()
         result = self.page.evaluate("""async () => {
@@ -713,7 +951,7 @@ class EndToEndTests(unittest.TestCase):
             mode.value = 'follow';
             seekPlayback(8); revealPlaybackPosition();
             const immediate = scroll.scrollLeft;
-            await frame(); revealPlaybackPosition();
+            await frame(); await frame(); revealPlaybackPosition();
             const catchingUp = scroll.scrollLeft;
             // Seek again during the ease: it must update the destination, not wait
             // for the old destination or snap straight to the new one.
@@ -727,7 +965,7 @@ class EndToEndTests(unittest.TestCase):
             const settled = scroll.scrollLeft;
             seekPlayback(4); revealPlaybackPosition();
             await frame(); await frame();
-            mode.value = 'off'; revealPlaybackPosition();
+            stopViewportMotion();
             const stopped = scroll.scrollLeft;
             await frame(); await frame();
             return { immediate, catchingUp, retargeted, samples, settled, target: target(16),

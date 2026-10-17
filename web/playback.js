@@ -16,6 +16,22 @@ import { playbackEvents, playSampleEvent } from "./playback-effects.js";
 export let scheduled = new Set();   // notes scheduled in the current play cycle
 
 export let scheduledBeats = new Set(); // metronome beat indices scheduled this cycle
+let scrollingSuspended = false;
+let scrollingResumeSince = null;
+window.addEventListener("cw-viewport-manual", () => {
+  if (transportPlaying()) {
+    scrollingSuspended = true;
+    scrollingResumeSince = null;
+    if (viewportFollowing("playback")) stopViewportMotion();
+  }
+});
+// Includes scrollbar dragging, trackpad inertia and overview easing: the two
+// seconds start after the viewport actually settles, not after the last input.
+scroll.addEventListener("scroll", () => {
+  if (scrollingSuspended) scrollingResumeSince = null;
+}, { passive: true });
+window.addEventListener("cw-project-opened", () => { scrollingSuspended = false; });
+window.addEventListener("cw-project-closed", () => { scrollingSuspended = false; });
 
 function hasAudioTransport() { return !!S.state?.stems?.length; }
 
@@ -42,6 +58,7 @@ export function playTransport() {
   if (!S.state) return Promise.resolve();
   if (hasAudioTransport()) return audio.play();
   if (S.scorePlaying) return Promise.resolve();
+  scrollingSuspended = false;
   const duration = Number(S.state.duration) || 0;
   if ((S.scoreTime || 0) >= duration) S.scoreTime = 0;
   S.scoreAnchorSong = S.scoreTime || 0; S.scoreAnchorClock = performance.now() / 1000; S.scorePlaying = true;
@@ -555,6 +572,19 @@ export function seekPlayback(t) {
 // View switches center explicitly; continuous following eases toward its left
 // margin and keeps retargeting as the transport moves, even during the catch-up.
 export function revealPlaybackPosition({ center = false, redraw = true } = {}) {
+  if (scrollingSuspended && transportPlaying() && !center) {
+    const head = playbackTime() * S.pxPerSec;
+    const inFrame = scroll.clientWidth > 0 && head >= scroll.scrollLeft && head <= scroll.scrollLeft + scroll.clientWidth;
+    if (!inFrame || viewportMoving() || S.mmSeeking || S.mmDragging) {
+      scrollingResumeSince = null;
+      return;
+    }
+    const now = performance.now();
+    if (scrollingResumeSince === null) scrollingResumeSince = now;
+    if (now - scrollingResumeSince < 2000) return;
+    scrollingSuspended = false;
+    scrollingResumeSince = null;
+  }
   const mode = $("playbackScrollMode")?.value || "page";
   if (viewportFollowing("playback") && (center || mode !== "follow")) stopViewportMotion();
   if ((viewportMoving() && !viewportFollowing("playback")) || S.mmSeeking || S.mmDragging) return;
@@ -630,7 +660,7 @@ const PAUSE_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="curren
 export function init_playback() {
   startScheduler();
   playBtn.addEventListener("click", async () => { await ensureTone(); togglePlay(); });
-  audio.addEventListener("play", () => { playBtn.innerHTML = PAUSE_ICON; playBtn.title = "Pause (Space)"; setSynthsMuted(false); ensureStemMixer(); startFollowers(); resetSchedule(); tick(); });
+  audio.addEventListener("play", () => { scrollingSuspended = false; playBtn.innerHTML = PAUSE_ICON; playBtn.title = "Pause (Space)"; setSynthsMuted(false); ensureStemMixer(); startFollowers(); resetSchedule(); tick(); });
   audio.addEventListener("pause", () => {
     cancelPassagePreview();
     clearPreview();
