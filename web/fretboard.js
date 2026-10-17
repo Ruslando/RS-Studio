@@ -1,3 +1,4 @@
+import { fretboardHandKey } from "./fretboard-cache.js";
 import { chordWarnings } from "./chord-warnings.js";
 import { overrideResetPreview } from './override-reset.js';
 import { panelControls, syncPanelControls } from "./canvas-controls.js";
@@ -87,7 +88,7 @@ let handJob = "";     // the key currently being voiced, so one lane is asked on
 
 function handKey(lane) {
   const tempo = gridSegments().map((seg) => `${seg.t}:${seg.bpm}`).join(",");
-  return `${lane.id}:${S.voicingRevision}:${lane.notes.length}:${lane.tuning}:${lane.transpositionPitch || 0}:${lane.capo || 0}:${tempo}`;
+  return fretboardHandKey(lane, S.voicingRevision, tempo);
 }
 
 // Which finger holds which note, and which fret the hand is anchored on.
@@ -940,8 +941,8 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   fretboardShape.hidden = !(editing) || playing || (!chord && !shaping);
   fretboardShape.disabled = unplayable;
   $("fretboardAlternatives").hidden = playing || !!shaping || unplayable;
-  $("fretboardAltCount").textContent = alternativeCount ? (alternativeIndex < 0 ? `Original · ${alternativeCount} alternatives` : `${alternativeIndex + 1} / ${alternativeCount}`)
-    : chord && (alts?.note !== focusNote(lane) || alts?.rev !== S.voicingRevision) ? "Original · Loading..." : "Original · No alternatives";
+  $("fretboardAltCount").textContent = alternativeCount ? (alternativeIndex < 0 ? `${alternativeCount} alternatives` : `${alternativeIndex + 1} / ${alternativeCount}`)
+    : chord && (alts?.note !== focusNote(lane) || alts?.rev !== S.voicingRevision) ? "Loading alternatives..." : "No alternatives";
   $("fretboardAltPrev").disabled = alternativeCount === 0;
   $("fretboardAltNext").disabled = alternativeCount === 0;
   $("fretboardChoose").hidden = !activeAlternative;
