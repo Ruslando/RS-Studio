@@ -1,3 +1,4 @@
+import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 // Note editing: undo/redo across all edit lanes, clipboard (incl. paste-as-reference),
 // the per-note effects (bend / harmonic / articulations / slide), the fingering
 // override, and the right-click note context menu.
@@ -28,7 +29,7 @@ import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
 import { S, setSelection } from "./store.js";
-import { laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
+import { laneFretCount, laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { matchKey } from "./keymap.js";
@@ -639,6 +640,27 @@ export function columnOf(note) {
   return col ? { lane, tuning: laneFretTuning(lane), col } : null;
 }
 
+// A multi-selection is one local grip edit, validated in full before one undo
+// snapshot is committed. Existing reach/adaptation flags are intentionally reset.
+function applySelectedPosition(colNotes, shape) {
+  const lane = laneOf(colNotes?.[0]);
+  const group = positionSelection(lane, S.selection);
+  if (!group.multiple) return { handled: false };
+  if (group.error) return { handled: true, error: group.error };
+  if (!canEditLane(lane)) return { handled: true, error: null };
+  const tuning = laneFretTuning(lane);
+  const voiced = voiceNotes(lane.notes, tuning, Infinity,
+    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
+  const plan = sharedPositionPlan(lane, S.selection, colNotes, shape, tuning,
+    note => voiced.get(note), laneFretCount(lane));
+  // Offers are prevalidated for the full selection. A stale offer must be
+  // discarded, not presented as an invalid action the user could have avoided.
+  if (plan.error) { draw(); return { handled: true, error: null }; }
+  const prev = snapshotEdit();
+  if (applySharedPositionPlan(plan)) { commit(prev); draw(); refreshTabIfOpen(); }
+  return { handled: true, error: null };
+}
+
 // One-line description of a shape for the menu/toast: "A string · fret 7",
 // "open", or a chord's per-string frets + lowest position.
 // Pin the column to `shape` (Map note -> {string, fret}) or, when null, clear the
@@ -679,6 +701,7 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null) {
 // Written as a new object rather than mutated, because the undo snapshot shares the
 // note's own `pos` reference and editing it in place would rewrite history too.
 export function setColumnInfluence(colNotes, direction, on) {
+  if (positionSelection(laneOf(colNotes?.[0]), S.selection).multiple) return;
   const key = { previous: "influencePrevious", next: "influenceNext" }[direction] || direction;
   const prev = snapshotEdit();
   let touched = false;
@@ -697,6 +720,15 @@ export function setColumnInfluence(colNotes, direction, on) {
 // spectrogram afterwards is what the neck showed. null returns the column to
 // automatic (pins only; a deleted note comes back through undo).
 export function applyColumnAlternative(colNotes, choice, influence = null) {
+  const group = positionSelection(laneOf(colNotes?.[0]), S.selection);
+  if (group.multiple) {
+    if (group.error) { toast(group.error); return; }
+    const shape = choice && mapPositionShape(choice.notes, choice.shape, colNotes);
+    if (!shape) { draw(); return; }
+    const result = applySelectedPosition(colNotes, shape);
+    if (result.error) toast(result.error);
+    return;
+  }
   const prev = snapshotEdit();
   if (writeAlternative(colNotes, choice, influence)) { commit(prev); draw(); refreshTabIfOpen(); }
 }
@@ -778,6 +810,8 @@ export function setHandAnchor(lane, t, fret) {
 //
 // Returns null when it wrote, or the sentence saying what is wrong.
 export function setColumnShape(colNotes, shape, limits = null, maxFret = undefined) {
+  const shared = applySelectedPosition(colNotes, shape);
+  if (shared.handled) return shared.error;
   const lane = laneOf(colNotes?.[0]);
   if (!lane) return "These notes are not in an editable note layer";
   const wrong = shapeFault(colNotes, laneFretTuning(lane), shape, limits, maxFret);
@@ -814,6 +848,8 @@ export function setNotePosition(note, string, fret) {
     if (!p) return;                       // a column the voicer could not place
     shape.set(n, { string: p.string, fret: p.fret });
   }
+  const shared = applySelectedPosition(ctx.col.notes, shape);
+  if (shared.handled) { if (shared.error) toast(shared.error); return; }
   applyColumnPos(ctx.col.notes, shape, "local", overrideFlow(ctx.col.notes));
 }
 
@@ -826,6 +862,18 @@ export function setNotePosition(note, string, fret) {
 // is not read as a whole: you fix the one bar that came out wrong, and wiping the other
 // twenty is a bigger act than anything else on the panel offers.
 export function clearOverrideAt(lane, colNotes, t) {
+  const group = positionSelection(lane, S.selection);
+  if (group.multiple) {
+    if (group.error) { toast(group.error); return; }
+    if (!canEditLane(lane)) return;
+    const result = resetSharedPositions(lane, S.selection);
+    if (!result.changed) return;
+    const prev = snapshotEdit();
+    lane.notes = result.notes;
+    setSelection(result.selection);
+    commit(prev); draw(); refreshTabIfOpen();
+    return;
+  }
   const prev = snapshotEdit();
   let touched = false;
   if (lane?.handHolds?.length && Number.isFinite(t)) {
