@@ -1297,5 +1297,9 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardInfluence { margin-left: auto; padding-left: 12px; border-left: 1px solid var(--stage-line); }
 #fretboardInfluence:not(:has(> button:not([hidden]))) { display: none; }
 #fretboardShape { margin-left: 4px; }
+#fretboardShapeNotes { display: flex; align-items: center; gap: 4px; }
+#fretboardShapeNotes[hidden], #fretboardPanel[data-shaping] :is(#fretboardSetup, #fretboardInfluence) { display: none; }
+#fretboardPanel[data-shaping] #fretboardShape { color: var(--stage-text); }
+#fretboardShapePrev svg, #fretboardShapeNext svg { transform: rotate(-90deg); }
 #fretboardPanel[data-collapsed] #fretboardControls { visibility: hidden; pointer-events: none; }
 #fretboardPanel { container-type: inline-size; }

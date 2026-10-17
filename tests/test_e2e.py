@@ -363,7 +363,8 @@ class EndToEndTests(unittest.TestCase):
                 page.locator(selector).click()
             page.locator(selector).hover()
             colors = page.locator(selector).evaluate("el => { const s=getComputedStyle(el); return {ink:s.color,background:s.backgroundColor,on:getComputedStyle(document.documentElement).getPropertyValue('--on-engaged').trim()}; }")
-            self.assertEqual(colors['ink'], 'rgb(255, 255, 255)', colors)
+            if selector.endswith('Edit'):
+                self.assertEqual(colors['ink'], 'rgb(255, 255, 255)', colors)
         page.keyboard.press('Escape')
         page.mouse.move(5,5)
         audit_script = """() => {
@@ -383,6 +384,95 @@ class EndToEndTests(unittest.TestCase):
         page.click('#settingsMenuBtn')
         self.assertEqual(page.evaluate(audit_script), [], 'Light-mode settings buttons need readable foregrounds')
         page.click('#settingsCancel')
+
+    def test_custom_shape_only_shows_draft_notes_and_supports_revisiting(self):
+        page = self.page
+        bundle = self.data / 'custom-shape-showcase.chart'
+        with zipfile.ZipFile(bundle, 'w') as archive:
+            archive.write(Path(__file__).resolve().parents[1] / 'examples/chord-showcase/project.json', 'project.json')
+        with page.expect_file_chooser() as chooser: page.click('#welcomeOpen')
+        chooser.value.set_files(bundle)
+        expect(page.locator('#lanes .lane-row')).to_be_visible()
+        self.fretboard_hover_points(80)
+        original = page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)")
+        page.locator('#fretboardEdit').click()
+        expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
+        page.locator('#fretboardShape').click()
+        expect(page.locator('#fretboardShape')).to_have_text('Cancel')
+        expect(page.locator('#fretboardApply')).to_have_text('Done')
+        expect(page.locator('#fretboardApply')).to_be_disabled()
+        for selector in ['#fretboardSetup','#fretboardCapoField','#fretboardHandField','#fretboardAlternatives','#fretboardInfluence']:
+            expect(page.locator(selector)).to_be_hidden()
+
+        def painted():
+            return page.evaluate("""async () => {
+                const canvas=document.querySelector('#fretboard'), ctx=canvas.getContext('2d');
+                const original={begin:ctx.beginPath,arc:ctx.arc,stroke:ctx.stroke,text:ctx.fillText};
+                const rings=[],notes=[],tuning={}; let arc=null;
+                ctx.beginPath=function(...a){arc=null;return original.begin.apply(this,a);};
+                ctx.arc=function(x,y,r,...a){arc={x,y,r};return original.arc.call(this,x,y,r,...a);};
+                ctx.stroke=function(...a){if(arc)rings.push(arc);return original.stroke.apply(this,a);};
+                ctx.fillText=function(text,x,y,...a){
+                    if(this.textBaseline==='middle' && /^[A-G]#?[0-9]$/.test(String(text))) {
+                        if(this.textAlign==='right') tuning[text]={x,y}; else notes.push(text);
+                    }
+                    return original.text.call(this,text,x,y,...a);
+                };
+                try{(await import('/fretboard.js')).drawFretboard();}finally{ctx.beginPath=original.begin;ctx.arc=original.arc;ctx.stroke=original.stroke;ctx.fillText=original.text;}
+                const rect=canvas.getBoundingClientRect();
+                return {rings,notes,tuning,left:rect.left,top:rect.top};
+            }""")
+
+        def pick(string, fret):
+            sample = painted()
+            point = page.evaluate("""async ({sample,string,fret}) => {
+                const {fretboardFor,fretCentre,stringOffsetAt}=await import('/fretboard-core.js');
+                const s=fretboardFor('electric'), lo=sample.tuning.E2, hi=sample.tuning.E4;
+                const scale=(lo.y-hi.y)/s.spreadAtNut, mm=fretCentre(fret,s);
+                return [sample.left+lo.x+8+s.nutDepth*scale+mm*scale,
+                    sample.top+(lo.y+hi.y)/2+stringOffsetAt(string,Math.max(0,mm),s)*scale];
+            }""", {'sample':sample,'string':string,'fret':fret})
+            page.mouse.click(*point)
+
+        self.assertEqual(set(painted()['notes']), {'A2'})
+        self.assertEqual(len(painted()['rings']), 2, 'Only the two A2 placements may be outlined; no original-chord ghosts')
+        expect(page.locator('#fretboardName')).to_have_text('1 / 3 \u00b7 A2')
+        page.locator('#fretboardShapeNext').click()
+        expect(page.locator('#fretboardName')).to_have_text('2 / 3 \u00b7 G3')
+        page.locator('#fretboardShapePrev').click()
+        pick(4,0)
+        expect(page.locator('#fretboardName')).to_have_text('2 / 3 \u00b7 G3')
+        self.assertEqual(set(painted()['notes']), {'A2','G3'})
+        pick(3,5)
+        expect(page.locator('#fretboardName')).to_have_text('3 / 3 \u00b7 C4')
+        pick(2,5)
+        expect(page.locator('#fretboardApply')).to_be_enabled()
+        page.locator('#fretboardShapePrev').click()
+        expect(page.locator('#fretboardName')).to_have_text('2 / 3 \u00b7 G3')
+        page.locator('#fretboardShapePrev').click()
+        self.assertEqual(len(painted()['rings']), 2, 'Returning to a note must allow its current string again')
+        pick(5,5)
+        expect(page.locator('#fretboardApply')).to_be_enabled()
+        pick(4,0)
+        pick(2,5)  # A previously placed note is selectable without clearing it.
+        expect(page.locator('#fretboardName')).to_have_text('3 / 3 \u00b7 C4')
+        expect(page.locator('#fretboardApply')).to_be_enabled()
+        self.assertEqual(page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)"), original)
+        shot=Path(__file__).resolve().parents[1]/'.runs'/'custom-shape-navigation.png'
+        page.locator('#fretboardPanel').screenshot(path=str(shot))
+        page.locator('#fretboardShape').click()
+        expect(page.locator('#fretboardShape')).to_have_text('Custom shape')
+        expect(page.locator('#fretboardSetup')).to_be_visible()
+        self.assertEqual(page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)"), original)
+        page.locator('#fretboardShape').click()
+        pick(4,0);pick(3,5);pick(2,5)
+        page.locator('#fretboardApply').click()
+        expect(page.locator('#fretboardSetup')).to_be_visible()
+        expect(page.locator('#fretboardShape')).to_have_text('Custom shape')
+        actual=page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.find(n=>n.start===80&&n.pitch===45).pos")
+        self.assertEqual((actual['string'],actual['fret']), (4,0))
+        page.keyboard.press('Control+z')
+        self.assertEqual(page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)"), original)
 
     def test_fretboard_label_choices_and_custom_shape_targets(self):
         page = self.page
@@ -569,7 +659,7 @@ class EndToEndTests(unittest.TestCase):
         page.locator('#fretboardPanel').screenshot(path=str(shot))
         page.evaluate("async () => (await import('/playback.js')).seekPlayback(80)")
         page.locator('#fretboardShape').click()
-        expect(page.locator('#fretboardShape')).to_have_attribute('aria-pressed', 'true')
+        expect(page.locator('#fretboardShape')).to_have_text('Cancel')
         page.evaluate("async () => (await import('/playback.js')).seekPlayback(100)")
         expect(page.locator('#fretboardShape')).to_have_attribute('aria-pressed', 'false')
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-unplayable', '')

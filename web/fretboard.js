@@ -249,7 +249,7 @@ let spots = null;     // last frame's targets: { note, string, fret, x0, x1, y0,
 let spotHover = -1;
 
 // Custom shape entry keeps its existing staged walk; its redesign is separate.
-let shaping = null;   // { notes, picked: Map(note -> { string, fret }) }
+let shaping = null;   // { notes, index, picked: Map(note -> { string, fret }) }
 
 // THE MOMENT THE BOARD SHOWS. While the song runs that is the playhead. Stopped, it is
 // the playhead plus a hair: a parked playhead is stored to the microsecond and a
@@ -355,10 +355,25 @@ function setFretboardShape(on) {
   const notes = (at?.marks || []).map((m) => m.note).filter(Boolean);
   // Low to high, which is the order a player names the strings of a chord in.
   shaping = notes.length > 1
-    ? { notes: notes.slice().sort((a, b) => a.pitch - b.pitch), picked: new Map() } : null;
+    ? { notes: notes.slice().sort((a, b) => a.pitch - b.pitch), index: 0, picked: new Map() } : null;
   spots = null; spotHover = -1;
-  fretboardShape.setAttribute("aria-pressed", String(!!shaping));
+  if (shaping) { previewAlternative = false; endResetPreview(); }
+  syncShapeMode();
   layoutFretboard();
+}
+
+function syncShapeMode() {
+  fretboardPanel.toggleAttribute("data-shaping", !!shaping);
+  fretboardShape.textContent = shaping ? "Cancel" : "Custom shape";
+  fretboardShape.title = shaping ? "Discard custom shape" : "Place every note of the chord by hand";
+  if (shaping) fretboardShape.removeAttribute("aria-pressed");
+  else fretboardShape.setAttribute("aria-pressed", "false");
+}
+
+function stepShapeNote(delta) {
+  if (!shaping) return;
+  shaping.index = Math.max(0, Math.min(shaping.notes.length - 1, shaping.index + delta));
+  spotHover = -1; drawFretboard();
 }
 
 // The walk, drawn: what is placed, filled in the layer's hue, and where the note being
@@ -367,10 +382,8 @@ function setFretboardShape(on) {
 // neck cannot say which belongs to which note, and this is the one view where that
 // question has to have an answer.
 //
-// A placed mark is a target too: clicking it takes that note back off the board and
-// makes it the one being placed, which is the only way back that needs no control.
-//
-// Returns the note still to be placed, or null when the shape is complete.
+// Placed marks remain selectable. Returning to a note keeps its draft position
+// while offering all its other positions on strings not used by another note.
 function drawShaping(ctx, s, scale, X, Y, lane) {
   const tuning = lane && laneFretTuning(lane);
   if (!tuning || tuning.length !== s.strings) return null;
@@ -380,16 +393,16 @@ function drawShaping(ctx, s, scale, X, Y, lane) {
     x: fretCentre(p.fret, s), mm: fretCentre(p.fret, s), placed: true,
     finger: 0, dead: !!note.fx?.dead,
   }));
-  const cur = shaping.notes.find((n) => !shaping.picked.has(n)) || null;
+  const cur = shaping.notes[shaping.index];
   // The note being placed is handed in on string -1, which is no string at all: it
   // spends none of the ones already taken and it has no home to be excluded from.
   const asking = cur ? [{ note: cur, pitch: cur.pitch, string: -1 }] : [];
   const opts = cur
-    ? notePlacements([...placed, ...asking], tuning, s.frets, asking)
+    ? notePlacements([...placed.filter(m => m.note !== cur), ...asking], tuning, s.frets, asking)
       .filter(allowedAt(lane, tuning, s))
       .map((p) => spotBox({ ...p, mm: fretCentre(p.fret, s) }, scale, s, X, Y))
     : [];
-  spots = [...opts, ...placed.map((m) => spotBox(m, scale, s, X, Y))];
+  spots = [...opts, ...placed.filter(m => m.note !== cur).map((m) => spotBox(m, scale, s, X, Y))];
   ctx.lineWidth = 1.8;
   for (let i = 0; i < opts.length; i++) {
     const p = opts[i];
@@ -400,7 +413,9 @@ function drawShaping(ctx, s, scale, X, Y, lane) {
   }
   // These are placement targets, so identify their pitch even when labels are
   // hidden for playback. A finger has not been assigned to this draft yet.
-  drawGripNoteNames(ctx, s, scale, X, Y, opts.map(p => ({ ...p, x: p.mm })), hue, false);
+  const selected = shaping.picked.get(cur);
+  drawGripNoteNames(ctx, s, scale, X, Y, opts.filter(p => p.string !== selected?.string)
+    .map(p => ({ ...p, x: p.mm })), hue, false);
   drawGrip(ctx, s, scale, X, Y, placed, hue, true, { digits: false, labels: "notes" });
   return cur;
 }
@@ -470,6 +485,7 @@ export function setFretboardVisible(on) {
     fretboardEdit.textContent = "Edit";
     altsOn = false; alts = null; altsJob = null;
     spots = null; spotHover = -1; shaping = null;
+    syncShapeMode();
     fretboardShape.hidden = true;
     fretboardApply.hidden = true;
   }
@@ -667,7 +683,7 @@ export function drawFretboard() {
   // as it stands is the filled band, fading while something else is considered, and
   // the hand as it WOULD stand — under a hovered shape, or with the override reset —
   // is an outline. Swapping one for the other left nothing to compare against.
-  const now = impossible ? null : handNow(lane, s);
+  const now = impossible || shaping ? null : handNow(lane, s);
   const seat = anchorFret(lane), offered = impossible ? 0 : offeredSeat(lane);
   const hue = lane?.color || PAINT.accent;
   const moves = offered > 0 && offered !== seat;
@@ -842,7 +858,7 @@ export function drawFretboard() {
   // vouched for is what the shape walk is for, and it is a mode you ask for.
   const placing = shaping && !impossible ? drawShaping(ctx, s, scale, X, Y, lane) : null;
   // Something else is on offer: the grip in the hand steps back. See drawHand.
-  drawHand(ctx, s, scale, X, Y, lane, now, shaping ? "ghost" : hovered || spot || resetPeeking ? "fade" : null);
+  if (!shaping) drawHand(ctx, s, scale, X, Y, lane, now, hovered || spot || resetPeeking ? "fade" : null);
   drawBundle(ctx, s, scale, X, Y, lane, held, w, h, chord, placing, impossible);
   if (hovered) drawOffer(ctx, s, scale, X, Y, hovered, lane);
   if (spot) drawNoteOffer(ctx, s, scale, X, Y, lane, spot);
@@ -916,7 +932,10 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   // While a shape is being built the bundle names the note being placed, which is
   // the one thing you need to know and the reason no sentence says what to do.
   fretboardName.hidden = !placing;
-  if (placing) fretboardName.textContent = noteName(placing.pitch);
+  if (placing) fretboardName.textContent = `${shaping.index + 1} / ${shaping.notes.length} · ${noteName(placing.pitch)}`;
+  $("fretboardShapeNotes").hidden = !shaping;
+  $("fretboardShapePrev").disabled = !shaping || shaping.index === 0;
+  $("fretboardShapeNext").disabled = !shaping || shaping.index === shaping.notes.length - 1;
   // Chords only: a lone note has every position on the board already.
   fretboardShape.hidden = !(editing) || playing || (!chord && !shaping);
   fretboardShape.disabled = unplayable;
@@ -927,7 +946,8 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   $("fretboardAltNext").disabled = alternativeCount === 0;
   $("fretboardChoose").hidden = !activeAlternative;
   $("fretboardChoose").disabled = !activeAlternative;
-  fretboardApply.hidden = !shaping || !!placing;
+  fretboardApply.hidden = !shaping;
+  fretboardApply.disabled = !shaping || shaping.picked.size !== shaping.notes.length;
   fretboardAuto.hidden = !overridden;
   refreshPinControls(lane, overridden);   // before measuring: they change its width
   if (!overridden || unplayable) endResetPreview();
@@ -1430,10 +1450,6 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
     drawOnion(ctx, s, scale, X, Y, columns, gripIndex(columns, t), hue);
   }
   if (!at) return;
-  if (quiet === "ghost") {
-    drawGrip(ctx, s, scale, X, Y, at.marks, PAINT.hint, false, { digits: false });
-    return;
-  }
   if (quiet) {
     ctx.save();
     ctx.globalAlpha = FADED;
@@ -1608,13 +1624,17 @@ export function init_fretboard() {
   });
   $("fretboardAltPrev").addEventListener("click", () => stepAlternative(-1));
   $("fretboardAltNext").addEventListener("click", () => stepAlternative(1));
+  $("fretboardShapePrev").addEventListener("click", () => stepShapeNote(-1));
+  $("fretboardShapeNext").addEventListener("click", () => stepShapeNote(1));
   $("fretboardChoose").addEventListener("click", () => {
     useAlternative(); $("fretboardChoose").blur();
   });
   const navigateAlternative = e => {
-    if (!(editing) || shaping || transportPlaying()) return;
+    if (!(editing) || transportPlaying()) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault(); e.stopPropagation(); stepAlternative(e.key === "ArrowLeft" ? -1 : 1);
+    e.preventDefault(); e.stopPropagation();
+    if (shaping) stepShapeNote(e.key === "ArrowLeft" ? -1 : 1);
+    else stepAlternative(e.key === "ArrowLeft" ? -1 : 1);
   };
   fretboardPin.addEventListener("keydown", navigateAlternative);
   fretboardEl.addEventListener("keydown", navigateAlternative);
@@ -1634,8 +1654,12 @@ export function init_fretboard() {
     if (shaping) {
       const pick = spotUnder(e);
       if (!pick) return;
-      if (pick.placed) shaping.picked.delete(pick.note);
-      else shaping.picked.set(pick.note, { string: pick.string, fret: pick.fret });
+      if (pick.placed) shaping.index = shaping.notes.indexOf(pick.note);
+      else {
+        shaping.picked.set(pick.note, { string: pick.string, fret: pick.fret });
+        const next = shaping.notes.findIndex((note, i) => i > shaping.index && !shaping.picked.has(note));
+        if (next >= 0) shaping.index = next;
+      }
       spotHover = -1;
       layoutFretboard();          // Apply arrives or leaves with the last note
       return;
@@ -1701,14 +1725,12 @@ export function init_fretboard() {
     setFretboardShape(!shaping);
   });
   // The one place on this panel where work is staged rather than applied as you go, so
-  // it is the one place with a primary (rule 20 names the work). It only appears once
-  // every note has somewhere to be, so pressing it can only fail on something the walk
-  // could not have prevented — a column that moved under the edit — and that is a
-  // sentence, not a silent no-op.
+  // it is the one place with a primary (rule 20 names the work). Done becomes
+  // enabled when every note has a position; navigating notes keeps that draft.
   fretboardApply.addEventListener("click", () => {
     fretboardApply.blur();
     const col = shaping && columnOf(shaping.notes[0])?.col;
-    if (!col) return;
+    if (!col || shaping.picked.size !== shaping.notes.length) return;
     const lane = currentLane();
     const wrong = setColumnShape(col.notes, shaping.picked, limitsFor(lane, col.notes[0]), laneFretCount(lane));
     if (wrong) { toast(wrong); return; }
