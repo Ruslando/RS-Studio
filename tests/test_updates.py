@@ -9,6 +9,18 @@ from rs_studio import updates
 
 
 class UpdateTests(unittest.TestCase):
+    def test_channel_api_saves_preferences_and_rejects_unknown_channels(self):
+        from fastapi.testclient import TestClient
+        from rs_studio.server import app
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"RS_STUDIO_DATA_ROOT": tmp}, clear=True):
+            client = TestClient(app, base_url="http://127.0.0.1:8000")
+            self.assertEqual(client.get("/api/update/channel").json()["channel"], "stable")
+            response = client.post("/api/update/channel", json={"channel": "preview"})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(client.get("/api/update/channel").json()["channel"], "preview")
+            self.assertEqual(client.post("/api/update/channel", json={"channel": []}).status_code, 400)
+            self.assertEqual(client.get("/api/update/channel").json()["channel"], "preview")
+
     def test_versions_compare_as_releases(self):
         self.assertTrue(updates._newer("0.1.2-alpha", "0.1.1-alpha"))
         self.assertTrue(updates._newer("0.2.0", "0.1.9"))
@@ -48,6 +60,40 @@ class UpdateTests(unittest.TestCase):
     def test_update_without_launcher_is_refused(self):
         with patch.dict(os.environ, {}, clear=True), self.assertRaises(RuntimeError):
             updates.start_install()
+
+    def test_channel_is_persisted_without_changing_installer_trust(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"RS_STUDIO_INSTALL_ROOT": tmp}, clear=True):
+            path = Path(tmp, "bootstrap-release.json")
+            config = {"launcher_version": 4, "manifest_url": "https://example.com/m.json", "public_key": {"n": "trusted"}}
+            path.write_text(json.dumps(config))
+            self.assertEqual(updates.channel_state()["channel"], "stable")
+            self.assertEqual(updates.set_channel("preview")["channel"], "preview")
+            self.assertEqual(json.loads(path.read_text()), {**config, "channel": "preview"})
+            self.assertEqual(updates.set_channel("stable")["channel"], "stable")
+
+    def test_old_launcher_and_invalid_channel_are_rejected(self):
+        with patch.object(updates, "_config", return_value={"launcher_version": 3}):
+            self.assertFalse(updates.channel_state()["can_change_channel"])
+            with self.assertRaises(RuntimeError):
+                updates.set_channel("preview")
+            for invalid in ("nightly", None, []):
+                with self.assertRaises(ValueError):
+                    updates.set_channel(invalid)
+
+    def test_source_channel_survives_restart(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"RS_STUDIO_DATA_ROOT": tmp}, clear=True):
+            updates.set_channel("preview")
+            self.assertEqual(updates.channel_state(), {"channel": "preview", "can_change_channel": True})
+
+    def test_returning_to_regular_releases_offers_older_stable(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"RS_STUDIO_INSTALL_ROOT": tmp}, clear=True):
+            Path(tmp, "bootstrap-release.json").write_text(json.dumps({"launcher_version": 4, "channel": "stable"}))
+            Path(tmp, "current.json").write_text(json.dumps({"payload": {"channel": "preview"}}))
+            with patch.object(updates, "_installer") as installer:
+                installer.return_value.fetch_manifest.return_value = {"payload": {"version": "0.2.3-alpha"}}
+                self.assertTrue(updates.check()["available"])
+                Path(tmp, "current.json").write_text(json.dumps({"payload": {"channel": "stable"}}))
+                self.assertFalse(updates.check()["available"])
 
 
 if __name__ == "__main__":

@@ -166,7 +166,7 @@ def run(page, audit, data, audio):
         page.mouse.click(700, 37)                        # the project title: inert, and outside every menu
 
     def settings(prefix):
-        for pane in ["appearance", "trace", "tunings", "sounds", "keys", "models", "acceleration"]:
+        for pane in ["appearance", "trace", "tunings", "sounds", "keys", "models", "acceleration", "updates"]:
             click(f"[data-settings-pane={pane}]")
             scene(f"{prefix}-settings-{pane}", "#settingsModal")
         click("[data-settings-pane=keys]"); click("#keysTabFixed"); scene(f"{prefix}-settings-keys-fixed", "#settingsModal")

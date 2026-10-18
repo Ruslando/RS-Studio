@@ -22,6 +22,7 @@ import { panelMotion } from "./panel-motion.js";
 import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { refreshSaveState } from "./project.js";
 import { renderAcceleration } from "./acceleration.js";
+import { applyUpdateChannel } from "./updates.js";
 import { renderModels, stopModelPolling } from "./models.js";
 import { S } from "./store.js";
 import { exportRocksmith } from "./rocksmith-export.js";
@@ -156,6 +157,7 @@ function showSettingsPane(section) {
   $("spAppearance").hidden = section !== "appearance";
   $("spModels").hidden = section !== "models";
   $("spAcceleration").hidden = section !== "acceleration";
+  $("spUpdates").hidden = section !== "updates";
   $("spTunings").hidden = section !== "tunings";
   $("spSounds").hidden = section !== "sounds";
   $("settingsModalTitle").textContent = section === "project" ? SP_TITLES.project : "Settings";
@@ -222,6 +224,7 @@ async function applySettingsModal() {
   if (spSection === "project") { saveProjectSettings(); return; }
   if (!(await saveTuningDraft({ keepOpen: true }))) return;   // an unsaved built-in edit made them stay
   if (!saveSoundDraft()) { showSettingsPane("sounds"); return; }
+  if (!(await applyUpdateChannel())) { showSettingsPane("updates"); return; }
   snapshotSettings();
 }
 
@@ -490,6 +493,11 @@ export function init_ui() {
     $("settingsPanel").addEventListener(type, () => queueMicrotask(syncLayerActions));
   }
   window.addEventListener("settings-draft-changed", syncSettingsActions);
+  window.addEventListener("update-channel-loaded", () => {
+    const item = spSnapshot?.inputs.find(({ el }) => el.id === "updateChannel");
+    if (item) item.v = $("updateChannel").value;
+    syncSettingsActions();
+  });
   wireMenu("menuTraceSettings", () => openSettingsModal("trace"));
   wireMenu("menuProjectSettings", () => openSettingsModal("project"));
   wireMenu("menuKeySettings", () => openSettingsModal("keys"));

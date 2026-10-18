@@ -353,6 +353,13 @@ def main() -> None:
         config = json.loads(config_path.read_text(encoding="utf-8"))
         if config["launcher_version"] != LAUNCHER_VERSION or not isinstance(config["public_key"], dict):
             raise ValueError("Invalid launcher configuration")
+        if fixed and (root / "bootstrap-release.json").is_file():
+            # Keep the executable's trust key; only the channel is user-selectable.
+            installed_config = json.loads((root / "bootstrap-release.json").read_text(encoding="utf-8"))
+            channel = installed_config.get("channel", "stable")
+            if channel not in {"stable", "preview"}:
+                raise ValueError("Invalid update channel")
+            config["channel"] = channel
         InstallerWindow(config, root, fixed=fixed, update=args.update and fixed, switch=args.runtime if fixed else None,
                         allow_local=getattr(args, "allow_local", False), relaunch=relaunch)._run()
     except Exception as exc:

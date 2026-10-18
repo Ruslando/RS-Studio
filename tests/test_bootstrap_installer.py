@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bootstrap"))
 import installer
+import launcher
 from launcher import InstallerWindow
 
 
@@ -51,6 +52,49 @@ def fake_environment(root, runtime, environment, app, wheels, payload, cancel, p
 
 
 class InstallerTests(unittest.TestCase):
+    def test_launcher_uses_saved_channel_and_embedded_trust_key(self):
+        embedded = self.root / "embedded-config.json"
+        config = {"launcher_version": 4, "public_key": self.public, "manifest_url": "https://example.com/stable"}
+        embedded.write_text(json.dumps(config))
+        self.destination.mkdir()
+        (self.destination / "bootstrap-release.json").write_text(json.dumps({
+            "launcher_version": 3, "public_key": {"n": "untrusted"},
+            "manifest_url": "https://example.com/other", "channel": "preview"}))
+        with patch("sys.argv", ["launcher.py", "--config", str(embedded), "--install-root", str(self.destination), "--launch"]), \
+                patch("builtins.open"), \
+                patch.object(launcher, "InstallerWindow") as window:
+            launcher.main()
+        self.assertEqual(window.call_args.args[0], {**config, "channel": "preview"})
+
+    def test_preview_version_order_matches_release_progression(self):
+        versions = ["0.3.0-alpha", "0.5.0.dev20261018190000", "0.5.0.dev20261018190100", "0.5.0-alpha", "0.5.0-beta.2", "0.5.0-rc.1", "0.5.0"]
+        self.assertEqual(sorted(reversed(versions), key=installer.release_version), versions)
+
+    def test_preview_discovery_ignores_drafts_and_incomplete_releases(self):
+        releases = [
+            {"tag_name": "v0.5.0rc1", "assets": [{"name": "bootstrap-manifest.json", "browser_download_url": "https://example.com/rc"}]},
+            {"tag_name": "v0.6.0", "draft": True, "assets": [{"name": "bootstrap-manifest.json", "browser_download_url": "https://example.com/draft"}]},
+            {"tag_name": "v0.7.0", "assets": []},
+            {"tag_name": "v0.5.0", "assets": [{"name": "bootstrap-manifest.json", "browser_download_url": "https://example.com/stable"}]},
+        ]
+        with patch.object(installer, "opener") as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value = json.dumps(releases).encode()
+            self.assertEqual(installer.preview_release()["manifest_url"], "https://example.com/stable")
+
+    def test_preview_fetch_still_checks_signature(self):
+        config = {**self.config, "channel": "preview"}
+        with patch.object(installer, "preview_release", return_value={"manifest_url": self.base + "/manifest.json"}):
+            self.assertEqual(installer.fetch_manifest(config, allow_local=True), self.envelope)
+            tampered = {**self.envelope, "payload": {**self.payload, "version": "9.0.0"}}
+            (self.server_root / "manifest.json").write_text(json.dumps(tampered))
+            with self.assertRaises(installer.InstallError):
+                installer.fetch_manifest(config, allow_local=True)
+
+    def test_regular_channel_never_queries_preview_feed(self):
+        with patch.object(installer, "preview_release") as preview:
+            self.assertEqual(installer.fetch_manifest(self.config, allow_local=True), self.envelope)
+        preview.assert_not_called()
+
     @classmethod
     def setUpClass(cls):
         cls.key = rsa.generate_private_key(public_exponent=65537, key_size=3072)

@@ -2,6 +2,8 @@
 
     build/cpu-venv/Scripts/python tools/release.py 0.2.2-alpha --notes notes.txt
     build/cpu-venv/Scripts/python tools/release.py 0.2.2-alpha --dry-run   # build only
+    build/cpu-venv/Scripts/python tools/release.py 0.5.0-alpha.2 --preview
+    build/cpu-venv/Scripts/python tools/release.py 0.5.0-rc.1 --prerelease
 
 Needs the GitHub CLI (winget install GitHub.cli; gh auth login), the release
 signing key, staged FFmpeg (tools/fetch-ffmpeg.py) and this build environment.
@@ -15,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +25,6 @@ REPO_URL = "https://github.com/Ruslando/RS-Studio"
 SIGNING_KEY = ROOT / ".local-tools/bootstrap-signing-key.pem"
 # sm_ architectures compiled into the cu126 PyTorch wheels (torch._C._cuda_getArchFlags()).
 CUDA_ARCHS = "50,60,61,70,75,80,86,90"
-VERSION = re.compile(r"^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$")
 SETUP_HINT = "Download **RS-Studio-Setup.exe**. The other files are downloaded by the setup."
 # (file, pattern, replacement template); each pattern must match exactly once.
 VERSION_FILES = (
@@ -53,8 +55,15 @@ def set_version(version: str, root: Path = ROOT) -> None:
 
 
 def check(args) -> None:
-    if not VERSION.fullmatch(args.version):
+    from packaging.version import InvalidVersion, Version
+    try:
+        parsed = Version(args.version)
+    except InvalidVersion:
         raise SystemExit(f"Invalid version: {args.version}")
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:[-.]?(?:alpha|a|beta|b|rc)[.-]?\d*)?(?:[.-]?dev[.-]?\d+)?", args.version, re.I):
+        raise SystemExit(f"Unsupported release version: {args.version}")
+    if parsed.is_devrelease and not args.prerelease:
+        raise SystemExit("Development builds must use --preview or --prerelease.")
     if run("git", "rev-parse", "--abbrev-ref", "HEAD", capture=True) != "main":
         raise SystemExit("Releases are made from main.")
     if run("git", "status", "--porcelain", capture=True):
@@ -72,12 +81,13 @@ def check(args) -> None:
     run(sys.executable, "-m", "unittest", "discover", "-s", "tests")
 
 
-def build(version: str, notes: Path | None) -> list[Path]:
+def build(version: str, notes: Path | None, *, channel: str = "stable") -> list[Path]:
     output, launcher = ROOT / "dist/bootstrap-release", ROOT / "dist/bootstrap-launcher"
     shutil.rmtree(output, ignore_errors=True)
     shutil.rmtree(launcher, ignore_errors=True)
     package = [sys.executable, "tools/package-bootstrap.py", "--version", version, "--signing-key", SIGNING_KEY,
-               "--base-url", f"{REPO_URL}/releases/download/v{version}", "--cuda-archs", CUDA_ARCHS, "--output", output]
+               "--base-url", f"{REPO_URL}/releases/download/v{version}", "--cuda-archs", CUDA_ARCHS, "--output", output,
+               "--channel", channel]
     run(*package, *(["--notes", notes] if notes else []))
     run(sys.executable, "-m", "PyInstaller", "rs-bootstrap.spec", "--noconfirm", "--distpath", launcher,
         "--workpath", ROOT / "build/bootstrap-launcher",
@@ -92,34 +102,42 @@ def build(version: str, notes: Path | None) -> list[Path]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("version", help="e.g. 0.2.2-alpha (tag v0.2.2-alpha)")
+    parser.add_argument("--preview", "--prerelease", dest="prerelease", action="store_true",
+                        help="Publish the specified version to the preview channel; preserve its exact name and restore the checkout's version after building")
     parser.add_argument("--notes", type=Path, help="Optional release notes (plain text): shown in the app's update dialog and above GitHub's generated changelog")
     parser.add_argument("--dry-run", action="store_true", help="Build everything, publish nothing")
     args = parser.parse_args()
     check(args)
     tag = "v" + args.version
     bump = current_version() != args.version
-    if bump:
-        set_version(args.version)
-        run("uv", "lock", "--locked")  # the lockfile edit must still match pyproject.toml
     try:
-        assets = build(args.version, args.notes)
+        if bump:
+            set_version(args.version)
+            run("uv", "lock", "--locked")  # the lockfile edit must still match pyproject.toml
+        assets = build(args.version, args.notes, channel="preview" if args.prerelease else "stable")
     except BaseException:
         if bump:
             run("git", "checkout", "--", *(name for name, _, _ in VERSION_FILES))
         raise
-    if args.dry_run:
+    if args.dry_run or args.prerelease:
         if bump:
             run("git", "checkout", "--", *(name for name, _, _ in VERSION_FILES))
-        print("\nDry run: built", *assets, sep="\n  ")
-        return
-    if bump:
+        if args.dry_run:
+            print("\nDry run: built", *assets, sep="\n  ")
+            return
+    if bump and not args.prerelease:
         run("git", "commit", "-m", f"chore(release): bump version to {args.version}", "--", *(name for name, _, _ in VERSION_FILES))
     run("git", "tag", tag)
     run("git", "push", "origin", "main", tag)
     notes = args.notes.read_text(encoding="utf-8").strip() if args.notes else ""
     body = SETUP_HINT + ("\n\n" + notes if notes else "")
-    # GitHub appends its generated changelog to the body.
-    run("gh", "release", "create", tag, *assets, "--title", tag, "--notes", body, "--generate-notes", "--latest", "--verify-tag")
+    # Keep incomplete uploads out of both update feeds. Publish only once all assets exist.
+    with tempfile.TemporaryDirectory(prefix="rs-studio-release-") as temporary:
+        notes_path = Path(temporary) / "notes.md"
+        notes_path.write_text(body, encoding="utf-8")
+        run("gh", "release", "create", tag, *assets, "--title", tag, "--notes-file", notes_path,
+            "--generate-notes", "--draft", "--verify-tag", *(["--prerelease"] if args.prerelease else []))
+    run("gh", "release", "edit", tag, "--draft=false", "--latest=false" if args.prerelease else "--latest")
     print(f"\nPublished {REPO_URL}/releases/tag/{tag}")
 
 

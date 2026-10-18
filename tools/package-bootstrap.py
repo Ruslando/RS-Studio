@@ -150,6 +150,7 @@ def cuda_variant(requirements: str, downloads: list[dict], python_tag: str) -> t
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version")
+    parser.add_argument("--channel", choices=("stable", "preview"), default="stable")
     parser.add_argument("--base-url")
     parser.add_argument("--signing-key", type=Path, required=True)
     parser.add_argument("--generate-key", action="store_true", help="Create a private release key and exit. Keep it outside version control.")
@@ -232,7 +233,7 @@ def main():
     ffmpeg_name = f"RS-Studio-ffmpeg-{platform_id()}.zip"
     ffmpeg = write_zip(args.output / ffmpeg_name, ffmpeg_files)
     ffmpeg.update(id="ffmpeg", url=base_url + ffmpeg_name)
-    payload = {"schema": 2, "launcher_min": 2, "version": args.version, "platform": platform_id(), "python": python,
+    payload = {"schema": 2, "launcher_min": 4 if args.channel == "preview" else 2, "channel": args.channel, "version": args.version, "platform": platform_id(), "python": python,
                "app": app, "ffmpeg": ffmpeg, "runtimes": runtimes}
     if args.notes:
         payload["notes"] = args.notes.read_text(encoding="utf-8").strip()
@@ -246,7 +247,7 @@ def main():
     # versions. GitHub's "latest" skips releases marked as pre-release.
     manifest_url = args.manifest_url or re.sub(r"/releases/download/[^/]+/$", "/releases/latest/download/", base_url) + "bootstrap-manifest.json"
     checked_url(manifest_url, allow_local=args.allow_local)
-    config = {"launcher_version": LAUNCHER_VERSION, "manifest_url": manifest_url, "public_key": public_key(key)}
+    config = {"launcher_version": LAUNCHER_VERSION, "manifest_url": manifest_url, "public_key": public_key(key), "channel": args.channel}
     (args.output / "bootstrap-manifest.json").write_text(json.dumps(envelope, indent=2), encoding="utf-8")
     (args.output / "bootstrap-release.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
     print(json.dumps({**{k: v for k, v in payload.items() if k != "runtimes"}, "download_mib": {k: round(v["download_bytes"] / 2**20) for k, v in runtimes.items()}, "built_wheels": sorted(shipped), "config": str(args.output / "bootstrap-release.json")}, indent=2))

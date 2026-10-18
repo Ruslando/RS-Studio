@@ -16,7 +16,7 @@ import threading
 from pathlib import Path
 
 from . import __version__
-from .paths import resource_root
+from .paths import data_root, resource_root
 
 
 def _installer():
@@ -35,6 +35,35 @@ def _config() -> dict | None:
         return json.loads(Path(path).read_text(encoding="utf-8")) if path else None
     except (OSError, ValueError):
         return None
+
+
+def channel_state() -> dict:
+    config = _config()
+    if config is None:
+        try:
+            channel = json.loads((data_root() / "update-channel.json").read_text(encoding="utf-8"))["channel"]
+        except (OSError, ValueError, KeyError):
+            channel = "stable"
+    else:
+        channel = config.get("channel", "stable")
+    return {"channel": channel if channel in ("stable", "preview") else "stable",
+            "can_change_channel": config is None or config.get("launcher_version", 0) >= 4}
+
+
+def set_channel(channel: str) -> dict:
+    if channel not in ("stable", "preview"):
+        raise ValueError("Choose stable or preview.")
+    if not channel_state()["can_change_channel"]:
+        raise RuntimeError("Run the new RS Studio Setup once to enable update channels.")
+    config = _config()
+    if config is None:
+        path, value = data_root() / "update-channel.json", {"channel": channel}
+    else:
+        path = Path(os.environ.get("RS_STUDIO_UPDATE_CONFIG") or
+                    str(Path(os.environ["RS_STUDIO_INSTALL_ROOT"]) / "bootstrap-release.json"))
+        value = {**config, "channel": channel}
+    _installer().atomic_json(path, value)
+    return channel_state()
 
 
 def _newer(candidate: str, current: str) -> bool:
@@ -59,6 +88,10 @@ RELEASES = "https://api.github.com/repos/Ruslando/RS-Studio/releases/latest"
 def _latest_release() -> dict:
     """The newest published release, for copies that run from source and update themselves."""
     import urllib.request
+    if channel_state()["channel"] == "preview":
+        release = _installer().preview_release()
+        if release:
+            return {"latest": str(release["tag_name"]).removeprefix("v"), "notes": str(release.get("body") or "")[:20000]}
     request = urllib.request.Request(RELEASES, headers={"User-Agent": "RS-Studio", "Accept": "application/vnd.github+json"})
     with urllib.request.urlopen(request, timeout=15) as response:
         release = json.loads(response.read(1024 * 1024))
@@ -74,12 +107,20 @@ def check() -> dict:
     config = _config()
     if config is None:
         release = _latest_release()
-        return {"supported": False, "current": __version__, "can_install": False, **release,
+        return {"supported": False, "current": __version__, "can_install": False, **channel_state(), **release,
                 "available": _newer(release["latest"], __version__)}
     allow_local = os.environ.get("RS_STUDIO_ALLOW_LOCAL") == "1"
     payload = _installer().fetch_manifest(config, allow_local=allow_local)["payload"]
-    return {"supported": True, "current": __version__, "latest": payload["version"],
-            "available": _newer(payload["version"], __version__), "notes": payload.get("notes", ""),
+    # Opting back into regular releases can deliberately return from a preview to an older release.
+    returning = False
+    if channel_state()["channel"] == "stable":
+        try:
+            installed = json.loads((Path(os.environ["RS_STUDIO_INSTALL_ROOT"]) / "current.json").read_text(encoding="utf-8"))
+            returning = installed["payload"].get("channel") == "preview" and payload["version"] != __version__
+        except (OSError, ValueError, KeyError):
+            pass
+    return {"supported": True, "current": __version__, "latest": payload["version"], **channel_state(),
+            "available": returning or _newer(payload["version"], __version__), "notes": payload.get("notes", ""),
             "can_install": _launcher() is not None}
 
 

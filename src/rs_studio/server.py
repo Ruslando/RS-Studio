@@ -1168,6 +1168,21 @@ def api_update_install() -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
+@app.get("/api/update/channel")
+def api_update_channel() -> JSONResponse:
+    return JSONResponse(updates.channel_state())
+
+
+@app.post("/api/update/channel")
+def api_update_set_channel(body: dict) -> JSONResponse:
+    try:
+        return JSONResponse(updates.set_channel(body.get("channel")))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.post("/api/projects/import")
 def api_project_import(file: UploadFile) -> JSONResponse:
     """Open a `.chart` bundle: extract it into a fresh cache dir and load it.

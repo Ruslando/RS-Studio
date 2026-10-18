@@ -119,6 +119,48 @@ gh auth login).
 
 The steps it runs are described below.
 
+### Preview channel
+
+Settings > Updates offers **Release** (the default) and **Preview**.
+Apply saves the selection for this installation and checks the chosen channel.
+Installing still requires confirmation. The regular channel follows GitHub's
+latest non-prerelease, even when its version name contains `alpha`. Preview
+chooses the highest supported version with a manifest among the most recent
+100 public releases, including regular releases that supersede test builds.
+Drafts and releases without a manifest are ignored. Both paths verify the
+same signed manifest and download hashes.
+
+Choose the complete version, including its suffix, yourself:
+
+    build/cpu-venv/Scripts/python tools/release.py 0.5.0-alpha.2 --preview --notes notes.txt
+
+The specified name is preserved exactly: no timestamp or suffix is added.
+The command builds and publishes a GitHub **pre-release**, without a version-bump
+commit or changing the Release channel. The checkout's original version is
+restored after building, including on build failures. As with regular releases,
+commit your work to main first. `--dry-run` builds locally without publishing.
+
+`--prerelease` is an alias for `--preview`, for example:
+
+    build/cpu-venv/Scripts/python tools/release.py 0.5.0-rc.1 --prerelease --notes notes.txt
+
+Versions must use the supported Python version syntax (alpha, beta, rc or dev
+suffixes). Development builds sort before alpha, beta and RC versions of the same target. A normal
+`release.py 0.5.0` later publishes the regular release and reaches both channels.
+
+Each test build has its own tag and assets so an offered download never changes
+underneath an installation. Publication uploads a draft first and exposes it
+only after every asset is present. There is still a GitHub release object per
+build; the command handles it automatically, without consuming the final version.
+
+The channel selection requires launcher 4. Existing installations with launcher
+2 or 3 must run a newly built Setup once; an app-only update cannot replace the
+launcher executable. The app disables channel selection and explains this when
+an older launcher is installed. A Preview Setup starts on Preview by default.
+Switching back to Release offers the current regular version, including
+an older version when the installed build came from Preview. CUDA changes stay
+on the installed version and preserve the selected channel.
+
 Generate a release signing identity **once** and keep it private, backed up and
 outside version control. Later releases must retain the same public key.
 

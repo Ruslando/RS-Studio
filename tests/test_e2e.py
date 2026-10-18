@@ -135,6 +135,33 @@ class EndToEndTests(unittest.TestCase):
         expect(self.page.locator("#settingsApply")).to_be_hidden()
         self.page.click("#settingsModalClose")
 
+    def test_update_channels_are_staged_and_survive_reload(self):
+        page = self.page
+        self.assertEqual(page.request.post(self.url + "api/update/channel", data={"channel": "stable"}).status, 200)
+        page.reload()
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="updates"]')
+        expect(page.locator("#updateChannel")).to_be_enabled()
+        page.select_option("#updateChannel", "preview")
+        self.assertEqual(page.request.get(self.url + "api/update/channel").json()["channel"], "stable")
+        page.keyboard.press("Escape")
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="updates"]')
+        expect(page.locator("#updateChannel")).to_have_value("stable")
+        page.select_option("#updateChannel", "preview")
+        page.click("#settingsApply")
+        expect(page.locator("#settingsApply")).to_be_hidden()
+        self.assertEqual(page.request.get(self.url + "api/update/channel").json()["channel"], "preview")
+        page.reload()
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="updates"]')
+        expect(page.locator("#updateChannel")).to_be_enabled()
+        expect(page.locator("#updateChannel")).to_have_value("preview")
+        page.select_option("#updateChannel", "stable")
+        page.click("#settingsApply")
+        expect(page.locator("#settingsApply")).to_be_hidden()
+        self.assertEqual(page.request.get(self.url + "api/update/channel").json()["channel"], "stable")
+
     def test_settings_contextual_apply_and_footer_actions(self):
         page = self.page
         reads = []
@@ -1028,7 +1055,7 @@ class EndToEndTests(unittest.TestCase):
                 nut: [rect.left + tuning.x + 11, rect.top + mid] };
         }""")
 
-    def test_fretboard_edit_button_and_single_note_alternative_navigation(self):
+    def test_fretboard_single_note_alternative_navigation_and_panel_visibility(self):
         self.open_reference_project()
         page = self.page
         points = self.fretboard_hover_points()
@@ -1037,26 +1064,22 @@ class EndToEndTests(unittest.TestCase):
             return { revision: S.voicingRevision, pitches: S.state.editLanes[0].notes.map(n => n.pitch),
                 notes: JSON.stringify(S.state.editLanes[0].notes) };
         }""")
-        expect(page.locator('#fretboardEdit')).to_be_visible()
+        expect(page.locator('#fretboardPanel')).to_have_attribute('data-editing', '')
         for target in ('note', 'anchor', 'nut'):
             page.mouse.move(*points[target])
-            expect(page.locator('#fretboardPin')).to_be_hidden()
+            expect(page.locator('#fretboardPin')).to_be_visible()
             expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
-        height = page.locator('#fretboard').bounding_box()['height']
-        page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardPin')).to_be_visible()
-        expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
+        expect(page.locator('#fretboardAltCount')).to_have_text('2 alternatives')
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
         expect(page.locator('#fretboardChoose')).to_be_hidden()
         page.locator('#fretboardAltNext').click()
         expect(page.locator('#fretboardAltCount')).to_have_text('1 / 2')
-        expect(page.locator('#fretboardEdit')).to_have_attribute('aria-pressed', 'true')
-        self.assertGreaterEqual(page.locator('#fretboard').bounding_box()['height'], height)
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '1')
         page.locator('#fretboardAltNext').click()
         expect(page.locator('#fretboardAltCount')).to_have_text('2 / 2')
         page.locator('#fretboardAltNext').click()
-        expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
+        expect(page.locator('#fretboardAltCount')).to_have_text('2 alternatives')
         expect(page.locator('#fretboardChoose')).to_be_hidden()
         page.locator('#fretboardAltPrev').click()
         expect(page.locator('#fretboardAltCount')).to_have_text('2 / 2')
@@ -1075,24 +1098,23 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate('document.activeElement.blur()')
         page.mouse.move(30, 30)
         expect(page.locator('#fretboardPin')).to_be_visible()
-        page.locator('#fretboardEdit').click()
+        page.locator('#fretboardChevron').click()
         expect(page.locator('#fretboardPin')).to_be_hidden()
-        expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
+        expect(page.locator('#fretboardPanel')).to_have_attribute('data-collapsed', '')
         page.mouse.move(*points['nut'])
         expect(page.locator('#fretboardPin')).to_be_hidden()
-        page.locator('#fretboardEdit').click()
+        page.locator('#fretboardChevron').click()
+        expect(page.locator('#fretboardPin')).to_be_visible()
         page.keyboard.press('Escape')
-        expect(page.locator('#fretboardPin')).to_be_hidden()
-        expect(page.locator('#fretboardEdit')).to_have_attribute('aria-pressed', 'false')
+        expect(page.locator('#fretboardPin')).to_be_visible()
+        expect(page.locator('#fretboardPanel')).to_have_attribute('data-editing', '')
 
     def test_fretboard_capo_control_and_undo(self):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
         pitches = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.pitch)")
-        expect(page.locator('#fretboardCapo')).to_be_disabled()
-        expect(page.locator('#fretboardCapo')).to_be_hidden()
-        page.locator('#fretboardEdit').click()
+        expect(page.locator('#fretboardCapo')).to_be_visible()
         expect(page.locator('#fretboardCapo')).to_be_enabled()
         page.locator('#fretboardCapo').fill('2')
         page.locator('#fretboardCapo').press('Enter')
@@ -1100,8 +1122,10 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.pitch)"), pitches)
         page.keyboard.press('Control+z')
         expect(page.locator('#fretboardCapo')).to_have_value('0')
-        page.locator('#fretboardEdit').click()
+        page.locator('#lanes .lock-btn').click()
         expect(page.locator('#fretboardCapo')).to_be_disabled()
+        page.locator('#lanes .lock-btn').click()
+        expect(page.locator('#fretboardCapo')).to_be_enabled()
 
     def test_marker_flags_snap_to_note_subdivisions(self):
         self.open_reference_project()
@@ -1218,7 +1242,6 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#lanes .lane-row')).to_be_visible()
         self.fretboard_hover_points(80)
         page.evaluate("() => { const theme = document.querySelector('#themeSelect'); theme.value = 'light'; theme.dispatchEvent(new Event('change')); }")
-        page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
         expect(page.locator('#fretboardChoose')).to_be_hidden()
         for width, height in [(1920,1080), (1280,1024), (1024,768), (900,1100)]:
@@ -1245,16 +1268,6 @@ class EndToEndTests(unittest.TestCase):
             shot.parent.mkdir(exist_ok=True)
             page.locator('#fretboardPanel').screenshot(path=str(shot))
         page.set_viewport_size({'width':1440, 'height':900})
-        # Audit the actual visible buttons, including hovered engaged controls.
-        for selector in ['#fretboardEdit', '#fretboardShape']:
-            if selector.endswith('Shape'):
-                page.locator(selector).click()
-            page.locator(selector).hover()
-            colors = page.locator(selector).evaluate("el => { const s=getComputedStyle(el); return {ink:s.color,background:s.backgroundColor,on:getComputedStyle(document.documentElement).getPropertyValue('--on-engaged').trim()}; }")
-            if selector.endswith('Edit'):
-                self.assertEqual(colors['ink'], 'rgb(255, 255, 255)', colors)
-        page.keyboard.press('Escape')
-        page.mouse.move(5,5)
         audit_script = """() => {
             const ctx = document.createElement('canvas').getContext('2d');
             const rgb = s => { ctx.clearRect(0,0,1,1); ctx.fillStyle=s; ctx.fillRect(0,0,1,1); const c=[...ctx.getImageData(0,0,1,1).data]; return [...c.slice(0,3),c[3]/255]; };
@@ -1268,6 +1281,14 @@ class EndToEndTests(unittest.TestCase):
                 return {id:el.id||el.getAttribute('aria-label'),text:visibleText?el.textContent.trim().slice(0,40):'',ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
             }).filter(x=>x.ratio < (x.text?4.5:3));
         }"""
+        # Audit the current controls in both hover and engaged states.
+        page.locator('#fretboardAltNext').hover()
+        self.assertEqual(page.evaluate(audit_script), [], 'Hovered light-mode buttons need readable foregrounds')
+        page.locator('#fretboardShape').click()
+        page.locator('#fretboardShape').hover()
+        self.assertEqual(page.evaluate(audit_script), [], 'Engaged light-mode buttons need readable foregrounds')
+        page.keyboard.press('Escape')
+        page.mouse.move(5,5)
         self.assertEqual(page.evaluate(audit_script), [], 'Visible light-mode buttons need readable foregrounds')
         page.click('#settingsMenuBtn')
         self.assertEqual(page.evaluate(audit_script), [], 'Light-mode settings buttons need readable foregrounds')
@@ -1283,7 +1304,6 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#lanes .lane-row')).to_be_visible()
         self.fretboard_hover_points(80)
         original = page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)")
-        page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
         page.locator('#fretboardShape').click()
         expect(page.locator('#fretboardShape')).to_have_text('Cancel')
@@ -1401,8 +1421,8 @@ class EndToEndTests(unittest.TestCase):
 
         page.click('#settingsMenuBtn')
         expect(page.locator('input[name=fretboardLabels][value=both]')).to_be_checked()
-        self.assertEqual(page.locator('canvas[data-fretboard-labels]').count(), 4)
-        self.assertEqual(page.get_by_text('Each preview shows a fretted note and an open string.').count(), 0)
+        expect(page.locator('#fretboardSettingsPreview')).to_be_visible()
+        self.assertEqual(page.locator('input[name=fretboardLabels]').count(), 4)
         shot = Path(__file__).resolve().parents[1] / '.runs' / 'fretboard-label-settings.png'
         shot.parent.mkdir(exist_ok=True)
         page.locator('#settingsModal').screenshot(path=str(shot))
@@ -1441,7 +1461,6 @@ class EndToEndTests(unittest.TestCase):
         page.locator('input[name=fretboardLabels][value=none]').check()
         self.apply_settings_and_close()
         self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.settings')).fretboardLabels"), 'none')
-        page.click('#fretboardEdit')
         page.click('#fretboardShape')
         actual = painted_labels()
         self.assertTrue(actual['notes'], 'Custom-shape placement rings must identify their note even with playback labels off')
@@ -1459,7 +1478,6 @@ class EndToEndTests(unittest.TestCase):
         chooser.value.set_files(bundle)
         expect(page.locator('#lanes .lane-row')).to_be_visible()
         self.fretboard_hover_points(68)
-        page.locator('#fretboardEdit').click()
         for start, anchor, digits in [(20,2,[1,2,4]), (68,4,[1,2,3,4]), (72,6,[1,2,3,4]), (84,5,[1,3]), (92,5,[1,3])]:
             page.evaluate("async t => (await import('/playback.js')).seekPlayback(t)", start)
             expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
@@ -1468,13 +1486,16 @@ class EndToEndTests(unittest.TestCase):
                 const found = await (await import('/tablature.js')).laneFingering(S.state.editLanes[0]);
                 const notes = found.notes.filter(n => n.start === start);
                 const ctx = document.querySelector('#fretboard').getContext('2d');
-                const original = ctx.fillText, digits = [];
+                const original = ctx.fillText, clear = ctx.clearRect, digits = [];
+                // Layout can repaint recursively. Only the last cleared canvas remains visible.
+                ctx.clearRect = function(...args) { digits.length = 0; return clear.apply(this, args); };
                 ctx.fillText = function(text, x, y, ...args) {
                     if (/^[1-4]$/.test(String(text)) && this.textBaseline === 'middle' && this.globalAlpha > .9)
                         digits.push(Number(text));
                     return original.call(this,text,x,y,...args);
                 };
-                try { (await import('/fretboard.js')).drawFretboard(); } finally { ctx.fillText = original; }
+                try { (await import('/fretboard.js')).drawFretboard(); }
+                finally { ctx.fillText = original; ctx.clearRect = clear; }
                 return {seats:notes.map(n=>found.seats.get(n)),digits:digits.sort()};
             }""", start)
             self.assertEqual(set(actual['seats']), {anchor})
@@ -1491,17 +1512,18 @@ class EndToEndTests(unittest.TestCase):
         self.fretboard_hover_points()
         result = page.evaluate("""async () => {
             const { S } = await import('/store.js');
-            const { drawFretboard } = await import('/fretboard.js');
+            const { drawFretboard, setFretboardEdit } = await import('/fretboard.js');
             const { laneFingering } = await import('/tablature.js');
-            const { fretDistance } = await import('/fretboard-core.js');
             const { hexA } = await import('/util.js');
             const { WASH } = await import('/stage-paint.js');
             const lane = S.state.editLanes[0];
             lane.notes = [{id:'a',start:0,end:1,pitch:52,pos:{string:3,fret:2}},
                 {id:'b',start:1,end:2,pitch:58,pos:{string:3,fret:8}}];
             lane.refBoxes = {}; S.voicingRevision++;
+            (await import('/store.js')).setSelection(new Set());
+            setFretboardEdit(false);  // sample the transport, without a held alternative-edit column
             (await import('/playback.js')).seekPlayback(.75);
-            const found = await laneFingering(lane);
+            await laneFingering(lane);
             drawFretboard(); await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
             const ctx = document.querySelector('#fretboard').getContext('2d');
             const original = {begin:ctx.beginPath,move:ctx.moveTo,line:ctx.lineTo,fill:ctx.fill};
@@ -1526,8 +1548,8 @@ class EndToEndTests(unittest.TestCase):
                 ctx.beginPath=original.begin;ctx.moveTo=original.move;ctx.lineTo=original.line;ctx.fill=original.fill;
             }
         }""")
-        self.assertGreater(result['middle'],result['from'])
-        self.assertLess(result['middle'],result['to'])
+        self.assertGreater(result['middle'], min(result['from'], result['to']), result)
+        self.assertLess(result['middle'], max(result['from'], result['to']), result)
         self.assertAlmostEqual(result['off'],result['from'],places=5)
 
     def test_unplayable_chord_warning_and_shape_exit_on_seek(self):
@@ -1539,9 +1561,8 @@ class EndToEndTests(unittest.TestCase):
         chooser.value.set_files(bundle)
         expect(page.locator('#lanes .lane-row')).to_be_visible()
         self.fretboard_hover_points(76)
-        page.locator('#fretboardEdit').click()
-        expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
-        expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
+        expect(page.locator('#fretboardAltCount')).to_have_text('No alternatives')
+        expect(page.locator('#fretboardAltNext')).to_be_disabled()
         shot = Path(__file__).resolve().parents[1] / '.runs' / 'fretboard-controls-b7.png'
         shot.parent.mkdir(exist_ok=True)
         page.locator('#fretboardPanel').screenshot(path=str(shot))
@@ -1600,10 +1621,8 @@ class EndToEndTests(unittest.TestCase):
         points = self.fretboard_hover_points(80)
         original = page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)")
         page.mouse.move(*points['note'])
-        expect(page.locator('#fretboardPin')).to_be_hidden()
-        page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardPin')).to_be_visible()
-        expect(page.locator('#fretboardAltCount')).to_contain_text('Original')
+        expect(page.locator('#fretboardAltCount')).to_have_text(re.compile(r'[1-9][0-9]* alternatives'))
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
         expect(page.locator('#fretboardChoose')).to_be_hidden()
         page.locator('#fretboardAltNext').click()
@@ -1612,7 +1631,7 @@ class EndToEndTests(unittest.TestCase):
         count = int(page.locator('#fretboardAltCount').inner_text().split('/')[1])
         self.assertGreater(count, 1)
         alphas = page.evaluate("""async () => {
-            const { drawFretboard } = await import('/fretboard.js');
+            const { drawFretboard, setFretboardEdit } = await import('/fretboard.js');
             const ctx = document.querySelector('#fretboard').getContext('2d'), original = ctx.fillText, alphas = [];
             ctx.fillText = function(text, x, y, ...args) {
                 if (/^[1-4]$/.test(String(text)) && this.textBaseline === 'middle') alphas.push(this.globalAlpha);
@@ -1655,7 +1674,6 @@ class EndToEndTests(unittest.TestCase):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
-        page.locator('#fretboardEdit').click()
         expect(page.locator('#fretboardHand')).to_have_attribute('type','text')
         expect(page.locator('#fretboardCapo')).to_have_attribute('type','text')
         expect(page.locator('#fretboardHandAuto')).to_have_text(re.compile(r'\([1-9][0-9]*\)'))
@@ -1688,8 +1706,8 @@ class EndToEndTests(unittest.TestCase):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
-        expect(page.locator('#fretboardHand')).to_be_hidden()
-        page.locator('#fretboardEdit').click()
+        expect(page.locator('#fretboardHand')).to_be_visible()
+        expect(page.locator('#fretboardHand')).to_be_enabled()
         page.locator('#fretboardHand').fill('7')
         page.locator('#fretboardHand').press('Enter')
         holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
@@ -1699,8 +1717,10 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds"), [])
         page.keyboard.press('Control+z')
         expect(page.locator('#fretboardHand')).to_have_value('7')
-        page.locator('#fretboardEdit').click()
-        expect(page.locator('#fretboardHand')).to_be_hidden()
+        page.locator('#lanes .lock-btn').click()
+        expect(page.locator('#fretboardHand')).to_be_disabled()
+        page.locator('#lanes .lock-btn').click()
+        expect(page.locator('#fretboardHand')).to_be_enabled()
 
     def test_minimap_eases_while_pointer_keeps_moving(self):
         self.open_reference_project()
@@ -1769,56 +1789,59 @@ class EndToEndTests(unittest.TestCase):
         before = page.evaluate("async () => (await import('/playback.js')).playbackTime()")
         page.click('#settingsMenuBtn')
         preview = page.locator('#timelineScrollPreview')
+        follow = page.locator('#timelineScrollPreviewFollow')
         expect(preview).to_be_visible()
+        expect(preview).to_have_attribute('data-running', 'false')
+        preview.hover()
         expect(preview).to_have_attribute('data-running', 'true')
         boundary = page.evaluate("""async () => {
             const canvas = document.querySelector('#timelineScrollPreview');
             let lastHead = 0;
-            while (!Number(canvas.dataset.scroll)) {
+            const deadline = performance.now() + 10000;
+            while (!Number(canvas.dataset.scroll) && performance.now() < deadline) {
                 lastHead = Number(canvas.dataset.playhead);
                 await new Promise(requestAnimationFrame);
             }
             const viewport = canvas.clientWidth - 16;
             const referenceWidth = document.querySelector('#scroll').clientWidth;
-            return {lastHead, viewport, expected:viewport * (1 - 60 / referenceWidth)};
+            return {lastHead, viewport, scrolled:Number(canvas.dataset.scroll), expected:viewport * (1 - 60 / referenceWidth)};
         }""")
+        self.assertGreater(boundary['scrolled'], 0, boundary)
         self.assertGreater(boundary['lastHead'], boundary['viewport'] * .85)
         self.assertAlmostEqual(boundary['lastHead'], boundary['expected'], delta=8)
-        self.assertEqual(page.get_by_text('Scrolling manually stops following until you pause and play again.').count(), 0)
-        page.click('#timelineScrollPreviewToggle')
+        # Hovering the other card switches the animation, without choosing a preference.
+        follow.hover()
         expect(preview).to_have_attribute('data-running', 'false')
-        paused = preview.evaluate('(canvas) => canvas.toDataURL()')
-        page.evaluate('() => new Promise(resolve => setTimeout(resolve, 150))')
-        self.assertEqual(preview.evaluate('(canvas) => canvas.toDataURL()'), paused)
-        shot = Path(__file__).resolve().parents[1] / '.runs' / 'timeline-scroll-preview.png'
-        shot.parent.mkdir(exist_ok=True)
-        page.locator('#settingsModal').screenshot(path=str(shot))
-        page.locator('input[name=playbackScrollMode][value=follow]').check()
-        page.click('#timelineScrollPreviewToggle')
-        follow = page.locator('#timelineScrollPreviewFollow')
         expect(follow).to_have_attribute('data-running', 'true')
+        page.wait_for_function("Number(document.querySelector('#timelineScrollPreviewFollow').dataset.scroll) > 0")
         sample = follow.evaluate("""canvas => ({head:Number(canvas.dataset.playhead), width:canvas.clientWidth,
             referenceWidth:document.querySelector('#scroll').clientWidth})""")
         self.assertAlmostEqual(sample['head'], (sample['width'] - 16) * min(60 / sample['referenceWidth'], .1), delta=1)
+        expect(page.locator('#playbackScrollMode')).to_have_value('page')
+        page.locator('#settingsModalTitle').hover()
+        expect(follow).to_have_attribute('data-running', 'false')
+        paused = follow.evaluate('(canvas) => canvas.toDataURL()')
+        page.evaluate('() => new Promise(resolve => setTimeout(resolve, 150))')
+        self.assertEqual(follow.evaluate('(canvas) => canvas.toDataURL()'), paused)
         self.assertEqual(page.locator('input[name=playbackScrollMode]').count(), 2)
         page.click('[data-settings-pane=appearance]')
         expect(preview).to_have_attribute('data-running', 'false')
         page.click('[data-settings-pane=trace]')
+        expect(preview).to_have_attribute('data-running', 'false')
+        preview.hover()
         expect(preview).to_have_attribute('data-running', 'true')
         page.click('#settingsModalClose')
         expect(preview).to_have_attribute('data-running', 'false')
-        expect(page.locator('#playbackScrollMode')).to_have_value('page')
         after = page.evaluate("async () => (await import('/playback.js')).playbackTime()")
         self.assertEqual(after, before, 'The preview must not move the project playhead')
         page.emulate_media(reduced_motion='reduce')
         page.reload()
         page.click('#welcomeSettingsBtn')
         page.click('[data-settings-pane=trace]')
+        preview.hover()
         expect(preview).to_have_attribute('data-running', 'false')
-        expect(page.locator('#timelineScrollPreviewToggle')).to_have_text('Play previews')
-        page.click('#timelineScrollPreviewToggle')
+        page.emulate_media(reduced_motion='no-preference')
         expect(preview).to_have_attribute('data-running', 'true')
-        page.wait_for_function("Number(document.querySelector('#timelineScrollPreview').dataset.playhead) > 10")
         page.click('#settingsModalClose')
         expect(preview).to_have_attribute('data-running', 'false')
 
@@ -3365,6 +3388,7 @@ class EndToEndTests(unittest.TestCase):
             addMarker(2); drawNow();
         }""")
         marker_t = lambda: page.evaluate("async () => (await import('./store.js')).S.state.tempoMap[0].t")
+        original_time = marker_t()  # addMarker snaps to the song's detected note grid.
         (x, y), (x1, _) = self.rail_point(2), self.rail_point(2.5)
         page.mouse.click(x, y)                               # open its popover
         expect(page.locator("#markerPop")).to_be_visible()
@@ -3384,9 +3408,13 @@ class EndToEndTests(unittest.TestCase):
         page.mouse.up()
         self.assertAlmostEqual(marker_t(), before + 0.5, delta=0.011)
         self.assertAlmostEqual(float(page.input_value("#markerTime")), marker_t(), places=3)
+        edited_time = marker_t()
         page.click("#markerPopClose")
+        page.evaluate('document.activeElement.blur()')       # global undo ignores focused form buttons
         page.keyboard.press("Control+z")                     # the popover session is one step
-        self.assertEqual(marker_t(), 2)
+        self.assertEqual(marker_t(), original_time)
+        page.keyboard.press("Control+Shift+z")
+        self.assertEqual(marker_t(), edited_time)
 
     def test_layer_and_bus_volumes_are_dragged_and_muted_in_the_sidebar(self):
         page = self.page
