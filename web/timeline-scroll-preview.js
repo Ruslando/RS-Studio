@@ -3,7 +3,8 @@ import { UI_PAINT as PAINT } from "./stage-paint.js";
 import { dpr, playheadScrollLeft } from "./util.js";
 import { stageMono } from "./constants.js";
 
-let visible = false, frame = 0, paused = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let visible = false, frame = 0, activeMode = null;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 let elapsed = 0, last = null;
 const offsets = new Map();
 
@@ -15,8 +16,8 @@ function paint() {
     }
     const ctx = canvas.getContext("2d"), viewport = width - 2 * inset;
     ctx.setTransform(dpr(), 0, 0, dpr(), 0, 0);
-    const time = Math.min(elapsed % 8, 7), speed = 80;
     const mode = canvas.dataset.scrollPreview;
+    const time = mode === activeMode ? Math.min(elapsed % 8, 7) : 2, speed = 80;
     // Run the real paging rule at the editor's size, then shrink its result.
     // Applying its 60px edge margin directly to a thumbnail pages far too early.
     const referenceWidth = Math.max(viewport, scroll.clientWidth || window.innerWidth);
@@ -46,7 +47,7 @@ function paint() {
     ctx.restore();
     canvas.dataset.scroll = String(left);
     canvas.dataset.playhead = String(head - left);
-    canvas.dataset.running = String(visible && !paused);
+    canvas.dataset.running = String(visible && activeMode === mode && !reducedMotion.matches && !document.hidden);
   }
 }
 
@@ -54,7 +55,7 @@ export const refreshTimelineScrollPreview = () => { if (visible) paint(); };
 
 function tick(now) {
   frame = 0;
-  if (!visible || paused) return;
+  if (!visible || !activeMode || reducedMotion.matches || document.hidden) return;
   const before = elapsed % 8;
   elapsed += last == null ? 0 : Math.min(64, now - last) / 1000;
   last = now;
@@ -62,26 +63,35 @@ function tick(now) {
   paint(); frame = requestAnimationFrame(tick);
 }
 
-export function setTimelineScrollPreviewVisible(on) {
-  visible = on;
+function stop() {
   cancelAnimationFrame(frame); frame = 0; last = null;
-  if (on) {
-    elapsed = 0; offsets.clear(); paint();
-    frame = requestAnimationFrame(paused ? () => { frame = 0; if (visible) paint(); } : tick);
-  } else for (const canvas of document.querySelectorAll("canvas[data-scroll-preview]")) canvas.dataset.running = "false";
+}
+
+function start(mode) {
+  stop(); activeMode = mode; elapsed = 0; offsets.clear();
+  if (!visible) return;
+  paint();
+  if (mode && !reducedMotion.matches && !document.hidden) frame = requestAnimationFrame(tick);
+}
+
+export function setTimelineScrollPreviewVisible(on) {
+  visible = on; start(null);
+  if (on) frame = requestAnimationFrame(() => { frame = 0; if (visible) paint(); });
+  else for (const canvas of document.querySelectorAll('canvas[data-scroll-preview]')) canvas.dataset.running = 'false';
 }
 
 export function initTimelineScrollPreview() {
-  const button = $("timelineScrollPreviewToggle");
-  const sync = () => {
-    button.textContent = paused ? "Play previews" : "Pause previews";
-    button.setAttribute("aria-pressed", String(!paused));
-  };
-  button.addEventListener("click", () => {
-    paused = !paused; sync(); last = null;
-    cancelAnimationFrame(frame); frame = 0; paint();
-    if (visible && !paused) frame = requestAnimationFrame(tick);
+  for (const canvas of document.querySelectorAll('canvas[data-scroll-preview]')) {
+    const card = canvas.closest('label');
+    card.addEventListener('mouseenter', () => start(canvas.dataset.scrollPreview));
+    card.addEventListener('mouseleave', () => start(null));
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { stop(); if (visible) paint(); }
+    else if (visible) {
+      const hovered = [...document.querySelectorAll('canvas[data-scroll-preview]')].find(canvas => canvas.closest('label').matches(':hover'));
+      start(hovered?.dataset.scrollPreview || null);
+    }
   });
-  document.addEventListener("visibilitychange", () => { last = null; });
-  sync();
+  reducedMotion.addEventListener('change', () => start(activeMode));
 }

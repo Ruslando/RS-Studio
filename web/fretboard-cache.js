@@ -8,5 +8,5 @@ const identityOf = object => {
 };
 
 export function fretboardHandKey(lane, revision, tempo) {
-  return `${identityOf(lane)}:${identityOf(lane.notes)}:${lane.id}:${revision}:${lane.notes.length}:${lane.tuning}:${lane.transpositionPitch || 0}:${lane.capo || 0}:${tempo}`;
+  return `${identityOf(lane)}:${identityOf(lane.notes)}:${lane.id}:${revision}:${lane.notes.length}:${lane.instrument}:${lane.tuning}:${lane.transpositionPitch || 0}:${lane.capo || 0}:${tempo}`;
 }

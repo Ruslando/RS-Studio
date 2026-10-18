@@ -9,7 +9,7 @@ import { ZOOM_STEP } from "./constants.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { $, inTourCard, stage } from "./dom.js";
 import { draw } from "./repaint.js";
-import { drawFretboardLabelPreviews } from "./fretboard.js";
+import { refreshEditorPreviews } from "./editor-previews.js";
 import { setTimelineScrollPreviewVisible } from "./timeline-scroll-preview.js";
 import { doCopy, doCut, doDelete, doPaste, redo, undo, updateUndoButtons } from "./edit.js";
 import { resetZoom, zoomCenter } from "./geometry.js";
@@ -177,7 +177,7 @@ function showSettingsPane(section) {
   if (section === "tunings" && !tuningDraftOpen()) beginTuningDraft(tuningSelect);
   if (section === "sounds") beginSoundDraft();
   if (section === "keys") { setKeyTab("edit"); renderKeymap(); }
-  if (section === "trace") drawFretboardLabelPreviews();
+  if (section === "trace") refreshEditorPreviews();
   setTimelineScrollPreviewVisible(section === "trace");
   syncSettingsActions();
 }

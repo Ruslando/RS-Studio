@@ -6,7 +6,7 @@ import { makeResizeRoom } from "./note-merge.js";
 import { graceBefore } from "./grace.js";
 import { SNAP_SEMI, SNAP_T, bendAt, bendCurve, clampSemi, snapTo } from "./bend.js";
 import { AUTOSCROLL_MAX, AUTOSCROLL_ZONE, BEND_HANDLE_R, EDGE_PX, MIN_DUR, MIN_REGION, ZOOM_STEP } from "./constants.js";
-import { openDetectPanel, updateDetectStatus } from "./detect.js";
+import { updateDetectStatus } from "./detect.js";
 import { bendHandles, regionEdgeAt } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
@@ -120,6 +120,17 @@ export function localXY(e) {
   return clientToCanvas(e.clientX, e.clientY);
 }
 
+// Re-hit-test in the current viewport. A stationary pointer can cover another
+// note after scrolling, zooming or playback following, without a mousemove.
+export function hoveredStageNote() {
+  if (!S.state || S.drag || S.mouseX == null || stage.closest('[hidden], [inert]') ||
+      document.elementFromPoint(S.lastPointerX, S.lastPointerY) !== stage) return null;
+  const [x, y] = clientToCanvas(S.lastPointerX, S.lastPointerY);
+  if (y - scroll.scrollTop <= railsBottom()) return null;
+  const hit = pickNote(timeAt(x), pitchAt(y));
+  return hit && !boxOfNote(hit.note)?.group.locked ? hit.note : null;
+}
+
 // Apply the active drag at a canvas-space position. Shared by the mousemove
 // handler and the edge auto-scroll loop (which feeds a recomputed position as
 // the viewport pans under a stationary cursor).
@@ -163,7 +174,7 @@ function updateDrag(x, y) {
     draw(); return;
   }
   if (S.drag.mode === "marquee") { S.marquee.x1 = x; S.marquee.y1 = y; draw(); return; }
-  if (S.drag.mode === "region") { S.detectRegion.t1 = Math.max(0, timeAt(x)); draw(); return; }
+  if (S.drag.mode === "region") { S.detectRegion.t1 = clamp(timeAt(x), 0, S.state.duration); draw(); return; }
   if (S.drag.mode === "regionEdge") {
     const t = clamp(timeAt(x), 0, S.state.duration);
     if (S.drag.edge === "l") S.detectRegion.t0 = Math.min(t, S.detectRegion.t1 - MIN_REGION);
@@ -312,6 +323,17 @@ export function init_interaction() {
     const wantSlice = sliceHeld && noMod;
     const plainSelect = noMod && (S.toolMode === "select" || defaultTrace);
     const noteHit = plainSelect ? pickNote(t, pitch) : null;
+
+    // Existing range edges stay grabbable in every tool, including the default
+    // Trace tool, and take priority over notes and reference boxes behind them.
+    if (!e.shiftKey && !wantSlice) {
+      const edge = regionEdgeAt(x);
+      if (edge) {
+        e.preventDefault();
+        S.drag = { mode: "regionEdge", edge };
+        draw(); return;
+      }
+    }
   
     // A selected note's bend curve is edited right on the spectrogram: drag a
     // control point onto what the audio actually shows. Checked before every
@@ -375,19 +397,13 @@ export function init_interaction() {
       if (redge && canEditLane(redge.lane) && !redge.lane.refBoxes?.[redge.ref]?.locked) { S.drag = { mode: "refBox", ...redge, prev: snapshotEdit() }; draw(); return; }
     }
   
-    // Grab a detect-frame handle to resize that edge (works in Select or Frame,
-    // so an existing band can be adjusted by dragging its sides).
-    if (!wantTrace && !wantMarquee) {
-      const redge = regionEdgeAt(x);
-      if (redge) { S.drag = { mode: "regionEdge", edge: redge }; draw(); return; }
-    }
-  
     // Frame (Alt-drag) = select a time frame (a vertical band across all pitches)
-    // to scope detection; releasing opens the Detect popover. A click (no drag)
+    // for looping and detection. A click (no drag)
     // clears the frame.
     if (wantFrame) {
       S.drag = { mode: "region", x0: x };
-      S.detectRegion = { t0: timeAt(x), t1: timeAt(x) };
+      const time = clamp(timeAt(x), 0, S.state.duration);
+      S.detectRegion = { t0: time, t1: time };
       draw();
       return;
     }
@@ -552,6 +568,9 @@ export function init_interaction() {
     const [x, y] = localXY(e);
     const markerCursor = markerCursorAt(x, y) || markerRails().map(rail => rail.cursorAt?.(x, y)).find(Boolean);
     if (markerCursor) { stage.style.cursor = markerCursor; return; }
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && regionEdgeAt(x)) {
+      stage.style.cursor = "ew-resize"; return;
+    }
     // Reference labels and edges set their own cursor in draw.js's handler.
     if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (refLockAt(x, y) || refBadgeAt(x, y) || refBoxEdgeAt(x, y))) return;
     const hit = pickNote(timeAt(x), pitchAt(y));
@@ -672,9 +691,7 @@ export function init_interaction() {
       if (t1 - t0 < MIN_REGION) { S.detectRegion = null; }
       else S.detectRegion = { t0, t1: Math.min(t1, S.state.duration) };
       updateDetectStatus();
-      // A real Frame drag opens the Detect popover prescoped to the band, so the
-      // detector can run on just that range. (A click that cleared it does not.)
-      if (S.detectRegion) openDetectPanel(e.clientX, e.clientY);
+      // Keep the range available for looping and explicitly requested detection.
     } else if (S.drag.mode === "move" || S.drag.mode === "resize") {
       // The moved/resized notes stay selected. Enforce full grid placement on the
       // final position so neither edge is left straddling a gridline (move already

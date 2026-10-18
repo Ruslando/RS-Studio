@@ -369,7 +369,6 @@
               </div>
             </div>
             <div id="fretboardControls" role="group" aria-label="Fretboard controls">
-              <button type="button" id="fretboardEdit" class="btn btn--compact" aria-pressed="false">Switch to edit mode</button>
               <div id="fretboardSetup" role="group" aria-label="Hand and capo">
               <div id="fretboardCapoField">
                 <label for="fretboardCapo">Capo</label>
@@ -886,13 +885,9 @@
           </select>
           <input type="range" id="traceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" hidden />
 
-          </div><div class="pane-intro"><h2>Editor</h2><p>Choose playback scrolling, note placement and the fretboard display.</p></div>
-          <!-- Five groups, so it sections (rule 23). The captions name the part of
-               the editor being changed: where a traced note lands, and what the
-               fretboard draws. "Trace options" named the gesture and not the thing
-               it decides, which is where a note ends up. -->
-          <div class="section">
-            <div class="section-head"><span>Playback</span></div>
+          </div><div class="pane-intro"><h2>Editor</h2><p>Choose playback scrolling, note placement, spectrogram labels and the fretboard display.</p></div>
+          <div class="section" id="spectrogramSettings">
+            <div class="section-head"><span>Spectrogram</span></div>
             <select id="playbackScrollMode" hidden aria-hidden="true">
               <option value="page">Page</option><option value="follow">Follow</option>
             </select>
@@ -908,44 +903,18 @@
                   <canvas id="timelineScrollPreviewFollow" data-scroll-preview="follow" role="img" aria-label="Follow scrolling: the playhead stays near the left edge"></canvas>
                 </label>
               </div>
-              <div class="timeline-scroll-footer">
-                <button type="button" id="timelineScrollPreviewToggle" class="link">Pause previews</button>
+            </fieldset>
+            <fieldset class="editor-subsection">
+              <legend>Note appearance</legend>
+              <canvas id="noteAppearancePreview" class="editor-preview note-appearance-preview" tabindex="0" role="img" aria-label="Note appearance preview. Hover a note to see hover-only labels."></canvas>
+              <div class="note-appearance-options">
+              <label class="field-group"><span class="label">Note name</span><select id="spectrogramNoteNames"><option value="off">Off</option><option value="always" selected>Always</option><option value="hover">On hover</option></select></label>
+              <label class="field-group"><span class="label">Finger position</span><select id="spectrogramPositions"><option value="off">Off</option><option value="always" selected>Always</option><option value="hover">On hover</option></select></label>
+              <label class="field-group"><span class="label">Effects</span><select id="spectrogramEffects"><option value="off">Off</option><option value="always" selected>Always</option><option value="hover">On hover</option></select></label>
               </div>
             </fieldset>
-          </div>
-          <div class="section">
-            <div class="section-head"><span>Fretboard</span></div>
-            <fieldset class="fretboard-label-setting">
-              <legend>Note labels</legend>
-              <div class="fretboard-label-choices">
-                <label class="fretboard-label-choice">
-                  <span><input type="radio" name="fretboardLabels" value="fingers" /> Finger positions</span>
-                  <canvas data-fretboard-labels="fingers" aria-hidden="true"></canvas>
-                </label>
-                <label class="fretboard-label-choice">
-                  <span><input type="radio" name="fretboardLabels" value="notes" /> Note names</span>
-                  <canvas data-fretboard-labels="notes" aria-hidden="true"></canvas>
-                </label>
-                <label class="fretboard-label-choice">
-                  <span><input type="radio" name="fretboardLabels" value="both" checked /> Both</span>
-                  <canvas data-fretboard-labels="both" aria-hidden="true"></canvas>
-                </label>
-                <label class="fretboard-label-choice">
-                  <span><input type="radio" name="fretboardLabels" value="none" /> None</span>
-                  <canvas data-fretboard-labels="none" aria-hidden="true"></canvas>
-                </label>
-              </div>
-            </fieldset>
-            <label class="field-group block"><span class="label">String order</span>
-              <select id="fretboardStringOrder">
-                <option value="low-bottom">Lowest string at the bottom</option>
-                <option value="low-top">Lowest string at the top</option>
-              </select>
-            </label>
-            <label class="chk"><input type="checkbox" id="fretboardAnimations" checked /> Animate the fretboard during playback</label>
-          </div>
-          <div class="section" id="tracePlacement">
-            <div class="section-head"><span>Note placement</span></div>
+          <fieldset class="editor-subsection" id="tracePlacement">
+            <legend>Note placement</legend>
             <!-- Rule 27: Range only qualifies Snap to pitch, so it rides on that
                  line rather than pretending to be a peer, and Heat is a slider,
                  which is always label-beside-control. Three controls, two rows. -->
@@ -964,26 +933,36 @@
               <input type="range" id="traceThresholdM" class="trace-heat-ctl" min="0" max="100" step="1" value="18" />
               <span id="traceThresholdValueM" class="ro trace-thresh-val">18%</span>
             </label>
+          </fieldset>
           </div>
-          <!-- The fretboard's onion skin: how strongly it ghosts the chord on
-               either side of the one being played. Named for the feature, because
-               "Previous" and "Next" under a caption reading "Fretboard" could have
-               been anything; each is a whole chord, so each says so. Strength is a
-               matter of taste rather than a fact about the board, which is why it is
-               a setting at all, and the two sides are separate because the one you
-               are working against is usually one of them. -->
-          <div class="section">
-            <div class="section-head"><span>Fret numbers</span></div>
+          <div class="section" id="fretboardSettings">
+            <div class="section-head"><span>Fretboard</span></div>
+            <canvas id="fretboardSettingsPreview" class="editor-preview fretboard-settings-preview" tabindex="0" role="img" aria-label="Fretboard preview with the current label, string order, capo and onion skin settings."></canvas>
+            <fieldset class="fretboard-label-setting">
+              <legend>Note labels</legend>
+              <div class="fretboard-label-choices">
+                <label class="fretboard-label-choice"><span><input type="radio" name="fretboardLabels" value="fingers" /> Finger positions</span></label>
+                <label class="fretboard-label-choice"><span><input type="radio" name="fretboardLabels" value="notes" /> Note names</span></label>
+                <label class="fretboard-label-choice"><span><input type="radio" name="fretboardLabels" value="both" checked /> Both</span></label>
+                <label class="fretboard-label-choice"><span><input type="radio" name="fretboardLabels" value="none" /> None</span></label>
+              </div>
+            </fieldset>
+            <label class="field-group block"><span class="label">String order</span>
+              <select id="fretboardStringOrder">
+                <option value="low-bottom">Lowest string at the bottom</option>
+                <option value="low-top">Lowest string at the top</option>
+              </select>
+            </label>
             <label class="field-group block"><span class="label">With a capo <span class="info" role="img" tabindex="0" title="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo." aria-label="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo.">i</span></span>
               <select id="fretNumbering">
                 <option value="capo">Count from the capo</option>
                 <option value="nut">Count from the nut</option>
               </select>
             </label>
-          </div>
-          <div class="section">
-            <div class="section-head"><span>Onion skin</span></div>
-            <label class="chk"><input type="checkbox" id="fretboardOnionEnabled" /> Show neighbouring chords in fretboard edit mode</label>
+            <label class="chk"><input type="checkbox" id="fretboardAnimations" checked /> Animate the fretboard during playback</label>
+            <fieldset class="editor-subsection">
+              <legend>Onion skin</legend>
+            <label class="chk"><input type="checkbox" id="fretboardOnionEnabled" /> Show neighbouring chords while paused</label>
             <label class="field-slider"><span class="label">Previous chord <span class="info" role="img" tabindex="0" title="How strongly the fretboard ghosts the chord before the one being played. 0 turns it off." aria-label="How strongly the fretboard ghosts the chord before the one being played. 0 turns it off.">i</span></span>
               <input type="range" id="onionAlphaPrev" min="0" max="100" step="1" value="35" />
               <span id="onionAlphaPrevValue" class="ro">35%</span>
@@ -992,6 +971,7 @@
               <input type="range" id="onionAlphaNext" min="0" max="100" step="1" value="35" />
               <span id="onionAlphaNextValue" class="ro">35%</span>
             </label>
+            </fieldset>
           </div>
         </div>
         <!-- Appearance: light / dark theme selector (persisted across runs). -->

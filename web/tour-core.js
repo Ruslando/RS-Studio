@@ -101,7 +101,6 @@ export const ACT = {
   options: "options",       // open Editor options
   optionsClose: "optionsClose",
   fbEdit: "fbEdit",         // put the neck in edit mode
-  fbEditClose: "fbEditClose", // restore the neck's normal view on Back
   rsExport: "rsExport",     // open the Rocksmith export window
   rsExportClose: "rsExportClose",
   metroPlay: "metroPlay",   // play with the click on
@@ -538,18 +537,17 @@ export const TOURS = {
         do: ACT.focusAlternative,
         target: "fretboardStage",
         title: "Fingering and hand position",
-        body: "RS Studio works out both the fingering and the hand position for you. The numbers show which finger plays each note, and the highlighted frets show where your hand sits.\n\nHowever, you may want to change its choice. To do that, click a note, a chord or the highlighted hand position, then choose Edit.",
+        body: "RS Studio works out both the fingering and the hand position for you. The numbers show which finger plays each note, and the highlighted frets show where your hand sits.\n\nHowever, you may want to change its choice. While playback is paused, editing is available automatically. Select a note or chord to explore other positions.",
         until: UNTIL.fretboardEdit,
-        task: "Open fretboard Edit mode",
+        task: "Explore the paused fretboard",
         optional: true,
         allow: "#fretboardStage",
       },
       {
         do: ACT.fbEdit,
-        back: ACT.fbEditClose,
         target: "fretboardStage",
         title: "Other positions",
-        body: "Inside edit mode, you'll see your current note or chord, and alternative placements as outlines on the fretboard.\n\nChoose the note on the 10th fret.",
+        body: "While paused, you'll see your current note or chord, and alternative placements as outlines on the fretboard.\n\nChoose the note on the 10th fret.",
         until: UNTIL.fretboardOverride,
         task: "Choose the 10th fret",
         optional: true,

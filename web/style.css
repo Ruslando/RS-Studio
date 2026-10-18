@@ -508,13 +508,8 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #fretboardResetStatus.busy::before { border-color: var(--stage-hint); border-top-color: var(--stage-text); }
 #fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
 #fretboardWarning { position: absolute; z-index: 3; top: 50%; left: 50%; transform: translate(-50%, -50%); width: max-content; max-width: calc(100% - 48px); padding: 8px 12px; border-radius: var(--r-control); background: var(--stage); color: var(--stage-warn); font-size: var(--text-control); text-align: center; overflow-wrap: anywhere; pointer-events: none; }
-/* Paint above the canvas and toolbars: an outline on the panel is covered by
-   its own opaque children along the inset sides and bottom. */
-#fretboardPanel::before { content: ""; position: absolute; inset: 2px; z-index: 20; border: 2px dashed var(--spectral-text); border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity var(--dur-panel) var(--ease-panel); }
-#fretboardPanel[data-editing]::before { opacity: 1; }
 #fretboardPanel[data-edit-blocked] :is(#fretboardSetup, #fretboardPin, #fretboardBusy, #fretboardResetStatus, #fretboardChevron),
 #fretboardPanel:not([data-editing]) :is(#fretboardSetup, #fretboardPin) { display: none; }
-@media (prefers-reduced-motion: reduce) { #fretboardPanel::before { transition: none; } }
 
 #fretboardStage { opacity: 1; transform: translateY(0); transition: opacity var(--dur-panel) var(--ease-panel), transform var(--dur-panel) var(--ease-panel); }
 #fretboardPanel[data-collapsed] #fretboardStage {
@@ -1319,17 +1314,22 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 .timeline-scroll-choice canvas { width: 100%; height: 76px; border-radius: var(--r-compact); }
 .timeline-scroll-choice:has(input:checked) { border-color: var(--selection-line); background: var(--selection); }
 .timeline-scroll-choice:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
-.timeline-scroll-footer { display: flex; justify-content: flex-end; margin-top: var(--s-sibling); }
-.timeline-scroll-footer .link { font-size: var(--text-caption); color: var(--label); white-space: nowrap; }
 .fretboard-label-setting { border: 0; padding: 0; margin: 0; min-width: 0; }
 .fretboard-label-setting legend { color: var(--label); font-size: var(--text-control); }
 .fretboard-label-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: var(--s-sibling); }
 .fretboard-label-choice { display: flex; flex-direction: column; gap: var(--s-pair); padding: var(--s-sibling); border: 1px solid var(--line); border-radius: var(--r-control); cursor: pointer; min-width: 0; }
 .fretboard-label-choice > span { display: flex; align-items: center; gap: var(--s-pair); font-size: var(--text-control); }
 .fretboard-label-choice input { accent-color: var(--accent); margin: 0; }
-.fretboard-label-choice canvas { width: 84px; max-width: 100%; align-self: center; aspect-ratio: 84 / 76; border-radius: var(--r-compact); }
 .fretboard-label-choice:has(input:checked) { border-color: var(--selection-line); background: var(--selection); }
 .fretboard-label-choice:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.editor-subsection { border: 0; padding: 0; margin: var(--s-group) 0 0; min-width: 0; }
+.editor-subsection legend { color: var(--label); font-size: var(--text-control); margin-bottom: var(--s-sibling); }
+.editor-preview { display: block; width: 100%; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--stage); }
+.editor-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note-appearance-preview { height: 128px; }
+.fretboard-settings-preview { height: 164px; margin-bottom: var(--s-group); position: sticky; top: 0; z-index: 2; }
+.note-appearance-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: var(--s-sibling); margin-top: var(--s-sibling); }
+.note-appearance-options select { width: 100%; }
 #settingsModal.settings-window { width: min(var(--w-settings), calc(100vw - 2 * var(--s-section))); height: min(620px, calc(100dvh - 2 * var(--s-section))); }
 #settingsModal.settings-window:has(#spSounds:not([hidden])) { height: min(800px, calc(100dvh - 2 * var(--s-section))); max-height: calc(100dvh - 2 * var(--s-section)); }
 .settings-nav { flex: 0 0 190px; display: flex; flex-direction: column; gap: var(--s-pair); padding: var(--s-row); background: var(--surface-toolbar); border-right: 1px solid var(--line); overflow: auto; }
@@ -1488,7 +1488,6 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardPanel:not([data-editing]) #fretboardControls { border-top-color: transparent; background: transparent; }
 #fretboardSetup { display: flex; align-items: center; gap: 8px; flex: none; }
 #fretboardSetup > * { flex: none; }
-#fretboardEdit { flex: none; min-width: 58px; white-space: nowrap; }
 #fretboardCapoField, #fretboardHandField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
 #fretboardSetup > :first-child { border-left: 0; padding-left: 0; }
 #fretboardCapoField label, #fretboardHandField label { color: var(--stage-label); font-size: var(--text-caption); }

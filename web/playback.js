@@ -12,6 +12,19 @@ import { clamp, fmtTime, followerTrim, normLayerVolume, onsetSec, playheadScroll
 import { followViewportTo, stopViewportMotion, viewportFollowing, viewportMoving } from "./viewport-motion.js";
 import { busLevel } from "./volume.js";
 import { playbackEvents, playSampleEvent } from "./playback-effects.js";
+import { createRegionLoop } from "./region-loop.js";
+
+const regionLoop = createRegionLoop();
+window.addEventListener("cw-project-opened", () => regionLoop.reset());
+window.addEventListener("cw-project-closed", () => regionLoop.reset());
+
+function updateRegionLoop() {
+  if (S.passagePreviewActive || S.drag?.mode === "region" || S.drag?.mode === "regionEdge") {
+    regionLoop.reset(); return;
+  }
+  const next = regionLoop.update(playbackTime(), S.detectRegion);
+  if (next !== null) seekPlayback(next);
+}
 
 export let scheduled = new Set();   // notes scheduled in the current play cycle
 
@@ -58,12 +71,13 @@ export function playTransport() {
   if (!S.state) return Promise.resolve();
   if (hasAudioTransport()) return audio.play();
   if (S.scorePlaying) return Promise.resolve();
+  regionLoop.reset();
   scrollingSuspended = false;
   const duration = Number(S.state.duration) || 0;
   if ((S.scoreTime || 0) >= duration) S.scoreTime = 0;
   S.scoreAnchorSong = S.scoreTime || 0; S.scoreAnchorClock = performance.now() / 1000; S.scorePlaying = true;
   playBtn.innerHTML = PAUSE_ICON; playBtn.title = "Pause (Space)";
-  setSynthsMuted(false); resetSchedule(); tick();
+  setSynthsMuted(false); resetSchedule(S.scoreAnchorSong); tick();
   window.dispatchEvent(new CustomEvent("cw-transport", { detail: "play" }));
   return Promise.resolve();
 }
@@ -226,10 +240,9 @@ function updateClock() {
   S.anchorSong += step; clockErr -= step;
 }
 
-function resetSchedule() {
+function resetSchedule(current = hasAudioTransport() ? audio.currentTime : playbackTime()) {
   scheduled.clear();
   scheduledBeats.clear();
-  const current = playbackTime();
   notesFrom = metroFrom = current;
   clearPreview(); // drop any pending drag-preview notes so they don't leak into playback
   if (hasAudioTransport()) {
@@ -254,7 +267,8 @@ function metroSynth() {
 function scheduleMetro() {
   if (clockArmed) return; // no valid clock to schedule against yet
   // Tight grace: a late click is worse than a missed one — it lands off the grid.
-  const [from, horizon] = schedWindow(metroFrom, playbackTime(), lookahead(), 0.05);
+  const [from, planned] = schedWindow(metroFrom, playbackTime(), lookahead(), 0.05);
+  const horizon = Math.min(planned, regionLoop.end(S.detectRegion));
   metroFrom = horizon;   // advance even while the metronome is off, so enabling it mid-play can't backfire old beats
   if (!window.Tone || !S.state || !metroOn.checked) return;
   const segs = gridSegments();
@@ -319,7 +333,8 @@ function lanePlaybackEvents(lane) {
 
 function scheduleNotes() {
   if (!window.Tone || !S.state || clockArmed) return;
-  const [from, horizon] = schedWindow(notesFrom, playbackTime(), lookahead());
+  const [from, planned] = schedWindow(notesFrom, playbackTime(), lookahead());
+  const horizon = Math.min(planned, regionLoop.end(S.detectRegion));
   notesFrom = horizon;   // advance during passage previews too — their notes are meant to be skipped, not queued
   if (S.passagePreviewActive) return; // similar-passage previews audition the stem slice only
   for (const lane of editLanes()) {
@@ -548,15 +563,20 @@ export function playbackTime() {
 // and alphaTab. Updating the readout and scheduler here prevents a view-specific
 // cursor from moving while the actual playback clock remains somewhere else.
 export function seekPlayback(t) {
+  regionLoop.reset();
   if (viewportFollowing("playback")) stopViewportMotion();
   const fallback = Number.isFinite(t) ? Math.max(0, t) : 0;
   const limit = S.state?.duration || (Number.isFinite(audio.duration) ? audio.duration : fallback);
   const next = clamp(fallback, 0, Math.max(0, limit));
+  // Prime the new range before the scheduler runs. Even a very short loop must
+  // cap its first lookahead window immediately after a seek / loop restart.
+  if (!S.passagePreviewActive && !["region", "regionEdge"].includes(S.drag?.mode))
+    regionLoop.update(next, S.detectRegion);
   if (!hasAudioTransport()) {
     S.scoreTime = next; S.scoreAnchorSong = next; S.scoreAnchorClock = performance.now() / 1000;
     if (S.state?.duration) seek.value = Math.round((next / S.state.duration) * 1000);
     timeEl.textContent = `${fmtTime(next)} / ${fmtTime(S.state?.duration || 0)}`;
-    if (S.scorePlaying) resetSchedule();
+    if (S.scorePlaying) resetSchedule(next);
     window.dispatchEvent(new CustomEvent("cw-transport", { detail: "seek" }));
     draw(); return next;
   }
@@ -606,6 +626,7 @@ export function revealPlaybackPosition({ center = false, redraw = true } = {}) {
 function schedulerTick() {
   if (!S.state || !transportPlaying()) return;
   updateClock();
+  updateRegionLoop();
   scheduleNotes();
   scheduleMetro();
   resyncFollowers();
@@ -637,6 +658,7 @@ function stopScheduler() {
 // visual, so rAF throttling/freezing is fine here.
 function tick() {
   if (!S.state) return;
+  if (transportPlaying()) updateRegionLoop();
   const ct = playbackTime();
   const duration = Number(S.state.duration) || Number(audio.duration) || 0;
   timeEl.textContent = `${fmtTime(ct)} / ${fmtTime(duration)}`;
@@ -659,8 +681,19 @@ const PAUSE_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="curren
 
 export function init_playback() {
   startScheduler();
+  audio.addEventListener("play", () => { regionLoop.reset(); updateRegionLoop(); });
+  audio.addEventListener("ended", () => {
+    if (S.passagePreviewActive) return;
+    const next = regionLoop.update(audio.currentTime, S.detectRegion);
+    if (next !== null) { seekPlayback(next); audio.play().catch(() => {}); }
+  });
   playBtn.addEventListener("click", async () => { await ensureTone(); togglePlay(); });
-  audio.addEventListener("play", () => { scrollingSuspended = false; playBtn.innerHTML = PAUSE_ICON; playBtn.title = "Pause (Space)"; setSynthsMuted(false); ensureStemMixer(); startFollowers(); resetSchedule(); tick(); });
+  audio.addEventListener("play", () => {
+    scrollingSuspended = false; playBtn.innerHTML = PAUSE_ICON; playBtn.title = "Pause (Space)";
+    setSynthsMuted(false); ensureStemMixer(); startFollowers(); resetSchedule();
+    window.dispatchEvent(new CustomEvent("cw-transport", { detail: "play" }));
+    tick();
+  });
   audio.addEventListener("pause", () => {
     cancelPassagePreview();
     clearPreview();
@@ -668,6 +701,8 @@ export function init_playback() {
     playBtn.innerHTML = PLAY_ICON; playBtn.title = "Play (Space)";
     if (S.state) for (const l of S.state.lanes) releaseLaneSynth(l);
     setSynthsMuted(true); // silence notes already scheduled in the LOOKAHEAD window (releaseAll can't recall them)
+    window.dispatchEvent(new CustomEvent("cw-transport", { detail: "pause" }));
+    draw();
   });
   audio.addEventListener("seeked", () => {
     syncFollowerTimes();

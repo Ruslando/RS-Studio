@@ -4,14 +4,16 @@
 // lock-step and changes are persisted by the input's id.
 
 import { $ } from "./dom.js";
-import { drawFretboard, drawFretboardLabelPreviews } from "./fretboard.js";
+import { drawFretboard } from "./fretboard.js";
 import { refreshStagePaint } from "./stage-paint.js";
 import { draw } from "./repaint.js";
 import { initTimelineScrollPreview, refreshTimelineScrollPreview } from "./timeline-scroll-preview.js";
+import { initEditorPreviews, refreshEditorPreviews } from "./editor-previews.js";
+import { migrateNoteAppearanceSettings } from "./spectrogram-labels.js";
 
 const KEY = "cw.settings";
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
-const store = load();
+const store = migrateNoteAppearanceSettings(load());
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch { /* private mode / quota */ } };
 
 const get = (el, bool) => (bool ? el.checked : el.value);
@@ -47,7 +49,7 @@ function setTheme(t) {
   else delete document.documentElement.dataset.theme;
   refreshStagePaint();
   refreshTimelineScrollPreview();
-  drawFretboardLabelPreviews();
+  refreshEditorPreviews();
   draw();
   try { localStorage.setItem(THEME_KEY, v); } catch { /* private mode / quota */ }
   if ($("themeSelect").value !== v) $("themeSelect").value = v;
@@ -89,26 +91,34 @@ export function init_settings() {
   initTimelineScrollPreview();
   persistSetting($("fretboardStringOrder"));
   persistSetting($("fretboardAnimations"), { bool: true });
+  for (const id of ['spectrogramNoteNames', 'spectrogramPositions', 'spectrogramEffects']) {
+    persistSetting($(id));
+    $(id).addEventListener('input', () => { refreshEditorPreviews(); draw(); });
+  }
   const labelChoices = [...document.querySelectorAll('input[name="fretboardLabels"]')];
   const savedLabels = ["fingers", "notes", "both", "none"].includes(store.fretboardLabels) ? store.fretboardLabels : "both";
   for (const radio of labelChoices) {
     radio.checked = radio.value === savedLabels;
     radio.addEventListener("input", () => {
       if (!radio.checked) return;
-      store.fretboardLabels = radio.value; persist(); drawFretboard();
+      store.fretboardLabels = radio.value; persist(); drawFretboard(); refreshEditorPreviews();
     });
   }
-  for (const id of ["playbackScrollMode", "fretboardStringOrder", "fretboardAnimations"]) {
-    $(id).addEventListener(id === "fretboardAnimations" ? "change" : "input", draw);
+  for (const id of ["playbackScrollMode", "fretboardStringOrder", "fretboardAnimations", "fretNumbering", "fretboardOnionEnabled"]) {
+    $(id).addEventListener(["fretboardAnimations", "fretboardOnionEnabled"].includes(id) ? "change" : "input", () => {
+      draw(); refreshEditorPreviews();
+    });
   }
   for (const id of ["onionAlphaPrev", "onionAlphaNext"]) {
     persistSetting($(id));
     const show = () => {
       $(id + "Value").textContent = `${$(id).value}%`;
-      drawFretboard();
+      drawFretboard(); refreshEditorPreviews();
     };
     $(id).addEventListener("input", show);
     show();
   }
+  initEditorPreviews();
+  persist();
   init_theme();
 }

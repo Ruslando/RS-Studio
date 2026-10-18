@@ -26,7 +26,7 @@ import { bpmInput, detectPanel, offsetInput, scroll, stage } from "./dom.js";
 import { currentGridState, gridBpm, gridOffset, gridSegments, gridStep, retimeTempoSpan, setSubdiv } from "./grid.js";
 import { closeMenus } from "./menus.js";
 import { xOf, yOf } from "./geometry.js";
-import { playbackTime, seekPlayback, transportPlaying } from "./playback.js";
+import { pauseTransport, playbackTime, seekPlayback, transportPlaying } from "./playback.js";
 import { S, setSelection } from "./store.js";
 import { clearMatches, runFindSimilar } from "./tracing.js";
 import { normalizePhraseBoundaries, normalizeSectionMarkers } from "./section-marker-core.js";
@@ -206,6 +206,7 @@ const ACTIONS = {
     }
   },
   [ACT.focusAlternative]: () => {
+    pauseTransport();
     setFretboardVisible(true);
     setSelection(new Set());
     seekPlayback(ALTERNATIVE_AT);
@@ -295,12 +296,9 @@ const ACTIONS = {
   [ACT.options]: () => click("menuTraceSettings"),
   [ACT.optionsClose]: () => click("settingsModalClose"),
   [ACT.fbEdit]: () => {
+    pauseTransport();
     setFretboardVisible(true);
     seekPlayback(ALTERNATIVE_AT);
-    if (document.getElementById("fretboardEdit")?.getAttribute("aria-pressed") !== "true") click("fretboardEdit");
-  },
-  [ACT.fbEditClose]: () => {
-    if (document.getElementById("fretboardEdit")?.getAttribute("aria-pressed") === "true") click("fretboardEdit");
   },
   [ACT.rsExport]: () => {
     if (document.getElementById("rocksmithExportBackdrop")?.hidden) click("menuExportRocksmith");
@@ -382,7 +380,7 @@ const WAITS = {
   [UNTIL.detectFinished]: () => detectCompletionCount(),
   [UNTIL.frame]: () => !!S.detectRegion && S.drag?.mode !== "region",
   [UNTIL.selection]: () => S.selection.size >= 2,
-  [UNTIL.fretboardEdit]: () => document.getElementById("fretboardEdit")?.getAttribute("aria-pressed") === "true",
+  [UNTIL.fretboardEdit]: () => document.getElementById("fretboardPanel")?.hasAttribute("data-editing"),
   [UNTIL.fretboardVisible]: () => fretboardVisible(),
   [UNTIL.fretboardOverride]: () => S.voicingRevision,
   [UNTIL.fretboardHandHold]: () => JSON.stringify(tutorialEditLane()?.handHolds || []),

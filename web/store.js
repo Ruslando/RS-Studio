@@ -38,7 +38,7 @@ export const S = {
   clipboardSrc: [],  // the live source note objects copied (so they can become instance 1)
   drag: null,
   marquee: null,
-  detectRegion: null,  // { t0, t1 } Alt-dragged time frame that scopes Detect (null = whole stem)
+  detectRegion: null,  // { t0, t1 } Alt-dragged range for looping and Detect
   hoverNote: null,
   rulerHover: null,  // pitch under the cursor on the pitch ruler (click to audition)
   pitchHoverClientY: null, // viewport coordinate; stays correct across pitch zoom/scroll
@@ -65,7 +65,7 @@ export const S = {
   //   select  → click/move notes, drag = marquee   (default)
   //   trace   → drag draws notes along the spectrogram
   //   marquee → drag box-selects notes             (= Shift-drag)
-  //   frame   → drag a time range → detect popover (= Alt-drag)
+  //   frame   → drag a time range for looping / detection (= Alt-drag)
   toolMode: "select",
   sliceHeld: false,  // temporary FL-style Slice gesture while the S key is held
   heatPreview: false,
