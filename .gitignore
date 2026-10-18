@@ -15,7 +15,6 @@ venv/
 .codex/
 .agents/
 .claude/
-.walkthrough-critique.json
 tunings.json
 update-channel.json
 .webview/

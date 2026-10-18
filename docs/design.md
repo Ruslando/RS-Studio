@@ -241,7 +241,7 @@ as a number.
    **Apply**, shown only while values differ from the last saved snapshot. Apply
    saves without closing the window. Escape
    and the header's close button discard pending edits; there is no duplicate
-   Cancel button. Action-only pages such as Models and Acceleration have no
+   Cancel button. Action-only pages such as Models have no
    Apply action. Hide an empty footer.
 7. A **popover** has no scrim and is **live**: each field applies as it changes.
    It has no footer and no primary. The exception is a popover that starts a
@@ -458,7 +458,15 @@ A confirmation is a 480 window with a title, one sentence (`.confirm-msg`) and
 a footer of two or three buttons. It has no close button; Escape cancels.
 Settings is the one window with a navigation column: 190 wide,
 `--surface-toolbar`, `.navigation-item` rows, body padding 24, each pane opening
-with `.pane-intro` (title 16/600 and one sentence in `--label` 13).
+with `.pane-intro` (title 16/600, without a subtitle).
+Appearance uses the same radio preview cards as Timeline scrolling to select
+Dark or Light, without a dropdown.
+Each preview scales an inert copy of the actual project launcher, using its
+existing markup, icons and component styles with the actual theme tokens.
+Its radio label stays in the surrounding theme.
+The update dialog uses the shared confirmation window, with a channel selector
+above its result. Changing the channel saves it and checks again; installing
+requires the explicit Update now action.
 
 ### 4.13 Rows and cards
 

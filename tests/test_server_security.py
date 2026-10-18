@@ -43,6 +43,12 @@ class ServerSecurityTests(unittest.TestCase):
     def import_chart(self, files):
         return self.client.post("/api/projects/import", files={"file": ("song.chart", _chart(files))})
 
+    def test_walkthrough_review_endpoints_are_removed(self):
+        path = "/api/walkthrough/critique"
+        self.assertNotIn(path, [getattr(route, "path", None) for route in server.app.routes])
+        self.assertEqual(self.client.get(path).status_code, 404)
+        self.assertIn(self.client.post(path, json={"entries": {}}).status_code, (404, 405))
+
     # ---- who may talk to the server --------------------------------------
     def test_only_this_app_may_call_the_server(self):
         get = lambda **headers: self.client.get("/api/version", headers=headers).status_code
