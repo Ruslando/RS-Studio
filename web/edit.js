@@ -4,6 +4,7 @@ import { applySharedPositionPlan, mapPositionShape, positionSelection, resetShar
 // override, and the right-click note context menu.
 
 import { wireContextSubmenu } from "./context-submenu.js";
+import { hoveredStageNote } from "./interaction.js";
 import { MAX_POINTS, bendAt, bendCurve, normalizeCurve } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
@@ -402,18 +403,22 @@ function linkPasteAsReference(added, lane, refShift = 0) {
   return ref;
 }
 
-export function doDelete() {
-  if (!S.state) return;
+export function doDelete({ hovered = false } = {}) {
+  if (!S.state || S.drag) return;
+  const hoverTarget = hovered && !tabViewOn() && !S.selection.size ? hoveredStageNote() : null;
+  const targets = S.selection.size ? S.selection : new Set(hoverTarget ? [hoverTarget] : []);
+  if (!targets.size) return;
   clearMatches();
   const prev = snapshotEdit();
   let removed = 0;
   for (const lane of editLanes()) {
     if (!canEditLane(lane)) continue;   // hidden / locked lanes are disabled — never delete their notes
     const before = lane.notes.length;
-    lane.notes = lane.notes.filter((n) => !S.selection.has(n));
+    lane.notes = lane.notes.filter((n) => !targets.has(n));
     removed += before - lane.notes.length;
   }
   S.selection = new Set();
+  if (targets.has(S.hoverNote)) S.hoverNote = null;
   if (removed) commit(prev);
   refreshCounts(); draw();
 }
@@ -1421,7 +1426,7 @@ export function init_edit() {
     else if (mod && (e.key === "c" || e.key === "C")) { e.preventDefault(); doCopy(); }
     else if (mod && (e.key === "x" || e.key === "X")) { e.preventDefault(); doCut(); }
     else if (mod && (e.key === "v" || e.key === "V")) { e.preventDefault(); doPaste({ mode: e.shiftKey ? "reference" : undefined }); }
-    else if (matchKey(e, "delete")) { e.preventDefault(); doDelete(); }
+    else if (matchKey(e, "delete")) { e.preventDefault(); doDelete({ hovered: true }); }
     else if (e.key === "Escape" && (S.selection.size || S.detectRegion)) {
       if (S.selection.size) setSelection(new Set());            // clear the selection
       if (S.detectRegion) { S.detectRegion = null; updateDetectStatus(); }

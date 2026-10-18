@@ -11,6 +11,7 @@ import { beatsPerBar, exportResolution, gridBpm, gridOffset, gridSubdiv, minDur 
 import { refOccurrences } from "./reference-core.js";
 import { boxMinIn, laneClock } from "./references.js";
 import { songBarStarts } from "./song-bars.js";
+import { fretboardHandKey } from "./fretboard-cache.js";
 import { onLiveTiming, timingData, timingIdOf } from "./timing.js";
 
 // A layer's bar lines come from its own timing (web/timing.js).
@@ -146,12 +147,12 @@ function tabLanes() {
 // opening tablature never monopolizes the browser's main thread.
 const laneVoicingCache = new WeakMap();
 
-function laneVoicingKey(lane, tuning) {
+export function laneFingeringKey(lane, tuning = laneFretTuning(lane)) {
   // The bar lines are part of the answer now — the voicer plans the hand a bar at a
   // time — and a meter-only grid edit changes them without touching a note, so it
   // never bumps voicingRevision. Keyed on the times themselves rather than a summary:
   // a tempo marker can move a bar without changing how many there are.
-  return `${S.voicingRevision}:${tuning.join(",")}:${laneBars(lane).join(",")}`;
+  return fretboardHandKey(lane, S.voicingRevision, `${tuning.join(",")}:${laneBars(lane).join(",")}`);
 }
 
 const aborted = () => Object.assign(new Error("tablature generation cancelled"), { name: "AbortError" });
@@ -167,7 +168,7 @@ function voicedMap(notes, positions) {
 // voiceNotesFingered. They are absent on the exact-fingering path, where the
 // positions are the transcriber's and there is no walk to have a hand.
 async function voiceLaneAsync(lane, notes, tuning, signal) {
-  const key = laneVoicingKey(lane, tuning);
+  const key = laneFingeringKey(lane, tuning);
   const cached = laneVoicingCache.get(lane);
   if (cached?.key === key && cached.positions.length === notes.length) return handedMap(notes, cached);
   if (signal?.aborted) throw aborted();
@@ -209,7 +210,7 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
     worker.postMessage({ task: "voice", notes, tuning, bars: laneBars(lane),
       instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
   });
-  if (signal?.aborted || laneVoicingKey(lane, tuning) !== key) throw aborted();
+  if (signal?.aborted || laneFingeringKey(lane, tuning) !== key) throw aborted();
   laneVoicingCache.set(lane, { key, ...got });
   return handedMap(notes, got);
 }

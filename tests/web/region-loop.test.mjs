@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { createRegionLoop } from '../../web/region-loop.js';
+
+const loop = createRegionLoop(), range = { t0: 2, t1: 4 };
+assert.equal(loop.update(5, range), null, 'starting beyond the range does not jump back');
+assert.equal(loop.update(1, range), null);
+assert.equal(loop.end(range), 4, 'approaching the range also clips lookahead');
+assert.equal(loop.update(2, range), null);
+assert.equal(loop.end(range), 4, 'scheduling stops at the loop boundary');
+assert.equal(loop.update(4, range), 2);
+assert.equal(loop.update(4.1, range), 2, 'keeps attacks at the loop start after tick overshoot');
+assert.equal(loop.update(10.1, range), 2, 'restarts at the beginning after delayed background ticks');
+loop.reset();
+assert.equal(loop.update(5, range), null, 'seeking outside disarms looping');
+loop.update(3, range);
+assert.equal(loop.update(5, { t0: 6, t1: 8 }), null, 'moving the region resets the latch');
+assert.equal(loop.update(9, { t0: 6, t1: 8 }), 6, 'a delayed tick can cross the whole range');
+loop.reset();
+assert.equal(loop.update(9, { t0: 6, t1: 8 }), null, 'an explicit seek past a range does not loop');
+loop.update(3, range);
+assert.equal(loop.update(4, null), null, 'clearing the region stops looping');
+assert.equal(loop.update(4, { t0: 4, t1: 4 }), null);
+assert.equal(loop.update(4, { t0: NaN, t1: 5 }), null);
+console.log('Region loop tests passed');

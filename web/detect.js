@@ -242,7 +242,7 @@ async function runDetect() {
   }
 }
 
-// ---- detect panel (floating popover: opened by right-click or the Frame tool) ----
+// ---- detect panel (floating popover: opened explicitly from the context menu) ----
 
 
 function detectPanelOpen() { return detectPanel && !detectPanel.hidden; }

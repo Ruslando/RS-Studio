@@ -32,4 +32,7 @@ assert.notEqual(key(restored), beforeReplacement,
   "replacing a same-length note array also invalidates old grip targets");
 assert.notEqual(fretboardHandKey(lane, 5, "0:60"), oldKey, "edits still invalidate grips");
 assert.notEqual(fretboardHandKey(lane, 4, "0:90"), oldKey, "tempo changes still invalidate grips");
+const instrumentKey = key(lane);
+lane.instrument = 'acoustic';
+assert.notEqual(key(lane), instrumentKey, 'changing instrument invalidates the fingering on the same lane object');
 console.log("fretboard cache: reload, note replacement and restored override reset passed");

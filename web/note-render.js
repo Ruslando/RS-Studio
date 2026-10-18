@@ -16,8 +16,12 @@ import { hammerDirections } from "./articulations.js";
 import { paintNoteBar } from "./canvas-components.js";
 import { graceBefore } from "./grace.js";
 import { bendCurve, slideRibbon, slideTargets } from "./bend.js";
-import { OVERLAP_EPS, REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono, stageUi } from "./constants.js";
+import { OVERLAP_EPS, REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
+import { laneFingering, laneFingeringKey } from "./tablature.js";
+import { draw } from "./repaint.js";
+import { edgeSlide, resolveNoteAppearance, sourceLabelPositions, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
+import { paintNoteLabel, paintSlideLabel } from "./note-label-paint.js";
 import { contentH, pitchAt, xOf, yOf } from "./geometry.js";
 import { gridAt, gridSegments, gridSubdiv, segStep } from "./grid.js";
 import { FX_GLYPHS, HARMONIC_TAG, noteMarks } from "./note-effects.js";
@@ -64,7 +68,7 @@ export function drawDetectRegion(vx0, vx1) {
   drawRegionHandle(rx0, hy);
   drawRegionHandle(rx1, hy);
   // Range + duration chip, pinned to stay visible while the band is scrolled.
-  const label = `${fmtTime(a)}–${fmtTime(b)} · ${(b - a).toFixed(1)}s`;
+  const label = `Loop · ${fmtTime(a)}–${fmtTime(b)} · ${(b - a).toFixed(1)}s`;
   // A time range and a duration, both compared against the ones either side of
   // them — mono. Free-floating chip, so 11.
   sctx.font = stageMono(); sctx.textBaseline = "top";
@@ -214,14 +218,7 @@ const SLIDE_TAG = { shift: "↗", legato: "⌒↗", inBelow: "↗", inAbove: "�
 // Labels stay horizontal, including at the individual bend control points.
 // Allow overflow so short notes and thin rows keep the same readable type size.
 function centeredLabel(text, x, width, pitch) {
-  const ym = yOf(pitch) + S.state.rowH / 2;
-  sctx.save();
-  sctx.font = stageUi(13, 600);
-  sctx.textAlign = "center"; sctx.textBaseline = "middle";
-  sctx.lineWidth = 2.5; sctx.strokeStyle = halo(); sctx.fillStyle = PAINT.text;
-  sctx.strokeText(text, x + width / 2, ym);
-  sctx.fillText(text, x + width / 2, ym);
-  sctx.restore();
+  paintNoteLabel(sctx, text, x, width, yOf(pitch) + S.state.rowH / 2);
 }
 
 function bendPitchName(pitch) {
@@ -248,10 +245,29 @@ function laneHammerTags(lane) {
   return tags;
 }
 
+const labelPositions = new WeakMap();
+function positionsForLabels(lane) {
+  const key = laneFingeringKey(lane);
+  let entry = labelPositions.get(lane);
+  if (entry?.key !== key) {
+    entry?.controller.abort();
+    entry = { key, controller: new AbortController(), voiced: new Map() };
+    labelPositions.set(lane, entry);
+    laneFingering(lane, entry.controller.signal).then(({ notes, voiced }) => {
+      if (labelPositions.get(lane) !== entry) return;
+      entry.voiced = sourceLabelPositions(lane.notes, notes, voiced); draw();
+    }).catch(() => {});
+  }
+  return entry.voiced;
+}
+
 export function drawNoteFx() {
   const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
+  const options = spectrogramLabelOptions();
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
+    const positions = options.positions !== 'off' ? positionsForLabels(lane) : null;
+    const capo = options.fromNut ? Number(lane.capo) || 0 : 0;
     const hammerTags = laneHammerTags(lane);
     const slides = laneSlides(lane);
     for (const n of lane.notes) {
@@ -259,14 +275,16 @@ export function drawNoteFx() {
       const onto = slides.get(n), ribbon = slideRibbon(n, onto);
       const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
       if ((grace ? xOf(grace.start) : x) > vx1 || Math.max(x1, ribbon ? xOf(ribbon.end) : x1) < vx0) continue;
-      const tags = noteMarks(n).map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(n) || m : m);
-      if (n.slide && !ribbon) tags.push(SLIDE_TAG[n.slide] || "slide");
-      if (n.harmonic) tags.push(HARMONIC_TAG[n.harmonic] || "harm.");
+      const { mode, effects } = resolveNoteAppearance(options, S.hoverNote === n);
+      const tags = effects ? noteMarks(n).map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(n) || m : m) : [];
+      if (effects && n.slide && !ribbon && !edgeSlide(n.slide)) tags.push(SLIDE_TAG[n.slide] || "slide");
+      if (effects && n.harmonic) tags.push(HARMONIC_TAG[n.harmonic] || "harm.");
+      const label = spectrogramLabel(n, positions?.get(n), mode, tags, capo);
       const curve = bendCurve(n);
       if (ribbon && !curve) {
-        centeredLabel([noteName(n.pitch), ...tags].join(" "), x, 0, n.pitch);
+        centeredLabel(label, x, 0, n.pitch);
         const arrow = onto.pitch < n.pitch ? "\u2198" : "\u2197";
-        centeredLabel((n.slide === "legato" ? "\u2312" : "") + arrow,
+        if (effects) centeredLabel((n.slide === "legato" ? "\u2312" : "") + arrow,
           x, xOf(ribbon.end) - x, (n.pitch + onto.pitch) / 2);
         if (n.slide === "shift") {
           const ax = xOf(onto.start) + 1, ay = yOf(onto.pitch), h = S.state.rowH;
@@ -277,10 +295,12 @@ export function drawNoteFx() {
           sctx.restore();
         }
       } else if (curve) {
-        for (const [t, semi] of curve)
+        if (mode === 'notes' || mode === 'both') for (const [t, semi] of curve)
           centeredLabel(bendPitchName(n.pitch + semi), x + (x1 - x) * t, 0, n.pitch + semi);
-        if (tags.length) centeredLabel(tags.join(" "), x, x1 - x, n.pitch);
-      } else centeredLabel([noteName(n.pitch), ...tags].join(" "), x, x1 - x, n.pitch);
+        const baseLabel = spectrogramLabel(n, positions?.get(n), mode === 'both' ? 'positions' : mode === 'notes' ? 'none' : mode, tags, capo);
+        if (baseLabel) centeredLabel(baseLabel, x, x1 - x, n.pitch);
+      } else if (label) centeredLabel(label, x, x1 - x, n.pitch);
+      if (effects) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2);
       if (grace) {
         const gx = xOf(grace.start), width = Math.max(2, x - gx), pitch = n.pitch + grace.offset;
         paintNoteBar(sctx, gx, yOf(pitch), width, S.state.rowH, lane.color, S.selection.has(n), S.hoverNote === n);

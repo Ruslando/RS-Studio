@@ -72,7 +72,8 @@ function addToastCopyButton(element, getText) {
 // `status` is "ok" | "warn" | "error" and draws the 8px dot — the toast is one
 // of the three places status colour is allowed to appear, and the dot is the
 // whole of it: no coloured text, no left status bar.
-export function toast(msg, ms = 2200, status = "") {
+export function toast(msg, ms = 5000, status = "") {
+  if (status === "warn" || status === "error" || !status) ms = Math.max(5000, ms);
   if (!toastWrap) {
     toastWrap = document.createElement("div");
     toastWrap.className = "toasts";

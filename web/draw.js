@@ -15,7 +15,7 @@ import { drawFretboard, fretboardEditTargets } from "./fretboard.js";
 import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
 import { markerRails, overviewMarkerRails, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
-import { edgeOf, localXY, pickNote } from "./interaction.js";
+import { edgeOf, hoveredStageNote, localXY, pickNote } from "./interaction.js";
 import { activeLane, canEditLane } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";
@@ -25,9 +25,10 @@ import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
-import { dpr, hexA, noteName } from "./util.js";
+import { dpr, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
+import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
 
 const overrideEffectCache = new WeakMap();
 const overrideEffectJobs = new WeakMap();
@@ -182,7 +183,8 @@ function drawGhostNotes(added) {
   sctx.save();
   sctx.lineCap = "round";
   sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
-  for (const { pitch, start, end, alpha } of added) {
+  const labels = resolveNoteAppearance(spectrogramLabelOptions());
+  for (const { pitch, start, end, alpha, pos, capo } of added) {
     sctx.globalAlpha = alpha ?? 1;
     const x = xOf(start), w = Math.max(2, xOf(end) - x), y = yOf(pitch);
     sctx.fillStyle = hexA(PAINT.ok, 0.28);
@@ -191,9 +193,10 @@ function drawGhostNotes(added) {
     sctx.lineWidth = 2; sctx.strokeStyle = PAINT.ok;
     sctx.strokeRect(x + 1, y + 1, w - 2, rowH - 2);
     sctx.setLineDash([]);
-    const label = "+" + noteName(pitch);
+    const text = spectrogramLabel({ pitch }, pos, labels.mode, [], labels.fromNut ? capo || 0 : 0);
+    const label = text ? "+" + text : "";
     const tw = sctx.measureText(label).width;
-    if (w >= tw + 6) {
+    if (label && w >= tw + 6) {
       const ly = y + rowH / 2;
       sctx.lineWidth = 2.5; sctx.strokeStyle = halo();
       sctx.strokeText(label, x + 3, ly);
@@ -325,6 +328,7 @@ function paintFrame() {
   drawFretboard();
   if (!S.state || !S.state.spec) return;   // spec is set by selectStem; nothing to paint before then
   if (editorEl.hidden || viewer.clientWidth <= RULER_W || viewer.clientHeight < 1) return;
+  if (!S.drag) S.hoverNote = hoveredStageNote();
   // layout() primes the fixed ruler width before measuring #scroll. This is a
   // last-resort recovery if stylesheet loading or a future CSS change ever lets
   // the ruler consume the row again.
@@ -405,7 +409,7 @@ function paintFrame() {
     // Non-active and locked lanes are read-only reference — dim them so the one
     // layer you're actually editing stands out.
     const laneAlpha = (lane === actLane && !lane.locked) ? 1 : 0.55;
-    for (const ghost of addedNotes) ghostNotes.push({ ...ghost, alpha: laneAlpha });
+    for (const ghost of addedNotes) ghostNotes.push({ ...ghost, alpha: laneAlpha, capo: Number(lane.capo) || 0 });
     // Adjacent written attacks otherwise fuse into one solid bar. Indexing their
     // shared edges makes sliced sustains (and other re-attacks) explicit without
     // turning the draw loop into a quadratic search on imported arrangements.
@@ -538,6 +542,7 @@ function paintFrame() {
   }
   // Removed notes and brief drag trails are visual remnants only. They never
   // enter the selection, hit tests, minimap, playback or export.
+  const motionLabels = resolveNoteAppearance(spectrogramLabelOptions());
   for (const { lane, note, alpha, shrink } of noteMotionGhosts()) {
     const x = xOf(note.start), y = yOf(note.pitch), w = Math.max(2, xOf(note.end) - x);
     if (x > vx1 || x + w < vx0) continue;
@@ -548,8 +553,8 @@ function paintFrame() {
       sctx.beginPath(); traceBendPath(x, w, y + h / 2, curve, h);
       sctx.lineWidth = Math.max(1, h - 2 * inset); sctx.strokeStyle = lane.color; sctx.stroke();
     } else paintNoteBar(sctx, x, y + inset, w, h - 2 * inset, lane.color);
-    const label = noteName(note.pitch);
-    if (w >= sctx.measureText(label).width + 6) {
+    const label = spectrogramLabel(note, note.pos, motionLabels.mode, [], motionLabels.fromNut ? Number(lane.capo) || 0 : 0);
+    if (label && w >= sctx.measureText(label).width + 6) {
       sctx.fillStyle = PAINT.text; sctx.fillText(label, x + 3, y + h / 2);
     }
     sctx.restore();
@@ -850,6 +855,7 @@ export function init_draw() {
   // ---- hover highlight + cursor line ----
   stage.addEventListener("mousemove", (e) => {
     S.pitchHoverClientY = e.clientY;
+    S.lastPointerX = e.clientX; S.lastPointerY = e.clientY;
     if (S.drag || !S.state) return;
     const [x, y] = localXY(e);
     const t = timeAt(x), pitch = pitchAt(y);
@@ -870,12 +876,12 @@ export function init_draw() {
     mkCur = mkCur || markerCursorAt(x, y);
     if (e.ctrlKey || e.metaKey) cur = "pointer";             // Ctrl + click = seek
     else if (mkCur) cur = mkCur;                             // over a timing or section flag
+    else if (!e.shiftKey && !S.sliceHeld && regionEdgeAt(x)) cur = "ew-resize";
     else if (mi >= 0) cur = "pointer";                       // hovering a suggestion
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && refLockAt(x, y)) cur = "pointer";   // pitch lock toggle
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && refBadgeAt(x, y)) cur = "grab"; // reference badge (click = select, drag = move)
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (rbe = refBoxEdgeAt(x, y)))
       cur = refEdgeCursor(rbe.edge);                         // reference box edge or corner
-    else if (!e.ctrlKey && !e.metaKey && !e.shiftKey && regionEdgeAt(x)) cur = "ew-resize"; // frame handle
     else if (S.sliceHeld) cur = "crosshair";                 // hold S = temporary Slice line
     else if (e.altKey) cur = "col-resize";                   // Alt = detect-frame band
     else if (hit && hit.lane !== activeLane()) cur = "pointer";  // click switches the edit target to this layer

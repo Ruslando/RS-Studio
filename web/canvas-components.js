@@ -40,6 +40,10 @@ export function paintNoteBar(ctx, x, y, width, height, color, selected = false, 
   ctx.lineWidth = 3.5; ctx.strokeStyle = hexA(PAINT.ink, 0.94); ctx.stroke();
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = selected ? PAINT.accent : hovered ? PAINT.text : color; ctx.stroke();
+  if (hovered) {
+    rectangle(ctx, x - 1, y - 1, width + 2, height + 2, radius + 1);
+    ctx.lineWidth = 2; ctx.strokeStyle = PAINT.text; ctx.stroke();
+  }
   if (emphasis > 0) {
     ctx.lineWidth = 1;
     ctx.strokeStyle = hexA(PAINT.text, emphasis * .65); ctx.stroke();

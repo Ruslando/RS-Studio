@@ -21,7 +21,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // Both mm → px scales are the same one, always.
 
 import { barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
-import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEdit, fretboardEl, fretboardName, fretboardPanel, fretboardAdaptNext, fretboardAdaptPrev, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardStage } from "./dom.js";
+import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEl, fretboardName, fretboardPanel, fretboardAdaptNext, fretboardAdaptPrev, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardStage } from "./dom.js";
 import { UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
 import { dpr, hexA, noteName, rememberPref } from "./util.js";
@@ -298,8 +298,7 @@ const travelSeconds = () => 60 / (gridBpm() || 120);
 // Edit mode previews one candidate at a time; arrows browse it and Use position commits it.
 let altsOn = false;
 let alts = null;      // { note, rev, t0, notes, influence, ranked, boxes, hover }
-// READING THE NECK, OR WORKING ON IT. Off by default, and off is most of the time: a
-// neck is read far more often than it is edited. The mode owns three things at once —
+// Pausing defaults to editing; playback switches to the neck preview. The mode owns three things at once —
 // whether a click moves the hand, whether the other positions are drawn, and whether
 // onion skin is offered — because all three are the same question ("what else could
 // this be, and what would it do to its neighbours") and none of them is worth the
@@ -428,9 +427,9 @@ function altsFor(note) {
   return null;
 }
 
-// The fixed Edit button owns the preview and editing controls.
+// Transport state owns the editing controls; playback is always read-only.
 export function setFretboardEdit(on) {
-  const next = !!on && visible, changed = next !== editing;
+  const next = !!on && visible && !transportPlaying(), changed = next !== editing;
   const motion = panelMotion();
   if (changed) {
     // Keep resize observers from snapping the mode's height change to its end.
@@ -439,8 +438,6 @@ export function setFretboardEdit(on) {
   }
   editing = next;
   previewAlternative = false; alternativeIndex = -1;
-  fretboardEdit.setAttribute("aria-pressed", String(editing));
-  fretboardEdit.textContent = editing ? "Switch to preview mode" : "Switch to edit mode";
   fretboardPanel.toggleAttribute("data-editing", editing);
   if (editing && !S.selection.size) selectPlayheadNotes();
   drawFretboard();
@@ -606,16 +603,14 @@ export function setFretboardVisible(on) {
   // during opening introduces an auto-height layout that interrupts the tween.
   if (!visible) fretboardPanel.style.height = "";
   // Hide transient board controls as its contents retract out of view.
-  // Closing the panel leaves the mode behind with it: reopening on a neck that is
-  // still armed to edit is how a stray click becomes a shift nobody asked for.
+  // Closing the panel clears transient editing state. Reopening chooses the
+  // default mode from the current transport state.
   if (!visible) {
     fretboardBusy.hidden = true;
     endResetPreview();
     fretboardPin.hidden = true;
     editing = false;
     fretboardPanel.removeAttribute("data-editing");
-    fretboardEdit.setAttribute("aria-pressed", "false");
-    fretboardEdit.textContent = "Switch to edit mode";
     fretboardPanel.removeAttribute("data-edit-blocked");
     altsOn = false; alts = null; altsJob = null;
     spots = null; spotHover = -1; shaping = null;
@@ -626,6 +621,7 @@ export function setFretboardVisible(on) {
   $("menuFretboardCheck").hidden = !visible;
   const label = visible ? "Hide fretboard" : "Show fretboard";
   syncPanelControls("fretboard", visible, label);
+  if (visible) setFretboardEdit(!transportPlaying());
   layoutFretboard(true);      // this one IS the gesture
 }
 
@@ -683,6 +679,21 @@ function fretSpaceBounds(ctx, x0, x1, s, X, Y) {
   ctx.moveTo(X(x0), Y(-h0)); ctx.lineTo(X(x1), Y(-h1));
   ctx.lineTo(X(x1), Y(h1)); ctx.lineTo(X(x0), Y(h0));
   ctx.closePath();
+}
+
+function paintBoardCapo(ctx, s, scale, X, Y) {
+  if (!s.capo) return;
+  const x = capoLine(s), half = boardHalfWidthAt(x, s) + 1;
+  ctx.fillStyle = PAINT.text;
+  ctx.fillRect(X(x) - 3 * scale, Math.min(Y(-half), Y(half)), 6 * scale, half * 2 * scale);
+}
+
+function paintBoardTuning(ctx, s, X, Y, tuning, fontSize) {
+  ctx.save(); ctx.font = stageMono(fontSize); ctx.fillStyle = PAINT.label;
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let string = 0; string < s.strings; string++)
+    ctx.fillText(noteName(tuning[string]), X(-s.nutDepth) - 8, Y(stringOffsetAt(string, 0, s)));
+  ctx.restore();
 }
 
 export function drawFretboard() {
@@ -955,12 +966,7 @@ export function drawFretboard() {
     ctx.restore();
   }
 
-  // The capo, over the strings: a bar across the whole board, in the nut's bone.
-  if (s.capo) {
-    const x = capoLine(s), half = boardHalfWidthAt(x, s) + 1;
-    ctx.fillStyle = PAINT.text;
-    ctx.fillRect(X(x) - 3 * scale, Math.min(Y(-half), Y(half)), 6 * scale, half * 2 * scale);
-  }
+  paintBoardCapo(ctx, s, scale, X, Y);
 
   // Fret numbers below the board, on the dotted frets only — a number under
   // every fret is 22 numbers nobody reads. Mono, because a fret number is a
@@ -982,13 +988,7 @@ export function drawFretboard() {
   // pitch at all. Right-aligned against the nut, and mono because a pitch is a
   // value (rule 6), in the same tier as the fret numbers because it does the same
   // job: annotating the board rather than being part of it.
-  if (strung) {
-    ctx.font = stageMono(tunePx);
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    for (let i = 0; i < s.strings; i++)
-      ctx.fillText(noteName(strung[i]), X(-s.nutDepth) - 8, Y(stringOffsetAt(i, 0, s)));
-  }
+  if (strung) paintBoardTuning(ctx, s, X, Y, strung, tunePx);
 
   // WHICH GRAIN IS DECIDED BY THE COLUMN, not by a second switch. A lone note has one
   // question — which string — and every answer to it is legal, so it gets circles and
@@ -1300,37 +1300,74 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
   if (mode === "notes" || mode === "both") drawGripNoteNames(ctx, s, scale, X, Y, marks, hue, true, mode === "notes");
 }
 
-// Use the real contacts and labels in Settings, so previews track their rendering.
-export function drawFretboardLabelPreviews() {
-  const s = fretboardFor("electric"), scale = 1.65;
-  const hue = currentLane()?.color || PAINT.ok;
-  const X = mm => 12 + mm * scale, Y = off => 38 + off * scale;
-  const width = 84, height = 76;
-  const marks = [
-    { string: 0, fret: 1, x: fretCentre(1, s), pitch: 65, finger: 1 },
-    { string: 1, fret: 0, x: fretCentre(0, s), pitch: 59, finger: 0 },
-  ];
-  for (const canvas of document.querySelectorAll("canvas[data-fretboard-labels]")) {
-    canvas.width = width * dpr(); canvas.height = height * dpr();
-    const ctx = canvas.getContext("2d");
-    ctx.scale(dpr(), dpr());
-    ctx.fillStyle = PAINT.chrome; ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = PAINT.hint; ctx.lineWidth = 1;
-    for (let string = 0; string < s.strings; string++) {
-      ctx.beginPath();
-      ctx.moveTo(X(0), Y(stringOffsetAt(string, 0, s)));
-      ctx.lineTo(width, Y(stringOffsetAt(string, (width - 12) / scale, s))); ctx.stroke();
+// A short neck using the same capo, tuning, hand-band and contact renderers.
+export function drawFretboardSettingsPreview(time = 0) {
+  const canvas = $("fretboardSettingsPreview");
+  if (!canvas) return;
+  const lane = currentLane(), base = fretboardFor(lane?.instrument || "electric");
+  const capo = Number(lane?.capo) || 2, s = { ...base, capo };
+  const width = Math.max(260, canvas.clientWidth || 420), height = 164, dp = dpr();
+  canvas.width = Math.round(width * dp); canvas.height = Math.round(height * dp);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dp, 0, 0, dp, 0, 0);
+  ctx.fillStyle = PAINT.chrome; ctx.fillRect(0, 0, width, height);
+  const tuning = lane ? laneTuning(lane) : [64, 59, 55, 50, 45, 40];
+  ctx.font = stageMono(11);
+  const gutter = Math.max(...tuning.map(pitch => ctx.measureText(noteName(pitch)).width)) + 8;
+  const first = -s.nutDepth, end = fretDistance(capo + 5, s.scale);
+  const scale = Math.min((width - 32 - gutter) / (end - first), (height - 52) / boardWidth(s));
+  const offset = 16 + gutter + (width - 32 - gutter - (end - first) * scale) / 2;
+  const X = mm => offset + (mm - first) * scale;
+  const direction = $("fretboardStringOrder").value === "low-top" ? -1 : 1;
+  const Y = off => height / 2 + off * scale * direction;
+  const half = boardHalfWidthAt(0, s), farHalf = boardHalfWidthAt(end, s);
+  ctx.beginPath(); ctx.moveTo(X(first), Y(-half)); ctx.lineTo(X(end), Y(-farHalf));
+  ctx.lineTo(X(end), Y(farHalf)); ctx.lineTo(X(first), Y(half)); ctx.closePath();
+  ctx.fillStyle = PAINT.ground; ctx.fill();
+  ctx.strokeStyle = PAINT.hint; ctx.lineWidth = 1; ctx.stroke();
+  const animate = $("fretboardAnimations").checked;
+  const step = animate ? Math.floor(time / 1.5) % 3 : 1;
+  const hue = lane?.color || PAINT.ok, seat = step + 1;
+  // This uses capo-relative seats, exactly like the live board.
+  ctx.fillStyle = hexA(hue, WASH);
+  fretSpace(ctx, seat, s, X, Y); ctx.fill();
+  ctx.fillStyle = hexA(PAINT.ink, .35);
+  fretSpaceBounds(ctx, 0, capoLine(s), s, X, Y); ctx.fill();
+  ctx.font = stageMono(10); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let fret = 1; fret <= capo + 5; fret++) {
+    const at = fretDistance(fret, s.scale), x = X(at), h = boardHalfWidthAt(at, s);
+    ctx.beginPath(); ctx.moveTo(x, Y(-h)); ctx.lineTo(x, Y(h));
+    ctx.lineWidth = 1.5; ctx.strokeStyle = PAINT.hint; ctx.stroke();
+    if (fret > capo) {
+      ctx.fillStyle = PAINT.label;
+      // dotCentre takes physical frets; fretCentre takes capo-relative frets.
+      ctx.fillText(String($("fretNumbering").value === "nut" ? fret : fret - capo), X(dotCentre(fret, s)), height - 13);
     }
-    for (let fret = 0; fret <= 1; fret++) {
-      const x = X(fretDistance(fret, s.scale));
-      ctx.lineWidth = fret ? 2 : 4;
-      ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x, 74); ctx.stroke();
-    }
-    // Limit the open-string glow to the miniature neck.
-    ctx.save(); ctx.beginPath(); ctx.rect(X(0), 0, width - X(0), height); ctx.clip();
-    drawGrip(ctx, s, scale, X, Y, marks, hue, true, { labels: canvas.dataset.fretboardLabels });
-    ctx.restore();
   }
+  ctx.fillStyle = PAINT.text;
+  ctx.fillRect(X(first), Math.min(Y(-half), Y(half)), s.nutDepth * scale, half * 2 * scale);
+  for (let string = 0; string < s.strings; string++) {
+    ctx.beginPath(); ctx.moveTo(X(first), Y(stringOffsetAt(string, 0, s)));
+    ctx.lineTo(X(end), Y(stringOffsetAt(string, end, s)));
+    ctx.lineWidth = .7 + string * .15; ctx.strokeStyle = PAINT.label; ctx.stroke();
+  }
+  paintBoardCapo(ctx, s, scale, X, Y);
+  paintBoardTuning(ctx, s, X, Y, tuning, 11);
+  ctx.font = stageMono(10); ctx.textAlign = "left"; ctx.fillStyle = PAINT.label;
+  ctx.fillText(`Capo ${capo}`, 12, 13);
+  ctx.textAlign = "center";
+  ctx.fillText(`Hand position ${seat}`, X(fretCentre(seat, s)), 13);
+  const chord = shift => [0, 2, 4].filter(string => string < s.strings).map((string, i) => {
+    const fret = 1 + i + shift;
+    return { string, fret, x: fretCentre(fret, s), finger: i + 1, pitch: tuning[string] + capo + fret };
+  });
+  if ($("fretboardOnionEnabled").checked) {
+    for (const [shift, id] of [[(step + 2) % 3, "onionAlphaPrev"], [(step + 1) % 3, "onionAlphaNext"]]) {
+      ctx.save(); ctx.globalAlpha = Number($(id).value) / 100;
+      drawGrip(ctx, s, scale, X, Y, chord(shift), hue, false, { digits: false }); ctx.restore();
+    }
+  }
+  drawGrip(ctx, s, scale, X, Y, chord(step), hue, true);
 }
 
 // A quiet, borderless pitch label beside each contact. Open strings follow the
@@ -1897,11 +1934,8 @@ export function init_fretboard() {
     for (const [side, delta] of [["Prev", -1], ["Next", 1]])
       $("fretboard" + kind + side).addEventListener("click", event => { event.currentTarget.blur(); apply(delta); });
   }
-  fretboardEdit.addEventListener("click", () => {
-    fretboardEdit.blur();            // or it eats the arrow keys that walk the song
-    setFretboardEdit(!editing);
-  });
   window.addEventListener("cw-transport", event => {
+    if (event.detail === "play" || event.detail === "pause") setFretboardEdit(!transportPlaying());
     if (event.detail === "seek" || event.detail === "pause") selectPlayheadNotes();
     if (event.detail === "seek") {
       alts = null; altsJob = null; alternativeKey = "";
@@ -1931,7 +1965,6 @@ export function init_fretboard() {
   // Transient depth: it is canvas state, above the selection and below every window.
   registerEscapeLayer(ESC_DEPTH.transient, () => {
     if (shaping) setFretboardShape(false);
-    else if (editing) setFretboardEdit(false);
     else return false;
     return true;
   });
@@ -1946,5 +1979,5 @@ export function init_fretboard() {
   // The markup ships collapsed so the first paint has nothing to animate; this is
   // what puts the menu's check, the pull's label and `visible` in step with it.
   setFretboardVisible(visible);
-  setFretboardEdit(false);
+  setFretboardEdit(!transportPlaying());
 }

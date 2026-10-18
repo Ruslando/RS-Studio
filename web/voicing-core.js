@@ -1252,7 +1252,7 @@ export function addedArrangementNotes(notes) {
     for (const note of arrangement.notes) {
       const remaining = spare.get(note.pitch) || 0;
       if (remaining) spare.set(note.pitch, remaining - 1);
-      else added.push({ pitch: note.pitch, start, end });
+      else added.push({ pitch: note.pitch, start, end, pos: { string: note.string, fret: note.fret } });
     }
   }
   return added;
