@@ -7,6 +7,8 @@ import { confirmChoice } from "./dialog.js";
 import { progressToast, toast } from "./notify.js";
 
 let latest = null;
+let savedChannel = null;
+let checkGeneration = 0;
 
 async function fetchUpdate() {
   const response = await fetch("/api/update");
@@ -53,8 +55,10 @@ async function openUpdate() {
 async function checkNow(button) {
   if (latest) { openUpdate(); return; }  // already known: the button shows it
   button.disabled = true;
+  const generation = ++checkGeneration;
   try {
     const data = await fetchUpdate();
+    if (generation !== checkGeneration) return;
     if (data.available) { showUpdate(data); openUpdate(); }
     else toast(`RS Studio ${data.current} is up to date`);
   } catch (error) {
@@ -64,7 +68,43 @@ async function checkNow(button) {
   }
 }
 
+export async function applyUpdateChannel() {
+  const channel = $("updateChannel").value;
+  if (savedChannel === null || channel === savedChannel) return true;
+  try {
+    const response = await fetch("/api/update/channel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not save the update channel");
+    savedChannel = data.channel;
+    const generation = ++checkGeneration;
+    showUpdate({ available: false });
+    $("updateChannelStatus").textContent = "Channel saved. Checking for updates…";
+    fetchUpdate().then(data => {
+      if (generation !== checkGeneration) return;
+      showUpdate(data);
+      $("updateChannelStatus").textContent = data.available ? `Version ${data.latest} is available.` : `RS Studio ${data.current} is up to date.`;
+    }).catch(error => {
+      if (generation === checkGeneration) $("updateChannelStatus").textContent = error.message;
+    });
+    return true;
+  } catch (error) {
+    $("updateChannelStatus").textContent = error.message;
+    return false;
+  }
+}
+
 export function init_updates() {
   $("welcomeUpdateBtn").addEventListener("click", (event) => checkNow(event.currentTarget));
-  fetchUpdate().then(showUpdate).catch(() => {});  // offline at startup: stay quiet, the button reports errors
+  $("settingsUpdateCheck").addEventListener("click", (event) => checkNow(event.currentTarget));
+  fetch("/api/update/channel").then(async response => {
+    if (!response.ok) throw new Error("Could not load the update channel. Restart RS Studio to try again.");
+    const data = await response.json();
+    savedChannel = data.channel;
+    $("updateChannel").value = data.channel;
+    $("updateChannel").disabled = !data.can_change_channel;
+    $("updateChannelStatus").textContent = data.can_change_channel ? "" : "Run the new RS Studio Setup once to enable update channels.";
+    window.dispatchEvent(new Event("update-channel-loaded"));
+  }).catch(error => { $("updateChannelStatus").textContent = error.message; });
+  const generation = checkGeneration;
+  fetchUpdate().then(data => { if (generation === checkGeneration) showUpdate(data); }).catch(() => {});
 }

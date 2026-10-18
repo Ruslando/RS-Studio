@@ -30,7 +30,8 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
 SCHEMA = 2
-LAUNCHER_VERSION = 3  # must match "launcher_version" in bootstrap-release.json; 3 added --runtime
+LAUNCHER_VERSION = 4  # 3 added --runtime; 4 reads the installation's update channel
+RELEASES_API = "https://api.github.com/repos/Ruslando/RS-Studio/releases"
 MAX_MANIFEST = 1024 * 1024
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -206,8 +207,50 @@ def cuda_check(runtime: dict | None, query=None) -> dict:
     return {"useful": True, "gpu": name, "reason": f"{name} · {best['memory'] / 1024:.0f} GB"}
 
 
+def release_version(value: str) -> tuple:
+    """Order our release tags using PEP 440's alpha/beta/rc/dev ordering, without dependencies."""
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:[-.]?(alpha|a|beta|b|rc)[.-]?(\d*))?(?:[.-]?dev[.-]?(\d+))?", value, re.I)
+    if not match:
+        raise ValueError(f"Unsupported release version: {value}")
+    major, minor, patch, pre, number, dev = match.groups()
+    stage = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "rc": 2}.get((pre or "").lower(), -1 if dev else 3)
+    return (int(major), int(minor), int(patch), stage, int(number or 0), int(dev) if dev else float("inf"))
+
+
+def preview_release() -> dict | None:
+    """Highest version among the latest 100 complete public releases, including regular releases.
+
+    Publishing as a draft keeps partially uploaded builds out of this feed.
+    Regular releases also reach testers when they supersede a preview.
+    """
+    request = urllib.request.Request(RELEASES_API + "?per_page=100", headers={
+        "User-Agent": "RS-Studio-Installer/4", "Accept": "application/vnd.github+json"})
+    with opener().open(request, timeout=30) as response:
+        raw = response.read(8 * MAX_MANIFEST + 1)
+    if len(raw) > 8 * MAX_MANIFEST:
+        raise InstallError("The release list is too large.")
+    candidates = []
+    for release in json.loads(raw):
+        if release.get("draft"):
+            continue
+        asset = next((asset for asset in release.get("assets", []) if asset["name"] == "bootstrap-manifest.json"), None)
+        if asset is None:
+            continue
+        try:
+            version = release_version(release["tag_name"])
+        except ValueError:
+            continue
+        candidates.append((version, {**release, "manifest_url": asset["browser_download_url"]}))
+    return max(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
 def fetch_manifest(config: dict, *, allow_local: bool = False) -> dict:
-    url = checked_url(config["manifest_url"], allow_local=allow_local)
+    url = config["manifest_url"]
+    if config.get("channel", "stable") == "preview":
+        release = preview_release()
+        if release:
+            url = release["manifest_url"]
+    url = checked_url(url, allow_local=allow_local)
     request = urllib.request.Request(url, headers={"User-Agent": "RS-Studio-Installer/2", "Accept": "application/json"})
     with opener(allow_local).open(request, timeout=30) as response:
         data = response.read(MAX_MANIFEST + 1)

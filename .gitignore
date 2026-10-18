@@ -17,6 +17,7 @@ venv/
 .claude/
 .walkthrough-critique.json
 tunings.json
+update-channel.json
 .webview/
 .DS_Store
 

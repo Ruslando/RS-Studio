@@ -771,7 +771,7 @@
           <span id="settingsModalTitle">Trace options</span></span>
         <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="sounds">Tone presets</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="dialog-body">
+<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="sounds">Tone presets</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button><button type="button" class="navigation-item" data-settings-pane="updates">Updates</button></nav>      <div class="dialog-body">
         <div class="sp-pane" id="spSounds" hidden>
           <section class="sound-section" data-section="preset">
           <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="soundSectionPreset"><span class="sound-section-title">Preset</span><span id="soundDraftStatus" class="sp-note" role="status"></span><span id="soundPresetSummary" class="sp-note sound-section-summary"></span></button>
@@ -1007,6 +1007,13 @@
             <div id="accelList" class="model-list"></div>
           </div>
           <p id="accelStatus" class="sp-note model-status" hidden></p>
+        </div>
+        <div class="sp-pane" id="spUpdates" hidden><div class="pane-intro"><h2>Updates</h2></div>
+          <label class="field-group block"><span class="field-label">Update channel</span>
+            <select id="updateChannel" disabled><option value="stable">Release</option><option value="preview">Preview</option></select>
+          </label>
+          <p id="updateChannelStatus" class="sp-note" role="status">Loading update channel…</p>
+          <button type="button" id="settingsUpdateCheck">Check for updates</button>
         </div>
         <div class="sp-pane" id="spProject" hidden>
           <!-- Rule 27: title and artist are read together, and so are album and
