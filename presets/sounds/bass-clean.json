@@ -1,0 +1,69 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 80,
+        "Rack_StudioEQ_HiMidFreq": 4,
+        "Rack_StudioEQ_TrebleFreq": 5,
+        "Rack_StudioEQ_LoMidFreq": 1600,
+        "Rack_StudioEQ_Treble": 1,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 0,
+        "Rack_StudioEQ_HiMid": 3,
+        "Rack_StudioEQ_LoMid": 4,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_HT300B_LoShift": 1,
+        "Bass_Amp_HT300B_Mid": 80,
+        "Bass_Amp_HT300B_MidFreq": 2,
+        "Bass_Amp_HT300B_HiShift": 0,
+        "Bass_Amp_HT300B_Bass": 23,
+        "Bass_Amp_HT300B_Gain": 25,
+        "Bass_Amp_HT300B_Treble": 50
+      },
+      "Key": "Bass_Amp_HT300B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_AT810BC_57_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ8_400": 0,
+        "Pedal_EQ8_100": 1,
+        "Pedal_EQ8_6400": 1,
+        "Pedal_EQ8_50": 0,
+        "Pedal_EQ8_200": 1,
+        "Pedal_EQ8_3200": 2,
+        "Pedal_EQ8_1600": 4,
+        "Pedal_EQ8_800": 2
+      },
+      "Key": "Pedal_EQ8"
+    },
+    "PrePedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 600,
+        "Bass_Pedal_MBComp_Compress": 5,
+        "Bass_Pedal_MBComp_Rate": 40
+      },
+      "Key": "Bass_Pedal_MBComp"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-20.578982",
+  "Key": "BrandNew_bass",
+  "Name": "Bass Clean"
+}

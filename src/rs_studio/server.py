@@ -987,6 +987,15 @@ _TUTORIAL_PROGRESS: dict[str, str] = {}
 CUSTOM_TUNINGS = _DATA_ROOT / "tunings.json"
 
 
+@app.get("/api/sound-presets")
+def api_sound_presets_get() -> dict:
+    from .sound_presets import read_preset_folder
+    try:
+        return read_preset_folder(_DATA_ROOT / "presets" / "sounds", _RES_ROOT / "presets" / "sounds")
+    except OSError as error:
+        raise HTTPException(status_code=400, detail=f"Preset folder could not be read: {error}") from error
+
+
 @app.get("/api/tunings")
 def api_tunings_get() -> list:
     try:

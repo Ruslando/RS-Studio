@@ -217,7 +217,7 @@ def main():
 
     app_files: dict[str, Path | bytes] = {name: text.encode("utf-8") for name, text in requirements.items()}
     app_files.update(shipped)
-    for directory in ("src/rs_studio", "web", "assets", "licenses", "bootstrap", "docs"):
+    for directory in ("src/rs_studio", "web", "assets", "licenses", "bootstrap", "docs", "presets"):
         app_files.update(source_files(ROOT / directory, directory + "/"))
     for file in ("LICENSE", "NOTICE", "README.md", "pyproject.toml", "uv.lock", "standalone.py", "tools/fetch-ffmpeg.py",
                  "tools/fetch-fonts.py", "tools/package-bootstrap.py", "tools/try-bootstrap.py", "rs-bootstrap.spec"):

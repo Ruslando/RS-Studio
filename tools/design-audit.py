@@ -166,11 +166,11 @@ def run(page, audit, data, audio):
         page.mouse.click(700, 37)                        # the project title: inert, and outside every menu
 
     def settings(prefix):
-        for pane in ["appearance", "trace", "tunings", "keys", "models", "acceleration"]:
+        for pane in ["appearance", "trace", "tunings", "sounds", "keys", "models", "acceleration"]:
             click(f"[data-settings-pane={pane}]")
             scene(f"{prefix}-settings-{pane}", "#settingsModal")
         click("[data-settings-pane=keys]"); click("#keysTabFixed"); scene(f"{prefix}-settings-keys-fixed", "#settingsModal")
-        click("#settingsCancel")
+        click("#settingsModalClose")
 
     def new_project():
         click("#welcomeNew"); scene("new-project-empty", "#newProjModal")
@@ -201,12 +201,12 @@ def run(page, audit, data, audio):
 
     def windows():
         page.hover("#lanes .lane-row"); click("#lanes .lane-row .edit-btn"); scene("window-note-layer", "#settingsPanel")
-        click("#layerCancel")
+        click("#settingsClose")
         page.hover("#stemTabs .stem-row"); click("#stemTabs .stem-row .stem-btn.edit"); scene("window-audio", "#stemSettingsPanel")
-        click("#stemCancel")
-        click("#fileMenuBtn"); click("#menuExportRocksmith"); scene("window-rocksmith-export", "#rocksmithExportModal"); click("#rsExportCancel")
-        click("#fileMenuBtn"); click("#menuProjectSettings"); scene("window-project-details", "#settingsModal"); click("#settingsCancel")
-        click("#fileMenuBtn"); click("#openProjMenu"); scene("window-open-project", "#openProjModal"); click("#openProjCancel")
+        click("#stemSettingsClose")
+        click("#fileMenuBtn"); click("#menuExportRocksmith"); scene("window-rocksmith-export", "#rocksmithExportModal"); click("#rsExportClose")
+        click("#fileMenuBtn"); click("#menuProjectSettings"); scene("window-project-details", "#settingsModal"); click("#settingsModalClose")
+        click("#fileMenuBtn"); click("#openProjMenu"); scene("window-open-project", "#openProjModal"); click("#openProjClose")
         click("#fileMenuBtn"); click("#menuPreviewTab"); page.wait_for_selector("#tabRender svg", timeout=30000)
         scene("window-tablature", "#tabView"); click("#tabViewClose")
         for box, modal in [("confirmBackdrop", "confirmModal"), ("actionConfirmBackdrop", "actionConfirmModal"), ("pasteBackdrop", "pasteModal"), ("setupBackdrop", "setupModal")]:
@@ -220,7 +220,7 @@ def run(page, audit, data, audio):
         with page.expect_file_chooser() as chooser:
             click("#welcomeGp")
         chooser.value.set_files(data / "song.gp5")
-        page.wait_for_selector("#gpImportTracks .gp-import-track"); scene("window-gp-import", "#gpImportModal"); click("#gpImportCancel")
+        page.wait_for_selector("#gpImportTracks .gp-import-track"); scene("window-gp-import", "#gpImportModal"); click("#gpImportClose")
 
     def tour():
         click("#welcomeTour"); page.wait_for_selector(".tour-card", timeout=60000); scene("tour-card", ".tour-card")
@@ -236,12 +236,12 @@ def run(page, audit, data, audio):
     page.evaluate("localStorage.setItem('cw.theme', 'light')"); page.reload(); page.wait_for_selector("#welcomeNew")
     scene("light-welcome", "#welcome")
     step("light-settings", lambda: (click("#welcomeSettingsBtn"), settings("light")))
-    step("light-new-project", lambda: (click("#welcomeNew"), scene("light-new-project", "#newProjModal"), click("#npCancel")))
+    step("light-new-project", lambda: (click("#welcomeNew"), scene("light-new-project", "#newProjModal"), click("#npClose")))
 
     def light_editor():
         page.locator("#recentList .ri-open").first.click(); page.wait_for_selector("#lanes .lane-row", timeout=60000)
         scene("light-editor", "#appshell")
-        page.hover("#lanes .lane-row"); click("#lanes .lane-row .edit-btn"); scene("light-window-note-layer", "#settingsPanel"); click("#layerCancel")
+        page.hover("#lanes .lane-row"); click("#lanes .lane-row .edit-btn"); scene("light-window-note-layer", "#settingsPanel"); click("#settingsClose")
         click("#fileMenuBtn"); scene("light-menu-file", "#fileMenu"); dismiss()
     step("light-editor", light_editor)
     page.evaluate("localStorage.setItem('cw.theme', 'dark')"); page.reload(); page.wait_for_selector("#welcomeNew")

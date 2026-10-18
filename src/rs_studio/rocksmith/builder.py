@@ -9,6 +9,8 @@ arrangements from the editor lanes.
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import re
 import tempfile
 import unicodedata
@@ -21,6 +23,7 @@ import numpy as np
 import soundfile as sf
 
 from . import bnk, chart, dds, manifest, psarc, sng, wem
+from .tones import custom_tone
 from .wem import AudioConverterNotFoundError, WwiseNotFoundError  # public error types
 
 _STANDARD_GUITAR = [40, 45, 50, 55, 59, 64]  # low->high E standard
@@ -310,13 +313,20 @@ def _arrangement_tones(track: dict, is_bass: bool, key: str, tag: str,
     # so this only decides for a spec that arrives without one.
     default = "clean" if is_bass else "crunch"
     markers = []
+    custom = {}
     for index, raw in enumerate(track.get("toneMarkers") or []):
         try:
             time = float(raw.get("t", raw.get("seconds")))
         except (AttributeError, TypeError, ValueError):
             continue
         tone = str(raw.get("tone", raw.get("preset", ""))).strip().lower()
-        if tone not in _TONE_PRESETS:
+        if re.fullmatch(r"sound_[a-z0-9_-]{1,80}", tone):
+            # Distinct project snapshots of one library preset stay distinct.
+            definition = custom_tone(raw.get("toneData"), "Custom")
+            digest = hashlib.sha256(json.dumps(definition, sort_keys=True).encode()).hexdigest()[:16]
+            tone = f"{tone}_{digest}"
+            custom[tone] = definition
+        if tone not in _TONE_PRESETS and tone not in custom:
             warnings.append(f"Ignored unknown Rocksmith tone preset '{tone or '?'}'")
             continue
         if not 0 <= time <= song_length:
@@ -351,6 +361,8 @@ def _arrangement_tones(track: dict, is_bass: bool, key: str, tag: str,
         raise ValueError("Rocksmith supports at most four switchable tones per arrangement")
 
     def load(name: str) -> dict:
+        if name in custom:
+            return {**copy.deepcopy(custom[name]), "Key": f"{key}_{tag}_{name}_tone"}
         return manifest.load_internal_tone(name, f"{key}_{tag}_{name}_tone")
 
     base = load(base_name)

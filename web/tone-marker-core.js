@@ -1,6 +1,6 @@
-// Per-lane amp tone-switch timeline data. Presets are intentionally
-// internal for now; a future tone designer can extend this catalog without
-// changing saved marker data.
+import { isSoundId, normalizeSound } from "./sound-presets-core.js";
+// Per-lane amp tone-switch timeline data. Custom markers embed a native tone
+// snapshot, so projects remain portable and library edits never rewrite songs.
 
 export const INTERNAL_TONE_PRESETS = [
   ["lead", "Lead"],
@@ -11,7 +11,8 @@ export const INTERNAL_TONE_PRESETS = [
 
 const PRESET_KEYS = new Set(INTERNAL_TONE_PRESETS.map(([key]) => key));
 
-export function tonePresetLabel(key) {
+export function tonePresetLabel(key, toneData = null) {
+  if (isSoundId(key) && toneData?.Name) return toneData.Name;
   return INTERNAL_TONE_PRESETS.find(([value]) => value === key)?.[1] || "Lead";
 }
 
@@ -21,11 +22,13 @@ export function normalizeToneMarkers(markers, duration = Infinity) {
   for (const [index, raw] of (Array.isArray(markers) ? markers : []).entries()) {
     const t = Number(raw?.t ?? raw?.seconds);
     const tone = String(raw?.tone || raw?.preset || "").trim().toLowerCase();
-    if (!Number.isFinite(t) || !PRESET_KEYS.has(tone)) continue;
+    const toneData = isSoundId(tone) ? normalizeSound(raw.toneData, { allowOutOfRange: true }) : null;
+    if (!Number.isFinite(t) || (!PRESET_KEYS.has(tone) && !toneData)) continue;
     out.push({
       id: String(raw?.id || `tone_${index}_${Math.round(Math.max(0, t) * 1000)}`),
       t: Math.max(0, Math.min(limit, t)),
       tone,
+      ...(toneData ? { toneData } : {}),
     });
   }
   out.sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));

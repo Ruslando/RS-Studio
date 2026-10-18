@@ -1,0 +1,55 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_Bass": -1,
+        "Rack_StudioEQ_BassFreq": 495,
+        "Rack_StudioEQ_HiMid": 2,
+        "Rack_StudioEQ_HiMidFreq": 2.4,
+        "Rack_StudioEQ_HiMidQ": 0,
+        "Rack_StudioEQ_LoMid": 0.5,
+        "Rack_StudioEQ_LoMidFreq": 480,
+        "Rack_StudioEQ_LoMidQ": 0,
+        "Rack_StudioEQ_Treble": 0,
+        "Rack_StudioEQ_TrebleFreq": 6.600002
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_TW40_Bass": 47,
+        "Amp_TW40_Gain": 93,
+        "Amp_TW40_Mid": 83,
+        "Amp_TW40_Pres": 51,
+        "Amp_TW40_Treble": 72
+      },
+      "Key": "Amp_TW40"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_TW110C_Condenser_Cone"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_SpringReverb_Depth": 88,
+        "Pedal_SpringReverb_Mix": 29,
+        "Pedal_SpringReverb_Time": 66
+      },
+      "Key": "Pedal_SpringReverb",
+      "Category": "30792"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35716]OVERDRIVE",
+    "$[35724]LEAD"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-21.250",
+  "Key": "janipece_drivelead",
+  "Name": "Guitar Overdrive"
+}

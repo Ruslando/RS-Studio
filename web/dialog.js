@@ -16,7 +16,7 @@ let closeActive = null;
 
 // Resolves "confirm" | "alternative" | "discard" | "cancel". The left slot holds
 // a destructive discard; with a neutral alternative there are two answers, so
-// both stand on the right (alternative, then primary) and Cancel takes the left.
+// both stand on the right (alternative, then primary). The header's × cancels.
 export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Cancel", danger = false, discardLabel = "", alternativeLabel = "", signal = null }) {
   if (closeActive) closeActive("cancel");
   if (signal?.aborted) return Promise.resolve("cancel");
@@ -27,13 +27,13 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
     actionConfirmTitle.textContent = title;
     actionConfirmMsg.textContent = message;
     actionConfirmAccept.textContent = confirmLabel;
-    actionConfirmCancel.textContent = cancelLabel;
+    actionConfirmCancel.title = cancelLabel === "Cancel" ? "Close (Esc)" : cancelLabel;
     actionConfirmAccept.classList.toggle("danger", danger);
     actionConfirmDiscard.hidden = !discardLabel && !alternativeLabel;
     actionConfirmDiscard.classList.toggle("danger", !!discardLabel);
     if (discardLabel || alternativeLabel) actionConfirmDiscard.textContent = discardLabel || alternativeLabel;
     const footer = actionConfirmDiscard.parentElement, actions = actionConfirmAccept.parentElement;
-    if (alternativeLabel && !discardLabel) { footer.prepend(actionConfirmCancel); actions.append(actionConfirmDiscard, actionConfirmAccept); }
+    if (alternativeLabel && !discardLabel) actions.append(actionConfirmDiscard, actionConfirmAccept);
     actionConfirmBackdrop.hidden = false;
 
     let done = false;
@@ -43,7 +43,7 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
       closeActive = null;
       actionConfirmBackdrop.hidden = true;
       actionConfirmDiscard.hidden = true;
-      footer.prepend(actionConfirmDiscard); actions.prepend(actionConfirmCancel); actions.append(actionConfirmAccept);
+      footer.prepend(actionConfirmDiscard); actions.append(actionConfirmAccept);
       actionConfirmAccept.removeEventListener("click", onConfirm);
       actionConfirmCancel.removeEventListener("click", onCancel);
       actionConfirmDiscard.removeEventListener("click", onDiscard);

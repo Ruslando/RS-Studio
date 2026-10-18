@@ -48,7 +48,11 @@ their own licenses:
   and psarc.py, sng.py, wem.py, dds.py and manifest.py follow its reading of the
   container, the SNG structures, the audio wrapper, the texture header and the
   manifest schema. res/ carries its flat-model files, Wwise project templates
-  and default tones. MIT asks for the licence text itself, not a mention of it:
+  and default tones. The Sound Designer also bundles DLC Builder's complete
+  tone gear definitions and native tone descriptions, pinned to commit
+  4cf3325174e13f1dc5ce997e7663b2851c6afcce. The shared catalogue is generated
+  by tools/sync-tone-gear.py into res/tone-gear.json and web/tone-gear.js.
+  MIT asks for the licence text itself, not a mention of it:
   see licenses/Rocksmith2014.NET-LICENSE.txt.
   https://github.com/iminashi/Rocksmith2014.NET
 

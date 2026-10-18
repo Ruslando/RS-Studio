@@ -674,6 +674,202 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .tuning-actions { display: flex; align-items: center; gap: var(--s-sibling); margin-top: auto; }
 .tuning-actions > button:first-child { margin-left: auto; }
 @media (max-width: 640px) { .tuning-manager { grid-template-columns: 1fr; } .tuning-list { max-height: 220px; } }
+/* Sound designer: signal flow above a single, consistent device editor. */
+/* The pane scrolls vertically only. It reaches into the dialog padding so its
+   scrollbar sits beside the content with a gap instead of against it. */
+#spSounds:not([hidden]) { height: 100%; min-height: 0; gap: var(--s-section); overflow: hidden auto; scrollbar-gutter: stable;
+  margin: 0 calc(-1 * var(--s-group)) 0 -3px; padding: 0 calc(var(--s-group) - 10px) 0 3px; }
+#spSounds { scrollbar-width: thin; scrollbar-color: var(--line-mark) transparent; }
+#spSounds > :not(.sound-section--device) { flex: none; }
+/* Collapsible sections: the body animates between its height and zero. The device
+   section takes the remaining height and scrolls inside its workbench. */
+.sound-section { display: flex; flex-direction: column; min-height: 0; }
+/* With every section open the device editor keeps a usable height and the pane scrolls. */
+.sound-section--device { flex: 1 1 auto; min-height: 220px; }
+.sound-section--device[data-collapsed] { flex: none; min-height: 0; }
+.sound-section-toggle { display: flex; align-items: center; gap: var(--s-sibling); width: 100%; height: 28px; min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--text); text-align: left; }
+.sound-section-toggle::before { content: ""; flex: none; width: 6px; height: 6px; margin: 0 4px 3px 2px; border-right: 1.5px solid var(--label); border-bottom: 1.5px solid var(--label); transform: rotate(45deg); transition: transform var(--dur-panel) var(--ease-panel); }
+.sound-section[data-collapsed] .sound-section-toggle::before { transform: translate(-1px, 2px) rotate(-45deg); }
+.sound-section-toggle:hover:not(:disabled) { background: transparent; color: var(--text); }
+.sound-section-title { flex: none; font: 600 var(--text-control)/1 var(--font-ui); }
+.sound-section-toggle::after { content: ""; order: 1; flex: 1; height: 1px; background: var(--line); }
+.sound-section-toggle > .sp-note { order: 2; flex: none; }
+.sound-section-toggle > .sp-note:empty { display: none; }
+/* The summary names what a collapsed section holds; open sections show it in full. */
+.sound-section:not([data-collapsed]) .sound-section-summary { display: none; }
+.sound-section-body { display: grid; grid-template-rows: 1fr; flex: 1 1 auto; min-height: 0; transition: grid-template-rows var(--dur-panel) var(--ease-panel); }
+.sound-section[data-collapsed] .sound-section-body { grid-template-rows: 0fr; }
+/* A few pixels of padding keep focus rings clear of the clipping edge. */
+.sound-section-inner { display: flex; flex-direction: column; gap: var(--s-sibling); min-height: 0; overflow: hidden; margin: 0 -3px; padding: var(--s-row) 3px 3px; transition: padding var(--dur-panel) var(--ease-panel); }
+.sound-section[data-collapsed] .sound-section-inner { padding-block: 0; }
+.sound-toolbar { display: flex; align-items: end; gap: var(--s-sibling); flex-wrap: wrap; }
+#soundDraftStatus[data-dirty="true"] { color: var(--warn); }
+
+/* Preset form: one label column, one spacing rhythm. */
+.sound-form { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: var(--s-group) var(--s-section); }
+.sound-form-label { color: var(--label); font: 400 var(--text-control)/1.2 var(--font-ui); white-space: nowrap; }
+.sound-form-field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-sibling); min-width: 0; }
+.sound-file-toolbar { display: flex; flex-wrap: wrap; gap: var(--s-sibling); min-width: 0; max-width: 100%; }
+.sound-preset-actions { grid-column: 2; padding-block: var(--s-pair); display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s-sibling) var(--s-group); min-width: 0; }
+#soundPreset, #soundName { flex: 1; min-width: 160px; }
+.sound-form .sound-volume { display: flex; align-items: center; gap: var(--s-row); flex: 0 1 360px; width: 360px; max-width: 100%; min-width: 0; }
+.sound-form .sound-volume .parameter-slider { flex: 1; margin-bottom: -10px; }
+.sound-form .sound-volume input[type="number"] { flex: none; width: 12ch; padding-inline: 6px; font-family: var(--font-mono); }
+.sound-descriptions { display: flex; align-items: center; gap: var(--s-pair); flex-wrap: wrap; }
+/* Descriptions are compact tags: each keeps its own picker and remove button. */
+.sound-tag { display: inline-flex; align-items: center; height: 28px; border: 1px solid var(--line-mark); border-radius: 999px; background: var(--surface-button); }
+.sound-tag:focus-within { border-color: var(--accent); }
+#spSounds .sound-tag select { width: auto; height: 26px; min-height: 0; padding: 0 22px 0 12px; border: 0; border-radius: 999px; background-color: transparent; background-position: right 12px center, right 6px center; font-size: var(--text-control); box-shadow: none; }
+.sound-tag-remove { width: 22px; height: 22px; min-height: 0; margin-right: 3px; padding: 0; border: 0; border-radius: 999px; background: transparent; box-shadow: none; color: var(--hint); font-size: 14px; line-height: 1; }
+.sound-tag-remove:hover:not(:disabled) { color: var(--error); background: var(--surface-inset); }
+#soundAddDescription { height: 28px; padding: 0 12px; border: 1px dashed var(--line-mark); border-radius: 999px; background: transparent; color: var(--label); }
+.sound-chain { display: flex; align-items: stretch; gap: var(--s-section); min-width: 0; overflow-x: auto; padding: var(--s-pair) var(--s-pair) var(--s-sibling); --fade-start: 0px; --fade-end: 0px;
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); }
+/* Cards cut off at an edge fade out, so a wider chain reads as scrollable. */
+.sound-chain[data-more~="start"] { --fade-start: 56px; }
+.sound-chain[data-more~="end"] { --fade-end: 56px; }
+.sound-chain::-webkit-scrollbar, .sound-workbench::-webkit-scrollbar { width: 10px; height: 10px; }
+.sound-chain::-webkit-scrollbar-thumb, .sound-workbench::-webkit-scrollbar-thumb { background: var(--line-mark); border: 2px solid var(--surface-inset); border-radius: var(--r-control); }
+.sound-chain::-webkit-scrollbar-track, .sound-workbench::-webkit-scrollbar-track { background: var(--surface-inset); }
+.sound-chain-group { position: relative; flex: 1 0 auto; display: flex; flex-direction: column; gap: var(--s-row); padding: var(--s-row); border: 1px solid var(--line); border-radius: var(--r-control); background: var(--surface-inset); }
+/* Each stage has its own enclosure; connectors stay outside it, level with the cards. */
+.sound-chain-group:not(:last-child)::after { content: "\2192"; position: absolute; right: calc(var(--s-section) / -2 - 1px); top: calc(var(--s-row) + 16px + var(--s-row) + 44px); transform: translate(50%, -50%); color: var(--hint); font: 400 14px/1 var(--font-ui); }
+.sound-chain-group > .section-head { height: 16px; line-height: 16px; white-space: nowrap; font-size: var(--text-caption); font-weight: 600; color: var(--text); }
+.sound-chain-group > .section-head::after { display: none; }
+.sound-chain-devices { display: flex; gap: var(--s-sibling); }
+/* An empty bank's add button takes the card's place, keeping the row even. */
+.sound-chain-devices:empty { display: none; }
+.sound-chain-devices:empty + .sound-chain-add { height: 88px; }
+.sound-chain-card { position: relative; flex: 1 0 176px; min-width: 176px; }
+/* One layout for every device: icon left, name over category, centred as a block. */
+.sound-chain-item { display: grid; grid-template-columns: 24px minmax(0, 1fr); grid-template-rows: auto auto; align-content: center; align-items: center; text-align: left; gap: 2px var(--s-sibling); width: 100%; min-width: 0; height: 88px; padding: var(--s-sibling) var(--s-row); background: var(--surface-card); border: 1px solid var(--line); white-space: normal; contain: inline-size; }
+.sound-chain-item > .sound-device-icon { grid-row: 1 / 3; }
+.sound-chain-card[draggable] .sound-chain-item { padding-right: 32px; cursor: grab; }
+.sound-drag-grip { position: absolute; bottom: 8px; right: 10px; color: var(--hint); font-size: 12px; line-height: 1; pointer-events: none; }
+.sound-chain-remove { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--hint); font-size: 16px; line-height: 1; }
+.sound-chain-remove:hover:not(:disabled) { color: var(--error); background: var(--surface-button); }
+.sound-chain-card[data-dragging] { opacity: .4; }
+.sound-chain-group[data-drop] { outline: 1px dashed var(--accent); outline-offset: 2px; border-radius: var(--r-control); }
+.sound-chain-card[data-drop="before"]::before, .sound-chain-card[data-drop="after"]::after { content: ""; position: absolute; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+.sound-chain-card[data-drop="before"]::before { left: -5px; }
+.sound-chain-card[data-drop="after"]::after { right: -5px; }
+/* The selected card is unmistakable: accent outline, accent icon. Clicking it again replaces the device. */
+.sound-chain-item[data-selected="true"] { background: var(--selection); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.sound-chain-item[data-selected="true"] .sound-device-icon { color: var(--accent); }
+.sound-chain-item:not([data-selected="true"]):hover { border-color: var(--line-mark); }
+.sound-chain-name { font: 600 var(--text-control)/1.25 var(--font-ui); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sound-chain-subtitle { grid-column: 2; color: var(--hint); font: 400 var(--text-caption)/1.2 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sound-device-icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; color: var(--label); }
+/* Beside existing cards the add control is a slim tile; an empty bank gets a full one. */
+.sound-chain-add--side { flex: none; align-self: stretch; width: 32px; height: 88px; min-height: 0; padding: 0; font-size: 18px; }
+.sound-chain-add { align-self: stretch; color: var(--label); border: 1px dashed var(--line-mark); background: transparent; }
+.sound-workbench { display: flex; flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--surface-inset); }
+.sound-device-editor { display: flex; flex: none; flex-direction: column; gap: var(--s-group); width: 100%; min-width: 0; box-sizing: border-box; margin-block: auto; padding: var(--s-section); }
+.sound-section-head { display: flex; align-items: center; gap: var(--s-sibling); min-height: 32px; }
+.sound-section-head > .sound-section-toggle { flex: 1; min-width: 0; }
+#soundDeviceDialog { position: fixed; max-width: none; max-height: none; margin: 0; padding: 0; box-sizing: border-box; }
+#soundDeviceDialog:not([open]) { display: none; }
+#soundDeviceDialog::backdrop { background: var(--scrim); }
+#soundDeviceDialogBody { display: flex; flex: 1; min-height: 0; padding: var(--s-group); }
+#soundDeviceDialogBody > .sound-workbench { flex: 1; }
+.sound-gear-filters { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-sibling); }
+.sound-gear-filters > *, #soundGearSelect { min-width: 0; width: 100%; }
+/* An inline list instead of a dropdown: it never opens over the dialog. */
+#soundGearSelect { height: 300px; padding: var(--s-pair); background-image: none; overflow-y: auto; }
+#soundGearSelect option { padding: 4px 8px; border-radius: var(--r-compact); color: var(--text); }
+#soundGearSelect option:checked { background: var(--selection) linear-gradient(var(--selection), var(--selection)); color: var(--text); -webkit-text-fill-color: var(--text); box-shadow: inset 0 0 0 1px var(--selection-line); }
+#soundGearSelect optgroup { color: var(--hint); font: 600 var(--text-caption)/1.8 var(--font-ui); }
+#soundGearDialog { width: min(600px, calc(100vw - 48px)); margin: auto; padding: 0; }
+#soundGearDialog:not([open]) { display: none; }
+#soundGearDialog::backdrop { background: var(--scrim); }
+/* Device controls: dials and switches in a wrapping row, faders side by side,
+   an EQ curve over its band columns. */
+.sound-devices { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-section) var(--s-group); align-items: flex-start; min-width: 0; }
+.sound-devices[data-layout="parametric"], .sound-devices[data-layout="cabinet"] { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--s-row); }
+.sound-devices[data-layout="parametric"] { width: min(100%, 760px); margin-inline: auto; }
+.sound-devices[data-layout="graphic"] { gap: var(--s-pair); }
+.sound-devices .field-group > select { min-width: 160px; }
+.sound-control-name { max-width: 100%; overflow: hidden; color: var(--label); font: 400 var(--text-control)/1.3 var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.sound-readout { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.sound-readout .sound-knob-value { width: 7ch; height: 24px; min-height: 0; padding: 0 4px; border-color: transparent; background: transparent; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.sound-readout .sound-knob-value::-webkit-inner-spin-button, .sound-readout .sound-knob-value::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.sound-readout .sound-knob-value:is(:hover, :focus) { border-color: var(--line-mark); background: var(--surface-card); }
+.sound-readout .sound-knob-value[aria-invalid="true"] { border-color: var(--error); }
+/* Back to the value the preset had when opened; space is kept so nothing shifts. */
+.sound-readout { position: relative; }
+.sound-revert { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; min-height: 0; padding: 0; border: 0; border-radius: var(--r-compact); background: transparent; box-shadow: none; color: var(--accent); font-size: 13px; line-height: 1; visibility: hidden; }
+.sound-revert[data-changed] { visibility: visible; }
+.sound-revert:hover:not(:disabled) { background: var(--selection); color: var(--text); }
+.sound-hidden-range { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.sound-parameter--dial { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 112px; }
+.sound-dial { position: relative; }
+.sound-dial-box { position: relative; width: 64px; height: 64px; margin: 14px 24px 4px; }
+.sound-dial-face { display: block; width: 64px; height: 64px; overflow: visible; cursor: ns-resize; touch-action: none; }
+.dial-track, .dial-fill { fill: none; stroke-width: 4; stroke-linecap: round; }
+.dial-track { stroke: var(--slider-track); }
+.dial-fill { stroke: var(--accent); }
+.dial-default { stroke: var(--text); stroke-width: 2; stroke-linecap: round; }
+.dial-cap { fill: var(--surface-card); stroke: var(--line-mark); }
+.dial-pointer { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+.sound-dial:has(.sound-hidden-range:focus-visible) .dial-cap { stroke: var(--accent); stroke-width: 2; }
+.sound-dial .parameter-default { height: 16px; padding: 0 2px; transform: translate(-50%, -100%); }
+.sound-dial .parameter-default[data-side="left"] { transform: translate(-100%, -50%); }
+.sound-dial .parameter-default[data-side="right"] { transform: translate(0, -50%); }
+.sound-parameter--fader { display: flex; flex-direction: column; align-items: center; gap: var(--s-pair); width: 88px; }
+.sound-parameter--fader .sound-readout { margin-right: 18px; }
+/* A horizontal range rotated a quarter turn: the minimum ends up at the bottom. */
+.sound-fader-track { position: relative; width: 56px; height: 120px; }
+.sound-fader-input { position: absolute; left: 50%; top: 50%; width: 120px; margin: 0; transform: translate(-50%, -50%) rotate(-90deg); }
+.sound-fader-default { position: absolute; left: 50%; width: 20px; height: 2px; margin-left: -10px; bottom: calc(var(--w-slider-thumb) / 2 + (100% - var(--w-slider-thumb)) * var(--at)); transform: translateY(50%); background: var(--text); pointer-events: none; }
+.sound-fader .parameter-default { left: auto; right: -6px; top: auto; bottom: calc(var(--w-slider-thumb) / 2 + (100% - var(--w-slider-thumb)) * var(--at)); transform: translate(100%, 50%); height: 16px; padding: 0 2px; }
+.sound-eq-graph { display: block; width: 100%; height: auto; background: var(--surface-card); border: 1px solid var(--line); border-radius: var(--r-control); touch-action: none; }
+.eq-grid { stroke: var(--line); }
+.eq-zero { stroke: var(--line-mark); }
+.eq-label { fill: var(--hint); font: 400 10px var(--font-mono); }
+.eq-area { fill: var(--accent); opacity: .14; }
+.eq-curve { fill: none; stroke: var(--accent); stroke-width: 2; }
+.eq-node { cursor: grab; }
+.eq-node circle { fill: var(--surface-card); stroke: var(--accent); stroke-width: 2; }
+.eq-node[data-drag] circle, .eq-node:hover circle { fill: var(--accent); }
+.eq-node-label { fill: var(--text); font: 600 10px var(--font-ui); pointer-events: none; }
+.sound-eq-bands { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 164px), 1fr)); align-items: start; align-content: start; gap: var(--s-row) var(--s-group); }
+.sound-eq-band { display: flex; flex-direction: column; gap: var(--s-pair); min-width: 0; }
+.sound-eq-band-title { display: flex; align-items: center; gap: var(--s-sibling); margin-bottom: var(--s-pair); color: var(--text); font: 600 var(--text-control)/1.3 var(--font-ui); }
+.sound-eq-band-title > span { display: grid; place-items: center; flex: none; width: 20px; height: 20px; border: 2px solid var(--accent); border-radius: 50%; font: 600 10px/1 var(--font-ui); }
+.sound-parameter--field { display: flex; align-items: center; justify-content: space-between; gap: var(--s-sibling); min-width: 0; }
+.sound-parameter--field .sound-control-name { min-width: 0; }
+.sound-parameter--field .sound-readout { flex: none; margin-right: 18px; }
+.sound-parameter--field .sound-knob-value { width: 6ch; }
+.sound-switch { display: flex; flex-direction: column; gap: var(--s-pair); min-width: 0; }
+.sound-switch-options { display: inline-flex; align-self: flex-start; max-width: 100%; overflow: hidden; border: 1px solid var(--line-mark); border-radius: var(--r-control); }
+.sound-switch-options label { position: relative; display: flex; align-items: center; height: 28px; padding: 0 10px; border-left: 1px solid var(--line-mark); color: var(--label); font-size: var(--text-control); white-space: nowrap; cursor: pointer; }
+.sound-switch-options label:first-child { border-left: 0; }
+.sound-switch-options input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.sound-switch-options label:hover { color: var(--text); }
+.sound-switch-options label:has(input:checked) { background: var(--selection); color: var(--text); }
+.sound-switch-options label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The catalogue default carries the same accent dot as other defaults. */
+.sound-switch-options label[data-default]::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--accent); }
+.sound-cabinet { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-section) var(--s-empty); }
+.parameter-slider { min-width: 0; flex: 1; }
+/* No UA margin: the marks below assume the track starts at the wrapper's edge. */
+.parameter-slider input[type="range"] { width: 100%; display: block; height: var(--h-compact); margin: 0; }
+/* Marks and the default label follow the thumb's travel, so they line up with its centre. */
+.parameter-markers { position: relative; height: 8px; margin-top: -4px; }
+.parameter-markers i { position: absolute; top: 0; left: calc(var(--w-slider-thumb) / 2 + (100% - var(--w-slider-thumb)) * var(--at)); width: 1px; height: 4px; transform: translateX(-50%); background: var(--line-mark); }
+.parameter-markers .is-default { width: 2px; height: 8px; background: var(--accent); }
+.parameter-scale { position: relative; display: flex; align-items: center; justify-content: space-between; height: 18px; color: var(--hint); font: 400 var(--text-caption)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.parameter-default { position: absolute; top: 0; left: calc(var(--w-slider-thumb) / 2 + (100% - var(--w-slider-thumb)) * var(--at)); transform: translateX(-50%); height: 18px; min-height: 0; padding: 0 4px; border: 0; border-radius: var(--r-compact); background: transparent; box-shadow: none; color: var(--accent); font: 600 var(--text-caption)/1 var(--font-mono); font-variant-numeric: tabular-nums; cursor: pointer; }
+.parameter-default[data-edge="start"] { transform: translateX(calc(var(--w-slider-thumb) / -2 - 4px)); }
+.parameter-default[data-edge="end"] { transform: translateX(calc(-100% + var(--w-slider-thumb) / 2 + 4px)); }
+.parameter-default:hover:not(:disabled) { background: var(--selection); color: var(--text); }
+#spSounds select, #soundGearDialog select { background-color: var(--surface-button); border-color: var(--line-mark); }
+#spSounds select:hover:not(:disabled), #soundGearDialog select:hover:not(:disabled) { border-color: var(--label); }
+.sound-unit { min-width: 2ch; color: var(--hint); font: 400 var(--text-caption)/1 var(--font-mono); }
+.sound-unit:empty { display: none; }
+@media (max-width: 800px) {
+  #spSounds:not([hidden]) { height: auto; }
+}
 .layer-color-control input[type="color"] {
   width: 56px; height: var(--h-control); padding: var(--s-pair);
   background: var(--control); border: 1px solid var(--line); border-radius: var(--r-control); cursor: default;
@@ -1135,6 +1331,7 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 .fretboard-label-choice:has(input:checked) { border-color: var(--selection-line); background: var(--selection); }
 .fretboard-label-choice:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 #settingsModal.settings-window { width: min(var(--w-settings), calc(100vw - 2 * var(--s-section))); height: min(620px, calc(100dvh - 2 * var(--s-section))); }
+#settingsModal.settings-window:has(#spSounds:not([hidden])) { height: min(800px, calc(100dvh - 2 * var(--s-section))); max-height: calc(100dvh - 2 * var(--s-section)); }
 .settings-nav { flex: 0 0 190px; display: flex; flex-direction: column; gap: var(--s-pair); padding: var(--s-row); background: var(--surface-toolbar); border-right: 1px solid var(--line); overflow: auto; }
 .settings-layout > .dialog-body { min-width: 0; padding: var(--s-section); }
 @media (max-width: 1100px) {

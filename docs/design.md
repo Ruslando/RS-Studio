@@ -237,9 +237,12 @@ as a number.
 
 **Windows and popovers**
 
-6. A **window** has a scrim and is **staged**: nothing changes until its primary
-   is pressed; Cancel, Escape and the close button drop the changes. It always
-   ends in a footer.
+6. A **window** has a scrim and is **staged**: settings are committed with
+   **Apply**, shown only while values differ from the last saved snapshot. Apply
+   saves without closing the window. Escape
+   and the header's close button discard pending edits; there is no duplicate
+   Cancel button. Action-only pages such as Models and Acceleration have no
+   Apply action. Hide an empty footer.
 7. A **popover** has no scrim and is **live**: each field applies as it changes.
    It has no footer and no primary. The exception is a popover that starts a
    job (Detect notes): it ends in one primary that names the job. Its header,
@@ -249,10 +252,10 @@ as a number.
 9. A **destructive** action sits in the footer's left slot as an outlined
    button, far from the primary, and opens a confirmation whose confirming
    button is the filled `--destructive`. In a popover it is a compact icon
-   button beside the close button. The footer's left slot holds nothing else,
-   except in a confirmation that offers two answers (Detach / Move back): both
+   button beside the close button. Tone presets groups Import preset and Export
+   preset with the preset actions in the content area. In a confirmation that offers two answers (Detach / Move back), both
    stand on the right, the alternative as a default button and then the
-   primary, and Cancel takes the left slot.
+   primary; closing the header's × cancels.
 10. The header names the object ("Note layer" plus its chip). The body does not
     repeat it.
 
@@ -371,6 +374,7 @@ Class: `input[type=text|number|search]`, `select`, `textarea`, or `.field`.
 | `.field-group.block` | Label above control, gap 4 |
 | `.field-inline` | Label left, control right, on one line |
 | `.field-slider` | Label (64 wide), slider, value |
+| Sound device parameter row | Slider plus an editable number and unit; discrete device parameters use a select with named options. Invalid values retain their text and use the shared `aria-invalid` field outline. |
 | `.field-pair` | Two or more `.field-group.block` on one row, gap 12; `.is-narrow` for a field that keeps its own width |
 | `.label` | The label: 13px/400, `--label`. Holds the `.info` mark. `data-required="true"` adds the dot |
 | `.info` | 16px ring in `--line-mark` with a mono "i"; focusable; sentence in `title` and `aria-label` |
@@ -448,7 +452,7 @@ width `--w-modal` (wide: `--w-modal-wide`), max-height `--h-modal-max` or 80vh.
 |---|---|---|
 | Header | `.dialog-header` | 48 high, `--surface-toolbar`, hairline below, padding `0 8 0 16`. Title 16/600 (`.dialog-title`), optionally the object's chip, then the 32 close button |
 | Body | `.dialog-body` | Padding 16, groups 16 apart, scrolls. `--sectioned`: sections 24 apart. `--flush`: padding 8, rows 4 apart, for a list whose rows are the controls |
-| Footer | `.dialog-footer` | 48 high, `--surface-toolbar`, hairline above, padding `0 16`. Left: the destructive button or nothing. Right (`.dialog-actions`): Cancel, then the primary, 8 apart |
+| Footer | `.dialog-footer` | 48 high, `--surface-toolbar`, hairline above, padding `0 16`. Left: destructive action. Right (`.dialog-actions`): Apply only with pending edits, or the window's explicit job action. Hide the footer when empty |
 
 A confirmation is a 480 window with a title, one sentence (`.confirm-msg`) and
 a footer of two or three buttons. It has no close button; Escape cancels.

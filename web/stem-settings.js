@@ -88,6 +88,11 @@ function renderStemSettings() {
   $("stemVolume").value = String(pct);
   $("stemVolumeValue").textContent = `${pct}%`;
   renderStemEditCard();
+  syncStemApply();
+}
+function syncStemApply() {
+  $("stemSave").hidden = !stemEditTarget || (stemSettNameInput.value.trim() === stemEditTarget.name
+    && normLayerVolume(stemEditTarget.volume) === stemVolumeAtOpen);
 }
 
 // Rule 17: this window is scrimmed, so the name is staged — it used to commit on
@@ -111,7 +116,7 @@ async function commitStemRename() {
 async function saveStemSettings() {
   if (!(await commitStemRename())) return;
   if (stemEditTarget) stemVolumeAtOpen = normLayerVolume(stemEditTarget.volume); // keep it: nothing to revert
-  closeStemSettings();
+  syncStemApply();
 }
 
 function renderStemEditCard() {
@@ -338,14 +343,15 @@ export function initStemSettings({ onRename, onRemove, onReplaced, onVolume }) {
   onStemVolume = onVolume;
 
   stemSettingsClose.addEventListener("click", closeStemSettings);
-  $("stemCancel").addEventListener("click", closeStemSettings);
   $("stemSave").addEventListener("click", saveStemSettings);
+  stemSettNameInput.addEventListener("input", syncStemApply);
   $("stemRemove").addEventListener("click", requestStemRemoval);
   $("stemVolume").addEventListener("input", (e) => {
     if (!stemEditTarget) return;
     stemEditTarget.volume = normLayerVolume((parseInt(e.target.value, 10) || 0) / 100);
     $("stemVolumeValue").textContent = `${Math.round(stemEditTarget.volume * 100)}%`;
     onStemVolume();
+    syncStemApply();
   });
   stemSettNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveStemSettings(); } });
   registerEscapeLayer(ESC_DEPTH.modal, () => {

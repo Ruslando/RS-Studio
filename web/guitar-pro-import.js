@@ -1,7 +1,7 @@
 // Browser-facing Guitar Pro import flow. Parsing stays client-side in alphaTab;
 // the backend only stores the untouched source file with the normal project.
 
-import { bpmInput, gpImportBackdrop, gpImportCancel, gpImportClose, gpImportConfirm, gpImportFile, gpImportStatus, gpImportSummary, gpImportTracks, importGpBtn, offsetInput, tsDenInput, tsNumInput, welcomeGpBtn } from "./dom.js";
+import { bpmInput, gpImportBackdrop, gpImportClose, gpImportConfirm, gpImportFile, gpImportStatus, gpImportSummary, gpImportTracks, importGpBtn, offsetInput, tsDenInput, tsNumInput, welcomeGpBtn } from "./dom.js";
 import { draw } from "./repaint.js";
 import { convertGpScore, inspectGpScore } from "./guitar-pro-core.js";
 import { currentGridState, setSubdiv } from "./grid.js";
@@ -167,7 +167,6 @@ async function confirmImport() {
   if (!selected.length) { setImportStatus("Select at least one guitar or bass track.", true); return; }
   importing = true;
   gpImportConfirm.disabled = true;
-  gpImportCancel.disabled = true;
   gpImportClose.disabled = true;
   setImportStatus();
   // The loading screen (design.md 4.17): the window cannot be used while this
@@ -243,7 +242,6 @@ async function confirmImport() {
   } finally {
     importing = false;
     gpImportConfirm.disabled = false;
-    gpImportCancel.disabled = false;
     gpImportClose.disabled = false;
   }
 }
@@ -260,7 +258,6 @@ export function init_guitar_pro_import() {
     gpImportFile.value = "";
     if (file) chooseFile(file);
   });
-  gpImportCancel.addEventListener("click", closeImport);
   gpImportClose.addEventListener("click", closeImport);
   gpImportConfirm.addEventListener("click", confirmImport);
   document.addEventListener("keydown", (event) => {

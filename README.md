@@ -85,6 +85,17 @@ On Linux it uses the system's FFmpeg. With the NVIDIA libraries installed, run
 ## Good to know
 
 - Models are optional downloads: **Settings > Models**.
+- **Settings > Tone presets**: edit a starting tone to create your own preset, change its gear
+  and controls, then choose **Apply**. Select your preset in a project's
+  tone marker to embed a portable copy, including its Rocksmith export settings.
+  Audition tones in Rocksmith. Library edits leave existing
+  project copies intact; choose the latest preset in the marker to update one.
+  The designer includes the full DLC Builder gear catalogue, native parameter
+  controls, cabinet microphone positions and effect reordering. See
+  [Tone presets](docs/sound-designer.md) for the supported workflow and scope.
+  Six JSON starting presets live in `presets/sounds` in the app's data directory.
+  Add your own JSON files there and reopen Tone presets, or use **Import preset**.
+  **Export preset** shares the selected tone. Import and export sit below the preset selector with the other preset actions.
 - Linux without Rust: `uv sync --no-group encoder`, then start from `.venv` as
   above. Everything works except Rocksmith export.
 - Linux export uses the [`wwise-wem`](https://github.com/rabbit-smith/wem)

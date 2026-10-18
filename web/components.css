@@ -133,6 +133,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .field-slider > .label { width: 64px; flex: none; }
 #spTrace .field-slider > .label { width: 112px; }
 .field-slider input[type="range"] { flex: 1; min-width: 0; }
+input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--error); }
 .field-slider > .ro { width: 40px; text-align: right; flex: none; }
 
 input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }

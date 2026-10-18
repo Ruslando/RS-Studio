@@ -1,0 +1,81 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_Bass": 1,
+        "Rack_StudioEQ_BassFreq": 395,
+        "Rack_StudioEQ_HiMid": 0.5,
+        "Rack_StudioEQ_HiMidFreq": 1.40001,
+        "Rack_StudioEQ_HiMidQ": 0,
+        "Rack_StudioEQ_LoMid": -1.5,
+        "Rack_StudioEQ_LoMidFreq": 160,
+        "Rack_StudioEQ_LoMidQ": 0,
+        "Rack_StudioEQ_Treble": 2,
+        "Rack_StudioEQ_TrebleFreq": 4.2
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_HT400B_Bass": -2.5,
+        "Bass_Amp_HT400B_Gain": 48,
+        "Bass_Amp_HT400B_HiShift": 1,
+        "Bass_Amp_HT400B_LoShift": 1,
+        "Bass_Amp_HT400B_Mid": 5,
+        "Bass_Amp_HT400B_Treble": 6
+      },
+      "Key": "Bass_Amp_HT400B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_CA1510BC_57_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassOverdrive_Blend": 21,
+        "Bass_Pedal_BassOverdrive_Filter": 76,
+        "Bass_Pedal_BassOverdrive_Gain": 33,
+        "Bass_Pedal_BassOverdrive_Tone": 46
+      },
+      "Key": "Bass_Pedal_BassOverdrive",
+      "Category": "30780"
+    },
+    "PrePedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassEQ8_1100": -5,
+        "Bass_Pedal_BassEQ8_16000": -3,
+        "Bass_Pedal_BassEQ8_185": -5,
+        "Bass_Pedal_BassEQ8_2700": 2,
+        "Bass_Pedal_BassEQ8_30": 0,
+        "Bass_Pedal_BassEQ8_460": 2,
+        "Bass_Pedal_BassEQ8_6800": 3,
+        "Bass_Pedal_BassEQ8_75": -1
+      },
+      "Key": "Bass_Pedal_BassEQ8",
+      "Category": "30785"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Compress": 48,
+        "Bass_Pedal_MBComp_Filter": 290,
+        "Bass_Pedal_MBComp_Rate": 88
+      },
+      "Key": "Bass_Pedal_MBComp",
+      "Category": "30781"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-24.500",
+  "Key": "pretgoin_bass",
+  "Name": "Bass Overdrive"
+}

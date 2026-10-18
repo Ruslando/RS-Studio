@@ -1,0 +1,57 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 310,
+        "Rack_StudioEQ_HiMidFreq": 1.6,
+        "Rack_StudioEQ_TrebleFreq": 7.2,
+        "Rack_StudioEQ_LoMidFreq": 210,
+        "Rack_StudioEQ_Treble": -2.5,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 2,
+        "Rack_StudioEQ_HiMid": 2,
+        "Rack_StudioEQ_LoMid": -1.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_MarshallPlexi_Loudness1": 82,
+        "Amp_MarshallPlexi_Loudness2": 85,
+        "Amp_MarshallPlexi_Mid": 100,
+        "Amp_MarshallPlexi_Bass": 46,
+        "Amp_MarshallPlexi_Pres": 1,
+        "Amp_MarshallPlexi_Treble": 100
+      },
+      "Key": "Amp_MarshallPlexi"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_Marshall1960TV_57_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ5_5700": -4,
+        "Pedal_EQ5_2200": 3,
+        "Pedal_EQ5_63": -2,
+        "Pedal_EQ5_250": 0,
+        "Pedal_EQ5_750": 4
+      },
+      "Key": "Pedal_EQ5",
+      "Category": "30785"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35716]OVERDRIVE"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-18.750",
+  "Key": "FreeAllR_drive",
+  "Name": "Guitar Crunch"
+}

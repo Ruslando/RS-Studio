@@ -16,7 +16,7 @@
 // open — `onClosed`. Same rule as project-library.js and stem-settings.js: the
 // import edge runs one way, project.js → here.
 
-import { $, addStemBtn, fileInput, form, goBtn, modalBackdrop, newProjBtn, npCancelBtn, npClear, npDrop, npDropSub, npDropTitle, stemBulkBrowseBtn, stemBulkInput, stemsAddEl, stemsListEl, warnEl } from "./dom.js";
+import { $, addStemBtn, fileInput, form, goBtn, modalBackdrop, newProjBtn, npClear, npDrop, npDropSub, npDropTitle, stemBulkBrowseBtn, stemBulkInput, stemsAddEl, stemsListEl, warnEl } from "./dom.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { UPLOAD_ARROW_ICON } from "./icons.js";
 import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
@@ -533,7 +533,6 @@ export function initNewProject({ onCreated, onClosed, canLeave }) {
 
   form.addEventListener("submit", (e) => { e.preventDefault(); createProject(); });
   newProjBtn.addEventListener("click", openNewProject);
-  npCancelBtn.addEventListener("click", closeNewProject);
   $("npClose").addEventListener("click", closeNewProject);
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (modalBackdrop.hidden) return false;

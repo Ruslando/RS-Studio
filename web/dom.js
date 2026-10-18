@@ -37,7 +37,7 @@ export const traceSnapInput = $("traceSnap");
 export const saveBtn = $("save"), saveAsBtn = $("saveAs"), openBtn = $("open"), openFileInput = $("openFile");
 export const importGpBtn = $("importGp"), gpImportFile = $("gpImportFile");
 export const attachAudioBtn = $("attachAudio");
-export const gpImportBackdrop = $("gpImportBackdrop"), gpImportClose = $("gpImportClose"), gpImportCancel = $("gpImportCancel");
+export const gpImportBackdrop = $("gpImportBackdrop"), gpImportClose = $("gpImportClose");
 export const gpImportConfirm = $("gpImportConfirm"), gpImportSummary = $("gpImportSummary"), gpImportTracks = $("gpImportTracks"), gpImportStatus = $("gpImportStatus");
 export const openProjMenuBtn = $("openProjMenu");
 export const openProjBackdrop = $("openProjBackdrop"), openProjList = $("openProjList"), openProjClose = $("openProjClose");
@@ -57,7 +57,7 @@ export const welcome = $("welcome"), welcomeNewBtn = $("welcomeNew"), welcomeOpe
 export const welcomeGpBtn = $("welcomeGp");
 export const welcomeRecent = $("welcomeRecent"), recentListEl = $("recentList"), recentSearchEl = $("recentSearch"), recentCountEl = $("recentCount"), recentPaginationEl = $("recentPagination"), recentPrevBtn = $("recentPrev"), recentPageEl = $("recentPage"), recentNextBtn = $("recentNext"), welcomeVersion = $("welcomeVersion");
 export const fileMenuBtn = $("fileMenuBtn"), fileMenu = $("fileMenu");
-export const modalBackdrop = $("modalBackdrop"), npCancelBtn = $("npCancel");
+export const modalBackdrop = $("modalBackdrop");
 export const npDrop = $("npDrop"), npDropTitle = $("npDropTitle"), npDropSub = $("npDropSub"), npClear = $("npClear");
 export const stemsListEl = $("stemsList"), stemsAddEl = $("stemsAdd");
 export const addStemBtn = $("addStemBtn"), stemBulkBrowseBtn = $("stemBulkBrowseBtn"), stemBulkInput = $("stemBulkInput");

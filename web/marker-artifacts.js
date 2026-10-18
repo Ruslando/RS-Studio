@@ -54,7 +54,7 @@ export function markerArtifacts() {
     }));
     for (const marker of lane.toneMarkers || []) entries.push({
       key: `tone:${lane.id}:${marker.id}`, kind: 'tone', lane, owner: lane.name,
-      marker, t: marker.t, name: tonePresetLabel(marker.tone),
+      marker, t: marker.t, name: tonePresetLabel(marker.tone, marker.toneData),
     });
   }
   return entries.sort((a, b) => a.t - b.t || a.key.localeCompare(b.key));

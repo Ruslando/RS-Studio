@@ -8,6 +8,7 @@ import { init_grid } from "./grid.js";
 import { init_lanes } from "./lanes.js";
 import { init_draw } from "./draw.js";
 import { init_settings } from "./settings.js";
+import { init_sound_designer } from "./sound-designer.js";
 import { init_tracing } from "./tracing.js";
 import { init_interaction } from "./interaction.js";
 import { init_sidebar } from "./sidebar.js";
@@ -38,6 +39,7 @@ init_grid();
 init_lanes();
 init_draw();
 init_settings();   // restore persisted prefs before features read their inputs
+init_sound_designer();
 init_tracing();
 init_interaction();
 init_sidebar();
