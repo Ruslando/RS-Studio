@@ -1,4 +1,5 @@
 /* Shared production components. Legacy markup aliases select these same implementations. */
+.theme-preview-surface { overflow: hidden; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-container); font: 400 var(--text-caption)/1.4 var(--font-ui); }
 button, .btn {
   height: var(--h-control); padding: 0 var(--s-group);
   background: var(--surface-button); color: var(--text); border: 1px solid transparent;

@@ -52,13 +52,24 @@ function setTheme(t) {
   refreshEditorPreviews();
   draw();
   try { localStorage.setItem(THEME_KEY, v); } catch { /* private mode / quota */ }
-  if ($("themeSelect").value !== v) $("themeSelect").value = v;
+  document.querySelectorAll('input[name="theme"]').forEach(radio => { radio.checked = radio.value === v; });
 }
 
-// A dropdown, not a segmented pill: rule 26 wants a set that will grow picked
-// from a menu, because every theme added makes the pill's targets smaller.
 function init_theme() {
-  $("themeSelect").addEventListener("change", () => setTheme($("themeSelect").value));
+  // Render the actual launcher components; cloned controls are only an image.
+  for (const surface of document.querySelectorAll('.theme-preview-surface')) {
+    const content = document.createElement('div');
+    content.className = 'theme-preview-content';
+    content.inert = true;
+    content.setAttribute('aria-hidden', 'true');
+    const launcher = document.querySelector('#welcome .welcome-card').cloneNode(true);
+    for (const element of launcher.querySelectorAll('[id]')) element.removeAttribute('id');
+    content.append(launcher);
+    surface.replaceChildren(content);
+  }
+  for (const radio of document.querySelectorAll('input[name="theme"]')) {
+    radio.addEventListener("input", () => { if (radio.checked) setTheme(radio.value); });
+  }
   // The inline head script already set data-theme; reflect it in the control.
   setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
 }

@@ -771,7 +771,7 @@
           <span id="settingsModalTitle">Trace options</span></span>
         <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="sounds">Tone presets</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button><button type="button" class="navigation-item" data-settings-pane="updates">Updates</button></nav>      <div class="dialog-body">
+<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="sounds">Tone presets</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button></nav>      <div class="dialog-body">
         <div class="sp-pane" id="spSounds" hidden>
           <section class="sound-section" data-section="preset">
           <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="soundSectionPreset"><span class="sound-section-title">Preset</span><span id="soundDraftStatus" class="sp-note" role="status"></span><span id="soundPresetSummary" class="sp-note sound-section-summary"></span></button>
@@ -885,20 +885,20 @@
           </select>
           <input type="range" id="traceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" hidden />
 
-          </div><div class="pane-intro"><h2>Editor</h2><p>Choose playback scrolling, note placement, spectrogram labels and the fretboard display.</p></div>
+          </div><div class="pane-intro"><h2>Editor</h2></div>
           <div class="section" id="spectrogramSettings">
             <div class="section-head"><span>Spectrogram</span></div>
             <select id="playbackScrollMode" hidden aria-hidden="true">
               <option value="page">Page</option><option value="follow">Follow</option>
             </select>
-            <fieldset class="timeline-scroll-setting">
+            <fieldset class="preview-setting">
               <legend>Timeline scrolling</legend>
-              <div class="timeline-scroll-choices">
-                <label class="timeline-scroll-choice">
+              <div class="preview-choices">
+                <label class="preview-choice">
                   <span><input type="radio" name="playbackScrollMode" value="page" checked /> Page</span>
                   <canvas id="timelineScrollPreview" data-scroll-preview="page" role="img" aria-label="Page scrolling: the view jumps when the playhead reaches the edge"></canvas>
                 </label>
-                <label class="timeline-scroll-choice">
+                <label class="preview-choice">
                   <span><input type="radio" name="playbackScrollMode" value="follow" /> Follow</span>
                   <canvas id="timelineScrollPreviewFollow" data-scroll-preview="follow" role="img" aria-label="Follow scrolling: the playhead stays near the left edge"></canvas>
                 </label>
@@ -975,22 +975,26 @@
           </div>
         </div>
         <!-- Appearance: light / dark theme selector (persisted across runs). -->
-        <div class="sp-pane" id="spAppearance" hidden><div class="pane-intro"><h2>Appearance</h2><p>Choose the look of your workspace. Musical displays keep their analysis colors.</p></div>
-          <!-- Rule 26: a set that will grow is a dropdown from the start. Two
-               segments today, but every theme added turns the pill into another
-               tiny target; the dropdown's width just follows its longest option. -->
-          <label class="field-inline"><span class="label">Theme <span class="info" role="img" tabindex="0" title="The spectrogram stays dark in every theme — its colours are analysis data, not decoration." aria-label="The spectrogram stays dark in every theme — its colours are analysis data, not decoration.">i</span></span>
-            <select id="themeSelect">
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </select>
-          </label>
+        <div class="sp-pane" id="spAppearance" hidden><div class="pane-intro"><h2>Appearance</h2></div>
+          <fieldset class="preview-setting">
+            <legend>Theme <span class="info" role="img" tabindex="0" title="The spectrogram stays dark in every theme — its colours are analysis data, not decoration." aria-label="The spectrogram stays dark in every theme — its colours are analysis data, not decoration.">i</span></legend>
+          <div class="preview-choices">
+            <label class="preview-choice">
+              <span><input type="radio" name="theme" value="dark" checked /> Dark</span>
+              <div class="theme-preview-surface" data-preview-theme="dark" role="img" aria-label="Dark theme preview of the project launcher"></div>
+            </label>
+            <label class="preview-choice">
+              <span><input type="radio" name="theme" value="light" /> Light</span>
+              <div class="theme-preview-surface" data-preview-theme="light" role="img" aria-label="Light theme preview of the project launcher"></div>
+            </label>
+          </div>
+          </fieldset>
         </div>
         <!-- Models: what the separators and detectors actually run on. Rule 21's
              form sub-list — each row carries its own controls and the group
              label above still governs it — and rule 17's "an action fires":
              Download names a job and runs, it is not a value awaiting Apply. -->
-        <div class="sp-pane" id="spModels" hidden><div class="pane-intro"><h2>Models</h2><p>Manage the models used for audio separation and note detection.</p></div>
+        <div class="sp-pane" id="spModels" hidden><div class="pane-intro"><h2>Models</h2></div>
           <div class="field-group block">
             <span class="field-label">Audio separation</span>
             <div id="modelListSeparation" class="model-list model-list-separation"></div>
@@ -1000,20 +1004,6 @@
             <div id="modelListDetection" class="model-list model-list-detection"></div>
           </div>
           <p id="modelStatus" class="sp-note model-status" hidden></p>
-        </div>
-        <div class="sp-pane" id="spAcceleration" hidden><div class="pane-intro"><h2>Acceleration</h2><p>Run audio separation and note detection on an NVIDIA graphics card.</p></div>
-          <div class="field-group block">
-            <span class="field-label">Graphics card</span>
-            <div id="accelList" class="model-list"></div>
-          </div>
-          <p id="accelStatus" class="sp-note model-status" hidden></p>
-        </div>
-        <div class="sp-pane" id="spUpdates" hidden><div class="pane-intro"><h2>Updates</h2></div>
-          <label class="field-group block"><span class="field-label">Update channel</span>
-            <select id="updateChannel" disabled><option value="stable">Release</option><option value="preview">Preview</option></select>
-          </label>
-          <p id="updateChannelStatus" class="sp-note" role="status">Loading update channel…</p>
-          <button type="button" id="settingsUpdateCheck">Check for updates</button>
         </div>
         <div class="sp-pane" id="spProject" hidden>
           <!-- Rule 27: title and artist are read together, and so are album and
@@ -1054,7 +1044,7 @@
         </div>
         <!-- Tunings: the list on the left, the selected tuning's editor on the right.
              Edits a draft (tuning-editor.js) that Apply saves and Cancel drops. -->
-        <div class="sp-pane" id="spTunings" hidden><div class="pane-intro"><h2>Tunings</h2><p>Make your own tunings, or start from a built-in one and save it under a new name.</p></div>
+        <div class="sp-pane" id="spTunings" hidden><div class="pane-intro"><h2>Tunings</h2></div>
           <div class="tuning-manager">
             <div class="tuning-side">
               <div id="tuningList" class="tuning-list" role="listbox" aria-label="Tunings"></div>
@@ -1065,7 +1055,7 @@
             <div id="tuningEditor" class="tuning-editor"></div>
           </div>
         </div>
-        <div class="sp-pane" id="spKeys" hidden><div class="pane-intro"><h2>Keyboard shortcuts</h2><p>Customize editing commands, or view the fixed navigation shortcuts.</p></div>
+        <div class="sp-pane" id="spKeys" hidden><div class="pane-intro"><h2>Keyboard shortcuts</h2></div>
           <div class="keymap-tabs" role="tablist">
             <button class="keymap-tab" role="tab" aria-controls="keysPaneEdit" id="keysTabEdit" data-keytab="edit">Editable</button>
             <button class="keymap-tab" role="tab" aria-controls="keysPaneFixed" id="keysTabFixed" data-keytab="fixed">Fixed</button>

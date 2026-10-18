@@ -135,32 +135,145 @@ class EndToEndTests(unittest.TestCase):
         expect(self.page.locator("#settingsApply")).to_be_hidden()
         self.page.click("#settingsModalClose")
 
-    def test_update_channels_are_staged_and_survive_reload(self):
+    def test_update_dialog_checks_both_channels_and_survives_reload(self):
         page = self.page
-        self.assertEqual(page.request.post(self.url + "api/update/channel", data={"channel": "stable"}).status, 200)
+        page.request.post(self.url + 'api/update/channel', data={'channel': 'stable'})
+        self.addCleanup(lambda: page.request.post(self.url + 'api/update/channel', data={'channel': 'stable'}))
+        installs = []
+        page.route('**/api/update/install', lambda route: (installs.append(True), route.fulfill(json={'ok': True})))
+
+        def update_feed(route):
+            state = json.loads((self.data / 'update-channel.json').read_text())
+            preview = state['channel'] == 'preview'
+            route.fulfill(json={'supported': True, 'current': '0.3.0-alpha',
+                'latest': '0.5.0-rc.1' if preview else '0.3.0-alpha', 'available': preview,
+                'notes': 'Preview release notes', 'can_install': True})
+        page.route('**/api/update', update_feed)
         page.reload()
-        page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="updates"]')
-        expect(page.locator("#updateChannel")).to_be_enabled()
-        page.select_option("#updateChannel", "preview")
-        self.assertEqual(page.request.get(self.url + "api/update/channel").json()["channel"], "stable")
-        page.keyboard.press("Escape")
-        page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="updates"]')
-        expect(page.locator("#updateChannel")).to_have_value("stable")
-        page.select_option("#updateChannel", "preview")
-        page.click("#settingsApply")
-        expect(page.locator("#settingsApply")).to_be_hidden()
-        self.assertEqual(page.request.get(self.url + "api/update/channel").json()["channel"], "preview")
+        page.click('#welcomeUpdateBtn')
+        expect(page.locator('#actionConfirmModal')).to_be_visible()
+        expect(page.locator('#actionConfirmMsg')).to_have_text('You are up to date.')
+        expect(page.locator('#updateDialogChannel')).to_have_value('stable')
+        expect(page.locator('#updateDialogChannel option[value="stable"]')).to_have_text('Stable')
+        expect(page.locator('#updateDialogChannel')).to_be_enabled()
+        shots = Path(__file__).resolve().parents[1] / 'design-shots'
+        shots.mkdir(exist_ok=True)
+        page.locator('#actionConfirmModal').screenshot(path=str(shots / 'updates-current.png'))
+        page.select_option('#updateDialogChannel', 'preview')
+        expect(page.locator('#actionConfirmTitle')).to_have_text('RS Studio 0.5.0-rc.1')
+        expect(page.locator('#actionConfirmMsg')).to_have_text('Preview release notes')
+        expect(page.locator('#actionConfirmAccept')).to_have_text('Update now')
+        page.locator('#actionConfirmModal').screenshot(path=str(shots / 'updates-available.png'))
+        self.assertEqual(page.locator('#updateDialogChannel').count(), 1)
+        self.assertEqual(page.request.get(self.url + 'api/update/channel').json()['channel'], 'preview')
+        self.assertEqual(installs, [], 'Choosing a channel must not install an update')
+        page.keyboard.press('Escape')
+        expect(page.locator('#updateDialogChannel')).to_have_count(0)
         page.reload()
-        page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="updates"]')
-        expect(page.locator("#updateChannel")).to_be_enabled()
-        expect(page.locator("#updateChannel")).to_have_value("preview")
-        page.select_option("#updateChannel", "stable")
-        page.click("#settingsApply")
-        expect(page.locator("#settingsApply")).to_be_hidden()
-        self.assertEqual(page.request.get(self.url + "api/update/channel").json()["channel"], "stable")
+        page.click('#welcomeSettingsBtn')
+        for pane in ['appearance', 'trace', 'tunings', 'sounds', 'keys', 'models']:
+            page.click(f'[data-settings-pane="{pane}"]')
+            self.assertEqual(page.locator('#settingsModal .pane-intro p').count(), 0)
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        expect(page.locator('[data-settings-pane=acceleration], [data-settings-pane=updates], #spAcceleration, #spUpdates')).to_have_count(0)
+        page.click('#settingsModalClose')
+        page.click('#welcomeUpdateBtn')
+        expect(page.locator('#updateDialogChannel')).to_have_value('preview')
+        expect(page.locator('#actionConfirmAccept')).to_have_text('Update now')
+        page.select_option('#updateDialogChannel', 'stable')
+        expect(page.locator('#actionConfirmMsg')).to_have_text('You are up to date.')
+        expect(page.locator('#actionConfirmAccept')).to_have_text('Close')
+        page.click('#actionConfirmAccept')
+        expect(page.locator('#actionConfirmModal')).to_be_hidden()
+        expect(page.locator('#settingsModal')).to_be_hidden()
+        self.assertEqual(installs, [])
+
+    def test_update_dialog_installs_only_after_confirmation(self):
+        page = self.page
+        installs = []
+        page.route('**/api/update', lambda route: route.fulfill(json={
+            'supported': True, 'current': '0.3.0-alpha', 'latest': '0.5.0-rc.1',
+            'available': True, 'notes': 'Release notes', 'can_install': True}))
+        def install(route):
+            installs.append(route.request.method)
+            route.fulfill(json={'ok': True})
+        page.route('**/api/update/install', install)
+        page.click('#welcomeUpdateBtn')
+        expect(page.locator('#actionConfirmAccept')).to_have_text('Update now')
+        self.assertEqual(installs, [])
+        page.click('#actionConfirmCancel')
+        self.assertEqual(installs, [])
+        page.click('#welcomeUpdateBtn')
+        expect(page.locator('#actionConfirmAccept')).to_have_text('Update now')
+        with page.expect_request('**/api/update/install'):
+            page.click('#actionConfirmAccept')
+        self.assertEqual(installs, ['POST'])
+
+    def test_update_dialog_disables_unsupported_channel_changes_and_cleans_up(self):
+        page = self.page
+        page.route('**/api/update/channel', lambda route: route.fulfill(json={
+            'channel': 'stable', 'can_change_channel': False}))
+        page.click('#welcomeUpdateBtn')
+        expect(page.locator('#actionConfirmMsg')).to_have_text('You are up to date.')
+        expect(page.locator('#updateDialogChannel')).to_be_disabled()
+        expect(page.locator('#updateDialogChannel')).to_have_attribute('title', re.compile('Setup'))
+        page.keyboard.press('Escape')
+
+    def test_update_dialog_shows_manual_update_for_source_copies(self):
+        page = self.page
+        page.route('**/api/update', lambda route: route.fulfill(json={
+            'supported': False, 'current': '0.3.0-alpha', 'latest': '0.5.0-rc.1',
+            'available': True, 'notes': 'Release notes', 'can_install': False}))
+        page.click('#welcomeUpdateBtn')
+        expect(page.locator('#actionConfirmMsg')).to_contain_text('git pull')
+        expect(page.locator('#actionConfirmAccept')).to_have_text('Close')
+        expect(page.locator('#updateDialogChannel')).to_be_enabled()
+        page.click('#actionConfirmAccept')
+        expect(page.locator('#actionConfirmModal')).to_be_hidden()
+        page.evaluate("() => { import('/dialog.js').then(m => m.confirmChoice({title:'Other action', message:'Confirm action', confirmLabel:'Proceed'})); }")
+        expect(page.locator('#actionConfirmTitle')).to_have_text('Other action')
+        expect(page.locator('#actionConfirmMsg')).to_have_text('Confirm action')
+        expect(page.locator('#updateDialogChannel')).to_have_count(0)
+        expect(page.locator('#actionConfirmAccept')).to_have_text('Proceed')
+        expect(page.locator('#actionConfirmAccept')).to_be_enabled()
+        page.keyboard.press('Escape')
+
+    def test_appearance_previews_keep_their_theme_when_app_theme_changes(self):
+        page = self.page
+        page.click('#welcomeSettingsBtn')
+        page.click('[data-settings-pane="appearance"]')
+        previews = page.locator('.theme-preview-surface')
+        expect(previews).to_have_count(2)
+        colors = {}
+        for theme in ['dark', 'light']:
+            page.locator(f'#spAppearance .preview-choice:has(input[value="{theme}"]) .theme-preview-surface').click()
+            expect(page.locator(f'input[name="theme"][value="{theme}"]')).to_be_checked()
+            current = previews.evaluate_all('els => els.map(el => ({background: getComputedStyle(el).backgroundColor, text: getComputedStyle(el).color, action: getComputedStyle(el.querySelector(".welcome-start")).backgroundColor}))')
+            self.assertNotEqual(current[0]['background'], current[1]['background'])
+            self.assertNotEqual(current[0]['text'], current[1]['text'])
+            self.assertNotEqual(current[0]['action'], current[1]['action'])
+            colors[theme] = current
+            self.assertEqual(page.locator('#spAppearance select').count(), 0)
+            for preview in [previews.nth(0), previews.nth(1)]:
+                self.assertEqual(preview.locator('[id]').count(), 0)
+                expect(preview.locator('.theme-preview-content')).to_have_attribute('inert', '')
+                self.assertEqual(preview.locator('.welcome-opt').all_text_contents(), page.locator('#welcome .welcome-opt').all_text_contents())
+                self.assertEqual(preview.locator('.wo-icon svg').count(), page.locator('#welcome .wo-icon svg').count())
+            shots = Path(__file__).resolve().parents[1] / 'design-shots'
+            shots.mkdir(exist_ok=True)
+            page.locator('#settingsModal').screenshot(path=str(shots / f'appearance-{theme}.png'))
+        self.assertEqual(colors['dark'], colors['light'])
+        page.click('#settingsApply')
+        page.click('#settingsModalClose')
+        page.reload()
+        page.click('#welcomeSettingsBtn')
+        expect(page.locator('input[name="theme"][value="light"]')).to_be_checked()
+        page.locator('input[name="theme"][value="light"]').focus()
+        page.keyboard.press('ArrowLeft')
+        expect(page.locator('input[name="theme"][value="dark"]')).to_be_checked()
+        page.keyboard.press('Escape')
+        page.click('#welcomeSettingsBtn')
+        expect(page.locator('input[name="theme"][value="light"]')).to_be_checked()
 
     def test_settings_contextual_apply_and_footer_actions(self):
         page = self.page
@@ -170,10 +283,10 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#settingsApply")).to_be_hidden()
         expect(page.locator("#settingsCancel")).to_have_count(0)
         self.assertEqual(reads, [])
-        page.select_option("#themeSelect", "light")
+        page.locator('input[name="theme"][value="light"]').check()
         expect(page.locator("#settingsApply")).to_be_visible()
         expect(page.locator("#settingsApply")).to_have_text("Apply")
-        page.select_option("#themeSelect", "dark")
+        page.locator('input[name="theme"][value="dark"]').check()
         expect(page.locator("#settingsApply")).to_be_hidden()
         page.click('[data-settings-pane="trace"]')
         page.uncheck("#fretboardAnimations")
@@ -198,8 +311,6 @@ class EndToEndTests(unittest.TestCase):
         page.click('[data-settings-pane="models"]')
         expect(page.locator('#settingsApply')).to_be_hidden()
         expect(page.locator('#soundFileActions')).to_be_hidden()
-        page.click('[data-settings-pane="acceleration"]')
-        expect(page.locator('#settingsApply')).to_be_hidden()
         page.click('[data-settings-pane="sounds"]')
         expect(page.locator('#settingsApply')).to_be_visible()
         self.assertEqual(len(reads), 1, 'Switching panes keeps the active draft without rescanning')
@@ -244,7 +355,7 @@ class EndToEndTests(unittest.TestCase):
     def test_settings_apply_keeps_window_and_rebases_visited_panes(self):
         page = self.page
         page.click('#welcomeSettingsBtn')
-        page.select_option('#themeSelect', 'light')
+        page.locator('input[name="theme"][value="light"]').check()
         page.click('[data-settings-pane="trace"]')
         page.uncheck('#fretboardAnimations')
         page.click('#settingsApply')
@@ -252,10 +363,10 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#settingsApply')).to_be_hidden()
         page.check('#fretboardAnimations')
         page.click('[data-settings-pane="appearance"]')
-        page.select_option('#themeSelect', 'dark')
+        page.locator('input[name="theme"][value="dark"]').check()
         page.click('#settingsModalClose')
         page.click('#welcomeSettingsBtn')
-        expect(page.locator('#themeSelect')).to_have_value('light')
+        expect(page.locator('input[name="theme"][value="light"]')).to_be_checked()
         page.click('[data-settings-pane="trace"]')
         expect(page.locator('#fretboardAnimations')).not_to_be_checked()
         page.click('#settingsModalClose')
@@ -1241,7 +1352,7 @@ class EndToEndTests(unittest.TestCase):
         chooser.value.set_files(bundle)
         expect(page.locator('#lanes .lane-row')).to_be_visible()
         self.fretboard_hover_points(80)
-        page.evaluate("() => { const theme = document.querySelector('#themeSelect'); theme.value = 'light'; theme.dispatchEvent(new Event('change')); }")
+        page.evaluate("() => { const theme = document.querySelector('input[name=theme][value=light]'); theme.checked = true; theme.dispatchEvent(new Event('input', {bubbles: true})); }")
         expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
         expect(page.locator('#fretboardChoose')).to_be_hidden()
         for width, height in [(1920,1080), (1280,1024), (1024,768), (900,1100)]:
@@ -1447,11 +1558,11 @@ class EndToEndTests(unittest.TestCase):
         page.locator('input[name=fretboardLabels][value=both]').check()
         self.assertEqual(set(painted_labels()['inks']), {'#edeef0'})
         self.assertEqual(set(painted_labels()['noteInks']), {painted_labels()['textInk']})
-        page.evaluate("() => { const theme = document.querySelector('#themeSelect'); theme.value = 'light'; theme.dispatchEvent(new Event('change')); }")
+        page.evaluate("() => { const theme = document.querySelector('input[name=theme][value=light]'); theme.checked = true; theme.dispatchEvent(new Event('input', {bubbles: true})); }")
         page.locator('#settingsModal').screenshot(path=str(shot.with_name('fretboard-label-settings-light.png')))
         page.evaluate("""async () => {
             const {S} = await import('/store.js'); S.state.editLanes[0].color = '#64ecc0';
-            const theme = document.querySelector('#themeSelect'); theme.value = 'dark'; theme.dispatchEvent(new Event('change'));
+            const theme = document.querySelector('input[name=theme][value=dark]'); theme.checked = true; theme.dispatchEvent(new Event('input', {bubbles: true}));
         }""")
         self.assertEqual(set(painted_labels()['inks']), {'#0f1012'})
         page.click('#settingsModalClose')
@@ -3608,6 +3719,8 @@ class EndToEndTests(unittest.TestCase):
         card = page.locator(".tour-card")
         # A cold process may still be compiling the audio-analysis kernels.
         expect(card).to_be_visible(timeout=120000)
+        expect(card.locator('.tour-body')).to_be_visible()
+        expect(card.locator('textarea')).to_have_count(0)
         head = card.locator(".tour-head")
         # The demo song starts on its real grid, at detection's 1/32.
         expect(page.locator("#bpm")).to_have_value("120")
@@ -3615,6 +3728,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#subdiv")).to_have_value("8")
         seen = []
         while not card.locator(".tour-home").is_visible():
+            expect(card.locator('.tour-body')).to_be_visible()
             self.assertLess(len(seen), 400, "the walkthrough does not end")
             seen.append(head.inner_text())
             card.locator(".tour-next").click()          # "Next", or "Skip" on a card that waits for a task

@@ -1,5 +1,5 @@
 /* Desktop design tokens. Values only; shared UI lives in components.css. */
-:root {
+:root, [data-preview-theme="dark"] {
   --page:          #101722;
   --panel:         #171f2b;
   --surface-frost: color-mix(in srgb, var(--panel) 55%, transparent);
@@ -111,7 +111,7 @@
   --text-small: 10px;
   --text-caption: 12px;
 }
-[data-theme="light"] {
+[data-theme="light"], [data-preview-theme="light"] {
   --workspace-ground: #e5e7eb;
   --page:          #eceef2;
   --panel:         #f7f8fa;

@@ -29,13 +29,10 @@ example no NVIDIA GPU, an outdated driver, or a GPU newer than the build
 (RTX 50-series needs sm_120, which cu126 torch does not include). The launcher
 enforces this as well: it installs Core when asked for CUDA without a usable GPU.
 
-CUDA can be added later in **Settings > Acceleration** (rs_studio/updates.py,
-GET /api/runtime, POST /api/runtime/cuda). The app starts
-`RS Studio.exe --runtime cuda` and exits; the launcher installs the CUDA build
-of the *installed* release (it does not update), switches current.json and
-reopens RS Studio. This needs launcher version 3: an installation made by an
-older setup shows the entry as unavailable until the current setup has been run
-on it once.
+CUDA can be added later by starting `RS Studio.exe --runtime cuda`.
+The launcher installs the CUDA build of the *installed* release (it does not
+update), switches current.json and reopens RS Studio. This needs launcher
+version 3. The runtime API remains GET /api/runtime and POST /api/runtime/cuda.
 
 ## Models
 
@@ -121,9 +118,11 @@ The steps it runs are described below.
 
 ### Preview channel
 
-Settings > Updates offers **Release** (the default) and **Preview**.
-Apply saves the selection for this installation and checks the chosen channel.
-Installing still requires confirmation. The regular channel follows GitHub's
+Check for updates opens a dialog from the launcher.
+It offers **Stable** (the default) and **Preview**. Changing the channel saves
+the selection for this installation and checks again in that dialog. If no update
+is available, it displays "You are up to date." Installing requires Update now.
+The regular channel follows GitHub's
 latest non-prerelease, even when its version name contains `alpha`. Preview
 chooses the highest supported version with a manifest among the most recent
 100 public releases, including regular releases that supersede test builds.
@@ -136,7 +135,7 @@ Choose the complete version, including its suffix, yourself:
 
 The specified name is preserved exactly: no timestamp or suffix is added.
 The command builds and publishes a GitHub **pre-release**, without a version-bump
-commit or changing the Release channel. The checkout's original version is
+commit or changing the Stable channel. The checkout's original version is
 restored after building, including on build failures. As with regular releases,
 commit your work to main first. `--dry-run` builds locally without publishing.
 
@@ -157,7 +156,7 @@ The channel selection requires launcher 4. Existing installations with launcher
 2 or 3 must run a newly built Setup once; an app-only update cannot replace the
 launcher executable. The app disables channel selection and explains this when
 an older launcher is installed. A Preview Setup starts on Preview by default.
-Switching back to Release offers the current regular version, including
+Switching back to Stable offers the current regular version, including
 an older version when the installed build came from Preview. CUDA changes stay
 on the installed version and preserve the selected channel.
 

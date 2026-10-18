@@ -17,7 +17,7 @@ let closeActive = null;
 // Resolves "confirm" | "alternative" | "discard" | "cancel". The left slot holds
 // a destructive discard; with a neutral alternative there are two answers, so
 // both stand on the right (alternative, then primary). The header's × cancels.
-export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Cancel", danger = false, discardLabel = "", alternativeLabel = "", signal = null }) {
+export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Cancel", danger = false, discardLabel = "", alternativeLabel = "", signal = null, content = null, onOpen = null }) {
   if (closeActive) closeActive("cancel");
   if (signal?.aborted) return Promise.resolve("cancel");
 
@@ -27,6 +27,8 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
     actionConfirmTitle.textContent = title;
     actionConfirmMsg.textContent = message;
     actionConfirmAccept.textContent = confirmLabel;
+    actionConfirmAccept.disabled = false;
+    if (content) actionConfirmMsg.before(content);
     actionConfirmCancel.title = cancelLabel === "Cancel" ? "Close (Esc)" : cancelLabel;
     actionConfirmAccept.classList.toggle("danger", danger);
     actionConfirmDiscard.hidden = !discardLabel && !alternativeLabel;
@@ -36,10 +38,20 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
     if (alternativeLabel && !discardLabel) actions.append(actionConfirmDiscard, actionConfirmAccept);
     actionConfirmBackdrop.hidden = false;
 
-    let done = false;
+    let done = false, cleanup = null;
+    const update = (state) => {
+      if (done) return;
+      if (state.title !== undefined) actionConfirmTitle.textContent = state.title;
+      if (state.message !== undefined) actionConfirmMsg.textContent = state.message;
+      if (state.confirmLabel !== undefined) actionConfirmAccept.textContent = state.confirmLabel;
+      if (state.confirmDisabled !== undefined) actionConfirmAccept.disabled = state.confirmDisabled;
+    };
     const finish = (choice) => {
       if (done) return;
       done = true;
+      cleanup?.();
+      content?.remove();
+      actionConfirmAccept.disabled = false;
       closeActive = null;
       actionConfirmBackdrop.hidden = true;
       actionConfirmDiscard.hidden = true;
@@ -71,6 +83,7 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
     window.addEventListener("keydown", onKey, true);
     signal?.addEventListener("abort", onAbort, { once: true });
     actionConfirmCancel.focus();
+    cleanup = onOpen?.({ update });
   });
 }
 

@@ -21,8 +21,6 @@ import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-r
 import { panelMotion } from "./panel-motion.js";
 import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { refreshSaveState } from "./project.js";
-import { renderAcceleration } from "./acceleration.js";
-import { applyUpdateChannel } from "./updates.js";
 import { renderModels, stopModelPolling } from "./models.js";
 import { S } from "./store.js";
 import { exportRocksmith } from "./rocksmith-export.js";
@@ -109,7 +107,7 @@ let spSection = "trace";
 // and a backdrop click are all the same key, and all four take this path.
 // The Tunings page keeps its own draft (tuning-editor.js), so it stays out of this.
 const snapshotInputs = (root) => [...root.querySelectorAll("input, select")]
-  .filter((el) => !el.closest("[hidden]") && !el.closest("#spTunings, #spSounds, #soundGearDialog, #soundFileActions, #spModels, #spAcceleration"))
+  .filter((el) => !el.closest("[hidden]") && !el.closest("#spTunings, #spSounds, #soundGearDialog, #soundFileActions, #spModels"))
   .map((el) => ({ el, v: ["checkbox", "radio"].includes(el.type) ? el.checked : el.value }));
 
 // Put each value back and re-fire the event that applied it, so persistence and
@@ -136,7 +134,7 @@ function syncSettingsActions() {
   const dirty = !!spSnapshot && (inputsDirty(spSnapshot.inputs) || keys(keySnapshot()) !== keys(spSnapshot.keys)
     || soundDraftDirty() || tuningDraftDirty());
   $("settingsApply").textContent = "Apply";
-  $("settingsApply").hidden = !dirty || ["models", "acceleration"].includes(spSection);
+  $("settingsApply").hidden = !dirty || spSection === "models";
   const footer = $("settingsApply").closest(".dialog-footer");
   footer.hidden = $("settingsApply").hidden && $("keymapReset").hidden;
 }
@@ -156,8 +154,6 @@ function showSettingsPane(section) {
   $("spKeys").hidden = section !== "keys";
   $("spAppearance").hidden = section !== "appearance";
   $("spModels").hidden = section !== "models";
-  $("spAcceleration").hidden = section !== "acceleration";
-  $("spUpdates").hidden = section !== "updates";
   $("spTunings").hidden = section !== "tunings";
   $("spSounds").hidden = section !== "sounds";
   $("settingsModalTitle").textContent = section === "project" ? SP_TITLES.project : "Settings";
@@ -175,7 +171,6 @@ function showSettingsPane(section) {
   });
   if (section === "project") renderProjectSettings();
   if (section === "models") renderModels();
-  if (section === "acceleration") renderAcceleration();
   if (section === "tunings" && !tuningDraftOpen()) beginTuningDraft(tuningSelect);
   if (section === "sounds") beginSoundDraft();
   if (section === "keys") { setKeyTab("edit"); renderKeymap(); }
@@ -224,7 +219,6 @@ async function applySettingsModal() {
   if (spSection === "project") { saveProjectSettings(); return; }
   if (!(await saveTuningDraft({ keepOpen: true }))) return;   // an unsaved built-in edit made them stay
   if (!saveSoundDraft()) { showSettingsPane("sounds"); return; }
-  if (!(await applyUpdateChannel())) { showSettingsPane("updates"); return; }
   snapshotSettings();
 }
 
@@ -493,11 +487,6 @@ export function init_ui() {
     $("settingsPanel").addEventListener(type, () => queueMicrotask(syncLayerActions));
   }
   window.addEventListener("settings-draft-changed", syncSettingsActions);
-  window.addEventListener("update-channel-loaded", () => {
-    const item = spSnapshot?.inputs.find(({ el }) => el.id === "updateChannel");
-    if (item) item.v = $("updateChannel").value;
-    syncSettingsActions();
-  });
   wireMenu("menuTraceSettings", () => openSettingsModal("trace"));
   wireMenu("menuProjectSettings", () => openSettingsModal("project"));
   wireMenu("menuKeySettings", () => openSettingsModal("keys"));
