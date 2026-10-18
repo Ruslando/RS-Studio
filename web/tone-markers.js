@@ -16,6 +16,7 @@ import { PAINT } from "./stage-paint.js";
 import { INTERNAL_TONE_PRESETS, normalizeToneMarkers, tonePresetLabel } from "./tone-marker-core.js";
 import { S } from "./store.js";
 import { timingIdOf, withTiming } from "./timing.js";
+import { readAvailableSoundPresets, cloneSound } from "./sound-presets-core.js";
 
 const TONE_MARK_H = 22;
 const bandY = () => railBand("tone").y;
@@ -60,6 +61,7 @@ function changed(lane = activeToneLane()) {
 export function openToneMarkerPop(clientX, clientY, marker, lane = activeToneLane()) {
   editLaneId = lane?.id;
   editMarker = marker;
+  refreshPresetOptions(marker);
   toneMarkerPreset.value = marker.tone;
   toneMarkerTime.value = String(+Number(marker.t).toFixed(3));
   toneMarkerPop.hidden = false;
@@ -92,6 +94,9 @@ export function addToneMarkerAtTime(time, clientX, clientY) {
 function applyPreset() {
   if (!editMarker) return;
   editMarker.tone = toneMarkerPreset.value;
+  const preset = readAvailableSoundPresets().find(entry => entry.id === editMarker.tone);
+  if (preset) editMarker.toneData = cloneSound(preset.tone);
+  else if (INTERNAL_TONE_PRESETS.some(([key]) => key === editMarker.tone)) delete editMarker.toneData;
   changed(editingLane());
 }
 
@@ -150,7 +155,7 @@ export function drawToneMarkers() {
   sctx.save();
   for (const normalized of normalizeToneMarkers(markers(lane))) {
     const marker = markers(lane).find((item) => item.id === normalized.id) || normalized;
-    const x = xOf(normalized.t), text = tonePresetLabel(normalized.tone);
+    const x = xOf(normalized.t), text = tonePresetLabel(normalized.tone, normalized.toneData);
     // 11/700, the same as every other flag: three rails were drawing at 9, 10
     // and 11, all three in a font the app stopped loading in pass 1.
     sctx.font = stageUi(11, 600);
@@ -175,6 +180,22 @@ export function drawMinimapToneMarkers(scale) {
   }
 }
 
+function refreshPresetOptions(marker = editMarker) {
+  toneMarkerPreset.replaceChildren();
+  for (const [key, label] of INTERNAL_TONE_PRESETS) toneMarkerPreset.append(new Option(label, key));
+  // A project's copy remains selectable after the library preset changes or
+  // disappears. Selecting a library version is an explicit update of that copy.
+  if (marker?.toneData) toneMarkerPreset.append(new Option(`${marker.toneData.Name} (project copy)`, marker.tone));
+  for (const preset of readAvailableSoundPresets()) {
+    if (preset.id === marker?.tone && marker.toneData) {
+      if (JSON.stringify(preset.tone) !== JSON.stringify(marker.toneData)) {
+        toneMarkerPreset.append(new Option(`${preset.tone.Name} (latest preset)`, `${preset.id}:latest`));
+      }
+    } else toneMarkerPreset.append(new Option(preset.tone.Name, preset.id));
+  }
+  if (marker) toneMarkerPreset.value = marker.tone;
+}
+
 export function init_tone_markers() {
   window.addEventListener(STATE_RESTORED, closeToneMarkerPop);   // undo replaced the marker it holds
   registerMarkerRail({
@@ -189,8 +210,12 @@ export function init_tone_markers() {
     addAt: addToneMarkerAtTime,
   });
   registerLaneField("toneMarkers", { normalize: normalizeToneMarkers });
-  for (const [key, label] of INTERNAL_TONE_PRESETS) toneMarkerPreset.append(new Option(label, key));
-  toneMarkerPreset.addEventListener("change", applyPreset);
+  refreshPresetOptions();
+  window.addEventListener("sound-presets-changed", () => refreshPresetOptions());
+  toneMarkerPreset.addEventListener("change", () => {
+    toneMarkerPreset.value = toneMarkerPreset.value.replace(/:latest$/, "");
+    applyPreset(); refreshPresetOptions();
+  });
   toneMarkerTime.addEventListener("change", applyTime);
   toneMarkerDelete.addEventListener("click", () => {
     if (!editMarker) return;

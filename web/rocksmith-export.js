@@ -348,7 +348,6 @@ async function submitRocksmithExport() {
 export function init_rocksmith_export() {
   $("rocksmithExportForm").addEventListener("submit", (e) => { e.preventDefault(); submitRocksmithExport(); });
   $("rsExportClose").addEventListener("click", closeRocksmithExportModal);
-  $("rsExportCancel").addEventListener("click", closeRocksmithExportModal);
   $("rsCoverDrop").addEventListener("click", (e) => { if (!e.target.closest(".cover-clear")) $("rsCoverInput").click(); });
   $("rsCoverDrop").addEventListener("keydown", (e) => {
     if (e.target.closest(".cover-clear")) return;

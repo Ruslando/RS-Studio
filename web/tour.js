@@ -247,7 +247,7 @@ const ACTIONS = {
     if (box) { scroll.scrollTop = Math.max(0, box.y0 - 64); draw(); }
   },
   [ACT.clear]: () => {
-    if (!document.getElementById("settingsModalBackdrop")?.hidden) click("settingsCancel");
+    if (!document.getElementById("settingsModalBackdrop")?.hidden) click("settingsModalClose");
     clearTutorialNotes();
   },
   [ACT.bass]: () => showBassStem(),
@@ -275,8 +275,8 @@ const ACTIONS = {
     if (document.getElementById("layerSettingsBackdrop")?.hidden)
       clickSel("#lanes .lane-row .edit-btn");
   },
-  [ACT.stemEditClose]: () => click("stemCancel"),
-  [ACT.layerEditClose]: () => click("layerCancel"),
+  [ACT.stemEditClose]: () => click("stemSettingsClose"),
+  [ACT.layerEditClose]: () => click("settingsClose"),
   [ACT.tempoPopClose]: () => click("markerPopClose"),
   [ACT.tempoPopOpen]: () => {
     if (document.getElementById("markerPop")?.hidden) openFirstMarkerPop();
@@ -287,13 +287,13 @@ const ACTIONS = {
     openDetectPanel(box.left + 80, box.top + 80);
   },
   [ACT.closeWindows]: () => {
-    if (!document.getElementById("stemSettingsBackdrop")?.hidden) click("stemCancel");
-    if (!document.getElementById("layerSettingsBackdrop")?.hidden) click("layerCancel");
+    if (!document.getElementById("stemSettingsBackdrop")?.hidden) click("stemSettingsClose");
+    if (!document.getElementById("layerSettingsBackdrop")?.hidden) click("settingsClose");
   },
   [ACT.fileMenuOpen]: () => { if (document.getElementById("fileMenu")?.hidden) click("fileMenuBtn"); },
   [ACT.fileMenuClose]: () => closeMenus(),
   [ACT.options]: () => click("menuTraceSettings"),
-  [ACT.optionsClose]: () => click("settingsCancel"),
+  [ACT.optionsClose]: () => click("settingsModalClose"),
   [ACT.fbEdit]: () => {
     setFretboardVisible(true);
     seekPlayback(ALTERNATIVE_AT);
@@ -305,7 +305,7 @@ const ACTIONS = {
   [ACT.rsExport]: () => {
     if (document.getElementById("rocksmithExportBackdrop")?.hidden) click("menuExportRocksmith");
   },
-  [ACT.rsExportClose]: () => click("rsExportCancel"),
+  [ACT.rsExportClose]: () => click("rsExportClose"),
   // The metronome against a wrong tempo is the whole tempo lesson, so the step
   // that teaches it starts the song with the click on and the next one stops it.
   [ACT.metroPlay]: () => {
@@ -1015,9 +1015,9 @@ function end({ preserveHistory = false } = {}) {
   closeAddStemMenu();
   if (!detectPanel?.hidden) click("detectClose");
   if (!document.getElementById("markerPop")?.hidden) click("markerPopClose");
-  if (!document.getElementById("settingsModalBackdrop")?.hidden) click("settingsCancel");
-  if (!document.getElementById("stemSettingsBackdrop")?.hidden) click("stemCancel");
-  if (!document.getElementById("layerSettingsBackdrop")?.hidden) click("layerCancel");
+  if (!document.getElementById("settingsModalBackdrop")?.hidden) click("settingsModalClose");
+  if (!document.getElementById("stemSettingsBackdrop")?.hidden) click("stemSettingsClose");
+  if (!document.getElementById("layerSettingsBackdrop")?.hidden) click("settingsClose");
   document.querySelectorAll(".ctxmenu").forEach((menu) => { menu.hidden = true; });
   if (transportPlaying()) click("play");
   seekPlayback(0);

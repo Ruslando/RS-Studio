@@ -1,0 +1,65 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 485,
+        "Rack_StudioEQ_HiMidFreq": 1.1,
+        "Rack_StudioEQ_TrebleFreq": 2.2,
+        "Rack_StudioEQ_LoMidFreq": 140,
+        "Rack_StudioEQ_Treble": 1.5,
+        "Rack_StudioEQ_LoMidQ": 0,
+        "Rack_StudioEQ_Bass": 1.5,
+        "Rack_StudioEQ_HiMid": 1,
+        "Rack_StudioEQ_LoMid": -3.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Rack2": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioPlate_Tone": 42,
+        "Rack_StudioPlate_Time": 72,
+        "Rack_StudioPlate_Depth": 83,
+        "Rack_StudioPlate_Mix": 28
+      },
+      "Key": "Rack_StudioPlate",
+      "Category": "30792"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_TW40_Pres": 33,
+        "Amp_TW40_Gain": 48,
+        "Amp_TW40_Bass": 37,
+        "Amp_TW40_Treble": 78,
+        "Amp_TW40_Mid": 20
+      },
+      "Key": "Amp_TW40"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_TW110C_57_Edge"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_SpringReverb_Time": 62,
+        "Pedal_SpringReverb_Mix": 42,
+        "Pedal_SpringReverb_Depth": 72
+      },
+      "Key": "Pedal_SpringReverb",
+      "Category": "30792"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35720]CLEAN"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-17.250",
+  "Key": "simpdont_clean",
+  "Name": "Guitar Clean"
+}

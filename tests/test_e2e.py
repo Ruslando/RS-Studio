@@ -26,6 +26,7 @@ from playwright.sync_api import expect, sync_playwright
 
 from rs_studio import tutorial
 from rs_studio.rocksmith.psarc import read_psarc
+from rs_studio.rocksmith import builder as rocksmith_builder
 from rs_studio.tab import build_gp5
 
 expect.set_options(timeout=15000)
@@ -88,6 +89,14 @@ class EndToEndTests(unittest.TestCase):
         # The startup update check asks GitHub, which rate-limits anonymous callers; answer it here.
         self.page.route("**/api/update", lambda route: route.fulfill(json={
             "supported": False, "current": "0", "latest": "0", "available": False, "notes": "", "can_install": False}))
+        # Existing interaction tests use a fixed rig to exercise EQ, pedal banks
+        # and keyboard editing. The JSON workflow test below uses the real folder.
+        if self._testMethodName.startswith("test_sound_") and not self._testMethodName.startswith("test_sound_json_"):
+            source = (Path(__file__).resolve().parents[1] / "web/sound-catalog.js").read_text("utf-8")
+            bases = json.loads(source.split("export const SOUND_BASES = ", 1)[1].strip().removesuffix(";"))
+            self.page.route("**/api/sound-presets", lambda route: route.fulfill(json={
+                "folder": "Fixture presets", "errors": [],
+                "presets": [{"id": key, "tone": tone} for key, tone in bases.items()]}))
         self.page.goto(self.url)
         # Registered last, so it runs first: before the page is closed.
         self.addCleanup(lambda: self.assertEqual(self.faults, [], "the app reported errors during this test"))
@@ -102,6 +111,844 @@ class EndToEndTests(unittest.TestCase):
         chooser.value.set_files(bundle)
         expect(page.locator("#lanes .lane-row")).to_be_visible()
         self.reference_job = page.evaluate("async () => (await import('/store.js')).S.state.job")
+
+    def pick_sound_gear(self, key):
+        if not self.page.locator("#soundGearDialog").is_visible():
+            self.page.locator('#soundChain [aria-pressed="true"]').click()
+        self.page.locator("#soundGearSelect").select_option(key)
+        self.page.click("#soundGearApply" if self.page.locator("#soundGearApply").is_visible() else "#soundGearClose")
+
+    def pick_sound_mic(self, mic, position):
+        self.page.get_by_role("radiogroup", name="Cabinet microphone").get_by_role("radio", name=mic, exact=True).check()
+        self.page.get_by_role("radiogroup", name="Microphone position").get_by_role("radio", name=position, exact=True).check()
+
+    def pick_sound_switch(self, group, option):
+        self.page.get_by_role("radiogroup", name=group, exact=True).get_by_role("radio", name=option, exact=True).check()
+
+    def add_sound_effect(self, bank):
+        self.page.get_by_role("button", name=f"Add {bank} effects", exact=True).click()
+        self.page.click("#soundGearApply")
+
+    def apply_settings_and_close(self):
+        self.page.click("#settingsApply")
+        expect(self.page.locator("#settingsModalBackdrop")).to_be_visible()
+        expect(self.page.locator("#settingsApply")).to_be_hidden()
+        self.page.click("#settingsModalClose")
+
+    def test_settings_contextual_apply_and_footer_actions(self):
+        page = self.page
+        reads = []
+        page.on("request", lambda request: reads.append(request.url) if request.url.endswith('/api/sound-presets') else None)
+        page.click("#welcomeSettingsBtn")
+        expect(page.locator("#settingsApply")).to_be_hidden()
+        expect(page.locator("#settingsCancel")).to_have_count(0)
+        self.assertEqual(reads, [])
+        page.select_option("#themeSelect", "light")
+        expect(page.locator("#settingsApply")).to_be_visible()
+        expect(page.locator("#settingsApply")).to_have_text("Apply")
+        page.select_option("#themeSelect", "dark")
+        expect(page.locator("#settingsApply")).to_be_hidden()
+        page.click('[data-settings-pane="trace"]')
+        page.uncheck("#fretboardAnimations")
+        expect(page.locator("#settingsApply")).to_be_visible()
+        page.check("#fretboardAnimations")
+        expect(page.locator("#settingsApply")).to_be_hidden()
+        page.click('[data-settings-pane="keys"]')
+        page.locator('.keymap-key').first.click()
+        page.keyboard.press('Control+Alt+y')
+        expect(page.locator("#settingsApply")).to_be_visible()
+        page.click('#keymapReset')
+        expect(page.locator("#settingsApply")).to_be_hidden()
+        page.click('[data-settings-pane="sounds"]')
+        expect(page.locator('[data-settings-pane="sounds"]')).to_have_text('Tone presets')
+        expect(page.locator('#soundName')).to_have_value('Guitar Clean')
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        expect(page.locator('#spSounds #soundImport')).to_have_text('Import preset')
+        expect(page.locator('#spSounds #soundExport')).to_have_text('Export preset')
+        self.assertEqual(len(reads), 1)
+        page.fill('#soundName', 'A pending preset')
+        expect(page.locator('#settingsApply')).to_be_visible()
+        page.click('[data-settings-pane="models"]')
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        expect(page.locator('#soundFileActions')).to_be_hidden()
+        page.click('[data-settings-pane="acceleration"]')
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.click('[data-settings-pane="sounds"]')
+        expect(page.locator('#settingsApply')).to_be_visible()
+        self.assertEqual(len(reads), 1, 'Switching panes keeps the active draft without rescanning')
+        page.click('#soundDelete'); page.click('#actionConfirmCancel')
+        expect(page.locator('#settingsApply')).to_be_visible()
+        page.click('#soundDelete'); page.click('#actionConfirmAccept')
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.click('#settingsModalClose')
+        page.click('#welcomeSettingsBtn'); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator('#soundName')).to_have_value('Guitar Clean')
+        self.assertEqual(len(reads), 2)
+        page.fill('#soundName', 'First save'); page.click('#settingsApply')
+        expect(page.locator('#settingsModalBackdrop')).to_be_visible()
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.fill('#soundName', 'Saved preset')
+        page.get_by_role('spinbutton', name='Amp Gain value', exact=True).fill('40')
+        page.click('#settingsApply')
+        saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()[0].tone")
+        self.assertEqual(saved['GearList']['Amp']['KnobValues']['Amp_TW40_Gain'], 40)
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.fill('#soundName', 'Discard this'); page.click('#settingsModalClose')
+        page.click('#welcomeSettingsBtn'); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator('#soundName')).to_have_value('Saved preset')
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.fill('#soundName', 'Changed')
+        expect(page.locator('#settingsApply')).to_be_visible()
+        page.fill('#soundName', 'Saved preset')
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.click('#settingsModalClose')
+        self.open_reference_project()
+        page.locator('#lanes .lane-row').first.hover()
+        page.locator('#lanes .lane-row .edit-btn').first.click()
+        expect(page.locator('#layerSave')).to_be_hidden()
+        name = page.locator('#layerName').input_value()
+        page.fill('#layerName', 'Changed layer')
+        expect(page.locator('#layerSave')).to_be_visible()
+        expect(page.locator('#layerSave')).to_have_text('Apply')
+        page.fill('#layerName', name)
+        expect(page.locator('#layerSave')).to_be_hidden()
+        page.click('#settingsClose')
+
+    def test_settings_apply_keeps_window_and_rebases_visited_panes(self):
+        page = self.page
+        page.click('#welcomeSettingsBtn')
+        page.select_option('#themeSelect', 'light')
+        page.click('[data-settings-pane="trace"]')
+        page.uncheck('#fretboardAnimations')
+        page.click('#settingsApply')
+        expect(page.locator('#settingsModalBackdrop')).to_be_visible()
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.check('#fretboardAnimations')
+        page.click('[data-settings-pane="appearance"]')
+        page.select_option('#themeSelect', 'dark')
+        page.click('#settingsModalClose')
+        page.click('#welcomeSettingsBtn')
+        expect(page.locator('#themeSelect')).to_have_value('light')
+        page.click('[data-settings-pane="trace"]')
+        expect(page.locator('#fretboardAnimations')).not_to_be_checked()
+        page.click('#settingsModalClose')
+        self.open_reference_project()
+        page.locator('#lanes .lane-row').first.hover()
+        page.locator('#lanes .lane-row .edit-btn').first.click()
+        page.fill('#layerName', 'Applied layer')
+        page.click('#layerSave')
+        expect(page.locator('#layerSettingsBackdrop')).to_be_visible()
+        expect(page.locator('#layerSave')).to_be_hidden()
+        page.fill('#layerName', 'Discard layer')
+        page.click('#settingsClose')
+        expect(page.locator('#lanes')).to_contain_text('Applied layer')
+        page.route('**/apply-stem.wav', lambda route: route.fulfill(path=str(self.audio), content_type='audio/wav'))
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            S.state.stems.push({id:'apply-stem', name:'Test audio', volume:1, audioUrl:'/apply-stem.wav'});
+            const {openStemSettings} = await import('/stem-settings.js');
+            openStemSettings(S.state.stems[0], true);
+        }""")
+        page.locator('#stemVolume').fill('60')
+        page.click('#stemSave')
+        expect(page.locator('#stemSettingsBackdrop')).to_be_visible()
+        expect(page.locator('#stemSave')).to_be_hidden()
+        page.locator('#stemVolume').fill('30')
+        page.click('#stemSettingsClose')
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.stems[0].volume"), .6)
+
+    def test_sound_json_import_export_and_folder_reload(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundName")).to_have_value("Guitar Clean")
+        expect(page.locator("#soundPreset option")).to_have_count(6)
+        expect(page.locator("#soundPresetFolder")).to_have_count(0)
+        page.set_viewport_size({"width":720,"height":800})
+        self.assertTrue(page.locator("#spSounds").evaluate("""pane => {
+            const bounds = pane.getBoundingClientRect();
+            return [...pane.querySelectorAll('.sound-form button, .sound-form input:not([type=range]), .sound-form select')]
+                .filter(el => el.getClientRects().length)
+                .every(el => { const r=el.getBoundingClientRect(); return r.left>=bounds.left && r.right<=bounds.right; });
+        }"""), "Preset actions and exact values must fit in a narrow window")
+        page.set_viewport_size({"width":1440,"height":900})
+        with page.expect_download() as download:
+            page.click("#soundExport")
+        exported = json.loads(Path(download.value.path()).read_text("utf-8"))
+        self.assertEqual(exported["Name"], "Guitar Clean")
+        self.assertEqual(exported["GearList"]["Amp"]["Key"], "Amp_TW40")
+        exported["Name"] = "Imported JSON"
+        exported["GearList"]["Amp"]["KnobValues"]["Amp_TW40_Gain"] = 40
+        upload = {"name": "custom.json", "mimeType": "application/json", "buffer": json.dumps(exported).encode()}
+        page.locator("#soundImportFiles").set_input_files(upload)
+        expect(page.locator("#soundName")).to_have_value("Imported JSON")
+        expect(page.locator("#soundDraftStatus")).to_have_text("Unsaved changes")
+        page.locator("#soundImportFiles").set_input_files(upload)
+        expect(page.locator("#soundFileStatus")).to_contain_text("duplicate preset skipped")
+        expect(page.locator("#soundPreset option")).to_have_count(7)
+        page.click("#settingsModalClose")
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundPreset option")).to_have_count(6)
+        page.locator("#soundImportFiles").set_input_files(upload)
+        expect(page.locator("#soundName")).to_have_value("Imported JSON")
+        self.apply_settings_and_close()
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundName")).to_have_value("Imported JSON")
+        expect(page.locator("#soundExportLibrary")).to_have_count(0)
+        expect(page.locator("#soundReloadFolder")).to_have_count(0)
+        expect(page.locator("#settingsApply")).to_be_hidden()
+        folder = self.data / "presets" / "sounds"
+        extra, invalid = folder / "z-external.json", folder / "invalid.json"
+        try:
+            exported["Name"] = "From folder"
+            extra.write_text(json.dumps(exported), encoding="utf-8")
+            invalid.write_text("{}", encoding="utf-8")
+            page.click("#settingsModalClose")
+            page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+            expect(page.locator("#soundPreset option")).to_have_count(8)
+            expect(page.locator("#soundFileStatus")).to_contain_text("invalid.json")
+            expect(page.locator("#soundName")).to_have_value("Imported JSON")
+            page.select_option("#soundPreset", "file:z-external.json")
+            expect(page.locator("#soundName")).to_have_value("From folder")
+            extra.unlink(); invalid.unlink()
+            page.click("#settingsModalClose")
+            page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+            expect(page.locator("#soundName")).to_have_value("Imported JSON")
+            page.locator("#soundImportFiles").set_input_files({"name":"bad.json", "mimeType":"application/json", "buffer":b"{}"})
+            expect(page.locator("#soundFileStatus")).to_contain_text("invalid values")
+            page.locator("#soundImportFiles").set_input_files({"name":"tone.psarc", "mimeType":"application/octet-stream", "buffer":b"PSAR"})
+            expect(page.locator("#soundFileStatus")).to_contain_text("Only JSON")
+            expect(page.locator("#soundPreset option")).to_have_count(7)
+        finally:
+            extra.unlink(missing_ok=True); invalid.unlink(missing_ok=True)
+        page.click("#settingsModalClose")
+        self.open_reference_project()
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            (await import('/tone-markers.js')).openToneMarkerPop(600,200,lane.toneMarkers[0],lane);
+        }""")
+        page.select_option("#toneMarkerPreset", label="Bass Overdrive")
+        marker = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]")
+        self.assertTrue(marker["tone"].startswith("sound_file_"))
+        self.assertEqual(marker["toneData"]["Name"], "Bass Overdrive")
+        self.assertEqual(marker["toneData"]["GearList"]["PrePedal1"]["Key"], "Bass_Pedal_BassOverdrive")
+
+    def test_sound_designer_drag_cards_remove_and_slider_scale(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.locator("#soundPreset").select_option("lead")
+        # Amp parameters are dials over the native range, labelled with their default.
+        slider = page.locator('input[aria-label="Amp Loudness 1"]')
+        scale = slider.locator("..")
+        expect(scale.locator(".parameter-default")).to_have_text("88")
+        self.assertEqual(float(slider.get_attribute("min")), 1)
+        self.assertEqual(float(slider.get_attribute("max")), 100)
+        value = page.get_by_role("spinbutton", name="Amp Loudness 1 value", exact=True)
+        value.fill("46.5")
+        scale.get_by_role("button").click()
+        expect(value).to_have_value("88")
+        # Dragging the dial upwards raises the value; double-click restores the default.
+        face = scale.locator(".sound-dial-face")
+        face.scroll_into_view_if_needed()
+        box = face.bounding_box()
+        page.mouse.move(box["x"] + 32, box["y"] + 32); page.mouse.down()
+        page.mouse.move(box["x"] + 32, box["y"] + 32 - 16, steps=4); page.mouse.up()
+        self.assertGreater(float(value.input_value()), 88)
+        face.dblclick()
+        expect(value).to_have_value("88")
+        # At its default the volume thumb sits exactly over the highlighted default mark.
+        slider = page.locator('input[aria-label="Tone volume"]')
+        offset = slider.evaluate("""input => {
+            const box = input.getBoundingClientRect(), mark = input.parentElement.querySelector('.is-default').getBoundingClientRect();
+            const thumb = parseFloat(getComputedStyle(input).getPropertyValue('--w-slider-thumb'));
+            return box.left + thumb / 2 + (box.width - thumb) * (input.value - input.min) / (input.max - input.min) - (mark.left + mark.width / 2);
+        }""")
+        self.assertLess(abs(offset), 0.6)
+        # Selecting a card shows its controls; one more click opens its picker.
+        page.locator('#soundChain [data-slot="Cabinet"]').click()
+        page.locator('#soundChain [data-slot="Cabinet"]').click()
+        expect(page.locator("#soundGearDialogTitle")).to_have_text("Replace cabinet")
+        page.click("#soundGearClose")
+        # Descriptions are tags; any one of them can be removed.
+        page.click("#soundAddDescription")
+        page.get_by_role("button", name="Remove tone description 1", exact=True).click()
+        expect(page.locator("#soundDescriptors .sound-tag")).to_have_count(1)
+        expect(page.get_by_role("button", name="Remove tone description 1", exact=True)).to_be_disabled()
+        before = page.evaluate("""async () => (await import('/sound-presets-core.js')).SOUND_BASES.lead.GearList""")
+        rack1 = page.locator('.sound-chain-card:has([data-slot="Rack1"])')
+        rack2 = page.locator('.sound-chain-card:has([data-slot="Rack2"])')
+        rack2.drag_to(rack1, target_position={"x": 3, "y": 35})
+        expect(page.locator('#soundChain [data-slot="Rack1"]')).to_contain_text("Chamber")
+        # A pedal can move to the other bank, keeping all its original values.
+        page.locator('.sound-chain-card:has([data-slot="PrePedal1"])').drag_to(
+            page.locator('[data-bank="PostPedal"] > .section-head'))
+        expect(page.locator('#soundChain [data-slot="PostPedal2"]')).to_contain_text("Germanium")
+        # Invalid rack -> pedal moves leave the chain unchanged. (The loop bank stays
+        # in view beside the rack; the pre bank would need the chain to scroll mid-drag.)
+        page.locator('.sound-chain-card:has([data-slot="Rack1"])').drag_to(
+            page.locator('[data-bank="PostPedal"] > .section-head'))
+        expect(page.locator('#soundChain [data-slot="PostPedal2"]')).to_contain_text("Germanium")
+        expect(page.locator('#soundChain [data-slot="Rack1"]')).to_contain_text("Chamber")
+        page.locator('#soundChain [data-slot="Rack2"]').click()
+        shots = Path(__file__).resolve().parents[1] / "design-shots"
+        shots.mkdir(exist_ok=True)
+        for theme in ("dark", "light"):
+            page.evaluate("theme => document.documentElement.dataset.theme = theme", theme)
+            page.screenshot(path=str(shots / f"sound-designer-controls-{theme}.png"), animations="disabled")
+        page.get_by_role("button", name="Remove Mod Delay from chain", exact=True).click()
+        expect(page.locator('#soundChain [data-slot="PostPedal2"]')).to_have_count(0)
+        self.apply_settings_and_close()
+        saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()[0].tone")
+        self.assertEqual(saved["GearList"]["PostPedal1"], before["PrePedal1"])
+        self.assertEqual(saved["GearList"]["Rack1"], before["Rack2"])
+        self.assertEqual(saved["GearList"]["Rack2"], before["Rack1"])
+
+    def test_sound_designer_device_shaped_controls(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.locator("#soundPreset").select_option("lead")
+        # A control offers a way back to the preset's value only once it differs.
+        revert = page.get_by_role("button", name="Amp Treble back to preset value", exact=True)
+        treble = page.get_by_role("spinbutton", name="Amp Treble value", exact=True)
+        original = treble.input_value()
+        expect(revert).to_be_hidden()
+        treble.fill("12")
+        expect(revert).to_be_visible()
+        revert.click()
+        expect(treble).to_have_value(original)
+        expect(revert).to_be_hidden()
+        # Clicking the selected card again opens the picker.
+        page.locator('#soundChain [aria-pressed="true"]').click()
+        expect(page.locator("#soundGearDialogTitle")).to_have_text("Replace amplifier")
+        page.click("#soundGearClose")
+        # A parametric EQ is a curve: dragging a band point writes its gain and frequency.
+        page.locator('#soundChain [data-slot="Rack1"]').click()
+        expect(page.locator("#soundDevices")).to_have_attribute("data-layout", "parametric")
+        gain = page.get_by_role("spinbutton", name="Rack1 High-Mid value", exact=True)
+        freq = page.get_by_role("spinbutton", name="Rack1 High-Mid Freq. value", exact=True)
+        before_gain, before_freq = float(gain.input_value()), float(freq.input_value())
+        page.locator(".eq-node").nth(2).scroll_into_view_if_needed()
+        node = page.locator(".eq-node").nth(2).bounding_box()
+        page.mouse.move(node["x"] + node["width"] / 2, node["y"] + node["height"] / 2); page.mouse.down()
+        page.mouse.move(node["x"] - 40, node["y"] + 40, steps=4); page.mouse.up()
+        self.assertLess(float(gain.input_value()), before_gain)
+        self.assertLess(float(freq.input_value()), before_freq)
+        expect(page.get_by_role("radiogroup", name="Rack1 High-Mid \"Q\"", exact=True)).to_be_visible()
+        # Fixed-band graphic EQs get one fader per band.
+        self.pick_sound_gear("Rack_StudioChamber")
+        page.locator('#soundChain [data-slot="PrePedal1"]').click()
+        self.pick_sound_gear("Pedal_EQ8")
+        expect(page.locator("#soundDevices")).to_have_attribute("data-layout", "graphic")
+        expect(page.locator(".sound-fader")).to_have_count(8)
+        page.get_by_role("slider", name="PrePedal1 50HZ", exact=True).press("ArrowUp")
+        expect(page.get_by_role("spinbutton", name="PrePedal1 50HZ value", exact=True)).to_have_value("5")
+
+    def test_sound_designer_large_device_view_preserves_edits_and_focus(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.locator("#soundPreset").select_option("lead")
+        page.locator('#soundChain [data-slot="Rack1"]').click()
+        # The band grid hugs its controls, rather than adding hundreds of empty pixels.
+        self.assertLess(page.locator(".sound-eq-bands").evaluate("el => el.getBoundingClientRect().height"), 180)
+        expect(page.locator("#soundExpandDevice")).to_be_visible()
+        expect(page.locator("#soundSectionDevice .sound-section-device-name")).to_have_count(0)
+        page.click("#soundExpandDevice")
+        expect(page.locator("#soundDeviceDialog")).to_be_visible()
+        expect(page.locator("#soundDeviceDialogClose")).to_be_focused()
+        self.assertTrue(page.locator("#soundDeviceDialog").evaluate("""dialog => {
+            const box = dialog.getBoundingClientRect();
+            const inner = document.querySelector('#settingsModal .settings-layout > .dialog-body').getBoundingClientRect();
+            return Math.abs(box.width-inner.width)<2 && Math.abs(box.height-inner.height)<2
+                && Math.abs(box.left-inner.left)<2 && Math.abs(box.top-inner.top)<2;
+        }"""))
+        expect(page.locator("#soundDeviceDialog .sound-workbench")).to_have_count(1)
+        gain = page.get_by_role("spinbutton", name="Rack1 High-Mid value", exact=True)
+        curve = page.locator(".eq-curve")
+        original_curve = curve.get_attribute("d")
+        gain.fill("3.5")
+        page.wait_for_function("""() => {
+            const box = document.querySelector('#soundDeviceDialog').getBoundingClientRect();
+            const inner = document.querySelector('#settingsModal .settings-layout > .dialog-body').getBoundingClientRect();
+            return Math.abs(box.height-inner.height)<2;
+        }""")
+        self.assertNotEqual(curve.get_attribute("d"), original_curve)
+        page.get_by_role("button", name="Rack1 High-Mid back to preset value", exact=True).click()
+        expect(curve).to_have_attribute("d", original_curve)
+        gain.fill("3.5")
+        page.keyboard.press("Escape")
+        expect(page.locator("#soundDeviceDialog")).not_to_be_visible()
+        expect(page.locator("#spSounds")).to_be_visible()
+        expect(page.locator("#soundWorkbenchHome .sound-workbench")).to_have_count(1)
+        expect(page.locator("#soundExpandDevice")).to_be_focused()
+        expect(gain).to_have_value("3.5")
+        page.click("#soundExpandDevice"); page.click("#soundDeviceDialogClose")
+        expect(gain).to_have_value("3.5")
+        self.apply_settings_and_close()
+        saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()[0].tone")
+        self.assertEqual(saved["GearList"]["Rack1"]["KnobValues"]["Rack_StudioEQ_HiMid"], 3.5)
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        # With other sections collapsed the amp fits, so no expansion is needed.
+        page.click('[aria-controls="soundSectionPreset"]'); page.click('[aria-controls="soundSectionChain"]')
+        expect(page.locator("#soundExpandDevice")).to_be_hidden()
+
+    def test_sound_designer_picker_cancel_and_controls_space(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundGearDialog")).not_to_be_visible()
+        # Collapsing preset and chain leaves room for every amp control without
+        # scrolling, and the layout is remembered when Settings reopens.
+        page.click('[aria-controls="soundSectionPreset"]'); page.click('[aria-controls="soundSectionChain"]')
+        page.click("#settingsModalClose"); page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator('[aria-controls="soundSectionChain"]')).to_have_attribute("aria-expanded", "false")
+        expect(page.locator("#soundPresetSummary")).to_have_text("Clean")
+        page.wait_for_function("() => !document.getAnimations().length")
+        self.assertTrue(page.locator(".sound-workbench").evaluate("el => el.scrollHeight <= el.clientHeight + 1"))
+        page.click('[aria-controls="soundSectionPreset"]'); page.click('[aria-controls="soundSectionChain"]')
+        before = page.locator("#soundChain").inner_text()
+        page.get_by_role("button", name="Add pre effects", exact=True).click()
+        page.locator("#soundGearSelect").select_option("Pedal_MultiPitch")
+        shots = Path(__file__).resolve().parents[1] / "design-shots"
+        shots.mkdir(exist_ok=True)
+        page.screenshot(path=str(shots / "sound-designer-device-picker.png"))
+        page.click("#soundGearClose")
+        self.assertEqual(page.locator("#soundChain").inner_text(), before)
+        expect(page.locator("#soundDraftStatus")).to_have_text("")
+        page.locator('#soundChain [aria-pressed="true"]').click()
+        page.fill("#soundGearSearch", "JCM800")
+        page.keyboard.press("Escape")
+        expect(page.locator("#soundGearDialog")).not_to_be_visible()
+        expect(page.locator("#spSounds")).to_be_visible()
+        expect(page.locator("#soundDraftStatus")).to_have_text("")
+        # Applying the already-selected cabinet must retain its microphone.
+        page.locator('#soundChain [data-slot="Cabinet"]').click()
+        self.pick_sound_mic("Ribbon", "Edge")
+        page.locator('#soundChain [aria-pressed="true"]').click()
+        expect(page.locator('#soundGearApply')).to_be_hidden()
+        page.click("#soundGearClose")
+        expect(page.get_by_role("radio", name="Edge", exact=True)).to_be_checked()
+        # A newly added effect uses the chosen device, with no intermediate default.
+        page.get_by_role("button", name="Add pre effects", exact=True).click()
+        page.locator("#soundGearSelect").select_option("Pedal_MultiPitch")
+        page.click("#soundGearApply")
+        expect(page.locator('#soundChain [aria-pressed="true"]')).to_contain_text("MultiPitch")
+        self.apply_settings_and_close()
+        saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()[0].tone")
+        self.assertEqual(saved["GearList"]["PrePedal1"]["Key"], "Pedal_MultiPitch")
+
+    def test_sound_designer_visual_chain_and_new_preset_workflow(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#settingsApply")).to_have_text("Apply")
+        expect(page.get_by_role("button", name="Listen", exact=True)).to_have_count(0)
+        expect(page.locator("#soundDraftStatus")).to_have_text("")
+        page.click("#soundNew")
+        expect(page.locator("#soundName")).to_have_value("Untitled preset")
+        expect(page.locator("#soundName")).to_be_focused()
+        expect(page.locator("#soundDraftStatus")).to_have_text("Unsaved changes")
+        expect(page.locator("#soundChain [data-slot]")).to_have_count(2)
+        first = page.locator("#soundPreset").input_value()
+        page.fill("#soundName", "New visual rig")
+        self.add_sound_effect("pre")
+        expect(page.locator('#soundChain [data-slot="PrePedal1"]')).to_have_attribute("aria-pressed", "true")
+        expect(page.locator('#soundChain [aria-pressed="true"]')).to_contain_text("Germanium Drive")
+        page.keyboard.press("Alt+ArrowRight")
+        expect(page.locator('#soundChain [data-slot="PostPedal1"]')).to_have_attribute("aria-pressed", "true")
+        page.click("#soundDuplicate")
+        expect(page.locator("#soundName")).to_have_value("New visual rig copy")
+        self.assertNotEqual(page.locator("#soundPreset").input_value(), first)
+        self.apply_settings_and_close()
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundDraftStatus")).to_have_text("")
+        page.click("#soundNew")
+        page.click("#settingsModalClose")
+        saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()")
+        self.assertEqual([entry["tone"]["Name"] for entry in saved], ["New visual rig", "New visual rig copy"])
+
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.locator("#soundPreset").select_option("lead")
+        shots = Path(__file__).resolve().parents[1] / "design-shots"
+        shots.mkdir(exist_ok=True)
+        for theme in ["dark", "light"]:
+            page.evaluate("theme => { if (theme === 'light') document.documentElement.dataset.theme = theme; else delete document.documentElement.dataset.theme; }", theme)
+            for width, height in [(1440, 900), (1000, 700), (720, 800)]:
+                page.set_viewport_size({"width": width, "height": height})
+                # Every card must remain reachable, including in a full chain.
+                for slot in ["PrePedal1", "Amp", "PostPedal1", "Cabinet", "Rack1", "Rack2"]:
+                    page.locator(f'#soundChain [data-slot="{slot}"]').click()
+                    expect(page.locator(f'#soundChain [data-slot="{slot}"]')).to_have_attribute("aria-pressed", "true")
+                page.locator('#soundChain [data-slot="Amp"]').click()
+                self.assertTrue(page.evaluate("""() => {
+                    const pane = document.querySelector('#spSounds');
+                    const body = pane.closest('.dialog-body');
+                    return body.scrollWidth <= body.clientWidth + 1;
+                }"""), "The settings body should not overflow horizontally")
+                page.screenshot(path=str(shots / f"sound-designer-flow-{theme}-{width}.png"))
+        page.click("#settingsModalClose")
+
+    def test_sound_designer_device_scroll_keyboard_focus_and_cross_pane_validation(self):
+        page = self.page
+        page.set_viewport_size({"width": 720, "height": 800})
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        # Switching devices starts at the top of their editor, even when the
+        # previous device's last control was being edited.
+        expect(page.locator('#soundChain [data-slot="Amp"]')).to_have_attribute("aria-pressed", "true")
+        self.assertGreater(page.evaluate("""() => {
+            const editor = document.querySelector('.sound-workbench');
+            editor.scrollTop = editor.scrollHeight;
+            return editor.scrollTop;
+        }"""), 0)
+        page.locator('#soundChain [data-slot="Rack1"]').click()
+        self.assertEqual(page.locator('.sound-workbench').evaluate('(el) => el.scrollTop'), 0)
+        # Rebuilding the chain must not lose keyboard focus to the document.
+        page.get_by_role("button", name="Add pre effects", exact=True).focus()
+        page.keyboard.press("Enter")
+        page.click("#soundGearApply")
+        expect(page.locator('#soundChain [data-slot="PrePedal1"]')).to_be_focused()
+        self.add_sound_effect("pre")
+        # Effect cards move with Alt+arrows (across the amp between pedal banks)
+        # and are removed with Delete, keeping focus on the moved card.
+        page.keyboard.press("Alt+ArrowLeft")
+        expect(page.locator('#soundChain [data-slot="PrePedal1"]')).to_be_focused()
+        page.keyboard.press("Alt+ArrowRight")
+        expect(page.locator('#soundChain [data-slot="PrePedal2"]')).to_be_focused()
+        page.keyboard.press("Alt+ArrowRight")
+        expect(page.locator('#soundChain [data-slot="PostPedal1"]')).to_be_focused()
+        page.keyboard.press("Delete")
+        expect(page.locator('#soundChain [data-slot="Amp"]')).to_be_focused()
+        # Saving another settings pane must reveal the preset blocking Save.
+        page.fill("#soundName", "")
+        page.click('[data-settings-pane="appearance"]')
+        page.click("#settingsApply")
+        expect(page.locator("#spSounds")).to_be_visible()
+        expect(page.locator("#soundName")).to_be_focused()
+        expect(page.locator("#soundValidation")).to_contain_text("preset name")
+        page.fill("#soundName", "Repaired preset")
+        self.apply_settings_and_close()
+        expect(page.locator("#settingsModalBackdrop")).to_be_hidden()
+        # Validation of a knob on a non-active device must reveal and focus it.
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        value = page.get_by_role("spinbutton", name="Amp Loudness 1 value", exact=True)
+        value.fill("101")
+        page.locator('#soundChain [data-slot="Cabinet"]').click()
+        page.click('[data-settings-pane="appearance"]'); page.click("#settingsApply")
+        expect(page.locator("#spSounds")).to_be_visible()
+        expect(value).to_be_focused()
+        expect(value).to_have_value("101")
+        value.fill("42")
+        self.apply_settings_and_close()
+        expect(page.locator("#settingsModalBackdrop")).to_be_hidden()
+
+    def test_sound_designer_empty_volume_repair_and_duplicate(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.fill("#soundVolumeNumber", "")
+        key = page.locator("#soundPreset").input_value()
+        expect(page.locator("#soundValidation")).to_contain_text("Volume")
+        page.locator("#soundPreset").select_option("bass")
+        page.locator("#soundPreset").select_option(key)
+        expect(page.locator("#soundVolumeNumber")).to_have_value("")
+        page.click("#settingsApply")
+        expect(page.locator("#settingsModalBackdrop")).to_be_visible()
+        expect(page.locator("#soundVolumeNumber")).to_have_value("")
+        page.locator("#soundVolume").fill("5")
+        expect(page.locator("#soundVolumeNumber")).to_have_attribute("aria-invalid", "false")
+        expect(page.locator("#soundValidation")).to_be_hidden()
+        page.locator("#soundVolumeNumber").fill("5.125")
+        expect(page.locator("#soundVolumeNumber")).to_have_attribute("aria-invalid", "false")
+        page.click("#soundDuplicate")
+        self.apply_settings_and_close()
+        saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()")
+        self.assertEqual(len(saved), 2)
+        self.assertTrue(all(float(entry["tone"]["Volume"]) == -5.125 for entry in saved))
+
+    def test_sound_designer_preserves_unavailable_data_and_detects_conflicts(self):
+        page = self.page
+        page.evaluate("""async () => {
+            const {SOUND_BASES, cloneSound, SOUND_LIBRARY_KEY} = await import('/sound-presets-core.js');
+            localStorage.setItem(SOUND_LIBRARY_KEY, JSON.stringify([
+                {id:'sound_seed', tone:{...cloneSound(SOUND_BASES.clean), Name:'Original'}},
+                {id:'sound_future', tone:{Name:'Unsupported future gear', GearList:{}}}
+            ]));
+        }""")
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundLibraryWarning")).to_be_visible()
+        page.fill("#soundName", "Renamed")
+        self.apply_settings_and_close()
+        saved = page.evaluate("JSON.parse(localStorage.getItem('cw.soundPresets.v1'))")
+        self.assertEqual(saved[0]["tone"]["Name"], "Renamed")
+        self.assertEqual(saved[1], {"id": "sound_future", "tone": {"Name": "Unsupported future gear", "GearList": {}}})
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.fill("#soundName", "Conflicting draft")
+        page.evaluate("""() => {
+            const list=JSON.parse(localStorage.getItem('cw.soundPresets.v1'));
+            list[0].tone.Name='Saved elsewhere'; localStorage.setItem('cw.soundPresets.v1',JSON.stringify(list));
+        }""")
+        page.click("#settingsApply")
+        expect(page.locator("#settingsModalBackdrop")).to_be_visible()
+        expect(page.locator("#soundName")).to_have_value("Conflicting draft")
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.soundPresets.v1'))[0].tone.Name"), "Saved elsewhere")
+        page.click("#settingsModalClose")
+        page.evaluate("localStorage.setItem('cw.soundPresets.v1','broken JSON')")
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.fill("#soundName", "New draft")
+        page.click("#settingsApply")
+        expect(page.locator("#settingsModalBackdrop")).to_be_visible()
+        self.assertEqual(page.evaluate("localStorage.getItem('cw.soundPresets.v1')"), "broken JSON")
+
+    def test_sound_project_copies_update_only_explicitly_and_survive_library_delete(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.fill("#soundName", "First version")
+        key = page.locator("#soundPreset").input_value()
+        self.apply_settings_and_close()
+        self.open_reference_project()
+        def open_marker():
+            page.evaluate("""async () => {
+                const {S} = await import('/store.js');
+                const lane=S.state.editLanes[0];
+                (await import('/tone-markers.js')).openToneMarkerPop(600,200,lane.toneMarkers[0],lane);
+            }""")
+        def snapshot():
+            return page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0].toneData")
+        open_marker()
+        page.locator("#toneMarkerPreset").select_option(key)
+        page.click("#toneMarkerPopClose")
+        old = snapshot()
+        page.click("#settingsMenuBtn"); page.click('[data-settings-pane="sounds"]')
+        page.fill("#soundName", "Latest version")
+        page.get_by_role("spinbutton", name="Amp Loudness 1 value", exact=True).fill("65")
+        self.apply_settings_and_close()
+        self.assertEqual(snapshot(), old, "editing the library must not silently change the project")
+        open_marker()
+        expect(page.locator(f'#toneMarkerPreset option[value="{key}"]')).to_have_text("First version (project copy)")
+        page.locator("#toneMarkerPreset").select_option(f"{key}:latest")
+        self.assertEqual(snapshot()["Name"], "Latest version")
+        self.assertEqual(snapshot()["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"], 65)
+        expect(page.locator(f'#toneMarkerPreset option[value="{key}:latest"]')).to_have_count(0)
+        page.click("#toneMarkerPopClose")
+        page.click("#settingsMenuBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#soundDelete"); page.click("#actionConfirmAccept"); self.apply_settings_and_close()
+        self.assertEqual(snapshot()["Name"], "Latest version")
+        open_marker()
+        expect(page.locator(f'#toneMarkerPreset option[value="{key}"]')).to_have_text("Latest version (project copy)")
+        base, _, _ = rocksmith_builder._arrangement_tones({"toneMarkers": [{"t":0,"tone":key,"toneData":snapshot()}]},False,"test","lead",60,[])
+        self.assertEqual(base["Name"], "Latest version")
+
+    def test_sound_designer_starting_points_are_directly_editable(self):
+        page = self.page
+        def slot(key):
+            page.locator(f'#soundChain [data-slot="{key}"]').click()
+        def named(text):
+            page.fill("#soundName", "")
+            page.locator("#soundName").press_sequentially(text)
+            expect(page.locator("#soundName")).to_be_focused()
+            expect(page.locator("#soundName")).to_have_value(text)
+        def slider():
+            control = page.get_by_role("slider", name="Amp Loudness 1", exact=True)
+            control.fill("42")
+            control.press("ArrowRight")
+            expect(control).to_have_value("43")
+        def amp_number():
+            page.get_by_role("spinbutton", name="Amp Loudness 1 value", exact=True).fill("46.5")
+        def microphone():
+            slot("Cabinet")
+            self.pick_sound_mic("Ribbon", "Edge")
+        def enum():
+            slot("Rack1")
+            self.pick_sound_switch("Rack1 Ratio", "20:1")
+        def remove():
+            slot("PrePedal1"); page.keyboard.press("Delete")
+        def move():
+            slot("Rack2"); page.keyboard.press("Alt+ArrowLeft")
+        def bank():
+            slot("PrePedal1"); page.keyboard.press("Alt+ArrowRight")
+        cases = [
+            ("name", "clean", lambda: named("My direct edit"), lambda tone: tone["Name"] == "My direct edit"),
+            ("description", "clean", lambda: page.get_by_role("combobox", name="Tone description 1", exact=True).select_option(label="Distortion"), lambda tone: tone["ToneDescriptors"] == ["$[35722]DISTORTION"]),
+            ("slider", "clean", slider, lambda tone: tone["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"] == 43),
+            ("number", "clean", amp_number, lambda tone: tone["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"] == 46.5),
+            ("volume", "clean", lambda: page.fill("#soundVolumeNumber", "18.5"), lambda tone: float(tone["Volume"]) == -18.5),
+            ("amplifier", "clean", lambda: self.pick_sound_gear("Amp_MarshallJCM800"), lambda tone: tone["GearList"]["Amp"]["Key"] == "Amp_MarshallJCM800"),
+            ("microphone", "clean", microphone, lambda tone: tone["GearList"]["Cabinet"]["Key"] == "Cab_Marshall1960TV_Ribbon_Edge"),
+            ("enum", "bass", enum, lambda tone: tone["GearList"]["Rack1"]["KnobValues"]["Rack_StudioCompressor_Ratio"] == 4),
+            ("remove", "lead", remove, lambda tone: "PrePedal1" not in tone["GearList"]),
+            ("add", "clean", lambda: self.add_sound_effect("pre"), lambda tone: "PrePedal1" in tone["GearList"]),
+            ("reorder", "lead", move, lambda tone: tone["GearList"]["Rack1"]["Key"] == "Rack_StudioChamber"),
+            ("relocate", "lead", bank, lambda tone: tone["GearList"]["PostPedal1"]["Key"] == "Pedal_GermaniumDrive"),
+            ("reset", "clean", lambda: page.get_by_role("button", name="Amp Loudness 1 default 88", exact=True).click(), lambda tone: tone["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"] == 88),
+            ("add description", "clean", lambda: page.click("#soundAddDescription"), lambda tone: len(tone["ToneDescriptors"]) == 2),
+        ]
+        for index, (name, base, action, verify) in enumerate(cases):
+            with self.subTest(control=name):
+                page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+                page.locator("#soundPreset").select_option(base)
+                original = page.evaluate("async (base) => (await import('/sound-presets-core.js')).SOUND_BASES[base]", base)
+                expect(page.locator("#soundName")).to_be_editable()
+                expect(page.get_by_role("combobox", name="Tone description 1", exact=True)).to_be_enabled()
+                expect(page.locator("#soundGearSelect")).to_be_enabled()
+                action()
+                key = page.locator("#soundPreset").input_value()
+                self.assertTrue(key.startswith("sound_"), name)
+                self.apply_settings_and_close()
+                library = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()")
+                self.assertEqual(len(library), index + 1, "one first edit creates exactly one preset")
+                saved = next(entry["tone"] for entry in library if entry["id"] == key)
+                self.assertTrue(verify(saved), name)
+                self.assertEqual(page.evaluate("async (base) => (await import('/sound-presets-core.js')).SOUND_BASES[base]", base), original)
+
+    def test_sound_designer_automatic_copies_are_discarded_on_cancel(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.fill("#soundName", "Discarded automatic copy")
+        page.get_by_role("combobox", name="Tone description 1", exact=True).select_option(label="Crunch")
+        page.click("#settingsModalClose")
+        page.reload()
+        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundName")).to_have_value("Clean")
+        expect(page.get_by_role("combobox", name="Tone description 1", exact=True)).to_have_value("$[35720]CLEAN")
+        self.assertEqual(page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()"), [])
+
+    def test_sound_designer_presets_are_staged_portable_and_exportable(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundName")).to_be_editable()
+        page.click("#soundDuplicate")
+        page.fill("#soundName", "Test solo")
+        page.locator('input[aria-label="Amp Loudness 1"]').fill("42")
+        shots = Path(__file__).resolve().parents[1] / "design-shots"
+        shots.mkdir(exist_ok=True)
+        page.screenshot(path=str(shots / "sound-designer-prototype.png"))
+        self.apply_settings_and_close()
+        page.reload()
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundName")).to_have_value("Test solo")
+        page.fill("#soundName", "Discard this edit")
+        page.click("#settingsModalClose")
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundName")).to_have_value("Test solo")
+        page.click("#settingsModalClose")
+        self.open_reference_project()
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const {openToneMarkerPop} = await import('/tone-markers.js');
+            const lane = S.state.editLanes[0];
+            openToneMarkerPop(600, 200, lane.toneMarkers[0], lane);
+        }""")
+        page.locator("#toneMarkerPreset").select_option(label="Test solo")
+        page.click("#toneMarkerPopClose")
+        snapshot = page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            return S.state.editLanes[0].toneMarkers[0];
+        }""")
+        self.assertEqual(snapshot["toneData"]["Name"], "Test solo")
+        self.assertEqual(snapshot["toneData"]["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"], 42)
+        # A portable project does not depend on this machine's preset library.
+        page.evaluate("localStorage.removeItem('cw.soundPresets.v1')")
+        with page.expect_response(lambda response: response.request.method == "POST" and response.url.endswith(f"/api/projects/{self.reference_job}")):
+            page.keyboard.press("Control+s")
+        saved = page.request.get(f"{self.url}api/projects/{self.reference_job}").json()
+        self.assertEqual(saved["editLanes"][0]["toneMarkers"][0]["toneData"]["Name"], "Test solo")
+        chart = self.data / "custom-sound.chart"
+        chart.write_bytes(self.download("#saveAs").read_bytes())
+        self.home()
+        with page.expect_file_chooser() as chooser:
+            page.click("#welcomeOpen")
+        chooser.value.set_files(chart)
+        expect(page.locator("#lanes .lane-row")).to_be_visible()
+        restored = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]")
+        self.assertEqual(restored["toneData"], snapshot["toneData"])
+        # Backend export accepts precisely the snapshot saved by the UI.
+        base, _, _ = rocksmith_builder._arrangement_tones(
+            {"toneMarkers": [snapshot]}, False, "test", "lead", 60, [])
+        self.assertEqual(base["Name"], "Test solo")
+
+    def test_sound_designer_effect_banks_and_delete_cancel(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="sounds"]')
+        page.locator("#soundPreset").select_option("lead")
+        page.click("#soundDuplicate")
+        page.fill("#soundName", "Effect test")
+        expect(page.get_by_role("button", name="Add pre effects", exact=True)).to_be_disabled()
+        page.locator('#soundChain [data-slot="PrePedal1"]').click()
+        page.get_by_role("button", name="Remove Germanium Drive from chain", exact=True).click()
+        expect(page.get_by_role("button", name="Add pre effects", exact=True)).to_be_enabled()
+        self.add_sound_effect("rack")
+        self.pick_sound_gear("Rack_StudioCompressor")
+        self.apply_settings_and_close()
+        expect(page.locator("#settingsModalBackdrop")).to_be_hidden()
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="sounds"]')
+        page.click("#soundDelete")
+        page.click("#actionConfirmAccept")
+        expect(page.locator("#soundName")).to_be_editable()
+        page.click("#settingsModalClose")
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundName")).to_have_value("Effect test")
+        # Switching to a bass starting point keeps the same editing workflow.
+        page.locator("#soundPreset").select_option("bass")
+        page.click("#settingsModalClose")
+
+    def test_sound_designer_full_native_devices_mics_enums_and_chain(self):
+        page = self.page
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="sounds"]')
+        page.click("#soundDuplicate")
+        page.fill("#soundName", "Native rig")
+        self.assertEqual(page.locator("#soundGearSelect option").count(), 63)
+        page.locator('#soundChain [aria-pressed="true"]').click()
+        page.fill("#soundGearSearch", "JCM800")
+        self.pick_sound_gear("Amp_MarshallJCM800")
+        gain = page.get_by_role("spinbutton", name="Amp PreAmp value", exact=True)
+        gain.fill("46.5")
+        expect(gain).to_have_value("46.5")
+        gain.fill("101")
+        expect(page.locator("#soundValidation")).to_contain_text("PreAmp")
+        page.click("#settingsApply")
+        expect(page.locator("#settingsModalBackdrop")).to_be_visible()
+        expect(page.locator("#soundValidation")).to_contain_text("PreAmp")
+        page.get_by_role("spinbutton", name="Amp PreAmp value", exact=True).fill("46.5")
+        expect(page.locator("#soundValidation")).to_be_hidden()
+        page.locator('#soundChain [data-slot="Cabinet"]').click()
+        self.assertEqual(page.locator("#soundGearSelect option").count(), 58)
+        self.pick_sound_gear("Cab_Marshall1936_57_Cone")
+        self.pick_sound_mic("Ribbon", "Off Axis")
+        page.locator('#soundChain [data-slot="Rack1"]').click()
+        self.assertEqual(page.locator("#soundGearSelect option").count(), 17)
+        self.pick_sound_gear("Rack_StudioCompressor")
+        self.pick_sound_switch("Rack1 Ratio", "8:1")
+        self.add_sound_effect("pre")
+        self.assertEqual(page.locator("#soundGearSelect option").count(), 83)
+        self.pick_sound_gear("Pedal_MultiPitch")
+        page.get_by_role("spinbutton", name="PrePedal1 Pitch 1 value", exact=True).fill("-7.5")
+        page.locator('#soundChain [data-slot="PrePedal1"]').press("Alt+ArrowRight")
+        expect(page.get_by_role("spinbutton", name="PostPedal1 Pitch 1 value", exact=True)).to_have_value("-7.5")
+        self.add_sound_effect("loop")
+        page.keyboard.press("Alt+ArrowLeft")
+        expect(page.locator("#soundGearSelect")).to_have_value("Pedal_GermaniumDrive")
+        page.locator('#soundChain [data-slot="PostPedal2"]').click()
+        expect(page.get_by_role("spinbutton", name="PostPedal2 Pitch 1 value", exact=True)).to_have_value("-7.5")
+        page.click("#soundAddDescription")
+        page.get_by_role("combobox", name="Tone description 2", exact=True).select_option(label="High Gain")
+        page.get_by_role("spinbutton", name="Tone volume value", exact=True).fill("18.5")
+        self.apply_settings_and_close()
+        page.reload()
+        page.click("#welcomeSettingsBtn")
+        page.click('[data-settings-pane="sounds"]')
+        expect(page.locator("#soundName")).to_have_value("Native rig")
+        saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()[0].tone")
+        self.assertEqual(saved["GearList"]["Cabinet"]["Key"], "Cab_Marshall1936_Ribbon_OffAxis")
+        self.assertEqual(saved["GearList"]["Rack1"]["KnobValues"]["Rack_StudioCompressor_Ratio"], 3)
+        self.assertEqual(saved["GearList"]["PostPedal2"]["KnobValues"]["Pedal_MultiPitch_Pitch1"], -7.5)
+        self.assertEqual(saved["GearList"]["Amp"]["KnobValues"]["Amp_MarshallJCM800_Gain"], 46.5)
+        self.assertEqual(float(saved["Volume"]), -18.5)
+        self.assertIn("$[35755]HIGH GAIN", saved["ToneDescriptors"])
+        base, _, _ = rocksmith_builder._arrangement_tones({"toneMarkers": [{"t": 0, "tone": "sound_test", "toneData": saved}]}, False, "test", "lead", 60, [])
+        self.assertEqual(base["GearList"], saved["GearList"])
 
     def test_trace_accepts_cells_shorter_than_fifty_ms(self):
         self.open_reference_project()
@@ -424,7 +1271,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate(audit_script), [], 'Visible light-mode buttons need readable foregrounds')
         page.click('#settingsMenuBtn')
         self.assertEqual(page.evaluate(audit_script), [], 'Light-mode settings buttons need readable foregrounds')
-        page.click('#settingsCancel')
+        page.click('#settingsModalClose')
 
     def test_custom_shape_only_shows_draft_notes_and_supports_revisiting(self):
         page = self.page
@@ -587,12 +1434,12 @@ class EndToEndTests(unittest.TestCase):
             const theme = document.querySelector('#themeSelect'); theme.value = 'dark'; theme.dispatchEvent(new Event('change'));
         }""")
         self.assertEqual(set(painted_labels()['inks']), {'#0f1012'})
-        page.click('#settingsCancel')
+        page.click('#settingsModalClose')
         expect(page.locator('input[name=fretboardLabels][value=both]')).to_be_checked()
         self.assertEqual(len(painted_labels()['notes']), 6)
         page.click('#settingsMenuBtn')
         page.locator('input[name=fretboardLabels][value=none]').check()
-        page.click('#settingsApply')
+        self.apply_settings_and_close()
         self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.settings')).fretboardLabels"), 'none')
         page.click('#fretboardEdit')
         page.click('#fretboardShape')
@@ -958,7 +1805,7 @@ class EndToEndTests(unittest.TestCase):
         expect(preview).to_have_attribute('data-running', 'false')
         page.click('[data-settings-pane=trace]')
         expect(preview).to_have_attribute('data-running', 'true')
-        page.click('#settingsCancel')
+        page.click('#settingsModalClose')
         expect(preview).to_have_attribute('data-running', 'false')
         expect(page.locator('#playbackScrollMode')).to_have_value('page')
         after = page.evaluate("async () => (await import('/playback.js')).playbackTime()")
@@ -972,7 +1819,7 @@ class EndToEndTests(unittest.TestCase):
         page.click('#timelineScrollPreviewToggle')
         expect(preview).to_have_attribute('data-running', 'true')
         page.wait_for_function("Number(document.querySelector('#timelineScrollPreview').dataset.playhead) > 10")
-        page.click('#settingsCancel')
+        page.click('#settingsModalClose')
         expect(preview).to_have_attribute('data-running', 'false')
 
     def test_playback_and_fretboard_preferences(self):
@@ -985,7 +1832,7 @@ class EndToEndTests(unittest.TestCase):
         page.locator("input[name=playbackScrollMode][value=follow]").check()
         page.select_option("#fretboardStringOrder", "low-top")
         page.uncheck("#fretboardAnimations")
-        page.click("#settingsCancel")
+        page.click("#settingsModalClose")
         expect(page.locator("#playbackScrollMode")).to_have_value("page")
         expect(page.locator("#fretboardStringOrder")).to_have_value("low-bottom")
         expect(page.locator("#fretboardAnimations")).to_be_checked()
@@ -993,7 +1840,7 @@ class EndToEndTests(unittest.TestCase):
         page.locator("input[name=playbackScrollMode][value=follow]").check()
         page.select_option("#fretboardStringOrder", "low-top")
         page.uncheck("#fretboardAnimations")
-        page.click("#settingsApply")
+        self.apply_settings_and_close()
         # Exercise the actual transport reveal path.
         positions = page.evaluate("""async () => {
             const { seekPlayback, revealPlaybackPosition } = await import('/playback.js');
@@ -2321,7 +3168,7 @@ class EndToEndTests(unittest.TestCase):
         # Bass needs four strings: the tuning list follows the arrangement type.
         row.locator(".rs-arr-kind").select_option("bass")
         self.assertEqual(row.locator(".rs-arr-tuning").input_value().count(","), 3)
-        page.click("#rsExportCancel")
+        page.click("#rsExportClose")
         expect(page.locator("#rocksmithExportModal")).to_be_hidden()
 
     def test_guitar_pro_file_comes_back_out_as_it_went_in(self):
@@ -2618,7 +3465,7 @@ class EndToEndTests(unittest.TestCase):
         guitar.hover()
         guitar.locator(".edit-btn").click()
         page.uncheck("#layerOwnTiming")
-        page.click("#layerSave")
+        page.click("#layerSave"); expect(page.locator("#layerSettingsBackdrop")).to_be_visible(); expect(page.locator("#layerSave")).to_be_hidden(); page.click("#settingsClose")
         expect(page.locator("#layerSettingsBackdrop")).to_be_hidden()
         self.assertEqual(own(), 0)
         self.assertAlmostEqual(float(page.input_value("#offset")), song_offset, places=3)
@@ -2633,7 +3480,7 @@ class EndToEndTests(unittest.TestCase):
         page.click("#lanes .lane-row .edit-btn")
         page.select_option("#layerCapo", "2")
         page.select_option("#layerArrangement", "rhythm")
-        page.click("#layerSave")
+        page.click("#layerSave"); expect(page.locator("#layerSettingsBackdrop")).to_be_visible(); expect(page.locator("#layerSave")).to_be_hidden(); page.click("#settingsClose")
         expect(page.locator("#layerSettingsBackdrop")).to_be_hidden()
         expect(page.locator("#lanes")).to_contain_text("Rhythm")
         expect(page.locator("#lanes")).to_contain_text("Capo 2")
@@ -2641,7 +3488,7 @@ class EndToEndTests(unittest.TestCase):
         row = page.locator(".rs-arr-row")
         expect(row.locator(".rs-arr-kind")).to_have_value("rhythm")
         expect(row.locator(".rs-arr-capo")).to_have_value("2")
-        page.click("#rsExportCancel")
+        page.click("#rsExportClose")
 
         # A second layer takes the next free arrangement, and cannot take the first one's.
         page.click("#addLane")
@@ -2677,7 +3524,7 @@ class EndToEndTests(unittest.TestCase):
         # A built-in's strings, unchanged, are that built-in: Save is refused.
         page.locator(".tuning-item", has_text="Drop D").first.click()
         expect(page.locator("#tuningEditor").get_by_role("button", name="Save")).to_be_disabled()
-        page.click("#settingsApply")
+        self.apply_settings_and_close()
         expect(page.locator("#settingsModalBackdrop")).to_be_hidden()
         # A new window keeps it: it is the server's, not the window's.
         page.reload()
@@ -2691,7 +3538,7 @@ class EndToEndTests(unittest.TestCase):
         self.file_menu("#menuProjectSettings")
         page.fill("#projTitle", "Gone Soon")
         page.fill("#projArtist", "Nobody")
-        page.click("#settingsApply")
+        self.apply_settings_and_close()
         expect(page.locator("#projTabName")).to_contain_text("Gone Soon")
         page.keyboard.press("Control+s")
         self.home()
@@ -2731,7 +3578,8 @@ class EndToEndTests(unittest.TestCase):
         page = self.page
         page.click("#welcomeTour")
         card = page.locator(".tour-card")
-        expect(card).to_be_visible()
+        # A cold process may still be compiling the audio-analysis kernels.
+        expect(card).to_be_visible(timeout=120000)
         head = card.locator(".tour-head")
         # The demo song starts on its real grid, at detection's 1/32.
         expect(page.locator("#bpm")).to_have_value("120")

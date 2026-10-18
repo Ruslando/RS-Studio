@@ -3,8 +3,9 @@ import json
 import os
 import unittest
 
-from rs_studio.rocksmith import builder, sng
+from rs_studio.rocksmith import builder, sng, manifest
 from rs_studio.rocksmith.psarc import build_psarc, read_psarc
+from rs_studio.rocksmith.tones import gear_catalog
 
 GUITAR = [64, 59, 55, 50, 45, 40]                       # hi -> lo, as the editor sends it
 DROP_D = [64, 59, 55, 50, 45, 38]
@@ -78,6 +79,36 @@ class RocksmithPackageTests(unittest.TestCase):
         # Going back to the first tone is a switch like any other: it takes a slot.
         self.assertTrue(lead["Tone_B"].endswith("clean_tone"), lead["Tone_B"])
         self.assertEqual(lead["Tone_C"], "")
+
+    def test_custom_tone_parameters_reach_the_packaged_manifest(self):
+        tone = manifest.load_internal_tone("lead", "ignored")
+        tone["Name"] = "My solo"
+        tone["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Bass"] = 23
+        markers = [{"t": 0, "tone": "sound_solo", "toneData": tone}, {"t": 2, "tone": "clean"}]
+        lead = _build(_spec([_track("Gtr", GUITAR, [0, 3], toneMarkers=markers)], [{"track": 0, "kind": "lead"}]))[1]["Lead"]
+        custom = next(t for t in lead["Tones"] if t["Key"] == lead["Tone_Base"])
+        self.assertEqual(custom["Name"], "My solo")
+        self.assertEqual(custom["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Bass"], 23)
+
+    def test_full_catalogue_rig_survives_the_psarc_manifest(self):
+        def device(key):
+            definition = gear_catalog()[key]
+            return {"Key": key, "Type": definition["Type"], "KnobValues": {
+                knob["Key"]: knob["DefaultValue"] for knob in definition.get("Knobs") or []}}
+        tone = {"Name": "Native rig", "Volume": "-18.5", "NameSeparator": " - ",
+                "ToneDescriptors": ["$[35724]LEAD", "$[35755]HIGH GAIN"],
+                "GearList": {"Amp": device("Amp_MarshallJCM800"),
+                             "Cabinet": device("Cab_Marshall1936_Ribbon_OffAxis"),
+                             "Rack1": device("Rack_StudioCompressor"),
+                             "PrePedal1": device("Pedal_MultiPitch")}}
+        tone["GearList"]["Rack1"]["KnobValues"]["Rack_StudioCompressor_Ratio"] = 3
+        tone["GearList"]["PrePedal1"]["KnobValues"]["Pedal_MultiPitch_Pitch1"] = -7.5
+        markers = [{"t": 0, "tone": "sound_native", "toneData": tone}]
+        lead = _build(_spec([_track("Gtr", GUITAR, [0, 3], toneMarkers=markers)], [{"track": 0, "kind": "lead"}]))[1]["Lead"]
+        saved = next(tone for tone in lead["Tones"] if tone["Key"] == lead["Tone_Base"])
+        self.assertEqual(saved["GearList"], tone["GearList"])
+        self.assertEqual(saved["ToneDescriptors"], tone["ToneDescriptors"])
+        self.assertEqual(float(saved["Volume"]), -18.5)
 
     def test_requests_the_game_cannot_load_are_refused(self):
         guitar, bass = _track("Gtr", GUITAR, [0]), _track("Bass", BASS, [0])

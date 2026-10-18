@@ -336,7 +336,6 @@ export function initProjectLibrary({ onNew, onOpenFile, onPick }) {
 
   openProjMenuBtn.addEventListener("click", openProjectPicker);
   openProjClose.addEventListener("click", closeOpenProjPicker);
-  $("openProjCancel").addEventListener("click", closeOpenProjPicker);
   $("openProjOpen").addEventListener("click", commitOpenProj);
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (openProjBackdrop.hidden) return false;

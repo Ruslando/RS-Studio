@@ -1,0 +1,68 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 485,
+        "Rack_StudioEQ_HiMidFreq": 1.2,
+        "Rack_StudioEQ_TrebleFreq": 8,
+        "Rack_StudioEQ_LoMidFreq": 190,
+        "Rack_StudioEQ_Treble": -1.5,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 2,
+        "Rack_StudioEQ_HiMid": 2.5,
+        "Rack_StudioEQ_LoMid": -2.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_HT300B_LoShift": 1,
+        "Bass_Amp_HT300B_Mid": 79,
+        "Bass_Amp_HT300B_MidFreq": 3,
+        "Bass_Amp_HT300B_HiShift": 0,
+        "Bass_Amp_HT300B_Bass": 67,
+        "Bass_Amp_HT300B_Gain": 7,
+        "Bass_Amp_HT300B_Treble": 68
+      },
+      "Key": "Bass_Amp_HT300B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_PA600C"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassOverdrive_Blend": 16,
+        "Bass_Pedal_BassOverdrive_Gain": 12,
+        "Bass_Pedal_BassOverdrive_Tone": 14,
+        "Bass_Pedal_BassOverdrive_Filter": 20
+      },
+      "Key": "Bass_Pedal_BassOverdrive",
+      "Category": "30780"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 220,
+        "Bass_Pedal_MBComp_Compress": 42,
+        "Bass_Pedal_MBComp_Rate": 80
+      },
+      "Key": "Bass_Pedal_MBComp",
+      "Category": "30781"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS",
+    "$[35722]DISTORTION"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-16.500",
+  "Key": "edgafree_bassdist",
+  "Name": "Bass Crunch"
+}

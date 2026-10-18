@@ -41,6 +41,7 @@ const newBtn = document.getElementById("tuningNewBtn");
 let draft = null;   // your tunings as edited: [{ id, name, notes, instrument }]
 let sel = null;     // { id } of one of yours, or { key } of a built-in
 let fork = null;    // an edited built-in: { key, name, midis, instrument }
+let draftBaseline = "";
 
 const builtinName = (key) => TUNINGS[key].label.replace(/\s*\(.*\)$/, "");
 const sameMidis = (a, b) => a.length === b.length && a.every((p, i) => p === b[i]);
@@ -78,12 +79,14 @@ function edit(patch) {
     fork = fork || { key: sel.key, ...current() };
     Object.assign(fork, patch);
   }
+  window.dispatchEvent(new Event("settings-draft-changed"));
 }
 
 // ---- lifecycle (called by the Settings window) ----
 
 export function beginTuningDraft(selectKey) {
   draft = customTunings.map((t) => ({ ...t }));
+  draftBaseline = JSON.stringify(draft);
   fork = null;
   sel = draft.some((t) => t.id === selectKey) ? { id: selectKey }
     : TUNINGS[selectKey] ? { key: selectKey }
@@ -91,10 +94,11 @@ export function beginTuningDraft(selectKey) {
   render();
 }
 export const tuningDraftOpen = () => !!draft;
+export const tuningDraftDirty = () => !!draft && (JSON.stringify(draft) !== draftBaseline || forkDirty());
 export function dropTuningDraft() { draft = null; fork = null; sel = null; }
 
 // Apply: false when an unsaved built-in edit made the user stay.
-export async function saveTuningDraft() {
+export async function saveTuningDraft({ keepOpen = false } = {}) {
   if (!draft) return true;
   if (forkDirty() && !(await confirmDiscard())) return false;
   const twin = draft.find((t) => clashOf(parseTuning(t.notes) || [], t.id));
@@ -121,7 +125,7 @@ export async function saveTuningDraft() {
     // Bare strings a tuning now has are that tuning.
     if (lane.tuning === "custom") lane.tuning = tuningKeyFor(laneTuning(lane)) || "custom";
   }
-  dropTuningDraft();
+  if (keepOpen) beginTuningDraft(sel?.id || sel?.key); else dropTuningDraft();
   renderLayerSettings(); draw(); refreshTabIfOpen(); refreshSaveState();
   return true;
 }
@@ -179,6 +183,7 @@ function render() {
   if (!draft) return;
   renderList();
   renderEditor();
+  window.dispatchEvent(new Event("settings-draft-changed"));
 }
 
 function listItem(target, name, midis, selected) {

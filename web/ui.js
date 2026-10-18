@@ -15,7 +15,8 @@ import { doCopy, doCut, doDelete, doPaste, redo, undo, updateUndoButtons } from 
 import { resetZoom, zoomCenter } from "./geometry.js";
 import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey } from "./keymap.js";
 import { renderLayerSettings } from "./lanes.js";
-import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen } from "./tuning-editor.js";
+import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen, tuningDraftDirty } from "./tuning-editor.js";
+import { beginSoundDraft, dropSoundDraft, saveSoundDraft, soundDraftDirty } from "./sound-designer.js";
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
 import { panelMotion } from "./panel-motion.js";
 import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
@@ -67,12 +68,16 @@ let layerSnapshot = null;
 let layerActions = null;
 export function openLayerSettings(actions = null) {
   layerActions = actions;
-  $("layerSave").textContent = actions ? "Create" : "Save";
+  $("layerSave").textContent = actions ? "Create" : "Apply";
   $("settingsPanel").setAttribute("aria-label", actions ? "Add note layer" : "Edit note layer");
   renderLayerSettings();
   layerSettingsBackdrop.hidden = false;
   layerSnapshot = snapshotInputs($("settingsPanel"));
+  syncLayerActions();
 }
+const inputsDirty = snapshot => (snapshot || []).some(({ el, v }) =>
+  (["checkbox", "radio"].includes(el.type) ? el.checked : el.value) !== v);
+function syncLayerActions() { $("layerSave").hidden = !layerActions && !inputsDirty(layerSnapshot); }
 
 export function closeLayerSettings() {
   const actions = layerActions;
@@ -94,7 +99,6 @@ export function openTuningManager(selectKey) { openSettingsModal("tunings", sele
 // One modal, panes swapped by `section` ("trace" | "project" | "keys" | "appearance" | "models").
 const SP_TITLES = { trace: "Editor options", project: "Project details", keys: "Keyboard shortcuts", appearance: "Appearance", models: "Models", tunings: "Tunings" };
 // Rule 20: the primary names the work. A settings window applies; an editor saves.
-const SP_PRIMARY = { project: "Save" };
 let spSection = "trace";
 
 // Rule 17: the scrim is a promise that nothing has changed yet. These panes all
@@ -104,7 +108,7 @@ let spSection = "trace";
 // and a backdrop click are all the same key, and all four take this path.
 // The Tunings page keeps its own draft (tuning-editor.js), so it stays out of this.
 const snapshotInputs = (root) => [...root.querySelectorAll("input, select")]
-  .filter((el) => !el.closest("[hidden]") && !el.closest("#spTunings"))
+  .filter((el) => !el.closest("[hidden]") && !el.closest("#spTunings, #spSounds, #soundGearDialog, #soundFileActions, #spModels, #spAcceleration"))
   .map((el) => ({ el, v: ["checkbox", "radio"].includes(el.type) ? el.checked : el.value }));
 
 // Put each value back and re-fire the event that applied it, so persistence and
@@ -120,7 +124,20 @@ function revertInputs(snap) {
 
 let spSnapshot = null;
 function snapshotSettings() {
-  spSnapshot = { keys: keySnapshot(), inputs: snapshotInputs($("settingsModal")) };
+  const elements = new Set([...(spSnapshot?.inputs || []).map(({ el }) => el),
+    ...snapshotInputs($("settingsModal")).map(({ el }) => el)]);
+  spSnapshot = { keys: keySnapshot(), inputs: [...elements].map(el => ({ el,
+    v: ["checkbox", "radio"].includes(el.type) ? el.checked : el.value })) };
+  syncSettingsActions();
+}
+function syncSettingsActions() {
+  const keys = value => JSON.stringify(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)));
+  const dirty = !!spSnapshot && (inputsDirty(spSnapshot.inputs) || keys(keySnapshot()) !== keys(spSnapshot.keys)
+    || soundDraftDirty() || tuningDraftDirty());
+  $("settingsApply").textContent = "Apply";
+  $("settingsApply").hidden = !dirty || ["models", "acceleration"].includes(spSection);
+  const footer = $("settingsApply").closest(".dialog-footer");
+  footer.hidden = $("settingsApply").hidden && $("keymapReset").hidden;
 }
 function revertSettings() {
   if (!spSnapshot) return;
@@ -140,8 +157,9 @@ function showSettingsPane(section) {
   $("spModels").hidden = section !== "models";
   $("spAcceleration").hidden = section !== "acceleration";
   $("spTunings").hidden = section !== "tunings";
+  $("spSounds").hidden = section !== "sounds";
   $("settingsModalTitle").textContent = section === "project" ? SP_TITLES.project : "Settings";
-  $("settingsApply").textContent = SP_PRIMARY[section] || "Apply";
+  $("settingsApply").textContent = "Apply";
   $("settingsApply").disabled = false;   // renderProjectSettings disables it with no project open
   $("keymapReset").hidden = section !== "keys";
   // Rule 18: 720 only because the body carries repeating rows — the shortcut
@@ -157,14 +175,17 @@ function showSettingsPane(section) {
   if (section === "models") renderModels();
   if (section === "acceleration") renderAcceleration();
   if (section === "tunings" && !tuningDraftOpen()) beginTuningDraft(tuningSelect);
+  if (section === "sounds") beginSoundDraft();
   if (section === "keys") { setKeyTab("edit"); renderKeymap(); }
   if (section === "trace") drawFretboardLabelPreviews();
   setTimelineScrollPreviewVisible(section === "trace");
+  syncSettingsActions();
 }
 
 let tuningSelect = null;   // the tuning the Tunings page opens on
 function openSettingsModal(section = "trace", selectTuning = null) {
   dropTuningDraft();
+  dropSoundDraft();
   tuningSelect = selectTuning;
   showSettingsPane(section);
   settingsModalBackdrop.hidden = false;
@@ -177,6 +198,7 @@ function switchSettingsPane(section) {
   // original values so Cancel restores changes across the whole window.
   const seen = new Set(spSnapshot.inputs.map(({ el }) => el));
   spSnapshot.inputs.push(...snapshotInputs($("settingsModal")).filter(({ el }) => !seen.has(el)));
+  syncSettingsActions();
 }
 
 // Toggle the two sub-tabs of the keyboard pane (Editable / Fixed).
@@ -193,14 +215,14 @@ function setKeyTab(name) {
 
 // Closing stops the Models poll: a closed window that keeps asking the server
 // every second is a window that never actually closed.
-function closeSettingsModal() { spSnapshot = null; stopModelPolling(); setTimelineScrollPreviewVisible(false); settingsModalBackdrop.hidden = true; }
-function cancelSettingsModal() { revertSettings(); dropTuningDraft(); stopModelPolling(); setTimelineScrollPreviewVisible(false); settingsModalBackdrop.hidden = true; }
+function cancelSettingsModal() { revertSettings(); dropTuningDraft(); dropSoundDraft(); stopModelPolling(); setTimelineScrollPreviewVisible(false); settingsModalBackdrop.hidden = true; }
 // Project details is the one pane whose values live on the server, so its
 // primary is the only one that has work left to do when it is pressed.
 async function applySettingsModal() {
   if (spSection === "project") { saveProjectSettings(); return; }
-  if (!(await saveTuningDraft())) return;   // an unsaved built-in edit made them stay
-  closeSettingsModal();
+  if (!(await saveTuningDraft({ keepOpen: true }))) return;   // an unsaved built-in edit made them stay
+  if (!saveSoundDraft()) { showSettingsPane("sounds"); return; }
+  snapshotSettings();
 }
 
 function projectSettingsMeta() {
@@ -272,7 +294,8 @@ async function saveProjectSettings() {
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
     refreshSaveState();   // the project is named after these details
-    closeSettingsModal();
+    setProjectMetaStatus("Saved");
+    snapshotSettings();
   } catch (err) {
     setProjectMetaStatus(err.message, true);
   }
@@ -324,6 +347,7 @@ function renderKeymap() {
     row.append(name, key);
     return row;
   }));
+  syncSettingsActions();
 }
 
 // Active only while a row is in capture mode; runs at capture phase so the
@@ -455,11 +479,17 @@ export function init_ui() {
   wireMenu("menuMarkerLanes", () => setMarkerLanes(!railsHidden()));
   for (const button of panelControls("markers")) button.addEventListener("click", () => setMarkerLanes(!railsHidden()));
   settingsClose.addEventListener("click", cancelLayerSettings);
-  $("layerCancel").addEventListener("click", cancelLayerSettings);
-  $("layerSave").addEventListener("click", closeLayerSettings);
+  $("layerSave").addEventListener("click", () => {
+    if (layerActions) { closeLayerSettings(); return; }
+    layerSnapshot = snapshotInputs($("settingsPanel")); syncLayerActions();
+  });
   settingsModalClose.addEventListener("click", cancelSettingsModal);
-  $("settingsCancel").addEventListener("click", cancelSettingsModal);
   $("settingsApply").addEventListener("click", applySettingsModal);
+  for (const type of ["input", "change", "click"]) {
+    $("settingsModal").addEventListener(type, () => queueMicrotask(syncSettingsActions));
+    $("settingsPanel").addEventListener(type, () => queueMicrotask(syncLayerActions));
+  }
+  window.addEventListener("settings-draft-changed", syncSettingsActions);
   wireMenu("menuTraceSettings", () => openSettingsModal("trace"));
   wireMenu("menuProjectSettings", () => openSettingsModal("project"));
   wireMenu("menuKeySettings", () => openSettingsModal("keys"));

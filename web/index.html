@@ -718,8 +718,7 @@
       <div class="dialog-footer">
         <button type="button" id="layerDelete" class="danger">Delete note layer</button>
         <div class="dialog-actions">
-          <button type="button" id="layerCancel">Cancel</button>
-          <button type="button" id="layerSave" class="primary">Save</button>
+          <button type="button" id="layerSave" class="primary" hidden>Apply</button>
         </div>
       </div>
     </div>
@@ -758,8 +757,7 @@
       <div class="dialog-footer">
         <button type="button" id="stemRemove" class="danger">Remove audio</button>
         <div class="dialog-actions">
-          <button type="button" id="stemCancel">Cancel</button>
-          <button type="button" id="stemSave" class="primary">Save</button>
+          <button type="button" id="stemSave" class="primary" hidden>Apply</button>
         </div>
       </div>
     </div>
@@ -774,7 +772,77 @@
           <span id="settingsModalTitle">Trace options</span></span>
         <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="dialog-body">
+<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="sounds">Tone presets</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button><button type="button" class="navigation-item" data-settings-pane="acceleration">Acceleration</button></nav>      <div class="dialog-body">
+        <div class="sp-pane" id="spSounds" hidden>
+          <section class="sound-section" data-section="preset">
+          <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="soundSectionPreset"><span class="sound-section-title">Preset</span><span id="soundDraftStatus" class="sp-note" role="status"></span><span id="soundPresetSummary" class="sp-note sound-section-summary"></span></button>
+          <div class="sound-section-body" id="soundSectionPreset"><div class="sound-section-inner">
+          <div class="sound-form">
+            <label class="sound-form-label" for="soundPreset">Preset</label>
+            <div class="sound-form-field">
+              <select id="soundPreset" aria-label="Sound preset"></select>
+            </div>
+            <div class="sound-preset-actions">
+              <div class="sound-file-toolbar">
+              <button type="button" id="soundNew">New preset</button>
+              <button type="button" id="soundDuplicate">Duplicate preset</button>
+              <button type="button" id="soundDelete" class="btn--destructive-outline">Delete preset</button>
+              </div>
+              <div id="soundFileActions" class="sound-file-toolbar">
+                <button type="button" id="soundImport">Import preset</button>
+                <input id="soundImportFiles" type="file" accept=".json,application/json" multiple hidden />
+                <button type="button" id="soundExport">Export preset</button>
+              </div>
+            </div>
+            <label class="sound-form-label" for="soundName">Name</label>
+            <div class="sound-form-field">
+              <input id="soundName" type="text" maxlength="80" />
+              <div class="field-slider sound-volume"><span class="sound-form-label">Volume</span><input id="soundVolume" type="range" min="-12" max="36" step="0.1" /><input id="soundVolumeNumber" type="number" min="-12" max="36" step="any" aria-label="Tone volume value" title="DLC Builder volume scale. Higher values are louder; negative values retain older prototype presets." /><span class="sound-unit">dB</span></div>
+            </div>
+            <span class="sound-form-label">Description</span>
+            <div class="sound-form-field">
+              <div id="soundDescriptors" class="sound-descriptions"></div>
+              <button type="button" id="soundAddDescription" class="btn--compact" aria-label="Add tone description">+ Add</button>
+            </div>
+          </div>
+          <p class="sp-note" id="soundFileStatus" role="status" hidden></p>
+          <p class="sp-note" id="soundLibraryWarning" role="status" hidden></p>
+          </div></div>
+          </section>
+          <p id="soundValidation" class="status-line" role="alert" hidden></p>
+          <section class="sound-section" data-section="chain">
+          <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="soundSectionChain"><span class="sound-section-title">Signal chain</span><span id="soundEffectCount" class="sp-note"></span></button>
+          <div class="sound-section-body" id="soundSectionChain"><div class="sound-section-inner">
+          <nav id="soundChain" class="sound-chain" aria-label="Tone signal chain"></nav>
+          </div></div>
+          </section>
+          <section class="sound-section sound-section--device" data-section="device">
+          <div class="sound-section-head">
+            <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="soundSectionDevice"><span class="sound-section-title">Device settings</span></button>
+            <button type="button" id="soundExpandDevice" class="icon-btn" aria-label="Open device settings in a large window" title="Larger view" hidden><span data-ui-icon="fit" data-icon-size="14" aria-hidden="true"></span></button>
+          </div>
+          <div class="sound-section-body" id="soundSectionDevice"><div class="sound-section-inner" id="soundWorkbenchHome">
+          <div class="sound-workbench">
+            <section class="sound-device-editor" id="soundDeviceEditor">
+              <div id="soundDevices" class="sound-devices"></div>
+            </section>
+          </div>
+          </div></div>
+          </section>
+        </div>
+        <dialog id="soundDeviceDialog" class="dialog" aria-labelledby="soundDeviceDialogTitle">
+          <div class="dialog-header"><span id="soundDeviceDialogTitle" class="dialog-title"></span><button type="button" id="soundDeviceDialogClose" class="sp-x" aria-label="Close large view"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button></div>
+          <div class="dialog-body" id="soundDeviceDialogBody"></div>
+        </dialog>
+        <dialog id="soundGearDialog" class="dialog" aria-labelledby="soundGearDialogTitle">
+          <div class="dialog-header"><span id="soundGearDialogTitle" class="dialog-title">Replace device</span><button type="button" id="soundGearClose" class="sp-x" aria-label="Close device picker"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button></div>
+          <div class="dialog-body">
+            <div class="sound-gear-filters"><input id="soundGearSearch" type="search" aria-label="Find gear" placeholder="Find gear" /><select id="soundGearCategory" aria-label="Gear category"></select></div>
+            <select id="soundGearSelect" size="12" aria-label="Amplifier"></select>
+            <span id="soundGearMatches" class="sp-note"></span>
+          </div>
+          <div class="dialog-footer"><div class="dialog-actions"><button type="button" id="soundGearApply" class="primary" hidden>Apply</button></div></div>
+        </dialog>
         <!-- Marker timing state: feature wiring still binds these ids, but BPM,
              meter, division, and offset are edited through the marker popover. -->
         <div class="sp-pane" id="spTempo" hidden>
@@ -1032,8 +1100,7 @@
       <div class="dialog-footer">
         <button type="button" id="keymapReset" class="danger" hidden>Reset to defaults</button>
         <div class="dialog-actions">
-          <button type="button" id="settingsCancel">Cancel</button>
-          <button type="button" id="settingsApply" class="primary">Apply</button>
+          <button type="button" id="settingsApply" class="primary" hidden>Apply</button>
         </div>
       </div>
     </div>
@@ -1132,7 +1199,6 @@
         </div>
         <div class="dialog-footer">
           <div class="dialog-actions">
-            <button type="button" id="npCancel">Cancel</button>
             <button type="submit" id="go" class="primary">Create</button>
           </div>
         </div>
@@ -1144,11 +1210,10 @@
   <!-- Detect-into-frame merge prompt (shown when the frame already has notes) -->
   <div id="confirmBackdrop" hidden>
     <div id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-      <div class="dialog-header"><h2 class="dialog-title" id="confirmTitle">Detect into frame</h2></div>
+      <div class="dialog-header"><h2 class="dialog-title" id="confirmTitle">Detect into frame</h2><button type="button" id="confirmCancel" class="sp-x" aria-label="Close" title="Close (Esc)"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button></div>
       <div class="dialog-body"><p id="confirmMsg" class="confirm-msg"></p></div>
       <div class="dialog-footer">
         <div class="dialog-actions">
-          <button type="button" id="confirmCancel">Cancel</button>
           <button type="button" id="confirmAppend" title="Add new attacks without duplicating existing notes">Add new notes</button>
           <button type="button" id="confirmReplace" class="primary">Replace</button>
         </div>
@@ -1159,12 +1224,11 @@
   <!-- Shared confirmation for two- or three-choice actions -->
   <div id="actionConfirmBackdrop" hidden>
     <div id="actionConfirmModal" role="alertdialog" aria-modal="true" aria-labelledby="actionConfirmTitle" aria-describedby="actionConfirmMsg">
-      <div class="dialog-header"><h2 class="dialog-title" id="actionConfirmTitle"></h2></div>
+      <div class="dialog-header"><h2 class="dialog-title" id="actionConfirmTitle"></h2><button type="button" id="actionConfirmCancel" class="sp-x" aria-label="Close" title="Close (Esc)"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button></div>
       <div class="dialog-body"><p id="actionConfirmMsg" class="confirm-msg"></p></div>
       <div class="dialog-footer">
         <button type="button" id="actionConfirmDiscard" class="danger" hidden>Discard</button>
         <div class="dialog-actions">
-          <button type="button" id="actionConfirmCancel">Cancel</button>
           <button type="button" id="actionConfirmAccept" class="primary"></button>
         </div>
       </div>
@@ -1183,7 +1247,6 @@
       <div id="openProjList" class="op-list dialog-body--flush"></div>
       <div class="dialog-footer">
         <div class="dialog-actions">
-          <button type="button" id="openProjCancel">Cancel</button>
           <button type="button" id="openProjOpen" class="primary" disabled>Open</button>
         </div>
       </div>
@@ -1204,7 +1267,6 @@
       </div>
       <div class="dialog-footer">
         <div class="dialog-actions">
-          <button type="button" id="gpImportCancel">Cancel</button>
           <button type="button" id="gpImportConfirm" class="primary">Import tracks</button>
         </div>
       </div>
@@ -1286,7 +1348,6 @@
         </div>
         <div class="dialog-footer">
           <div class="dialog-actions">
-            <button type="button" id="rsExportCancel">Cancel</button>
             <button type="submit" id="rsExportGo" class="primary">Export</button>
           </div>
         </div>
@@ -1296,11 +1357,10 @@
 
   <div id="pasteBackdrop" hidden>
     <div id="pasteModal" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
-      <div class="dialog-header"><h2 class="dialog-title" id="pasteTitle">Paste reference</h2></div>
+      <div class="dialog-header"><h2 class="dialog-title" id="pasteTitle">Paste reference</h2><button type="button" id="pasteCancel" class="sp-x" aria-label="Close" title="Close (Esc)"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button></div>
       <div class="dialog-body"><p id="pasteMsg" class="confirm-msg">Editing a linked reference mirrors to every copy.</p></div>
       <div class="dialog-footer">
         <div class="dialog-actions">
-          <button type="button" id="pasteCancel">Cancel</button>
           <button type="button" id="pasteCopy">Paste as copy</button>
           <button type="button" id="pasteAsRef" class="primary">Paste as reference</button>
         </div>
