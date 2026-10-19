@@ -18,6 +18,8 @@ existing custom bindings using the same key.
 | R | Toggle Artifacts sidebar |
 | + / - | Zoom in / out, like the toolbar buttons |
 | 0 | Reset zoom |
+| T | Toggle drawing snap to pitch |
+| H | Open / close drawing quick settings |
 | Left / Right | Previous / next note onset or chord; navigate matches during Find similar |
 | Up / Down | Choose between simultaneously sounding note groups |
 | Ctrl+Left / Ctrl+Right | Previous / next marker |
@@ -30,6 +32,11 @@ Panning preserves the playhead, notes, selection and undo history. Existing note
 move/resize gestures, double-click insertion, Shift-selection and Alt-ranges stay
 available.
 
+A moving release carries the viewport forward with smoothly decreasing speed,
+based on the last 90 ms of panning. Pausing before release stops immediately.
+Clicking, pressing a key, using the wheel or switching projects stops the coast.
+The view stays within its bounds; reduced-motion preferences disable inertia.
+
 The transport buttons on either side of Play perform the same marker jumps.
 Navigation uses the active layer's tempo/meter, sections, phrase boundaries,
 tone switches and hand anchors. Coincident markers form one stop. It does not
@@ -41,6 +48,20 @@ bindings and marker jumps do not run while typing or while a modal dialog is ope
 The Fixed tab also documents the existing file/clipboard shortcuts and local
 keyboard or mouse controls for the overview, project start, fretboard, note menu,
 Tone Designer, Artifacts previews, selection, scrolling and zooming.
+
+## Drawing quick settings
+
+The Drawing button beside Zoom shows the snap state and heat threshold. Its
+popover provides Snap to pitch, a search range of ±1, ±2 or ±3 semitones, and a
+Heat slider with a live spectrogram preview. Changes persist immediately and
+stay synchronized with Editor settings. Turning snap off disables Range and
+Heat. A former saved ±5 range is migrated to ±3.
+
+H opens the popover and focuses Heat (or Snap when Heat is disabled). Arrow keys
+adjust the focused slider; Escape or an outside click closes the popover. Both
+H and T are editable commands, with the same conflict checking, removal, staged
+Apply/cancel and persistence as other bindings. The button hints follow the
+current bindings.
 
 ## Actions available without a default key
 
