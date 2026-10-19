@@ -3,12 +3,18 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from rs_studio.sound_presets import decode_presets, read_preset_folder, MAX_PRESET_BYTES
+from rs_studio.sound_presets import decode_presets, read_preset_folder, portable_tone_lanes, MAX_PRESET_BYTES
 
 DEFAULTS = Path(__file__).resolve().parents[1] / "presets" / "sounds"
 
 
 class SoundPresetFilesTests(unittest.TestCase):
+    def test_portable_definitions_do_not_change_saved_references(self):
+        tone = json.loads((DEFAULTS / 'guitar-clean.json').read_text('utf-8-sig'))
+        lanes = [{'toneMarkers': [{'id': 'a', 't': 0, 'tone': 'sound_reference'}]}]
+        portable = portable_tone_lanes(lanes, {'sound_reference': tone})
+        self.assertNotIn('toneData', lanes[0]['toneMarkers'][0])
+        self.assertEqual(portable[0]['toneMarkers'][0]['toneData']['Name'], tone['Name'])
     def test_six_defaults_validate_and_preserve_native_settings(self):
         files = list(DEFAULTS.glob("*.json"))
         self.assertEqual(len(files), 6)

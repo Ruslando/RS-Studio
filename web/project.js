@@ -34,7 +34,8 @@ import { loadWithScreen } from "./project-loading.js";
 import { S } from "./store.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
-import { withStartTone } from "./tone-marker-core.js";
+import { tonePresetLabel, tonePresetMissing, withStartTone } from "./tone-marker-core.js";
+import { loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets-core.js";
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars } from "./section-marker-core.js";
 import { inferTablatureEnabled } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
@@ -78,6 +79,7 @@ function projectBody() {
       id: stem.id, muted: !!stem.muted, solo: !!stem.solo, volume: normLayerVolume(stem.volume),
     })),
     mix: normMix(S.state.mix),   // the two buses: all note layers, all audio layers
+    projectStart: Number(S.state.projectStart) || 0,
     editLanes: S.state.editLanes.map(serialize),
     ...(S.state.guitarPro ? { guitarPro: S.state.guitarPro } : {}),
     // The project's own grid, sections and bars are the SONG's timing — whichever
@@ -102,9 +104,12 @@ function projectFileName() {
 
 async function projectBundle() {
   if (!S.state) return;
+  const body = projectBody();
+  const used = new Set(body.editLanes.flatMap(lane => (lane.toneMarkers || []).map(marker => marker.tone)));
+  body.tonePresets = Object.fromEntries(readAvailableSoundPresets().filter(preset => used.has(preset.id)).map(preset => [preset.id, preset.tone]));
   const res = await fetch(`/api/projects/${S.state.job}/export`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(projectBody()),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
   return { blob: await res.blob(), name: projectFileName() };
@@ -133,7 +138,7 @@ let savedSig = null;
 function dirtySig() {
   const b = projectBody();
   return JSON.stringify({ editLanes: b.editLanes, grid: b.grid, sectionMarkers: b.sectionMarkers, timings: b.timings,
-    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, stemSettings: b.stemSettings, mix: b.mix });
+    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, projectStart: b.projectStart, stemSettings: b.stemSettings, mix: b.mix });
 }
 
 function isDirty() { return !!S.state && S.state.job !== "tutorial" && dirtySig() !== savedSig; }
@@ -209,7 +214,7 @@ async function openProjectFile(file) {
     fd.append("file", file);
     const res = await fetch("/api/projects/import", { method: "POST", body: fd });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Import failed");
-    applyProject(await res.json());
+    await applyProject(await res.json());
     await waitForProjectVisuals();
   });
 }
@@ -227,7 +232,7 @@ async function attachAudio(file) {
     await saveToServer();
     const body = new FormData();
     body.append("audio", file);
-    applyProject(await uploadRequest(`/api/projects/${S.state.job}/audio`, body, "Attaching audio", file.name));
+    await applyProject(await uploadRequest(`/api/projects/${S.state.job}/audio`, body, "Attaching audio", file.name));
     toast("Audio attached", 2200, "ok");
   } catch (error) {
     toast("Couldn't attach the audio: " + error.message, 6000, "error");
@@ -243,7 +248,7 @@ function chooseAudioAttachment() {
 
 // Return the UI to its initial "no project open" state.
 // Notes/lanes share one object shape in every lane, so copy-paste is trivial.
-export function mapLane(l) {
+export function mapLane(l, startAt = 0) {
   const instrument = instrKey(l.instrument);
   // `source` named the tool that made each note — "trace", "pasted", a detector's
   // own label. Nothing displayed it and one migration heuristic read it, so it is
@@ -294,7 +299,7 @@ export function mapLane(l) {
     displayTranspositionPitch: Number.isFinite(l.displayTranspositionPitch) ? l.displayTranspositionPitch : 0,
     notes,
     ...normalizedLaneFields(l),
-    toneMarkers: withStartTone(normalizedLaneFields(l).toneMarkers, { instrument, rocksmithArrangement: l.rocksmithArrangement }),
+    toneMarkers: withStartTone(normalizedLaneFields(l).toneMarkers, { instrument, rocksmithArrangement: l.rocksmithArrangement }, undefined, startAt),
     refBoxes: l.refBoxes && typeof l.refBoxes === "object" ? l.refBoxes : {},
   };
 }
@@ -318,7 +323,9 @@ export function mapLane(l) {
 let projectVisuals = Promise.resolve();
 export const waitForProjectVisuals = () => projectVisuals;
 
-export function applyProject(data) {
+export async function applyProject(data) {
+  let presetLoadError = null;
+  try { await loadPresetFolderData(); } catch (error) { presetLoadError = error; }
   projectVisuals = Promise.resolve();
   // 1. tear down the previous project
   disposeSynths();
@@ -354,6 +361,7 @@ export function applyProject(data) {
     name: data.name,
     filename: data.filename,
     duration: data.duration,
+    projectStart: Math.max(0, Math.min(Number(data.duration) || Infinity, Number(data.projectStart) || 0)),
     detectedTempo: data.tempo,
     separated: data.separated,
     separator: data.separator,
@@ -371,7 +379,7 @@ export function applyProject(data) {
       muted: !!s.muted, solo: !!s.solo, volume: normLayerVolume(s.volume),
     })),
     mix: normMix(data.mix),
-    editLanes: sourceLanes.map(mapLane),
+    editLanes: sourceLanes.map(lane => mapLane(lane, Number(data.projectStart) || 0)),
     curStem: null,         // set by selectStem below
     spec: null, rowH: 0, lanes: [],
   };
@@ -464,6 +472,11 @@ export function applyProject(data) {
   // sits upstream of all three. project-library.js hands GP drops back the same
   // way ("cw-open-guitar-pro").
   window.dispatchEvent(new CustomEvent("cw-project-opened"));
+  const presets = readAvailableSoundPresets();
+  const missingTones = [...new Set(S.state.editLanes.flatMap(lane => (lane.toneMarkers || [])
+    .filter(marker => tonePresetMissing(marker.tone, presets, marker.toneData)).map(marker => tonePresetLabel(marker.tone, marker.toneData, presets))))];
+  if (presetLoadError) toast(`Could not load tone presets: ${presetLoadError.message}`, 8000, "warn");
+  if (missingTones.length) toast(`Missing tone presets: ${missingTones.join(", ")}. Choose an available preset for the marked tone switches.`, 10000, "warn");
 }
 
 // Close the project and hand the window back to the launcher — phases 1 and 4 of
@@ -1005,7 +1018,7 @@ export async function loadCached(job) {
   await loadWithScreen(async () => {
     const res = await fetch(`/api/projects/${job}`);
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Load failed");
-    applyProject(await res.json());
+    await applyProject(await res.json());
     await waitForProjectVisuals();
   });
 }
@@ -1032,7 +1045,7 @@ export function init_project() {
     onPick: loadCached,
   });
   initNewProject({
-    onCreated: async (data) => { applyProject(data); await waitForProjectVisuals(); },
+    onCreated: async (data) => { await applyProject(data); await waitForProjectVisuals(); },
     onClosed: () => { if (!S.state) showWelcome(); },   // cancelled with nothing open
     canLeave: confirmLeave,   // the modal ends in a project swap, so ask before it opens
   });

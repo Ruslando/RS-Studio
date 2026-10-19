@@ -1,3 +1,4 @@
+import { paintNoteRow } from './timeline-paint.js';
 import { chordWarnings } from "./chord-warnings.js";
 import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
 import { renderArtifacts } from "./artifacts.js";
@@ -13,6 +14,7 @@ import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
 import { drawFretboard, fretboardEditTargets } from "./fretboard.js";
 import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
+import { syncProjectStartHandle } from "./project-position.js";
 import { markerRails, overviewMarkerRails, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
 import { edgeOf, hoveredStageNote, localXY, pickNote } from "./interaction.js";
@@ -477,8 +479,7 @@ function paintFrame() {
         }
         sctx.lineWidth = 1; sctx.lineCap = "round";
       } else {
-        const inset = Math.min(2, rowH * .12) * (1 - motion.reveal);
-        paintNoteBar(sctx, x, y + inset, w, rowH - 2 * inset, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis);
+        paintNoteRow(sctx, x, y, w, rowH, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis, motion.reveal);
       }
       if (active && !curve) {
         sctx.save();
@@ -639,6 +640,7 @@ function paintFrame() {
     sctx.restore();
   }
   sctx.restore();
+  syncProjectStartHandle();
   drawMinimap();
 }
 

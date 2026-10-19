@@ -59,6 +59,7 @@ function structureSnapshot() {
     sectionMarkers: cloneJson(S.state.sectionMarkers),
     scoreDuration: S.state.scoreDuration,
     duration: S.state.duration,
+    projectStart: S.state.projectStart,
   };
 }
 
@@ -121,22 +122,24 @@ export function commit(prev, mirrorSource, cuts = null) {
 // changes it picks the first arbitrarily and overwrites the rest with it. A
 // structure edit never changes what is inside a reference, only when it happens,
 // so it records undo and skips that pass.
-export function commitStructure(prev) {
-  recordUndo(prev);
+export function commitStructure(prev, { translation = null } = {}) {
+  recordUndo(prev, translation);
 }
 
-function rejectLockedEdit(prev) {
-  const ref = lockedReferenceFault(prev.lockedReferences);
+function rejectLockedEdit(prev, translation = 0) {
+  const ref = lockedReferenceFault(prev.lockedReferences, translation);
   if (ref == null) return false;
   restore(prev);
   toast(`Reference #${ref} is locked. Unlock it before editing.`, 2500);
   return true;
 }
 
-function recordUndo(prev) {
-  if (rejectLockedEdit(prev)) return;
-  if (S.state) eachTiming(editLanes(), snapStrayNotes);
-  if (rejectLockedEdit(prev)) return;
+function recordUndo(prev, translation = null) {
+  if (rejectLockedEdit(prev, translation || 0)) return;
+  // A whole-project translation preserves imported/off-grid rhythm exactly.
+  // Its locked references may move, but their shapes and contents must match.
+  if (S.state && translation == null) eachTiming(editLanes(), snapStrayNotes);
+  if (rejectLockedEdit(prev, translation || 0)) return;
   S.voicingRevision++;
   S.undoStack.push(prev);
   if (S.undoStack.length > MAX_UNDO) S.undoStack.shift();
@@ -157,6 +160,7 @@ function restore(snap) {
     S.state.scoreBars = cloneJson(snap.structure.scoreBars);
     S.state.sectionMarkers = cloneJson(snap.structure.sectionMarkers);
     S.state.scoreDuration = snap.structure.scoreDuration;
+    S.state.projectStart = snap.structure.projectStart;
     if (snap.structure.duration != null) S.state.duration = snap.structure.duration;
   }
   // The grid before the stem: switching stems rebuilds the lanes, which may swap

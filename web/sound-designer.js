@@ -1,4 +1,5 @@
-// Native tone authoring. Settings stage the library; projects own snapshots.
+// Native tone authoring. Projects reference the app library; unavailable
+// imported tones remain editable as project-local presets.
 import { SOUND_BASES, GEAR, GEAR_DATA, DESCRIPTORS, MAX_EFFECTS, cloneSound, gearName, gearInstrument,
   slotType, slotPrefix, slotLabel, knobValueValid, knobUnit, formatKnob, soundVolumeValid, normalizeSound, readSoundLibraryState, writeSoundLibrary, effectBank, removeEffect, moveEffect } from "./sound-presets-core.js";
 import { $ } from "./dom.js";
@@ -7,7 +8,11 @@ import { confirmAction } from "./dialog.js";
 import { insertEffect } from "./sound-presets-core.js";
 import { parameterSlider } from "./parameter-slider.js";
 import { dial, fader, eqGraph, segmented } from "./sound-controls.js";
-import { MAX_PRESET_FILE_BYTES, parsePresetJSON, presetJSON, presetFingerprint, loadPresetFolderData } from "./sound-presets-core.js";
+import { MAX_PRESET_FILE_BYTES, parsePresetJSON, presetJSON, presetFingerprint, loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets-core.js";
+import { projectSoundPresets, projectSoundDirty, prepareProjectSoundEdits } from './project-sound-presets.js';
+import { S } from './store.js';
+import { snapshotEdit, commitStructure } from './edit.js';
+import { initCollapsibleSections, setSection } from './collapsible-sections.js';
 
 let library = null, selected = "clean", sound = null, activeSlot = "Amp";
 let filter = "", category = "all";
@@ -15,11 +20,15 @@ let pendingBank = null, pickerKey = null;
 let librarySnapshot = null, libraryBaseline = "";
 let draggedSlot = null;
 let startingPoints = SOUND_BASES, fileRequest = 0, loadingFiles = false;
-export const soundDraftDirty = () => !!library && JSON.stringify(library) !== libraryBaseline;
+let projectLibrary = [], projectState = null;
+let linkedAppPreset = null;
+export const soundDraftDirty = () => !!library && (JSON.stringify(library) !== libraryBaseline || projectSoundDirty(projectLibrary));
 // The preset as it was when opened; each control can return to its value.
 let baseline = null;
 const own = () => library?.find(entry => entry.id === selected);
-const remember = () => { if (own()) own().tone = cloneSound(sound); };
+const projectOwn = () => projectLibrary.find(entry => entry.id === selected);
+const entry = () => own() || projectOwn() || (linkedAppPreset?.id === selected ? linkedAppPreset : null);
+const remember = () => { if (entry()) entry().tone = cloneSound(sound); };
 function copyName(name) {
   const base = name.replace(/ copy(?: \d+)?$/, "").slice(0, 65);
   const names = new Set(library.map(entry => entry.tone.Name));
@@ -29,13 +38,9 @@ function copyName(name) {
 }
 // Collapsed sections are a per-viewer layout preference.
 const SECTIONS_KEY = "rs-studio.sound-sections.collapsed";
-function setSection(section, open) {
-  section.toggleAttribute("data-collapsed", !open);
-  section.querySelector(".sound-section-toggle").setAttribute("aria-expanded", String(open));
-  section.querySelector(".sound-section-body").inert = !open;
-}
 function changed({ keepName = false } = {}) {
-  if (!own()) {
+  if (linkedAppPreset?.id === selected && !own()) library.push({ id: selected, tone: cloneSound(sound) });
+  if (!entry()) {
     // `sound` is already a private draft. Keep its object and device references
     // intact so the first slider drag or text edit can continue uninterrupted.
     if (!keepName) sound.Name = copyName(sound.Name);
@@ -50,31 +55,52 @@ function changed({ keepName = false } = {}) {
 }
 function choose(key) {
   remember(); selected = key;
-  sound = cloneSound(own()?.tone || startingPoints[key]); baseline = cloneSound(sound); activeSlot = "Amp";
+  sound = cloneSound(entry()?.tone || startingPoints[key]); baseline = cloneSound(sound); activeSlot = "Amp";
   filter = ""; category = "all"; render();
 }
 export function beginSoundDraft() {
   if (library) return;
   librarySnapshot = readSoundLibraryState(); library = cloneSound(librarySnapshot.presets);
+  projectState = S.state; projectLibrary = projectSoundPresets(projectState);
   libraryBaseline = JSON.stringify(library); selected = library[0]?.id || "clean";
   sound = cloneSound(own()?.tone || SOUND_BASES[selected]); baseline = cloneSound(sound); activeSlot = "Amp";
   filter = ""; category = "all"; render();
   loadPresetFolder({ initial: true });
 }
+export function selectToneSound(laneId, markerId) {
+  const marker = S.state?.editLanes.find(lane => lane.id === laneId)?.toneMarkers?.find(marker => marker.id === markerId);
+  const appPreset = readAvailableSoundPresets().find(preset => preset.id === marker?.tone);
+  if (appPreset) {
+    if (!library.some(entry => entry.id === appPreset.id)) linkedAppPreset = cloneSound(appPreset);
+    choose(appPreset.id);
+    setSection(document.querySelector('[data-section="preset"]'), true);
+    return true;
+  }
+  const preset = projectLibrary.find(entry => entry.targets.some(target => target.lane === laneId && target.marker === markerId));
+  if (!preset) return false;
+  choose(preset.id);
+  setSection(document.querySelector('[data-section="preset"]'), true);
+  return true;
+}
 export function dropSoundDraft() {
   fileRequest++; loadingFiles = false; $("spSounds").inert = false;
   $("soundPreset").disabled = false;
   $("soundGearDialog").close(); $("soundDeviceDialog").close(); library = null; sound = null; librarySnapshot = null;
+  projectLibrary = []; projectState = null;
+  linkedAppPreset = null;
 }
 export function saveSoundDraft() {
   if (loadingFiles) { toast("Wait for the presets to finish loading"); return false; }
   if (!library) return true;
   remember();
-  if (JSON.stringify(library) === libraryBaseline) return true;
+  if (!soundDraftDirty()) return true;
+  const libraryDirty = JSON.stringify(library) !== libraryBaseline;
+  const projectDirty = projectSoundDirty(projectLibrary);
   const normalized = library.map(entry => ({ id: entry.id, tone: normalizeSound(entry.tone) }));
-  const invalid = normalized.find(entry => !entry.tone);
+  const invalid = (libraryDirty && normalized.find(entry => !entry.tone))
+    || projectLibrary.find(entry => JSON.stringify(entry.tone) !== entry.source && !normalizeSound(entry.tone));
   if (invalid) {
-    selected = invalid.id; sound = cloneSound(own().tone);
+    selected = invalid.id; sound = cloneSound(entry().tone);
     activeSlot = Object.keys(sound.GearList).find(slot => (GEAR_DATA[sound.GearList[slot].Key]?.Knobs || [])
       .some(knob => !knobValueValid(knob, sound.GearList[slot].KnobValues[knob.Key]))) || "Amp";
     render();
@@ -89,11 +115,22 @@ export function saveSoundDraft() {
     });
     toast("Check the highlighted preset and parameter values"); return false;
   }
-  try { writeSoundLibrary(normalized, librarySnapshot); }
+  let applyProjectEdits;
+  try {
+    if (projectDirty && projectState !== S.state) throw new Error('The open project changed. Reopen the designer');
+    applyProjectEdits = prepareProjectSoundEdits(projectLibrary, S.state);
+    if (libraryDirty) writeSoundLibrary(normalized, librarySnapshot);
+  }
   catch (error) { toast(`Presets could not be saved: ${error.message}`); return false; }
+  if (projectDirty) {
+    const previous = snapshotEdit();
+    applyProjectEdits();
+    commitStructure(previous);
+  }
   librarySnapshot = readSoundLibraryState();
-  library = cloneSound(normalized); libraryBaseline = JSON.stringify(library);
-  sound = cloneSound(own()?.tone || sound); baseline = cloneSound(sound);
+  if (libraryDirty) library = cloneSound(normalized);
+  libraryBaseline = JSON.stringify(library);
+  sound = cloneSound(entry()?.tone || sound); baseline = cloneSound(sound);
   render();
   window.dispatchEvent(new Event("sound-presets-changed")); return true;
 }
@@ -118,10 +155,27 @@ function newPreset() {
 function renderPresets() {
   const select = $("soundPreset"); select.replaceChildren();
   const builtins = document.createElement("optgroup"); builtins.label = "Starting points";
-  for (const [key, tone] of Object.entries(startingPoints)) builtins.append(new Option(tone.Name, key));
+  const available = readAvailableSoundPresets();
+  for (const [key, tone] of Object.entries(startingPoints)) {
+    const preset = available.find(preset => preset.fileId === key);
+    if (preset && library.some(entry => entry.id === preset.id)) continue;
+    builtins.append(new Option(tone.Name, preset && linkedAppPreset?.id === preset.id ? preset.id : key));
+  }
+  if (linkedAppPreset && !library.some(entry => entry.id === linkedAppPreset.id)
+      && ![...builtins.children].some(option => option.value === linkedAppPreset.id)) {
+    builtins.append(new Option(linkedAppPreset.tone.Name, linkedAppPreset.id));
+  }
   const mine = document.createElement("optgroup"); mine.label = "Your presets";
   for (const entry of library) mine.append(new Option(entry.tone.Name, entry.id));
-  select.append(builtins, mine); select.value = selected;
+  const project = document.createElement('optgroup'); project.label = 'Project presets';
+  const names = new Map();
+  for (const entry of projectLibrary) {
+    const count = (names.get(entry.tone.Name) || 0) + 1; names.set(entry.tone.Name, count);
+    project.append(new Option(`${entry.tone.Name}${count > 1 ? ` · ${count}` : ''}`, entry.id));
+  }
+  select.append(builtins, mine);
+  if (projectLibrary.length) select.append(project);
+  select.value = selected;
 }
 function fileStatus(messages) {
   $("soundFileStatus").textContent = messages.join(" ");
@@ -140,7 +194,7 @@ async function loadPresetFolder({ initial = false } = {}) {
     startingPoints = entries.length ? Object.fromEntries(entries) : SOUND_BASES;
     fileStatus([...(data.errors || []).map(error => `${error.file}: ${error.error}`),
       ...(!entries.length ? ["No usable JSON presets found. Showing legacy starting points."] : [])]);
-    if (!own()) {
+    if (!entry()) {
       selected = (!initial && startingPoints[selected]) ? selected
         : (startingPoints["file:guitar-clean.json"] ? "file:guitar-clean.json" : Object.keys(startingPoints)[0]);
       sound = cloneSound(startingPoints[selected]); baseline = cloneSound(sound); activeSlot = "Amp";
@@ -576,7 +630,7 @@ function renderDescriptors() {
   $("soundAddDescription").hidden = sound.ToneDescriptors.length >= 3;
 }
 function refreshStatus() {
-  const dirty = JSON.stringify(library) !== libraryBaseline;
+  const dirty = soundDraftDirty();
   $("soundPresetSummary").textContent = sound.Name;
   $("soundDraftStatus").textContent = dirty ? "Unsaved changes" : "";
   $("soundDraftStatus").dataset.dirty = String(dirty);
@@ -599,7 +653,7 @@ function render() {
   $("soundLibraryWarning").hidden = !librarySnapshot.error && !librarySnapshot.unavailable.length;
   $("soundLibraryWarning").textContent = librarySnapshot.error ? "The saved preset library could not be read. Existing data will be protected." : "Some saved presets could not be loaded. Their stored data will be preserved.";
   $("soundDelete").disabled = !own();
-  $("soundDelete").title = own() ? "Delete preset" : "Only your own presets can be deleted";
+  $("soundDelete").title = own() ? "Delete preset" : projectOwn() ? "Remove project presets at their tone switches" : "Only your own presets can be deleted";
   if (!sound.GearList[activeSlot]) activeSlot = "Amp";
   renderDescriptors(); renderChain(); renderDevice({ resetScroll: true });
   refreshStatus();
@@ -609,17 +663,7 @@ export function init_sound_designer() {
   $("soundImport").addEventListener("click", () => $("soundImportFiles").click());
   $("soundImportFiles").addEventListener("change", () => importPresetFiles([...$("soundImportFiles").files]));
   $("soundExport").addEventListener("click", () => exportPresets());
-  let collapsed = [];
-  try { collapsed = JSON.parse(localStorage.getItem(SECTIONS_KEY)) || []; } catch { /* layout falls back to all open */ }
-  const sections = [...document.querySelectorAll("#spSounds .sound-section")];
-  for (const section of sections) {
-    setSection(section, !collapsed.includes(section.dataset.section));
-    section.querySelector(".sound-section-toggle").addEventListener("click", () => {
-      setSection(section, section.hasAttribute("data-collapsed"));
-      const keys = sections.filter(item => item.hasAttribute("data-collapsed")).map(item => item.dataset.section);
-      try { localStorage.setItem(SECTIONS_KEY, JSON.stringify(keys)); } catch { /* not remembered */ }
-    });
-  }
+  initCollapsibleSections($("spSounds"), SECTIONS_KEY);
   const volume = $("soundVolume"); volume.setAttribute("aria-label", "Tone volume");
   const volumeScale = parameterSlider(volume.cloneNode(), {
     min: -12, max: 36, step: 0.1, defaultValue: 0, format: value => `${value} dB`,
@@ -673,11 +717,13 @@ export function init_sound_designer() {
   $("soundNew").addEventListener("click", newPreset);
   $("soundPreset").addEventListener("change", () => choose($("soundPreset").value));
   $("soundDuplicate").addEventListener("click", duplicate);
-  $("soundName").addEventListener("input", () => { sound.Name = $("soundName").value; changed({ keepName: true }); renderPresets(); });
+  $("soundName").addEventListener("input", () => { if (!sound) return; sound.Name = $("soundName").value; changed({ keepName: true }); renderPresets(); });
   $("soundVolume").addEventListener("input", () => {
+    if (!sound) return;
     sound.Volume = String(-Number($("soundVolume").value)); $("soundVolumeNumber").value = $("soundVolume").value; changed();
   });
   $("soundVolumeNumber").addEventListener("input", () => {
+    if (!sound) return;
     const input = $("soundVolumeNumber");
     sound.Volume = input.value === "" ? null : String(-Number(input.value));
     input.setAttribute("aria-invalid", String(!input.validity.valid || input.value === ""));

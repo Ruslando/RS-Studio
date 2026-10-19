@@ -1,3 +1,4 @@
+import { paintTimeGridLine } from './timeline-paint.js';
 // Everything the canvas paints that is not the spectrogram itself: the pitch
 // ruler, the beat grid, the Alt-dragged detect frame, stacked-note badges, and
 // the note-effect glyphs (slides, bends, harmonics, articulation tags).
@@ -99,10 +100,7 @@ export function drawGrid() {
       const x = xOf(t);
       if (x > vx1) break;
       if (x < vx0 - 2) continue;
-      if (i % barSteps === 0) { sctx.strokeStyle = PAINT.gridBar; sctx.lineWidth = 2; }
-      else if (i % sub === 0) { sctx.strokeStyle = PAINT.gridBeat; sctx.lineWidth = 1; }
-      else { sctx.strokeStyle = PAINT.gridSub; sctx.lineWidth = 1; }
-      sctx.beginPath(); sctx.moveTo(x, 0); sctx.lineTo(x, ch); sctx.stroke();
+      paintTimeGridLine(sctx, x, 0, ch, i % barSteps === 0 ? 'bar' : i % sub === 0 ? 'beat' : 'sub');
     }
   }
   sctx.lineWidth = 1;

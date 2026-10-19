@@ -20,7 +20,9 @@ Editing a folder preset creates a private copy. To change a folder file, export
 the edited preset as JSON and replace that file yourself. **Export preset** exports
 the selected preset. Both actions sit below the preset selector with the other
 preset actions. Apply saves without closing the window.
-Assigned project tone snapshots remain independent of these files.
+Assigned tones reference their app preset. The Tone Designer action on a switch
+edits that app preset's values; it does not overwrite the source JSON file.
+Only unavailable tones from imported projects keep project-local definitions.
 
 ## Included starting points
 

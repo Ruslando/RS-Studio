@@ -41,6 +41,7 @@ import importlib
 import io
 import ipaddress
 import json
+import math
 import mimetypes
 import os
 import re
@@ -340,6 +341,9 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
                 stem["volume"] = float(volume)
     if "grid" in payload:
         m["grid"] = payload["grid"]
+    project_start = payload.get("projectStart")
+    if isinstance(project_start, (int, float)) and not isinstance(project_start, bool) and math.isfinite(project_start) and project_start >= 0:
+        m["projectStart"] = float(project_start)
     if "scoreBars" in payload and isinstance(payload.get("scoreBars"), list):
         m["scoreBars"] = payload["scoreBars"]
     if "sectionMarkers" in payload and isinstance(payload.get("sectionMarkers"), list):
@@ -426,6 +430,7 @@ def _response_from_manifest(m: dict) -> dict:
         "name": m.get("name"),
         "filename": m.get("filename"),
         "duration": m.get("duration"),
+        "projectStart": m.get("projectStart", 0.0),
         "tempo": m.get("tempo"),
         "separated": m.get("separated", False),
         "separator": m.get("separator"),
@@ -1338,6 +1343,14 @@ def api_project_export(job: str, payload: dict = Body(default={})) -> Response:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         portable = {k: v for k, v in m.items() if k != "job"}
+        from .sound_presets import portable_tone_lanes
+        definitions = payload.get("tonePresets") or {}
+        if not isinstance(definitions, dict):
+            raise HTTPException(status_code=400, detail="Invalid tone presets")
+        try:
+            portable["editLanes"] = portable_tone_lanes(m.get("editLanes", []), definitions)
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid tone preset: {exc}") from exc
         zf.writestr("project.json", json.dumps(portable, indent=2))
         for rel in _project_assets(m):
             asset = _safe_project_file(job_dir, rel)

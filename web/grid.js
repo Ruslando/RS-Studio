@@ -13,6 +13,7 @@ import { onLiveTiming } from "./timing.js";
 const timedLanes = () => editLanes().filter(onLiveTiming);
 import { refreshSaveState } from "./project.js";
 import { S } from "./store.js";
+import { projectStart } from "./project-position-core.js";
 
 // ---- tempo grid ----
 export const gridBpm = () => parseFloat(bpmInput.value) || 0;
@@ -198,8 +199,8 @@ export function snap(t, segments = null) {
   // pull subsequent pointer events onto a different set of snap positions.
   const seg = segments ? [...segments].reverse().find(s => s.t <= t) || segments[0] : gridAt(t);
   const step = segStep(seg);
-  if (!step) return t;
-  return Math.max(0, Math.round((t - seg.t) / step) * step + seg.t);
+  if (!step) return Math.max(projectStart(S.state), t);
+  return Math.max(projectStart(S.state), Math.round((t - seg.t) / step) * step + seg.t);
 }
 
 // Pull a whole note onto the current display grid: snap the start to the nearest
@@ -209,8 +210,11 @@ export function snap(t, segments = null) {
 // unchanged, which is how off-grid notes stay allowed only before timing exists.
 export function snapNote(start, end) {
   const seg = gridAt(start), step = segStep(seg);
-  if (!step) return { start, end };
-  const s = Math.max(0, Math.round((start - seg.t) / step) * step + seg.t);
+  if (!step) {
+    const s = Math.max(projectStart(S.state), start);
+    return { start: s, end: end + s - start };
+  }
+  const s = Math.max(projectStart(S.state), Math.round((start - seg.t) / step) * step + seg.t);
   const cells = Math.max(1, Math.round((end - start) / step));
   return { start: s, end: S.state ? Math.min(S.state.duration, s + cells * step) : s + cells * step };
 }
@@ -228,7 +232,7 @@ export function snapStrayNotes(lanes) {
   for (const lane of lanes) {
     for (const n of lane.notes) {
       const seg = gridAt(n.start);
-      if (!seg.bpm || on(n.start, seg, segStep(seg)) || on(n.start, seg, 60 / seg.bpm / 24)) continue;
+      if (n.start >= projectStart(S.state) && (!seg.bpm || on(n.start, seg, segStep(seg)) || on(n.start, seg, 60 / seg.bpm / 24))) continue;
       const q = snapNote(n.start, n.end);
       for (const h of lane.handHolds || []) if (Math.abs(+h.t - n.start) < 1e-6) h.t = q.start;
       n.start = q.start; n.end = q.end;
@@ -247,9 +251,12 @@ export const FINE_SUBDIV = 8;          // 1/32 note
 
 export function quantizeFine(start, end) {
   const seg = gridAt(start);
-  if (!seg.bpm) return { start, end };
+  if (!seg.bpm) {
+    const s = Math.max(projectStart(S.state), start);
+    return { start: s, end: end + s - start };
+  }
   const step = 60 / seg.bpm / FINE_SUBDIV;
-  const s = Math.max(0, Math.round((start - seg.t) / step) * step + seg.t);
+  const s = Math.max(projectStart(S.state), Math.round((start - seg.t) / step) * step + seg.t);
   const cells = Math.max(1, Math.floor((end - start) / step));
   return { start: s, end: Math.min(S.state.duration, s + cells * step) };
 }
@@ -262,7 +269,7 @@ function shiftEditLanesBy(delta) {
   const dur = S.state.duration;
   for (const lane of timedLanes()) {
     for (const n of lane.notes) {
-      n.start = Math.max(0, n.start + delta);
+      n.start = Math.max(projectStart(S.state), n.start + delta);
       n.end = Math.min(dur, n.end + delta);
     }
     if (lane.refBoxes)

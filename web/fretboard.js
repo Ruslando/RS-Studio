@@ -1,3 +1,4 @@
+import { fretboardPreviewPhrase } from './fretboard-preview-phrase.js';
 import { previewPositionReferences } from "./references.js";
 import { positionPreviewHand, positionPreviewLane } from "./position-preview.js";
 import { positionEditTargets, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
@@ -696,63 +697,13 @@ function paintBoardTuning(ctx, s, X, Y, tuning, fontSize) {
   ctx.restore();
 }
 
-export function drawFretboard() {
-  if (editorEl.hidden || !S.state) return;
-  const ctx = fretboardEl.getContext("2d");
-  const dp = dpr(), w = fretboardEl.width / dp, h = fretboardEl.height / dp;
-  ctx.setTransform(dp, 0, 0, dp, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-  // The lane whose hand this is, and its open strings. A lane whose tuning has
-  // another string count than its instrument's neck gets the instrument and nothing
-  // else, so its tuning is not drawn either.
-  const lane = currentLane();
-  const warning = $("fretboardWarning");
-  const warningTime = frozenAt(lane) ?? boardTime();
-  const impossible = !!lane && chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
-    .some(({ t0, notes }) => warningTime >= t0 - 1e-5 && warningTime < Math.max(...notes.map(n => n.end)));
-  const selectionError = editing && !transportPlaying() ? selectedPositions(lane).error : null;
-  const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
-  warning.hidden = !selectionError && !impossible;
-  warning.textContent = selectionError || (impossible ? "⚠ No valid shape found" : "");
-  warning.title = selectionError || "The notes cannot all be played together with this tuning, fret range and fingering.";
-  fretboardPanel.toggleAttribute("data-unplayable", impossible);
-  if (fretboardPanel.hasAttribute("data-edit-blocked") !== blocked) {
-    fretboardPanel.toggleAttribute("data-edit-blocked", blocked);
-    layoutFretboard(); return;
-  }
-  // Whether the player put the hand on this beat. Hoisted because holdHere walks
-  // songBarStarts(), which rebuilds the bar list on every call, and this runs per frame.
-  const held = holdHere(lane);
-  const s = laneSpec(lane);
-  // A different instrument is a different board shape, so the panel is the wrong
-  // height until the layout has seen it. One bounce: layoutFretboard draws again.
-  if (s !== laidOut) { layoutFretboard(); return; }
-  const last = fretDistance(s.frets, s.scale);
-  const tuning = lane ? laneTuning(lane) : null;
-  // How much room a name beside a string has, measured off the scale the board would
-  // take with no gutter — within a few percent of the real one, which is circular,
-  // and this only has to choose between three sizes. A string at the nut is a pitch
-  // row, so it gets rule 6's anchored 9 when 11 will not fit, and nothing when 9
-  // will not either: the same "drop the label too wide for its note" the stage does.
-  const capoControl = $("fretboardCapo");
-  if (document.activeElement !== capoControl) capoControl.value = String(Number(lane?.capo) || 0);
-  const disabled = !editing || !canEditLane(lane) || transportPlaying();
-  capoControl.disabled = disabled;
-  $("fretboardCapoPrev").disabled = disabled || Number(lane?.capo || 0) <= 0;
-  $("fretboardCapoNext").disabled = disabled || Number(lane?.capo || 0) >= MAX_CAPO;
-  const handControl = $("fretboardHand");
-  const maxHand = Math.max(1, lane ? laneFretCount(lane) : s.frets);
-  if (document.activeElement !== handControl) handControl.value = held ? String(held.fret) : "";
-  const shared = selectedPositions(lane).multiple;
-  handControl.disabled = disabled || shared;
-  const auto = $("fretboardHandAuto"), seatNow = impossible ? 0 : anchorFret(lane);
-  auto.hidden = !!held;
-  auto.textContent = `(${seatNow || '\u2013'})`;
-  $("fretboardHandPrev").disabled = disabled || shared;
-  $("fretboardHandNext").disabled = disabled || shared || Number(held?.fret || seatNow) >= maxHand;
+// Shared by the live neck and the settings preview: identical dimensions and paint.
+function boardProjection(ctx, s, w, h, tuning, lastFret = s.frets) {
+  const length = s.nutDepth + fretDistance(lastFret, s.scale) + s.overhang;
+  const width = lastFret === s.frets ? boardWidth(s) : boardHalfWidthAt(fretDistance(lastFret, s.scale), s) * 2;
   const neckH = Math.max(2 * PAD + 1, h);
   const rowPx = (s.spreadAtNut / (s.strings - 1))
-    * Math.min((w - 2 * PAD) / boardLength(s), (neckH - 2 * PAD) / boardWidth(s));
+    * Math.min((w - 2 * PAD) / length, (neckH - 2 * PAD) / width);
   const tunePx = rowPx >= 11 ? 11 : rowPx >= STAGE_ANCHORED ? STAGE_ANCHORED : 0;
   const strung = tuning && tuning.length === s.strings && tunePx ? tuning : null;
   // The tuning's own gutter, left of the nut. Its width follows the widest name it
@@ -762,28 +713,18 @@ export function drawFretboard() {
   const gutter = strung
     ? Math.max(...strung.map((p) => ctx.measureText(noteName(p)).width)) + 8 : 0;
   // One scale for both axes — the whole point. Whichever dimension binds, binds.
-  const scale = Math.min((w - 2 * PAD - gutter) / boardLength(s), (neckH - 2 * PAD) / boardWidth(s));
-  if (!(scale > 0)) return;
-  const originX = PAD + gutter + (w - 2 * PAD - gutter - boardLength(s) * scale) / 2
+  const scale = Math.min((w - 2 * PAD - gutter) / length, (neckH - 2 * PAD) / width);
+  if (!(scale > 0)) return null;
+  const originX = PAD + gutter + (w - 2 * PAD - gutter - length * scale) / 2
     + s.nutDepth * scale;
   const X = (mm) => originX + mm * scale;              // mm from the nut
   const direction = $("fretboardStringOrder")?.value === "low-top" ? -1 : 1;
   const Y = (off) => neckH / 2 + off * scale * direction;              // mm from the centreline
-  // Resolve the selected preview before painting its hand-position band.
-  const at = editing ? focusGrip(lane, s) : null;
-  const chord = (at?.marks.length || 0) > 1;
-  spots = null;
-  // And the working views stand down with it. They are offers about one column, so a
-  // column arriving sixty times a second makes them noise — and the boxes would ask the
-  // worker for a fresh set on every one of them.
-  const offering = editing && altsOn && !shaping && !transportPlaying() && !impossible && !blocked;
-  activeAlternative = null; alternativeCount = 0;
-  const chordOffer = offering && chord ? drawAlternatives(ctx, s, scale, X, Y, lane, at) : null;
-  const noteOffer = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
-  const hovered = previewAlternative ? chordOffer : null;
-  const spot = previewAlternative ? noteOffer : null;
-  activeAlternative = (hovered?.hand ? hovered : null) || (spot?.hand ? spot : null);
-  fretboardPanel.dataset.alternativeCount = String(activeAlternative ? 1 : 0);
+  return { scale, X, Y, strung, tunePx };
+}
+
+function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, offered = 0, strung = null, tunePx = 11, lastFret = s.frets }) {
+  const last = fretDistance(lastFret, s.scale);
   const nutHalf = boardHalfWidthAt(0, s), endHalf = boardHalfWidthAt(last, s);
 
   // The slab: parallel behind the nut, tapered to the last fret, parallel again
@@ -804,7 +745,7 @@ export function drawFretboard() {
 
   // Inlays, cut into the board, so they sit under the strings and the frets.
   ctx.fillStyle = hexA(PAINT.label, 0.45);
-  for (const n of s.dots) {
+  for (const n of s.dots.filter(n => n <= lastFret)) {
     const cx = dotCentre(n, s), r = (s.dotDiameter * scale) / 2;
     const half = boardHalfWidthAt(cx, s);
     // A pair splits the board, one dot centred in each half.
@@ -834,8 +775,6 @@ export function drawFretboard() {
   // as it stands is the filled band, fading while something else is considered, and
   // the hand as it WOULD stand — under a hovered shape, or with the override reset —
   // is an outline. Swapping one for the other left nothing to compare against.
-  const now = impossible || shaping ? null : handNow(lane, s);
-  const seat = anchorFret(lane), offered = impossible ? 0 : offeredSeat(lane);
   const hue = lane?.color || PAINT.accent;
   const moves = offered > 0 && offered !== seat;
   const anchor = now?.at?.anchor;
@@ -855,7 +794,7 @@ export function drawFretboard() {
   // Frets: nickel, and the brightest thing after the nut because they are what
   // the eye measures the board by.
   ctx.fillStyle = hexA(PAINT.label, 0.6);
-  for (let n = 1; n <= s.frets; n++) {
+  for (let n = 1; n <= lastFret; n++) {
     const d = fretDistance(n, s.scale), half = boardHalfWidthAt(d, s);
     ctx.fillRect(X(d) - (s.fretCrown * scale) / 2, Math.min(Y(-half), Y(half)),
       Math.max(1, s.fretCrown * scale), half * 2 * scale);
@@ -977,7 +916,7 @@ export function drawFretboard() {
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const fromCapo = s.capo && $("fretNumbering")?.value !== "nut" ? s.capo : 0;
-  for (const n of s.dots) {
+  for (const n of s.dots.filter(n => n <= lastFret)) {
     if (n <= fromCapo) continue;
     const cx = dotCentre(n, s);
     ctx.fillText(String(n - fromCapo), X(cx), Math.max(Y(boardHalfWidthAt(cx, s)), Y(-boardHalfWidthAt(cx, s))) + 4);
@@ -989,6 +928,82 @@ export function drawFretboard() {
   // value (rule 6), in the same tier as the fret numbers because it does the same
   // job: annotating the board rather than being part of it.
   if (strung) paintBoardTuning(ctx, s, X, Y, strung, tunePx);
+}
+
+export function drawFretboard() {
+  if (editorEl.hidden || !S.state) return;
+  const ctx = fretboardEl.getContext("2d");
+  const dp = dpr(), w = fretboardEl.width / dp, h = fretboardEl.height / dp;
+  ctx.setTransform(dp, 0, 0, dp, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  // The lane whose hand this is, and its open strings. A lane whose tuning has
+  // another string count than its instrument's neck gets the instrument and nothing
+  // else, so its tuning is not drawn either.
+  const lane = currentLane();
+  const warning = $("fretboardWarning");
+  const warningTime = frozenAt(lane) ?? boardTime();
+  const impossible = !!lane && chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
+    .some(({ t0, notes }) => warningTime >= t0 - 1e-5 && warningTime < Math.max(...notes.map(n => n.end)));
+  const selectionError = editing && !transportPlaying() ? selectedPositions(lane).error : null;
+  const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
+  warning.hidden = !selectionError && !impossible;
+  warning.textContent = selectionError || (impossible ? "⚠ No valid shape found" : "");
+  warning.title = selectionError || "The notes cannot all be played together with this tuning, fret range and fingering.";
+  fretboardPanel.toggleAttribute("data-unplayable", impossible);
+  if (fretboardPanel.hasAttribute("data-edit-blocked") !== blocked) {
+    fretboardPanel.toggleAttribute("data-edit-blocked", blocked);
+    layoutFretboard(); return;
+  }
+  // Whether the player put the hand on this beat. Hoisted because holdHere walks
+  // songBarStarts(), which rebuilds the bar list on every call, and this runs per frame.
+  const held = holdHere(lane);
+  const s = laneSpec(lane);
+  // A different instrument is a different board shape, so the panel is the wrong
+  // height until the layout has seen it. One bounce: layoutFretboard draws again.
+  if (s !== laidOut) { layoutFretboard(); return; }
+  const tuning = lane ? laneTuning(lane) : null;
+  // How much room a name beside a string has, measured off the scale the board would
+  // take with no gutter — within a few percent of the real one, which is circular,
+  // and this only has to choose between three sizes. A string at the nut is a pitch
+  // row, so it gets rule 6's anchored 9 when 11 will not fit, and nothing when 9
+  // will not either: the same "drop the label too wide for its note" the stage does.
+  const capoControl = $("fretboardCapo");
+  if (document.activeElement !== capoControl) capoControl.value = String(Number(lane?.capo) || 0);
+  const disabled = !editing || !canEditLane(lane) || transportPlaying();
+  capoControl.disabled = disabled;
+  $("fretboardCapoPrev").disabled = disabled || Number(lane?.capo || 0) <= 0;
+  $("fretboardCapoNext").disabled = disabled || Number(lane?.capo || 0) >= MAX_CAPO;
+  const handControl = $("fretboardHand");
+  const maxHand = Math.max(1, lane ? laneFretCount(lane) : s.frets);
+  if (document.activeElement !== handControl) handControl.value = held ? String(held.fret) : "";
+  const shared = selectedPositions(lane).multiple;
+  handControl.disabled = disabled || shared;
+  const auto = $("fretboardHandAuto"), seatNow = impossible ? 0 : anchorFret(lane);
+  auto.hidden = !!held;
+  auto.textContent = `(${seatNow || '\u2013'})`;
+  $("fretboardHandPrev").disabled = disabled || shared;
+  $("fretboardHandNext").disabled = disabled || shared || Number(held?.fret || seatNow) >= maxHand;
+  const projection = boardProjection(ctx, s, w, h, tuning);
+  if (!projection) return;
+  const { scale, X, Y, strung, tunePx } = projection;
+  // Resolve the selected preview before painting its hand-position band.
+  const at = editing ? focusGrip(lane, s) : null;
+  const chord = (at?.marks.length || 0) > 1;
+  spots = null;
+  // And the working views stand down with it. They are offers about one column, so a
+  // column arriving sixty times a second makes them noise — and the boxes would ask the
+  // worker for a fresh set on every one of them.
+  const offering = editing && altsOn && !shaping && !transportPlaying() && !impossible && !blocked;
+  activeAlternative = null; alternativeCount = 0;
+  const chordOffer = offering && chord ? drawAlternatives(ctx, s, scale, X, Y, lane, at) : null;
+  const noteOffer = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
+  const hovered = previewAlternative ? chordOffer : null;
+  const spot = previewAlternative ? noteOffer : null;
+  activeAlternative = (hovered?.hand ? hovered : null) || (spot?.hand ? spot : null);
+  fretboardPanel.dataset.alternativeCount = String(activeAlternative ? 1 : 0);
+  const now = impossible || shaping ? null : handNow(lane, s);
+  const seat = anchorFret(lane), offered = impossible ? 0 : offeredSeat(lane);
+  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, offered, strung, tunePx });
 
   // WHICH GRAIN IS DECIDED BY THE COLUMN, not by a second switch. A lone note has one
   // question — which string — and every answer to it is legal, so it gets circles and
@@ -1300,74 +1315,30 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
   if (mode === "notes" || mode === "both") drawGripNoteNames(ctx, s, scale, X, Y, marks, hue, true, mode === "notes");
 }
 
-// A short neck using the same capo, tuning, hand-band and contact renderers.
+// The real instrument, cropped after fret 12; its physical taper stays unchanged.
 export function drawFretboardSettingsPreview(time = 0) {
   const canvas = $("fretboardSettingsPreview");
   if (!canvas) return;
-  const lane = currentLane(), base = fretboardFor(lane?.instrument || "electric");
-  const capo = Number(lane?.capo) || 2, s = { ...base, capo };
-  const width = Math.max(260, canvas.clientWidth || 420), height = 164, dp = dpr();
+  const lane = currentLane() || { instrument: "electric", capo: 2, color: PAINT.ok };
+  const s = laneSpec(lane), tuning = currentLane() ? laneTuning(lane) : [64, 59, 55, 50, 45, 40];
+  const width = Math.max(260, canvas.clientWidth || 420), height = canvas.clientHeight || 164, dp = dpr();
   canvas.width = Math.round(width * dp); canvas.height = Math.round(height * dp);
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dp, 0, 0, dp, 0, 0);
-  ctx.fillStyle = PAINT.chrome; ctx.fillRect(0, 0, width, height);
-  const tuning = lane ? laneTuning(lane) : [64, 59, 55, 50, 45, 40];
-  ctx.font = stageMono(11);
-  const gutter = Math.max(...tuning.map(pitch => ctx.measureText(noteName(pitch)).width)) + 8;
-  const first = -s.nutDepth, end = fretDistance(capo + 5, s.scale);
-  const scale = Math.min((width - 32 - gutter) / (end - first), (height - 52) / boardWidth(s));
-  const offset = 16 + gutter + (width - 32 - gutter - (end - first) * scale) / 2;
-  const X = mm => offset + (mm - first) * scale;
-  const direction = $("fretboardStringOrder").value === "low-top" ? -1 : 1;
-  const Y = off => height / 2 + off * scale * direction;
-  const half = boardHalfWidthAt(0, s), farHalf = boardHalfWidthAt(end, s);
-  ctx.beginPath(); ctx.moveTo(X(first), Y(-half)); ctx.lineTo(X(end), Y(-farHalf));
-  ctx.lineTo(X(end), Y(farHalf)); ctx.lineTo(X(first), Y(half)); ctx.closePath();
-  ctx.fillStyle = PAINT.ground; ctx.fill();
-  ctx.strokeStyle = PAINT.hint; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = PAINT.ground; ctx.fillRect(0, 0, width, height);
+  const lastFret = Math.min(12, s.frets);
+  const projection = boardProjection(ctx, s, width, height, tuning, lastFret);
+  if (!projection) return;
+  const { scale, X, Y, strung, tunePx } = projection;
   const animate = $("fretboardAnimations").checked;
-  const step = animate ? Math.floor(time / 1.5) % 3 : 1;
-  const hue = lane?.color || PAINT.ok, seat = step + 1;
-  // This uses capo-relative seats, exactly like the live board.
-  ctx.fillStyle = hexA(hue, WASH);
-  fretSpace(ctx, seat, s, X, Y); ctx.fill();
-  ctx.fillStyle = hexA(PAINT.ink, .35);
-  fretSpaceBounds(ctx, 0, capoLine(s), s, X, Y); ctx.fill();
-  ctx.font = stageMono(10); ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  for (let fret = 1; fret <= capo + 5; fret++) {
-    const at = fretDistance(fret, s.scale), x = X(at), h = boardHalfWidthAt(at, s);
-    ctx.beginPath(); ctx.moveTo(x, Y(-h)); ctx.lineTo(x, Y(h));
-    ctx.lineWidth = 1.5; ctx.strokeStyle = PAINT.hint; ctx.stroke();
-    if (fret > capo) {
-      ctx.fillStyle = PAINT.label;
-      // dotCentre takes physical frets; fretCentre takes capo-relative frets.
-      ctx.fillText(String($("fretNumbering").value === "nut" ? fret : fret - capo), X(dotCentre(fret, s)), height - 13);
-    }
-  }
-  ctx.fillStyle = PAINT.text;
-  ctx.fillRect(X(first), Math.min(Y(-half), Y(half)), s.nutDepth * scale, half * 2 * scale);
-  for (let string = 0; string < s.strings; string++) {
-    ctx.beginPath(); ctx.moveTo(X(first), Y(stringOffsetAt(string, 0, s)));
-    ctx.lineTo(X(end), Y(stringOffsetAt(string, end, s)));
-    ctx.lineWidth = .7 + string * .15; ctx.strokeStyle = PAINT.label; ctx.stroke();
-  }
-  paintBoardCapo(ctx, s, scale, X, Y);
-  paintBoardTuning(ctx, s, X, Y, tuning, 11);
-  ctx.font = stageMono(10); ctx.textAlign = "left"; ctx.fillStyle = PAINT.label;
-  ctx.fillText(`Capo ${capo}`, 12, 13);
-  ctx.textAlign = "center";
-  ctx.fillText(`Hand position ${seat}`, X(fretCentre(seat, s)), 13);
-  const chord = shift => [0, 2, 4].filter(string => string < s.strings).map((string, i) => {
-    const fret = 1 + i + shift;
-    return { string, fret, x: fretCentre(fret, s), finger: i + 1, pitch: tuning[string] + capo + fret };
-  });
-  if ($("fretboardOnionEnabled").checked) {
-    for (const [shift, id] of [[(step + 2) % 3, "onionAlphaPrev"], [(step + 1) % 3, "onionAlphaNext"]]) {
-      ctx.save(); ctx.globalAlpha = Number($(id).value) / 100;
-      drawGrip(ctx, s, scale, X, Y, chord(shift), hue, false, { digits: false }); ctx.restore();
-    }
-  }
-  drawGrip(ctx, s, scale, X, Y, chord(step), hue, true);
+  const { columns, duration } = fretboardPreviewPhrase(tuning, s.capo || 0, lastFret);
+  const t = ((time % duration) + duration) % duration;
+  const found = { columns, playableColumns: columns };
+  const now = { found, t, moving: animate, at: handAt(columns, t, animate ? .25 : 0, s, animate),
+    ringing: [], releases: [], preparations: [] };
+  const seat = columns[gripIndex(columns, t)]?.seat || 0;
+  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, strung, tunePx, lastFret });
+  drawHand(ctx, s, scale, X, Y, lane, now, null, { onion: true });
 }
 
 // A quiet, borderless pitch label beside each contact. Open strings follow the
@@ -1664,11 +1635,11 @@ function handNow(lane, s) {
     preparations: moving ? (found.popFingers || []).filter((f) => Math.abs(popPreparation(f.note, t)) > 0.001) : [] };
 }
 
-function drawHand(ctx, s, scale, X, Y, lane, now, quiet) {
+function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {}) {
   if (!now) return;
   const { found, t, moving, at } = now;
   const hue = lane.color || PAINT.accent;
-  if (editing && $("fretboardOnionEnabled").checked) {
+  if (onion && $("fretboardOnionEnabled").checked) {
     const columns = found.playableColumns || found.columns;
     drawOnion(ctx, s, scale, X, Y, columns, gripIndex(columns, t), hue);
   }

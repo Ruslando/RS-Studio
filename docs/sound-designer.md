@@ -19,7 +19,8 @@ Add files there and reopen the editor.
 without silently changing parameters. Only JSON is supported, with no XML or
 PSARC import. See [Preset files](../presets/README.md) for sources, limits and
 the supported JSON shapes. Folder presets are directly selectable on project
-tone markers; the selected settings are embedded in the project as a snapshot.
+tone markers as references to their current app-library values. The marker's
+Tone Designer button opens the referenced app preset directly.
 
 The pane has three collapsible sections: **Preset**, **Signal chain** and
 **Device settings**. A collapsed section's header still names its content
@@ -116,9 +117,11 @@ another window changes the library during editing, saving is refused and the
 draft stays open. Reopen Settings to load the newer library before editing it.
 An unchanged library is never rewritten when applying other settings.
 
-Projects embed their own preset snapshots. Updating or deleting a library preset
-does not change existing songs. The marker menu can explicitly select the latest
-library version. Snapshots survive `.chart` export/import and CDLC export.
+Projects reference existing app presets, so library edits update their tones.
+Portable `.chart` files carry tone definitions. On import, an available preset
+remains a reference; only unavailable imported tones become editable Project
+presets. Missing references without a usable definition show a warning. CDLC
+export resolves references to the current app preset values.
 
 ## Source and verification
 

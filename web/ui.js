@@ -10,13 +10,14 @@ import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { $, inTourCard, stage } from "./dom.js";
 import { draw } from "./repaint.js";
 import { refreshEditorPreviews } from "./editor-previews.js";
+import { initCollapsibleSections } from './collapsible-sections.js';
 import { setTimelineScrollPreviewVisible } from "./timeline-scroll-preview.js";
 import { doCopy, doCut, doDelete, doPaste, redo, undo, updateUndoButtons } from "./edit.js";
 import { resetZoom, zoomCenter } from "./geometry.js";
 import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey } from "./keymap.js";
 import { renderLayerSettings } from "./lanes.js";
 import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen, tuningDraftDirty } from "./tuning-editor.js";
-import { beginSoundDraft, dropSoundDraft, saveSoundDraft, soundDraftDirty } from "./sound-designer.js";
+import { beginSoundDraft, dropSoundDraft, saveSoundDraft, selectToneSound, soundDraftDirty } from "./sound-designer.js";
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
 import { panelMotion } from "./panel-motion.js";
 import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
@@ -175,7 +176,7 @@ function showSettingsPane(section) {
   if (section === "sounds") beginSoundDraft();
   if (section === "keys") { setKeyTab("edit"); renderKeymap(); }
   if (section === "trace") refreshEditorPreviews();
-  setTimelineScrollPreviewVisible(section === "trace");
+  setTimelineScrollPreviewVisible(section === "trace" && !$("spectrogramSettings").hasAttribute('data-collapsed'));
   syncSettingsActions();
 }
 
@@ -411,6 +412,14 @@ export function gridDivLabelFor(value) {
 
 // Keep the toolbar's read-only tempo/meter/grid readout in sync with grid state.
 export function init_ui() {
+  initCollapsibleSections($("spTrace"), 'rs-studio.editor-sections.collapsed', () => {
+    refreshEditorPreviews();
+    setTimelineScrollPreviewVisible(!$("spTrace").hidden && !$("spectrogramSettings").hasAttribute('data-collapsed'));
+  });
+  window.addEventListener('cw-open-tone-designer', event => {
+    if (settingsModalBackdrop.hidden) openSettingsModal('sounds'); else switchSettingsPane('sounds');
+    selectToneSound(event.detail.laneId, event.detail.markerId);
+  });
   for (const slot of document.querySelectorAll('[data-ui-icon]')) {
     slot.innerHTML = icon(slot.dataset.uiIcon, Number(slot.dataset.iconSize) || 16);
   }
