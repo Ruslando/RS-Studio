@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
+import { playbackEventFrom, playbackEvents } from '../../web/playback-effects.js';
 
 class Target extends EventTarget {
   hidden = true;
@@ -41,7 +42,7 @@ try {
     './volume.js': { busLevel: () => 1 },
     './viewport-motion.js': { viewportFollowing: () => false, stopViewportMotion: noop },
     './playback-effects.js': {
-      playbackEvents: notes => notes, playSampleEvent: (synth, event) => calls.push(event.pitch),
+      playbackEventFrom, playbackEvents, playSampleEvent: (synth, event) => calls.push(event.pitch),
     },
   }, { './constants.js': true, './util.js': true, './region-loop.js': true, './keymap.js': true });
   playback.init_playback();
