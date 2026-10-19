@@ -104,6 +104,15 @@ export function playbackEvents(notes, bpmAt = () => 120, songEnd = Infinity) {
   return events.sort((a, b) => a.start - b.start);
 }
 
+// Keep the original segment timestamps so bends, slides and linked notes retain
+// their current phase when playback begins partway through an event.
+export function playbackEventFrom(event, from, until = Infinity) {
+  const start = Math.max(event.start, from), end = Math.min(event.start + event.duration, until);
+  if (end <= start) return null;
+  return start === event.start && end === event.start + event.duration ? event
+    : { ...event, start, duration: end - start };
+}
+
 // Each note owns its source, envelope and filter: chord members never change
 // their neighbours' timbre. Keep sources in Sampler's map for pause/releaseAll.
 export function playSampleEvent(synth, event, when, heardAt, r = 1) {

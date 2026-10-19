@@ -275,6 +275,43 @@ class EndToEndTests(unittest.TestCase):
         page.click('#welcomeSettingsBtn')
         expect(page.locator('input[name="theme"][value="light"]')).to_be_checked()
 
+    def test_playback_started_inside_a_note_is_audible_and_resumes_after_seek(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            const {warmSynths,seekPlayback} = await import('/playback.js');
+            const lane = S.state.editLanes[0];
+            lane.refBoxes = {}; lane.muted = false; lane.volume = 1;
+            lane.notes = [{id:'sustain_c',start:.5,end:6,pitch:60},
+                {id:'sustain_e',start:.5,end:6,pitch:64}];
+            S.voicingRevision++; S.detectRegion = null; setSelection(new Set());
+            warmSynths(); await Tone.loaded();
+            const synth = lane._synth, attack = synth.triggerAttack;
+            window.__midNoteAttacks = [];
+            synth.triggerAttack = function(...args) {
+                window.__midNoteAttacks.push(args[0]); return attack.apply(this,args);
+            };
+            window.__midNoteAnalyser = new Tone.Analyser('waveform',512).toDestination();
+            synth.connect(window.__midNoteAnalyser);
+            seekPlayback(2); document.activeElement.blur();
+        }""")
+        page.locator('#play').click()
+        page.wait_for_function("""() => window.__midNoteAttacks.length >= 2 &&
+            window.__midNoteAnalyser.getValue().some(value => Math.abs(value) > .0001)""", timeout=3000)
+        self.assertEqual(page.evaluate('window.__midNoteAttacks'), ['C4','E4'])
+        page.wait_for_timeout(150)
+        self.assertEqual(page.evaluate('window.__midNoteAttacks.length'), 2, 'held notes are not reattacked by each tick')
+        page.evaluate("async () => (await import('/playback.js')).seekPlayback(3)")
+        page.wait_for_function('window.__midNoteAttacks.length >= 4')
+        self.assertEqual(page.evaluate('window.__midNoteAttacks.slice(-2)'), ['C4','E4'])
+        page.locator('#play').click()
+        before_resume = page.evaluate('window.__midNoteAttacks.length')
+        page.locator('#play').click()
+        page.wait_for_function('before => window.__midNoteAttacks.length >= before+2', arg=before_resume)
+        self.assertEqual(page.evaluate('window.__midNoteAttacks.slice(-2)'), ['C4','E4'])
+        page.locator('#play').click()
+
     def test_arrow_navigation_steps_back_from_the_focused_chord(self):
         self.open_reference_project()
         page = self.page

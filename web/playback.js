@@ -11,7 +11,7 @@ import { S } from "./store.js";
 import { clamp, fmtTime, followerTrim, normLayerVolume, onsetSec, playheadScrollLeft, schedWindow } from "./util.js";
 import { followViewportTo, stopViewportMotion, viewportFollowing, viewportMoving } from "./viewport-motion.js";
 import { busLevel } from "./volume.js";
-import { playbackEvents, playSampleEvent } from "./playback-effects.js";
+import { playbackEventFrom, playbackEvents, playSampleEvent } from "./playback-effects.js";
 import { createRegionLoop } from "./region-loop.js";
 import { shortcutTitle } from './keymap.js';
 
@@ -88,6 +88,7 @@ export function playTransport() {
 // main-thread task still delays the worker's message) doesn't drop the notes
 // that fell in the gap.
 let notesFrom = 0, metroFrom = 0;
+let notesResumeAt = null;
 
 // Scheduling window size. Foreground: small — notes handed to Tone can't be
 // recalled (see setSynthsMuted), so a seek/speed change strands at most this
@@ -245,6 +246,7 @@ function resetSchedule(current = hasAudioTransport() ? audio.currentTime : playb
   scheduled.clear();
   scheduledBeats.clear();
   notesFrom = metroFrom = current;
+  notesResumeAt = current;
   clearPreview(); // drop any pending drag-preview notes so they don't leak into playback
   if (hasAudioTransport()) {
     clockArmed = true; armSong = audio.currentTime; clockErr = 0;
@@ -334,8 +336,10 @@ function lanePlaybackEvents(lane) {
 
 function scheduleNotes() {
   if (!window.Tone || !S.state || clockArmed) return;
-  const [from, planned] = schedWindow(notesFrom, playbackTime(), lookahead());
-  const horizon = Math.min(planned, regionLoop.end(S.detectRegion));
+  const now = playbackTime();
+  const [from, planned] = schedWindow(notesFrom, now, lookahead());
+  const loopEnd = regionLoop.end(S.detectRegion), horizon = Math.min(planned, loopEnd);
+  const resumeAt = notesResumeAt; notesResumeAt = null;
   notesFrom = horizon;   // advance during passage previews too — their notes are meant to be skipped, not queued
   if (S.passagePreviewActive) return; // similar-passage previews audition the stem slice only
   for (const lane of editLanes()) {
@@ -344,11 +348,17 @@ function scheduleNotes() {
     if (!synth) continue;
     const onset = synthOnset(synth); // real output-path seconds (samples play at 1×), so not divided by rate
     for (const event of lanePlaybackEvents(lane)) {
-      if (event.start >= from && event.start < horizon && !scheduled.has(event)) {
+      const soundingAtRestart = resumeAt !== null && event.start <= resumeAt && event.start + event.duration > resumeAt;
+      if ((event.start >= from || soundingAtRestart) && event.start < horizon && !scheduled.has(event)) {
+        // Resume old sustains from the current position. Ordinary attacks retain
+        // the existing late-tick grace rather than losing short notes to jitter.
+        const start = soundingAtRestart && event.start < resumeAt ? Math.max(now, resumeAt) : event.start;
+        const remaining = playbackEventFrom(event, start, loopEnd);
+        if (!remaining) continue;
         scheduled.add(event);
         const r = rate();
-        const when = Math.max(S.anchorCtx + (event.start - S.anchorSong) / r - onset, ctxNow());
-        try { playSampleEvent(synth, event, when, when + onset, r); }
+        const when = Math.max(S.anchorCtx + (remaining.start - S.anchorSong) / r - onset, ctxNow());
+        try { playSampleEvent(synth, remaining, when, when + onset, r); }
         catch { /* unavailable samples */ }
       }
     }

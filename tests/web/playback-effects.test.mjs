@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { articulation, eventOffsetAt, harmonicOffset, playbackEvents, playSampleEvent } from "../../web/playback-effects.js";
+import { articulation, eventOffsetAt, harmonicOffset, playbackEventFrom, playbackEvents, playSampleEvent } from "../../web/playback-effects.js";
 
 const n = (extra = {}) => ({ start: 1, end: 2, pitch: 62, pos: { string: 2, fret: 7 }, ...extra });
 const plan = (note, bpm = 120) => playbackEvents([note], () => bpm);
@@ -44,6 +44,20 @@ const slide = playbackEvents([n({ slide: "legato" }), n({ start: 2, end: 3, pitc
 assert.equal(slide.length, 1);
 assert.equal(eventOffsetAt(slide[0], 1.1), 2);
 assert.equal(eventOffsetAt(plan(n({ bend: "full", whammy: "dip" }))[0], 0.5), 0);
+
+const held = plan(n())[0], partial = playbackEventFrom(held, 1.4);
+assert.equal(partial.start, 1.4);
+assert.ok(Math.abs(partial.duration - .6) < 1e-9);
+assert.equal(playbackEventFrom(held, 2), null, 'an ended note is not restarted');
+assert.equal(playbackEventFrom(held, .5), held, 'future attacks keep their original timing');
+assert.ok(Math.abs(playbackEventFrom(held, 1.4, 1.6).duration - .2) < 1e-9, 'loop boundary clips the remaining sustain');
+assert.equal(playbackEventFrom(plan(n({fx:{palmMute:true}}))[0], 1.5), null, 'a palm mute does not become a long sustain');
+for (const event of [plan(n({bend:'full'}))[0], slide[0], hammer[0]]) {
+  const start = event.start + event.duration * .6;
+  const rest = playbackEventFrom(event, start);
+  assert.equal(eventOffsetAt(rest, 0), eventOffsetAt(event, start-event.start), 'pitch starts at the current articulation phase');
+  assert.equal(eventOffsetAt(rest, rest.duration/2), eventOffsetAt(event, start-event.start+rest.duration/2));
+}
 
 // A minimal sampler double verifies source-local automation and pause ownership.
 const calls = [], filters = [];
