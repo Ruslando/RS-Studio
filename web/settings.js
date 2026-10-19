@@ -106,6 +106,15 @@ export function init_settings() {
     persistSetting($(id));
     $(id).addEventListener('input', () => { refreshEditorPreviews(); draw(); });
   }
+  persistSetting($("noteLabelSize"));
+  const showNoteSize = () => {
+    const input = $("noteLabelSize");
+    $("noteLabelSizeValue").textContent = `${input.value} px`;
+    input.setAttribute('aria-valuetext', `${input.value} pixels`);
+    refreshEditorPreviews(); draw();
+  };
+  $("noteLabelSize").addEventListener('input', showNoteSize);
+  showNoteSize();
   const labelChoices = [...document.querySelectorAll('input[name="fretboardLabels"]')];
   const savedLabels = ["fingers", "notes", "both", "none"].includes(store.fretboardLabels) ? store.fretboardLabels : "both";
   for (const radio of labelChoices) {

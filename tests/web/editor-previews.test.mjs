@@ -24,13 +24,13 @@ try {
     './stage-paint.js': { PAINT: { text: '#fff' }, halo: () => '#000' },
   }, { './constants.js': true, './spectrogram-labels.js': true });
   const previews = await mockImport(new URL('../../web/editor-previews.js', import.meta.url), {
-    './dom.js': { $: id => controls[id] }, './canvas-components.js': { paintNoteBar: noop },
+    './dom.js': { $: id => controls[id] }, './timeline-paint.js': { paintNoteRow: noop, paintTimeGridLine: noop }, './store.js': { S: { state: null } },
     './note-label-paint.js': painter, './stage-paint.js': { PAINT: {} }, './util.js': { dpr: () => 1 },
     './fretboard.js': { drawFretboardSettingsPreview: noop },
-  }, { './spectrogram-labels.js': true, './editor-preview-layout.js': true });
+  }, { './spectrogram-labels.js': true, './editor-preview-layout.js': true, './note-effects.js': true });
   previews.initEditorPreviews();
   assert.equal(text.length, 0, 'preview obeys hidden and hover-only settings while idle');
-  const mouse = new Event('mousemove'); mouse.clientX = 90; mouse.clientY = 100;
+  const mouse = new Event('mousemove'); mouse.clientX = 90; mouse.clientY = 82;
   note.hovered = true; note.dispatchEvent(mouse);
   assert.deepEqual(text, ['S2:F5', '↗'], 'preview shows the same position and slide labels when hovered');
   text.length = 0; note.hovered = false; note.dispatchEvent(new Event('mouseleave'));
@@ -40,6 +40,11 @@ try {
   assert.equal(frames.size, 0, 'idle board preview does not animate');
   board.hovered = true; board.dispatchEvent(new Event('mouseenter'));
   assert.equal(frames.size, 1);
+  controls.fretboardAnimations.checked = false;
+  previews.refreshEditorPreviews();
+  assert.equal(frames.size, 1, 'disabling transitions does not stop the preview clock');
+  const tick = [...frames.values()][0]; frames.clear(); tick(1000);
+  assert.equal(frames.size, 1, 'note changes keep running without animated transitions');
   board.hiddenParent = true; previews.refreshEditorPreviews();
   assert.equal(frames.size, 0, 'closing settings cancels the board animation');
   board.hiddenParent = false; board.hovered = false; previews.refreshEditorPreviews();

@@ -11,7 +11,7 @@ import { openPhraseMarkerPop, closePhraseMarkerPop } from './phrase-markers.js';
 import { openToneMarkerPop, closeToneMarkerPop } from './tone-markers.js';
 import { openHandAnchorPop, closeHandAnchorPop } from './hand-anchors.js';
 import { sectionTypeLabel } from './section-marker-core.js';
-import { tonePresetLabel } from './tone-marker-core.js';
+import { tonePresetLabel, tonePresetMissing } from './tone-marker-core.js';
 import { seekPlayback } from './playback.js';
 import { xOf } from './geometry.js';
 import { moveViewportTo, stopViewportMotion } from './viewport-motion.js';
@@ -54,7 +54,7 @@ export function markerArtifacts() {
     }));
     for (const marker of lane.toneMarkers || []) entries.push({
       key: `tone:${lane.id}:${marker.id}`, kind: 'tone', lane, owner: lane.name,
-      marker, t: marker.t, name: tonePresetLabel(marker.tone, marker.toneData),
+      marker, t: marker.t, name: `${tonePresetMissing(marker.tone, undefined, marker.toneData) ? '⚠ ' : ''}${tonePresetLabel(marker.tone, marker.toneData)}`,
     });
   }
   return entries.sort((a, b) => a.t - b.t || a.key.localeCompare(b.key));

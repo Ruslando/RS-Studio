@@ -15,6 +15,7 @@ import { refreshTabIfOpen } from "./tablature.js";
 import { timeAt, xOf } from "./geometry.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
+import { projectStart } from "./project-position-core.js";
 import { railScale, railsHidden, timedLaneMarkers } from "./marker-rails.js";
 import { editLanes } from "./lanes.js";
 import { onLiveTiming, SONG, withTiming } from "./timing.js";
@@ -154,7 +155,7 @@ export function markerCursorAt(x, y) {
 function spanRiders(seg) {
   const t1 = gridSegments().find((s) => s.t > seg.t + 1e-6)?.t ?? Infinity;
   const inSpan = (t) => t >= seg.t - 1e-6 && t < t1 - 1e-6;
-  const dur = S.state.duration, clamp = (t) => Math.max(0, Math.min(dur, t));
+  const dur = S.state.duration, clamp = (t) => Math.max(projectStart(S.state), Math.min(dur, t));
   const lanes = editLanes().filter(onLiveTiming), riders = [];   // a layer with its own timing stays
   const marks = [...(S.state.sectionMarkers || []), ...timedLaneMarkers(lanes), ...lanes.flatMap((l) => l.handHolds || [])];
   for (const m of marks) {
@@ -208,7 +209,7 @@ export function markerMouseDown(e) {
       riders = spanRiders(seg);
     }
     if (seg.seg0)   // dragging the start flag moves the grid origin (the offset)
-      offsetInput.value = Math.max(0, Math.min(S.state.duration - 1e-3, nt)).toFixed(3);
+      offsetInput.value = Math.max(projectStart(S.state), Math.min(S.state.duration - 1e-3, nt)).toFixed(3);
     else
       seg.ref.t = Math.max(gridOffset() + 1e-3, Math.min(S.state.duration - 1e-3, nt));
     const delta = (seg.seg0 ? gridOffset() : seg.ref.t) - seg.t;
@@ -359,7 +360,7 @@ function applyMarkerTime() {
   beginPopEdit();
   if (!popRiders) popRiders = spanRiders(editSeg);
   if (editSeg.seg0) {
-    offsetInput.value = Math.max(0, Math.min(S.state.duration - 1e-3, t)).toFixed(3);
+    offsetInput.value = Math.max(projectStart(S.state), Math.min(S.state.duration - 1e-3, t)).toFixed(3);
     // The notes ride here, so the offset's own change handler (which shifts every
     // note in the song) must see nothing left to do.
     S.appliedOffset = gridOffset();

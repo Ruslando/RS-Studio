@@ -54,6 +54,16 @@ export function paintNoteBar(ctx, x, y, width, height, color, selected = false, 
   ctx.restore();
 }
 
+export function paintWarningSymbol(ctx, x, y, size) {
+  ctx.save();
+  ctx.strokeStyle = PAINT.warn; ctx.fillStyle = PAINT.warn; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x + size / 2, y); ctx.lineTo(x + size, y + size);
+  ctx.lineTo(x, y + size); ctx.closePath(); ctx.stroke();
+  ctx.fillRect(x + size / 2 - .5, y + 3, 1, 3);
+  ctx.fillRect(x + size / 2 - .5, y + 7.5, 1, 1);
+  ctx.restore();
+}
+
 export function paintMarkerFlag(ctx, rect, color) {
   const { x0: x, y0: y, x1, y1 } = rect;
   const width = x1 - x, height = y1 - y;

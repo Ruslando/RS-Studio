@@ -1,4 +1,16 @@
 /* Shared production components. Legacy markup aliases select these same implementations. */
+.tuning-string-row { border-bottom: 1px solid var(--line); padding: var(--s-pair) 0; }
+.tuning-string-row:last-child { border-bottom: 0; }
+.tuning-string-line, .tuning-string-controls, .tuning-string-label { display: flex; align-items: center; }
+.tuning-string-line { justify-content: space-between; gap: var(--s-sibling); }
+.tuning-string-label { gap: var(--s-sibling); font: 400 var(--text-control)/1 var(--font-ui); }
+.tuning-string-number { color: var(--text); font-family: var(--font-mono); }
+.tuning-string-end { color: var(--hint); font-size: var(--text-caption); }
+.tuning-string-controls { gap: var(--s-pair); }
+.tuning-string-step { width: var(--h-control); height: var(--h-compact); padding: 0; }
+.tuning-pitch { height: var(--h-compact); min-width: calc(var(--h-control) * 2); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.tuning-pitch[aria-expanded="true"] { background: var(--selection); border-color: var(--selection-line); }
+.tuning-pitch-picker { display: flex; justify-content: flex-end; gap: var(--s-row); padding: var(--s-sibling) 0; }
 .theme-preview-surface { overflow: hidden; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-container); font: 400 var(--text-caption)/1.4 var(--font-ui); }
 button, .btn {
   height: var(--h-control); padding: 0 var(--s-group);
@@ -135,7 +147,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 #spTrace .field-slider > .label { width: 112px; }
 .field-slider input[type="range"] { flex: 1; min-width: 0; }
 input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--error); }
-.field-slider > .ro { width: 40px; text-align: right; flex: none; }
+.field-slider > .ro { width: 40px; text-align: right; flex: none; white-space: nowrap; }
 
 input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 
@@ -259,6 +271,7 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .toast .dot.ok { background: var(--ok); }
 
 .toast .dot.warn { background: var(--warn); }
+.toast .dot.warn::before { content: none; }
 
 .toast .dot.error { background: var(--error); }
 
@@ -635,3 +648,27 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 
 .artifact-edit-lock[aria-pressed="false"] { color: var(--hint); }
 .artifact-edit-lock[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
+/* Project origin: the panel splitter's grip on a single quiet timeline rule. */
+.timeline-start-gutter {
+  flex: none; width: calc(var(--s-row) + var(--s-panel) / 2); background: var(--spectral-ground);
+}
+.splitter.timeline-start {
+  position: absolute; padding: 0; border: 0; border-radius: 0;
+  background: transparent; touch-action: none;
+}
+.splitter.timeline-start:is(:hover, :active):not(:disabled) { background: transparent; }
+.timeline-start::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+  background: color-mix(in srgb, var(--spectral-hint) 30%, transparent);
+}
+.timeline-start:is(:hover, :focus-visible, .is-dragging)::before {
+  background: color-mix(in srgb, var(--spectral-hint) 50%, transparent);
+}
+.timeline-start .splitter-dots { opacity: 0; background: var(--spectral-ground); }
+.timeline-start:is(:hover, :focus-visible, .is-dragging) .splitter-dots { opacity: 1; color: var(--spectral-hint); }
+.timeline-start-position {
+  position: absolute; left: calc(100% + var(--s-sibling)); top: var(--readout-at, 50%);
+  padding: var(--s-pair) var(--s-sibling); border-radius: var(--r-compact);
+  background: var(--spectral-chrome); color: var(--spectral-text);
+  font: 400 var(--text-data)/1.4 var(--font-mono); white-space: nowrap; pointer-events: none;
+}

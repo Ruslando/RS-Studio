@@ -2,7 +2,9 @@
 // Section, phrase and tone markers: what is kept on load, and where sections land on export.
 import assert from "node:assert/strict";
 import { assignSectionsToBars, beatStartsFromScoreBars, normalizePhraseBoundaries, normalizeSectionMarkers, sectionMarkersForExport, sectionMarkersFromScoreBars, sectionTypeLabel, validSectionType } from "../../web/section-marker-core.js";
-import { normalizeToneMarkers, startTone, withStartTone } from "../../web/tone-marker-core.js";
+import { normalizeToneMarkers, startTone, withStartTone, tonePresetMissing, tonePresetLabel } from "../../web/tone-marker-core.js";
+
+import { SOUND_BASES } from "../../web/sound-presets-core.js";
 
 // ---- section types --------------------------------------------------------
 assert.equal(validSectionType("Verse 2"), "verse", "a numbered name is still its type");
@@ -55,15 +57,26 @@ assert.deepEqual(normalizePhraseBoundaries([{ t: 5 }, 2, { seconds: 2 }, { t: "x
 
 // ---- tone markers ---------------------------------------------------------
 {
+  const presets = [
+    {id:'sound_guitar', fileId:'file:guitar-crunch.json', tone:SOUND_BASES.crunch},
+    {id:'sound_bass', fileId:'file:bass-clean.json', tone:SOUND_BASES.bass},
+  ];
   const got = normalizeToneMarkers([{ t: 4, tone: "Lead" }, { t: 0, preset: "clean" }, { t: 2, tone: "fuzz" }, { t: 4, tone: "crunch", id: "a" }, { t: 90, tone: "bass" }], 60);
-  assert.deepEqual(got.map((m) => [m.t, m.tone]), [[0, "clean"], [4, "crunch"], [60, "bass"]],
-    "unknown presets dropped, one marker per moment");
-  assert.equal(startTone({ instrument: "bass" }), "clean");
-  assert.equal(startTone({ instrument: "electric" }), "crunch");
-  assert.equal(startTone({ instrument: "bass", rocksmithArrangement: "lead" }), "crunch", "the chosen arrangement outranks the instrument");
-  assert.equal(startTone({ instrument: "electric", rocksmithArrangement: "alt_bass" }), "clean");
-  assert.deepEqual(withStartTone([{ t: 3, tone: "lead" }], { instrument: "bass" }).map((m) => [m.t, m.tone]), [[0, "clean"], [3, "lead"]]);
-  const own = [{ t: 0, tone: "lead" }];
-  assert.equal(withStartTone(own, {}), own, "a lane that already starts on a tone keeps it");
+  assert.deepEqual(got.map(m => [m.t, m.tone]), [[0,'clean'],[2,'fuzz'],[4,'crunch'],[60,'bass']],
+    'unresolved references are retained; only duplicate times are collapsed');
+  assert.equal(startTone({instrument:'bass'}, presets), 'sound_bass');
+  assert.equal(startTone({instrument:'electric'}, presets), 'sound_guitar');
+  assert.equal(startTone({instrument:'bass', rocksmithArrangement:'lead'}, presets), 'sound_guitar');
+  assert.equal(startTone({instrument:'electric', rocksmithArrangement:'alt_bass'}, presets), 'sound_bass');
+  const added = withStartTone([{t:3,tone:'lead'}], {instrument:'bass'}, presets);
+  assert.deepEqual(added.map(m => [m.t,m.tone]), [[0,'sound_bass'],[3,'lead']]);
+  assert.equal(added[0].toneData, undefined, 'available presets are references');
+  const own = [{t:0,tone:'lead'}];
+  assert.equal(withStartTone(own, {}, presets), own, 'removed presets are never replaced');
+  assert.equal(tonePresetMissing('lead', presets), true);
+  assert.equal(tonePresetMissing('sound_guitar', presets), false);
+  assert.equal(tonePresetLabel('unknown'), 'unknown', 'unknown keys never become Lead');
+  assert.deepEqual(withStartTone([], {}, []), [], 'no legacy default when the library is empty');
+
 }
 console.log("markers: ok");

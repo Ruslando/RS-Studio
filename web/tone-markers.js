@@ -1,4 +1,4 @@
-import { paintMarkerFlag } from "./canvas-components.js";
+import { paintMarkerFlag, paintWarningSymbol } from "./canvas-components.js";
 import { placeFloating } from "./floating-position.js";
 // Per-lane amp tone switches. A marker selects a preset from its time
 // onward; the next marker replaces it. They are audio-time annotations, snapped
@@ -12,11 +12,12 @@ import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
+import { toast } from "./notify.js";
 import { PAINT } from "./stage-paint.js";
-import { INTERNAL_TONE_PRESETS, normalizeToneMarkers, tonePresetLabel } from "./tone-marker-core.js";
+import { normalizeToneMarkers, startTone, tonePresetLabel, tonePresetMissing } from "./tone-marker-core.js";
 import { S } from "./store.js";
 import { timingIdOf, withTiming } from "./timing.js";
-import { readAvailableSoundPresets, cloneSound } from "./sound-presets-core.js";
+import { readAvailableSoundPresets } from "./sound-presets-core.js";
 
 const TONE_MARK_H = 22;
 const bandY = () => railBand("tone").y;
@@ -84,8 +85,13 @@ export function addToneMarkerAtTime(time, clientX, clientY) {
   const marker = {
     id: `tone_${Date.now()}_${Math.round(snapped * 1000)}`,
     t: snapped,
-    tone: String(lane.instrument || "").toLowerCase().includes("bass") ? "bass" : "lead",
+    tone: startTone(lane) || "",
   };
+  const preset = readAvailableSoundPresets().find(entry => entry.id === marker.tone);
+  if (!preset) {
+    toast("No tone presets are available. Add a preset in Settings > Tone presets.", 6000, "warn");
+    return;
+  }
   markers(lane).push(marker);
   changed(lane);
   openToneMarkerPop(clientX, clientY, lane.toneMarkers.find((item) => item.id === marker.id) || marker);
@@ -95,8 +101,7 @@ function applyPreset() {
   if (!editMarker) return;
   editMarker.tone = toneMarkerPreset.value;
   const preset = readAvailableSoundPresets().find(entry => entry.id === editMarker.tone);
-  if (preset) editMarker.toneData = cloneSound(preset.tone);
-  else if (INTERNAL_TONE_PRESETS.some(([key]) => key === editMarker.tone)) delete editMarker.toneData;
+  if (preset) delete editMarker.toneData;
   changed(editingLane());
 }
 
@@ -152,20 +157,23 @@ export function drawToneMarkers() {
   if (!lane) return;
   const top = scroll.scrollTop + bandY();
   const left = scroll.scrollLeft, right = left + scroll.clientWidth;
+  const presets = readAvailableSoundPresets();
   sctx.save();
   for (const normalized of normalizeToneMarkers(markers(lane))) {
     const marker = markers(lane).find((item) => item.id === normalized.id) || normalized;
-    const x = xOf(normalized.t), text = tonePresetLabel(normalized.tone, normalized.toneData);
+    const x = xOf(normalized.t), text = tonePresetLabel(normalized.tone, normalized.toneData, presets);
+    const missing = tonePresetMissing(normalized.tone, presets, normalized.toneData);
     // 11/700, the same as every other flag: three rails were drawing at 9, 10
     // and 11, all three in a font the app stopped loading in pass 1.
     sctx.font = stageUi(11, 600);
-    const width = Math.max(52, Math.ceil(sctx.measureText(text).width) + 18);
+    const width = Math.max(52, Math.ceil(sctx.measureText(text).width) + 18 + (missing ? 14 : 0));
     const rect = { marker, lane, x0: x, x1: x + width, y0: top + 2, y1: top + TONE_MARK_H - 2 };
     markerRects.push(rect);
     if (rect.x0 > right || rect.x1 < left) continue;
     paintMarkerFlag(sctx, rect, PAINT.tone);
+    if (missing) paintWarningSymbol(sctx, x + 7, top + 6, 10);
     sctx.fillStyle = PAINT.text; sctx.textBaseline = "middle";
-    sctx.fillText(text, x + 9, top + TONE_MARK_H / 2);
+    sctx.fillText(text, x + 9 + (missing ? 14 : 0), top + TONE_MARK_H / 2);
   }
   sctx.restore();
 }
@@ -173,31 +181,43 @@ export function drawToneMarkers() {
 export function drawMinimapToneMarkers(scale) {
   const lane = activeToneLane();
   if (!S.state || !lane) return;
+  const presets = readAvailableSoundPresets();
   for (const marker of normalizeToneMarkers(markers(lane))) {
     const x = xOf(marker.t) * scale;
-    mmctx.fillStyle = PAINT.tone;
+    mmctx.fillStyle = tonePresetMissing(marker.tone, presets, marker.toneData) ? PAINT.warn : PAINT.tone;
     mmctx.fillRect(x - 1, 26, 3, 8);
   }
 }
 
 function refreshPresetOptions(marker = editMarker) {
   toneMarkerPreset.replaceChildren();
-  for (const [key, label] of INTERNAL_TONE_PRESETS) toneMarkerPreset.append(new Option(label, key));
-  // A project's copy remains selectable after the library preset changes or
-  // disappears. Selecting a library version is an explicit update of that copy.
-  if (marker?.toneData) toneMarkerPreset.append(new Option(`${marker.toneData.Name} (project copy)`, marker.tone));
-  for (const preset of readAvailableSoundPresets()) {
-    if (preset.id === marker?.tone && marker.toneData) {
-      if (JSON.stringify(preset.tone) !== JSON.stringify(marker.toneData)) {
-        toneMarkerPreset.append(new Option(`${preset.tone.Name} (latest preset)`, `${preset.id}:latest`));
-      }
-    } else toneMarkerPreset.append(new Option(preset.tone.Name, preset.id));
+  const presets = readAvailableSoundPresets();
+  const missing = marker && tonePresetMissing(marker.tone, presets, marker.toneData);
+  const current = presets.find(preset => preset.id === marker?.tone);
+  const editButton = document.getElementById('toneMarkerEditPreset');
+  editButton.disabled = !current && !marker?.toneData;
+  editButton.title = editButton.disabled ? 'Choose an available preset first' : 'Open Tone Designer';
+  if (missing) {
+    const option = new Option(`\u26a0 Missing preset: ${tonePresetLabel(marker.tone, marker.toneData)}`, marker.tone);
+    option.disabled = true;
+    toneMarkerPreset.append(option);
+  } else if (marker?.toneData && !current) {
+    toneMarkerPreset.append(new Option(marker.toneData.Name, marker.tone));
   }
+  for (const preset of presets) toneMarkerPreset.append(new Option(preset.tone.Name, preset.id));
   if (marker) toneMarkerPreset.value = marker.tone;
 }
 
 export function init_tone_markers() {
+  document.getElementById('toneMarkerEditPreset').addEventListener('click', () => {
+    const lane = editingLane();
+    if (!lane || !editMarker) return;
+    const detail = { laneId: lane.id, markerId: editMarker.id };
+    closeToneMarkerPop();
+    window.dispatchEvent(new CustomEvent('cw-open-tone-designer', { detail }));
+  });
   window.addEventListener(STATE_RESTORED, closeToneMarkerPop);   // undo replaced the marker it holds
+  window.addEventListener("cw-project-opened", closeToneMarkerPop);
   registerMarkerRail({
     id: "tone",
     height: TONE_MARK_H,
@@ -211,9 +231,8 @@ export function init_tone_markers() {
   });
   registerLaneField("toneMarkers", { normalize: normalizeToneMarkers });
   refreshPresetOptions();
-  window.addEventListener("sound-presets-changed", () => refreshPresetOptions());
+  window.addEventListener("sound-presets-changed", () => { refreshPresetOptions(); draw(); });
   toneMarkerPreset.addEventListener("change", () => {
-    toneMarkerPreset.value = toneMarkerPreset.value.replace(/:latest$/, "");
     applyPreset(); refreshPresetOptions();
   });
   toneMarkerTime.addEventListener("change", applyTime);

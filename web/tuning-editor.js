@@ -9,6 +9,7 @@
 // A tuning is its open strings, not its name: two tunings with the same strings
 // are one tuning. Saving strings that another tuning already has is refused,
 // whatever it is called (clashOf).
+import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { confirmAction } from "./dialog.js";
 import { toast } from "./notify.js";
 import { icon } from "./icons.js";
@@ -37,6 +38,9 @@ const builtinInstrument = (key) => (key.startsWith("bass") ? "bass" : "guitar");
 const listEl = document.getElementById("tuningList");
 const editorEl = document.getElementById("tuningEditor");
 const newBtn = document.getElementById("tuningNewBtn");
+const STRING_ORDER_KEY = "cw.tuningStringOrder";
+let stringOrder = "low-bottom";
+try { if (localStorage.getItem(STRING_ORDER_KEY) === "low-top") stringOrder = "low-top"; } catch { /* private mode */ }
 
 let draft = null;   // your tunings as edited: [{ id, name, notes, instrument }]
 let sel = null;     // { id } of one of yours, or { key } of a built-in
@@ -274,8 +278,16 @@ function original() {
   return { name: saved.name, midis, instrument: instrumentOf(saved, midis) };
 }
 
-const NOTE_OPTIONS = [];
-for (let p = NOTE_MAX; p >= NOTE_MIN; p--) NOTE_OPTIONS.push([p, noteName(p)]);
+function closePitchPicker() {
+  const picker = editorEl.querySelector('.tuning-pitch-picker:not([hidden])');
+  if (!picker || picker.closest('[hidden]')) return false;
+  picker.hidden = true;
+  const button = picker.closest('.tuning-string-row').querySelector('.tuning-pitch');
+  button.setAttribute('aria-expanded', 'false');
+  button.focus({ preventScroll: true });
+  return true;
+}
+registerEscapeLayer(ESC_DEPTH.popover, closePitchPicker);
 
 function renderEditor() {
   const t = mine();
@@ -308,27 +320,78 @@ function renderEditor() {
     "label", resetBtn(`Reset to ${o?.midis.length} strings`, back, o && o.midis.length !== midis.length)),
   );
 
-  // Strings, lowest on the left like the fretboard and the "(E A D G B E)" labels.
-  // Stored highest first, so display column i is midis[last - i].
+  // Keep physical string numbers and storage order independent of display order.
   const strings = document.createElement("div");
   strings.className = "tuning-strings";
-  const last = midis.length - 1;
-  midis.slice().reverse().forEach((p, i) => {
-    const pick = (v) => { const m = midis.slice(); m[last - i] = Math.max(NOTE_MIN, Math.min(NOTE_MAX, v)); set({ midis: m }); };
-    // The note with a slim up/down pair on its right, joined like a spinner.
-    const nudge = document.createElement("span");
-    nudge.className = "stepper-nudge";
-    nudge.append(
-      stepBtn(icon("chevronUp", 12), "Up a semitone", () => pick(p + 1), p >= NOTE_MAX),
-      stepBtn(icon("chevronDown", 12), "Down a semitone", () => pick(p - 1), p <= NOTE_MIN),
-    );
-    const one = document.createElement("span");
-    one.className = "stepper";
-    one.append(selectOf(NOTE_OPTIONS, p, (v) => pick(Number(v)), "tuning-str"), nudge);
-    strings.append(one);
+  const ordered = midis.map((p, index) => ({ p, index }));
+  if (stringOrder === "low-top") ordered.reverse();
+  ordered.forEach(({ p, index }) => {
+    const number = index + 1;
+    const row = document.createElement("div");
+    row.className = "tuning-string-row";
+    row.dataset.string = String(number);
+    const pick = (v, focus, expanded = false) => {
+      const m = midis.slice(); m[index] = Math.max(NOTE_MIN, Math.min(NOTE_MAX, v));
+      set({ midis: m });
+      const next = editorEl.querySelector(`[data-string="${number}"]`);
+      if (expanded) next.querySelector('.tuning-pitch').click();
+      const target = next.querySelector(focus);
+      (target?.disabled ? next.querySelector('.tuning-pitch') : target)?.focus({ preventScroll: true });
+    };
+    const line = document.createElement("div");
+    line.className = "tuning-string-line";
+    const label = document.createElement("span");
+    label.className = "tuning-string-label";
+    const num = document.createElement("span");
+    num.className = "tuning-string-number"; num.textContent = String(number);
+    label.append(num);
+    if (number === 1 || number === midis.length) {
+      const end = document.createElement("span");
+      end.className = "tuning-string-end"; end.textContent = number === 1 ? "Highest" : "Lowest";
+      label.append(end);
+    }
+    const controls = document.createElement("div");
+    controls.className = "tuning-string-controls";
+    const down = stepBtn(icon("minus", 14), `String ${number} down a semitone`, () => pick(p - 1, '.tuning-string-down'), p <= NOTE_MIN);
+    down.className = "tuning-string-step tuning-string-down";
+    const up = stepBtn(icon("plus", 14), `String ${number} up a semitone`, () => pick(p + 1, '.tuning-string-up'), p >= NOTE_MAX);
+    up.className = "tuning-string-step tuning-string-up";
+    const pitch = document.createElement("button");
+    pitch.type = "button"; pitch.className = "tuning-pitch"; pitch.textContent = noteName(p);
+    pitch.setAttribute("aria-label", `String ${number}: ${noteName(p)}. Choose pitch`);
+    pitch.setAttribute("aria-expanded", "false");
+    pitch.setAttribute("aria-controls", `tuningPitch${number}`);
+    const picker = document.createElement("div");
+    picker.className = "tuning-pitch-picker"; picker.id = `tuningPitch${number}`; picker.hidden = true;
+    const octave = Math.floor(p / 12) - 1;
+    const noteOptions = Array.from({ length: 12 }, (_, n) => [n, noteName(60 + n).replace(/\d+$/, '')]);
+    const note = selectOf(noteOptions, p % 12,
+      v => pick((octave + 1) * 12 + Number(v), '.tuning-note', true), 'tuning-note');
+    for (const option of note.options) option.disabled = (octave + 1) * 12 + Number(option.value) > NOTE_MAX;
+    note.setAttribute('aria-label', `String ${number} note`);
+    const oct = selectOf(Array.from({ length: 7 }, (_, n) => [n, String(n)]), octave,
+      v => pick((Number(v) + 1) * 12 + p % 12, '.tuning-octave', true), 'tuning-octave');
+    for (const option of oct.options) option.disabled = (Number(option.value) + 1) * 12 + p % 12 > NOTE_MAX;
+    oct.setAttribute('aria-label', `String ${number} octave`);
+    picker.append(field('Note', note), field('Octave', oct));
+    pitch.addEventListener('click', () => {
+      const open = picker.hidden;
+      closePitchPicker();
+      picker.hidden = !open;
+      pitch.setAttribute('aria-expanded', String(open));
+      if (open) note.focus({ preventScroll: true });
+    });
+    controls.append(down, pitch, up);
+    line.append(label, controls);
+    row.append(line, picker);
+    strings.append(row);
   });
 
-  const shift = (d) => set({ midis: midis.map((p) => Math.max(NOTE_MIN, Math.min(NOTE_MAX, p + d))) });
+  const shift = (d) => {
+    set({ midis: midis.map((p) => Math.max(NOTE_MIN, Math.min(NOTE_MAX, p + d))) });
+    const button = editorEl.querySelectorAll('.tuning-whole-btn')[d > 0 ? 1 : 0];
+    (button.disabled ? editorEl.querySelector('.tuning-pitch') : button).focus({ preventScroll: true });
+  };
   const whole = document.createElement("div");
   whole.className = "tuning-whole";
   const wholeBtn = (text, title, d, disabled) => {
@@ -379,8 +442,24 @@ function renderEditor() {
   clash.className = "status-line status-line--warn";
   clash.setAttribute("role", "status");
   clash.textContent = `“${twin}” already has these strings. Change them, or this tuning cannot be kept.`;
-  editorEl.replaceChildren(field("Name", nameIn, "label", nameReset), shape,
-    field("Open strings", strings, "div", stringsReset), field("Whole tuning", whole, "div"),
+  const stringFields = field("Open strings", strings, "div", stringsReset);
+  stringFields.classList.add('tuning-string-section');
+  const stringHead = document.createElement('div');
+  stringHead.className = 'tuning-strings-head';
+  const order = selectOf([['low-bottom', 'Lowest at bottom'], ['low-top', 'Lowest at top']], stringOrder, value => {
+    stringOrder = value;
+    try { localStorage.setItem(STRING_ORDER_KEY, value); } catch { /* private mode / quota */ }
+    renderEditor();
+    document.getElementById('tuningStringOrder').focus({ preventScroll: true });
+  });
+  order.id = 'tuningStringOrder';
+  order.setAttribute('aria-label', 'String order');
+  const tools = document.createElement('div');
+  tools.className = 'tuning-string-tools';
+  tools.append(order, whole);
+  stringHead.append(stringFields.firstElementChild, tools);
+  stringFields.prepend(stringHead);
+  editorEl.replaceChildren(field("Name", nameIn, "label", nameReset), shape, stringFields,
     ...(twin && !builtin ? [clash] : []), actions);
 }
 

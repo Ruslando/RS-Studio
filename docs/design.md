@@ -41,6 +41,15 @@ chart. The interface is quiet so that the song is the loudest thing on screen.
 6. **Motion reports a change of state** and takes 100–240 ms. Nothing moves to
    decorate.
 
+The project start is a one-pixel vertical rule on the timeline, using the spectral
+hint at 30% opacity (50% on hover). Its invisible grab area uses the panel spacing;
+the existing splitter's three dots follow the pointer on hover. The line sits one
+row spacing to the left of the project start; all markers retain their exact time
+positions and alignment. A small leading gutter keeps the line reachable at zero.
+Dragging translates all
+notation and marker timings together; the audio stays fixed. No content can be
+placed before the start, and one drag is one undo step.
+
 ---
 
 ## 2. Tokens
@@ -469,6 +478,36 @@ above its result. Changing the channel saves it and checks again; installing
 requires the explicit Update now action.
 
 ### 4.13 Rows and cards
+
+Tone switches reference available app presets and use their current values.
+Only imported tones absent from the app library retain project-local definitions
+and appear in Project presets. The adjacent Tone Designer action selects the
+referenced app preset or the imported project preset. Apply edits that target;
+closing discards the draft. Missing references without definitions show warning
+triangles and one warning toast on project load. Portable exports carry tone
+definitions, which imports use only when their app preset is unavailable.
+
+The tuning editor uses one row per string, lowest at the bottom by default.
+A String order selector reverses the display and persists this view preference
+without changing the tuning or string numbers. Tunings uses the standard Settings
+height; Editor and Tone presets use the taller window. Spectrogram and Fretboard
+reuse the Tone presets disclosure component and remember their collapsed state.
+Fretboard settings use two columns for String order and Fret numbers, with full-width
+Note labels, Animation and Onion skin groups. Peer groups have section spacing;
+labels and controls have sibling spacing. Its preview uses the live fretboard's
+projection and hand renderers, cropped at physical fret 12 while preserving the
+instrument's taper, inlays and strings. Its demo plays three different grips and a
+major pentatonic run up and down. Enable playback animation controls transitions
+and string attack effects; switching it off keeps the phrase progressing with
+immediate note changes. Note appearance and Timeline scrolling use the editor's
+shared note-row and time-grid painters. Note label font size offers 10, 12, 14 and
+16 px and affects both the editor and its preview. Slider readouts stay on one line.
+Height changes use the panel duration and easing, and
+respect reduced motion. The editor scrolls independently of the preset list.
+Each row shows its
+string number, a pitch button and separate minus/plus buttons for semitone
+changes. The pitch button reveals inline Note and Octave fields. Whole-tuning
+transpose actions share the Open strings heading; the preset list stays separate.
 
 | Class | Spec | Use |
 |---|---|---|

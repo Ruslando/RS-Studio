@@ -15,6 +15,7 @@ import { cancelPassagePreview, clearPreview, ensureTone, passagePreviewToken, ra
 import { toast } from "./notify.js";
 import { PAINT, WASH } from "./stage-paint.js";
 import { S, setSelection } from "./store.js";
+import { projectStart } from "./project-position-core.js";
 import { clamp, hexA } from "./util.js";
 
 export let spectSampleCanvas = document.createElement("canvas");
@@ -149,7 +150,7 @@ export function drawHeatThresholdOverlay() {
 }
 
 export function addTracePoint(points, x, y) {
-  x = clamp(x, 0, songWidth());
+  x = clamp(x, xOf(projectStart(S.state)), songWidth());
   y = clamp(y, 0, contentH() - 1);
   const last = points[points.length - 1];
   if (last && Math.hypot(x - last[0], y - last[1]) < TRACE_POINT_GAP) return;
@@ -240,7 +241,7 @@ export function notesFromTrace(points) {
   const off = gridStep() ? gridOffset() : 0;
   const minX = Math.max(0, Math.min(...points.map((p) => p[0])));
   const maxX = Math.min(songWidth(), Math.max(...points.map((p) => p[0])));
-  const minT = Math.max(0, timeAt(minX));
+  const minT = Math.max(projectStart(S.state), timeAt(minX));
   const maxT = Math.min(S.state.duration, timeAt(maxX));
   // Fine grids can have valid cells shorter than the generic 50 ms minimum
   // (173 BPM / 8 = 43 ms). Keep those drawable too.
@@ -265,7 +266,7 @@ export function notesFromTrace(points) {
       if (cur) { notes.push(cur); cur = null; }
       continue;
     }
-    const start = Math.max(0, t0);
+    const start = Math.max(projectStart(S.state), t0);
     const end = Math.min(S.state.duration, t1);
     // Accept every non-empty grid cell before joining equal-pitch neighbours.
     // Filtering by MIN_DUR here discarded the entire trace on fine grids.

@@ -30,6 +30,7 @@ import { S, setSelection } from "./store.js";
 import { clearMatches, runFindSimilar } from "./tracing.js";
 import { normalizePhraseBoundaries, normalizeSectionMarkers } from "./section-marker-core.js";
 import { normalizeToneMarkers } from "./tone-marker-core.js";
+import { readAvailableSoundPresets } from "./sound-presets-core.js";
 import { effectSignatureFields } from "./note-effects.js";
 import { refreshCounts, renderLanes } from "./lanes.js";
 import { draw } from "./repaint.js";
@@ -232,9 +233,11 @@ const ACTIONS = {
   [ACT.demoTone]: () => {
     const lane = S.state?.editLanes?.find((item) => item.active) || S.state?.editLanes?.[0];
     if (!lane) return;
+    const preset = readAvailableSoundPresets().find(entry => entry.fileId === 'file:guitar-clean.json');
+    if (!preset) return;
     lane.toneMarkers = normalizeToneMarkers([
       ...(lane.toneMarkers || []).filter((marker) => marker.id !== "tour_tone_middle"),
-      { id: "tour_tone_middle", t: 8.35, tone: "clean" },
+      { id: "tour_tone_middle", t: 8.35, tone: preset.id },
     ], S.state.duration);
     draw();
   },

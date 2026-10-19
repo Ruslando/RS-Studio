@@ -1,3 +1,4 @@
+import { toneMarkersForExport } from "./tone-marker-core.js";
 // Guitar Pro export and the alphaTab tablature view. Exports consume all enabled
 // tab layers, while preview builds a one-layer alphaTab score for the currently
 // selected layer. alphaTab draws the playback cursor and handles click-to-seek;
@@ -259,6 +260,7 @@ function buildSpecFromPrepared(prepared) {
         name: l.name,
         ...ownTimingFields(l),
         ...normalizedLaneFields(l),
+        toneMarkers: toneMarkersForExport(l.toneMarkers),
         instrument: laneGm(l),
         tuning,
         // Frets below count from it; the .gp5 writer and Rocksmith both need it.

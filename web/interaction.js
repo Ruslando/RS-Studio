@@ -14,6 +14,8 @@ import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, remove
 import { pitchAt, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, minDur, snap, snapNote } from "./grid.js";
 import { markerCursorAt, markerMouseDown } from "./markers.js";
+import { updateProjectStartAt } from "./project-position.js";
+import { projectStart } from "./project-position-core.js";
 import { markerRails, railsBottom } from "./marker-rails.js";
 import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes, setLaneNotePitch, targetLane } from "./lanes.js";
 import { auditionNote, previewNotes, seekPlayback } from "./playback.js";
@@ -135,6 +137,7 @@ export function hoveredStageNote() {
 // handler and the edge auto-scroll loop (which feeds a recomputed position as
 // the viewport pans under a stationary cursor).
 function updateDrag(x, y) {
+  if (S.drag.mode === "projectStart") { updateProjectStartAt(x); return; }
   if (S.drag.mode === "scrub") {
     seekPlayback(timeAt(x)); return;
   }
@@ -196,7 +199,7 @@ function updateDrag(x, y) {
       const dt = Math.min(o.end - minDur(), Math.max(0, snap(timeAt(x)))) - o.start;
       for (const n of S.drag.notes) {
         const oo = S.drag.orig.get(n);
-        n.start = Math.min(oo.end - minDur(), Math.max(0, oo.start + dt));
+        n.start = Math.min(oo.end - minDur(), Math.max(projectStart(S.state), oo.start + dt));
       }
     }
     S.drag.lane.notes = makeResizeRoom(S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig,
@@ -232,7 +235,7 @@ function updateDrag(x, y) {
 // past the edge — plain hovering no longer pans the frame (and so reaching for
 // the vertical scrollbar on the right doesn't drag the timeline along). The right
 // edge is measured from the content width, excluding the scrollbar gutter.
-function updateAutoScroll(clientX) {
+export function updateAutoScroll(clientX) {
   if (!S.state || !S.drag) { stopAutoScroll(); return; }
   const r = scroll.getBoundingClientRect();
   const left = clientX - r.left, right = r.left + scroll.clientWidth - clientX;
@@ -631,6 +634,7 @@ export function init_interaction() {
   };
   window.addEventListener("mouseup", (e) => {
     if (!S.drag || !S.state) return;
+    if (S.drag.mode === "projectStart") return;
     const [x, y] = localXY(e);
     try {
     if (S.drag.mode === "tracePending") {

@@ -1,5 +1,6 @@
+import { paintNoteRow, paintTimeGridLine } from './timeline-paint.js';
 import { $, scroll } from "./dom.js";
-import { UI_PAINT as PAINT } from "./stage-paint.js";
+import { PAINT } from "./stage-paint.js";
 import { dpr, playheadScrollLeft } from "./util.js";
 import { stageMono } from "./constants.js";
 
@@ -25,25 +26,22 @@ function paint() {
     const left = playheadScrollLeft(time, speed / scale, referenceWidth, (viewport + 640) / scale,
       (offsets.get(mode) || 0) / scale, false, mode) * scale;
     offsets.set(mode, left);
-    ctx.fillStyle = PAINT.chrome; ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = PAINT.ground; ctx.fillRect(0, 0, width, height);
     ctx.save(); ctx.beginPath(); ctx.rect(inset, 0, viewport, height); ctx.clip();
     ctx.translate(inset - left, 0);
     ctx.font = stageMono(9, 400); ctx.textAlign = "left";
     for (let beat = 0; beat < 48; beat++) {
       const x = beat * 20;
-      ctx.strokeStyle = beat % 4 ? PAINT.gridBeat : PAINT.gridBar;
-      ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, 19); ctx.lineTo(x, height); ctx.stroke();
+      paintTimeGridLine(ctx, x, 19, height, beat % 4 ? 'beat' : 'bar');
       if (!(beat % 4)) { ctx.fillStyle = PAINT.label; ctx.fillText(String(beat / 4 + 1), x + 3, 13); }
       if (!(beat % 2)) {
-        ctx.fillStyle = PAINT.ok;
-        ctx.beginPath(); ctx.roundRect(x + 3, 28 + (beat / 2 % 3) * 12, beat % 6 ? 25 : 34, 5, 2); ctx.fill();
+        const rowHeight = 12, row = [2, 1, 0, 1, 3, 2][beat / 2 % 6];
+        paintNoteRow(ctx, x, 22 + row * rowHeight, beat % 6 ? 20 : 40, rowHeight, PAINT.ok);
       }
     }
     const head = time * speed;
     ctx.strokeStyle = PAINT.accent; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(head, 19); ctx.lineTo(head, height); ctx.stroke();
-    ctx.fillStyle = PAINT.accent;
-    ctx.beginPath(); ctx.moveTo(head - 4, 17); ctx.lineTo(head + 4, 17); ctx.lineTo(head, 22); ctx.closePath(); ctx.fill();
     ctx.restore();
     canvas.dataset.scroll = String(left);
     canvas.dataset.playhead = String(head - left);

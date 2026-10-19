@@ -20,6 +20,7 @@ import { timingSegments } from "./grid.js";
 import { timingData, timingIdOf } from "./timing.js";
 import { PAINT, WASH, halo } from "./stage-paint.js";
 import { S } from "./store.js";
+import { projectStart } from "./project-position-core.js";
 import { clamp, hexA } from "./util.js";
 
 // ---- references (linked repeated note groups) ----
@@ -144,16 +145,27 @@ export function lockedReferenceSnapshot() {
   return protectedRefs;
 }
 
-export function lockedReferenceFault(previous) {
+export function lockedReferenceFault(previous, translation = 0) {
+  const same = translation
+    ? (a, b) => JSON.stringify(a, (_, value) => typeof value === 'number' ? Math.round(value * 1e8) / 1e8 : value)
+      === JSON.stringify(b, (_, value) => typeof value === 'number' ? Math.round(value * 1e8) / 1e8 : value)
+    : (a, b) => JSON.stringify(a) === JSON.stringify(b);
   for (const protectedRef of previous || []) {
     const lane = editLanes().find(l => l.id === protectedRef.lane);
     const group = lane?.refBoxes?.[protectedRef.ref];
-    if (!group || lockShape(group) !== protectedRef.shape) return protectedRef.ref;
+    const shape = JSON.parse(protectedRef.shape);
+    if (translation) shape.anchors = shape.anchors.map(anchor => anchor + translation);
+    if (!group || !same(JSON.parse(lockShape(group)), shape)) return protectedRef.ref;
     const clock = laneClock(lane);
     for (let i = 0; i < group.anchors.length; i++) {
       const box = boxRect(group, i, clock);
-      if (JSON.stringify(box) !== JSON.stringify(protectedRef.boxes[i])
-        || lockNotes(notesInBox(box, lane.notes)) !== protectedRef.notes[i]) return protectedRef.ref;
+      const expectedBox = { ...protectedRef.boxes[i] };
+      const expectedNotes = JSON.parse(protectedRef.notes[i]);
+      if (translation) {
+        expectedBox.t0 += translation; expectedBox.t1 += translation;
+        for (const note of expectedNotes) { note.start += translation; note.end += translation; }
+      }
+      if (!same(box, expectedBox) || !same(JSON.parse(lockNotes(notesInBox(box, lane.notes))), expectedNotes)) return protectedRef.ref;
     }
   }
   return null;
@@ -350,7 +362,7 @@ export function moveRefOccurrence(drag, x, y) {
   freezeShape(drag.lane, group);
   const clock = laneClock(drag.lane);
   let dt = snap(drag.a0 + (timeAt(x) - drag.grabT)) - drag.a0;
-  dt = clamp(dt, -(drag.a0 + group.rt0), S.state.duration - (drag.a0 + group.rt1));   // keep the box in-song
+  dt = clamp(dt, projectStart(S.state) - (drag.a0 + group.rt0), S.state.duration - (drag.a0 + group.rt1));   // keep the box in-song
   let dp = 0;
   if (group.transposable) {
     const spec = S.state.spec;
@@ -359,6 +371,7 @@ export function moveRefOccurrence(drag, x, y) {
   // Never into another reference: the occurrence waits at its last free spot.
   const s = drag.s0 + dp, a = drag.a0 + dt;
   const box = { ...spanAt(group, a, clock), pLo: group.pLo + s, pHi: group.pHi + s };
+  if (box.t0 < projectStart(S.state) - 1e-9) return;
   if (overlapsRefBox(drag.lane, box, { ref: drag.ref, i: drag.i })) return;
   group.anchors[drag.i] = a;
   if (group.transposable) (group.shifts || (group.shifts = []))[drag.i] = s;
@@ -631,7 +644,10 @@ export function resizeRefBox(drag, x, y) {
   const a = group.anchors[drag.i], clock = laneClock(drag.lane);
   let [r0, r1] = beatShape(group, clock);
   const at = clock.beatAt(snap(timeAt(x))) - clock.beatAt(a);
-  if (drag.edge.includes("l")) r0 = Math.min(at, r1 - 1e-3);
+  if (drag.edge.includes("l")) {
+    const floor = Math.max(...group.anchors.map(anchor => clock.beatAt(projectStart(S.state)) - clock.beatAt(anchor)));
+    r0 = Math.max(floor, Math.min(at, r1 - 1e-3));
+  }
   else if (drag.edge.includes("r")) r1 = Math.max(at, r0 + 1e-3);
   setBeatShape(group, r0, r1, clock);
   if (drag.edge.includes("t")) group.pHi = Math.max(Math.round(pitchAt(y)), group.pLo);

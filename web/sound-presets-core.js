@@ -91,7 +91,11 @@ export async function loadPresetFolderData() {
   }
   return data;
 }
-export function readAvailableSoundPresets() { return [...folderPresets, ...readSoundLibrary()]; }
+export function readAvailableSoundPresets() {
+  const presets = new Map(folderPresets.map(entry => [entry.id, entry]));
+  for (const entry of readSoundLibrary()) presets.set(entry.id, { ...presets.get(entry.id), ...entry });
+  return [...presets.values()];
+}
 
 // Old finite values are retained for explicit repair on load, never clamped.
 export function normalizeSound(raw, { allowOutOfRange = false } = {}) {

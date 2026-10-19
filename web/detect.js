@@ -16,6 +16,7 @@ import { currentGridState, FINE_SUBDIV, gridAt, quantizeFine, segBeatSec, segSte
 import { confirmChoice } from "./dialog.js";
 import { nid } from "./ids.js";
 import { S, setSelection } from "./store.js";
+import { projectStart } from "./project-position-core.js";
 import { curStemObj, editLanes, refreshCounts, renderLanes, targetLane } from "./lanes.js";
 import { fmtTime } from "./util.js";
 
@@ -187,7 +188,7 @@ async function runDetect() {
     // Drop the detected notes straight into the active edit lane as editable
     // notes (fresh ids, like a manual trace/paste) — undo-committed and left
     // selected. Adding skips attacks already present after quantization.
-    let added = (data.notes || []).map((n) => ({
+    let added = (data.notes || []).filter(note => note.end > projectStart(state)).map((n) => ({
       ...n, ...quantizeFine(n.start, n.end), id: nid(),
     }));
     let gridChoice = "current";

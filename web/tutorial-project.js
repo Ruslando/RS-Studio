@@ -58,7 +58,7 @@ export async function openTutorialProject() {
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Could not prepare walkthrough");
         clearInterval(poll);
         report("visuals");
-        applyProject(await res.json());
+        await applyProject(await res.json());
         await waitForProjectVisuals();
       } finally {
         clearInterval(poll);

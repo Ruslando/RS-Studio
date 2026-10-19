@@ -327,6 +327,7 @@
           <div id="editingPanel"><div id="viewer">
             <button type="button" id="markerLanesChevron" class="edge-toggle edge-toggle--markers" data-panel-toggle="markers" aria-expanded="true" aria-label="Hide markers" title="Hide markers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
             <canvas id="ruler"></canvas>
+            <div class="timeline-start-gutter" aria-hidden="true"></div>
             <div id="scroll">
               <!-- #stageSpacer is as wide as the whole song (drives the scrollbar);
                    #stage is a viewport-sized canvas pinned (sticky) in view that
@@ -338,6 +339,10 @@
             </div>
 
             <canvas id="rulerRight" aria-label="Right pitch scale"></canvas>
+            <button type="button" id="projectStartHandle" class="splitter splitter--x timeline-start" aria-label="Project start: move entire project" hidden>
+              <svg class="splitter-dots" width="5" height="26" viewBox="0 0 5 26" fill="none" aria-hidden="true"><circle cx="2.5" cy="5" r="1.4" fill="currentColor"/><circle cx="2.5" cy="13" r="1.4" fill="currentColor"/><circle cx="2.5" cy="21" r="1.4" fill="currentColor"/></svg>
+              <output class="timeline-start-position" hidden></output>
+            </button>
             <!-- The marker layer's collapse chevron: the sidebar's idiom, on the
                  stage. It hangs off #viewer rather than #scroll so it stays put
                  while the song scrolls under it. -->
@@ -625,9 +630,12 @@
       </span>
     </div>
     <div class="dp-body">
-      <label class="field-group block">Tone preset
-        <select id="toneMarkerPreset"></select>
-      </label>
+      <div class="field-group block"><span>Tone preset</span>
+        <div class="tone-preset-control">
+          <select id="toneMarkerPreset" aria-label="Tone preset"></select>
+          <button type="button" id="toneMarkerEditPreset" class="icon-btn icon-btn--compact" title="Open Tone Designer" aria-label="Open Tone Designer"><span data-ui-icon="settings" data-icon-size="14" aria-hidden="true"></span></button>
+        </div>
+      </div>
       <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="A tone switch is per note layer and snaps to the note grid." aria-label="A tone switch is per note layer and snaps to the note grid.">i</span></span>
         <span class="pop-field"><input type="number" id="toneMarkerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>
@@ -886,8 +894,9 @@
           <input type="range" id="traceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" hidden />
 
           </div><div class="pane-intro"><h2>Editor</h2></div>
-          <div class="section" id="spectrogramSettings">
-            <div class="section-head"><span>Spectrogram</span></div>
+          <section class="sound-section" id="spectrogramSettings" data-section="spectrogram">
+            <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="editorSectionSpectrogram"><span class="sound-section-title">Spectrogram</span></button>
+            <div class="sound-section-body" id="editorSectionSpectrogram"><div class="sound-section-inner">
             <select id="playbackScrollMode" hidden aria-hidden="true">
               <option value="page">Page</option><option value="follow">Follow</option>
             </select>
@@ -912,6 +921,7 @@
               <label class="field-group"><span class="label">Finger position</span><select id="spectrogramPositions"><option value="off">Off</option><option value="always" selected>Always</option><option value="hover">On hover</option></select></label>
               <label class="field-group"><span class="label">Effects</span><select id="spectrogramEffects"><option value="off">Off</option><option value="always" selected>Always</option><option value="hover">On hover</option></select></label>
               </div>
+              <label class="field-slider"><span class="label">Font size</span><input id="noteLabelSize" type="range" min="10" max="16" step="2" value="12" aria-label="Note label font size" /><output class="ro" id="noteLabelSizeValue" for="noteLabelSize">12 px</output></label>
             </fieldset>
           <fieldset class="editor-subsection" id="tracePlacement">
             <legend>Note placement</legend>
@@ -934,10 +944,13 @@
               <span id="traceThresholdValueM" class="ro trace-thresh-val">18%</span>
             </label>
           </fieldset>
-          </div>
-          <div class="section" id="fretboardSettings">
-            <div class="section-head"><span>Fretboard</span></div>
+            </div></div>
+          </section>
+          <section class="sound-section" id="fretboardSettings" data-section="fretboard">
+            <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="editorSectionFretboard"><span class="sound-section-title">Fretboard</span></button>
+            <div class="sound-section-body" id="editorSectionFretboard"><div class="sound-section-inner">
             <canvas id="fretboardSettingsPreview" class="editor-preview fretboard-settings-preview" tabindex="0" role="img" aria-label="Fretboard preview with the current label, string order, capo and onion skin settings."></canvas>
+            <div class="fretboard-settings-groups">
             <fieldset class="fretboard-label-setting">
               <legend>Note labels</legend>
               <div class="fretboard-label-choices">
@@ -953,16 +966,19 @@
                 <option value="low-top">Lowest string at the top</option>
               </select>
             </label>
-            <label class="field-group block"><span class="label">With a capo <span class="info" role="img" tabindex="0" title="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo." aria-label="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo.">i</span></span>
+            <label class="field-group block"><span class="label">Fret numbers <span class="info" role="img" tabindex="0" title="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo." aria-label="Which fret numbers the fretboard shows on a layer with a capo. The tab always counts from the capo.">i</span></span>
               <select id="fretNumbering">
                 <option value="capo">Count from the capo</option>
                 <option value="nut">Count from the nut</option>
               </select>
             </label>
-            <label class="chk"><input type="checkbox" id="fretboardAnimations" checked /> Animate the fretboard during playback</label>
-            <fieldset class="editor-subsection">
+            <fieldset class="editor-subsection fretboard-animation-setting">
+              <legend>Animation</legend>
+              <label class="chk"><input type="checkbox" id="fretboardAnimations" checked /> Enable playback animation</label>
+            </fieldset>
+            <fieldset class="editor-subsection fretboard-onion-setting">
               <legend>Onion skin</legend>
-            <label class="chk"><input type="checkbox" id="fretboardOnionEnabled" /> Show neighbouring chords while paused</label>
+            <label class="chk"><input type="checkbox" id="fretboardOnionEnabled" /> Enable onion skinning</label>
             <label class="field-slider"><span class="label">Previous chord <span class="info" role="img" tabindex="0" title="How strongly the fretboard ghosts the chord before the one being played. 0 turns it off." aria-label="How strongly the fretboard ghosts the chord before the one being played. 0 turns it off.">i</span></span>
               <input type="range" id="onionAlphaPrev" min="0" max="100" step="1" value="35" />
               <span id="onionAlphaPrevValue" class="ro">35%</span>
@@ -972,7 +988,9 @@
               <span id="onionAlphaNextValue" class="ro">35%</span>
             </label>
             </fieldset>
-          </div>
+            </div>
+            </div></div>
+          </section>
         </div>
         <!-- Appearance: light / dark theme selector (persisted across runs). -->
         <div class="sp-pane" id="spAppearance" hidden><div class="pane-intro"><h2>Appearance</h2></div>

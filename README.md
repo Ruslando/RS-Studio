@@ -87,9 +87,9 @@ On Linux it uses the system's FFmpeg. With the NVIDIA libraries installed, run
 - Models are optional downloads: **Settings > Models**.
 - **Settings > Tone presets**: edit a starting tone to create your own preset, change its gear
   and controls, then choose **Apply**. Select your preset in a project's
-  tone marker to embed a portable copy, including its Rocksmith export settings.
-  Audition tones in Rocksmith. Library edits leave existing
-  project copies intact; choose the latest preset in the marker to update one.
+  tone marker to reference its current settings, including Rocksmith export values.
+  Audition tones in Rocksmith. Portable exports include tone definitions;
+  imports keep project-local tones only when their app preset is unavailable.
   The designer includes the full DLC Builder gear catalogue, native parameter
   controls, cabinet microphone positions and effect reordering. See
   [Tone presets](docs/sound-designer.md) for the supported workflow and scope.

@@ -10,6 +10,7 @@ import { toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
 import { applyProject, markSaved, mapLane, refreshSaveState, saveToServer } from "./project.js";
 import { S } from "./store.js";
+import { projectShiftPlan, projectStart } from "./project-position-core.js";
 import { SONG, addTiming, syncTiming, timingData } from "./timing.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { sectionMarkersFromScoreBars } from "./section-marker-core.js";
@@ -175,6 +176,14 @@ async function confirmImport() {
   try {
     await loadWithScreen(async () => {
       const converted = convertGpScore(pending.score, selected, pending.version);
+      const startAt = projectStart(S.state);
+      if (startAt) {
+        // A newly imported score starts at the project's boundary too.
+        const importedState = { ...converted, scoreDuration: converted.duration, stems: [] };
+        projectShiftPlan(importedState, [{ grid: converted.grid, tempoMap: converted.grid.tempoMap,
+          scoreBars: converted.guitarPro.score.masterBars }]).apply(startAt);
+        converted.duration = importedState.duration;
+      }
       const standalone = !S.state;
       let job = S.state?.job;
       if (standalone) {
@@ -195,7 +204,7 @@ async function confirmImport() {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: title }),
         });
         if (!finalized.ok) throw new Error((await finalized.json().catch(() => ({}))).detail || "Could not finalize the project");
-        applyProject(await finalized.json());
+        await applyProject(await finalized.json());
         S.state.metadata = { ...S.state.metadata, ...(converted.metadata || {}) };
       }
 
@@ -207,7 +216,7 @@ async function confirmImport() {
         && /^Layer 1$/i.test(retained[0].name || "") && /^edit(?:_|$)/.test(retained[0].id || "");
       const base = lonePlaceholder ? [] : retained;
       for (const lane of base) lane.active = false;
-      const imported = converted.editLanes.map(mapLane);
+      const imported = converted.editLanes.map(lane => mapLane(lane, projectStart(S.state)));
       if (imported[0]) imported[0].active = true;
       // Nothing to keep in time: the file's timing becomes the song's. Otherwise its
       // layers follow the song if the file keeps the same time, or get their own.

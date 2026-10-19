@@ -468,8 +468,7 @@ class EndToEndTests(unittest.TestCase):
         page.select_option("#toneMarkerPreset", label="Bass Overdrive")
         marker = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]")
         self.assertTrue(marker["tone"].startswith("sound_file_"))
-        self.assertEqual(marker["toneData"]["Name"], "Bass Overdrive")
-        self.assertEqual(marker["toneData"]["GearList"]["PrePedal1"]["Key"], "Bass_Pedal_BassOverdrive")
+        self.assertNotIn("toneData", marker)
 
     def test_sound_designer_drag_cards_remove_and_slider_scale(self):
         page = self.page
@@ -833,44 +832,34 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#settingsModalBackdrop")).to_be_visible()
         self.assertEqual(page.evaluate("localStorage.getItem('cw.soundPresets.v1')"), "broken JSON")
 
-    def test_sound_project_copies_update_only_explicitly_and_survive_library_delete(self):
+    def test_sound_project_references_follow_library_edits_and_warn_after_delete(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
-        page.fill("#soundName", "First version")
-        key = page.locator("#soundPreset").input_value()
+        page.click('#welcomeSettingsBtn'); page.click('[data-settings-pane=sounds]')
+        page.fill('#soundName', 'First version')
+        key = page.locator('#soundPreset').input_value()
         self.apply_settings_and_close()
         self.open_reference_project()
         def open_marker():
             page.evaluate("""async () => {
-                const {S} = await import('/store.js');
-                const lane=S.state.editLanes[0];
+                const {S} = await import('/store.js'); const lane=S.state.editLanes[0];
                 (await import('/tone-markers.js')).openToneMarkerPop(600,200,lane.toneMarkers[0],lane);
             }""")
-        def snapshot():
-            return page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0].toneData")
-        open_marker()
-        page.locator("#toneMarkerPreset").select_option(key)
-        page.click("#toneMarkerPopClose")
-        old = snapshot()
-        page.click("#settingsMenuBtn"); page.click('[data-settings-pane="sounds"]')
-        page.fill("#soundName", "Latest version")
-        page.get_by_role("spinbutton", name="Amp Loudness 1 value", exact=True).fill("65")
+        open_marker(); page.select_option('#toneMarkerPreset', key)
+        page.click('#toneMarkerPopClose')
+        page.click('#settingsMenuBtn'); page.click('[data-settings-pane=sounds]')
+        page.fill('#soundName', 'Latest version')
         self.apply_settings_and_close()
-        self.assertEqual(snapshot(), old, "editing the library must not silently change the project")
         open_marker()
-        expect(page.locator(f'#toneMarkerPreset option[value="{key}"]')).to_have_text("First version (project copy)")
-        page.locator("#toneMarkerPreset").select_option(f"{key}:latest")
-        self.assertEqual(snapshot()["Name"], "Latest version")
-        self.assertEqual(snapshot()["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"], 65)
-        expect(page.locator(f'#toneMarkerPreset option[value="{key}:latest"]')).to_have_count(0)
-        page.click("#toneMarkerPopClose")
-        page.click("#settingsMenuBtn"); page.click('[data-settings-pane="sounds"]')
-        page.click("#soundDelete"); page.click("#actionConfirmAccept"); self.apply_settings_and_close()
-        self.assertEqual(snapshot()["Name"], "Latest version")
+        expect(page.locator(f'#toneMarkerPreset option[value="{key}"]')).to_have_text('Latest version')
+        marker = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]")
+        self.assertNotIn('toneData', marker)
+        self.assertTrue(all('project copy' not in text for text in page.locator('#toneMarkerPreset option').all_text_contents()))
+        page.click('#toneMarkerPopClose')
+        page.click('#settingsMenuBtn'); page.click('[data-settings-pane=sounds]')
+        page.click('#soundDelete'); page.click('#actionConfirmAccept'); self.apply_settings_and_close()
         open_marker()
-        expect(page.locator(f'#toneMarkerPreset option[value="{key}"]')).to_have_text("Latest version (project copy)")
-        base, _, _ = rocksmith_builder._arrangement_tones({"toneMarkers": [{"t":0,"tone":key,"toneData":snapshot()}]},False,"test","lead",60,[])
-        self.assertEqual(base["Name"], "Latest version")
+        expect(page.locator(f'#toneMarkerPreset option[value="{key}"]')).to_contain_text('Missing preset')
+        expect(page.locator(f'#toneMarkerPreset option[value="{key}"]')).to_have_attribute('disabled', '')
 
     def test_sound_designer_starting_points_are_directly_editable(self):
         page = self.page
@@ -981,26 +970,25 @@ class EndToEndTests(unittest.TestCase):
             const {S} = await import('/store.js');
             return S.state.editLanes[0].toneMarkers[0];
         }""")
-        self.assertEqual(snapshot["toneData"]["Name"], "Test solo")
-        self.assertEqual(snapshot["toneData"]["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"], 42)
+        self.assertNotIn("toneData", snapshot)
         # A portable project does not depend on this machine's preset library.
-        page.evaluate("localStorage.removeItem('cw.soundPresets.v1')")
         with page.expect_response(lambda response: response.request.method == "POST" and response.url.endswith(f"/api/projects/{self.reference_job}")):
             page.keyboard.press("Control+s")
         saved = page.request.get(f"{self.url}api/projects/{self.reference_job}").json()
-        self.assertEqual(saved["editLanes"][0]["toneMarkers"][0]["toneData"]["Name"], "Test solo")
+        self.assertNotIn("toneData", saved["editLanes"][0]["toneMarkers"][0])
         chart = self.data / "custom-sound.chart"
         chart.write_bytes(self.download("#saveAs").read_bytes())
         self.home()
+        page.evaluate("localStorage.removeItem('cw.soundPresets.v1')")
         with page.expect_file_chooser() as chooser:
             page.click("#welcomeOpen")
         chooser.value.set_files(chart)
         expect(page.locator("#lanes .lane-row")).to_be_visible()
         restored = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]")
-        self.assertEqual(restored["toneData"], snapshot["toneData"])
+        self.assertEqual(restored["toneData"]["Name"], "Test solo")
         # Backend export accepts precisely the snapshot saved by the UI.
         base, _, _ = rocksmith_builder._arrangement_tones(
-            {"toneMarkers": [snapshot]}, False, "test", "lead", 60, [])
+            {"toneMarkers": [restored]}, False, "test", "lead", 60, [])
         self.assertEqual(base["Name"], "Test solo")
 
     def test_sound_designer_effect_banks_and_delete_cancel(self):
@@ -1955,6 +1943,95 @@ class EndToEndTests(unittest.TestCase):
         expect(preview).to_have_attribute('data-running', 'true')
         page.click('#settingsModalClose')
         expect(preview).to_have_attribute('data-running', 'false')
+
+    def test_fretboard_settings_preview_matches_the_live_neck(self):
+        self.open_reference_project()
+        page=self.page
+        page.click('#settingsMenuBtn')
+        page.locator('#spectrogramSettings > button').click()
+        result=page.evaluate("""async () => {
+            const {S}=await import('./store.js'); const board=await import('./fretboard.js');
+            const {UI_PAINT}=await import('./stage-paint.js'); const {hexA,dpr}=await import('./util.js');
+            document.querySelector('#fretboardAnimations').checked=false;
+            document.querySelector('#fretboardOnionEnabled').checked=false;
+            document.querySelector('input[name=fretboardLabels][value=none]').checked=true;
+            board.setFretboardVisible(true);
+            await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
+            const live=document.querySelector('#fretboard'),preview=document.querySelector('#fretboardSettingsPreview');
+            preview.style.width=(live.width/dpr()+2)+'px';preview.style.height=(live.height/dpr()+2)+'px';
+            const capture=(canvas,draw) => {
+                const ctx=canvas.getContext('2d'),original=ctx.fillRect,wires=[];
+                ctx.fillStyle=hexA(UI_PAINT.label,.6);const wireColor=ctx.fillStyle;
+                ctx.fillRect=function(...bounds){if(this.fillStyle===wireColor)wires.push(bounds.map(n=>+n.toFixed(5)));return original.apply(this,bounds);};
+                try{draw();}finally{ctx.fillRect=original;}
+                return wires;
+            };
+            const actual=capture(live,()=>board.drawFretboard());
+            const settings=capture(preview,()=>board.drawFretboardSettingsPreview(1.5));
+            preview.style.width='';preview.style.height='';
+            return {actual,settings};
+        }""")
+        self.assertEqual(len(result['actual']),22)
+        self.assertEqual(len(result['settings']),12)
+        actual, settings = result['actual'][:12], result['settings']
+        scale = settings[0][3] / actual[0][3]
+        for live, preview in zip(actual, settings):
+            # Cropping changes the fitted scale, not the physical instrument.
+            self.assertAlmostEqual(preview[0]-settings[0][0], (live[0]-actual[0][0])*scale, delta=.001)
+            self.assertAlmostEqual(preview[1]-settings[0][1], (live[1]-actual[0][1])*scale, delta=.001)
+            self.assertAlmostEqual(preview[3], live[3]*scale, delta=.001)
+        page.screenshot(path='design-shots/editor-fretboard-two-columns.png')
+        samples=page.evaluate("""async () => {
+            const board=await import('./fretboard.js'),canvas=document.querySelector('#fretboardSettingsPreview');
+            const control=document.querySelector('#fretboardAnimations');
+            const sample=(time)=>{board.drawFretboardSettingsPreview(time);return canvas.toDataURL();};
+            const still=[sample(.08),sample(.14),sample(2.0),sample(6.08)];
+            control.checked=true;
+            const moving=[sample(.08),sample(.14)];
+            return {still,moving};
+        }""")
+        self.assertTrue(samples['still'][0]==samples['still'][1], 'no movement between attacks when disabled')
+        self.assertTrue(samples['still'][0]!=samples['still'][2], 'chords still change with animation disabled')
+        self.assertTrue(samples['still'][2]!=samples['still'][3], 'phrase continues into single notes')
+        self.assertTrue(samples['moving'][0]!=samples['moving'][1], 'enabled preview includes string attack effects')
+
+
+    def test_note_label_font_size_preview_apply_and_cancel(self):
+        self.open_reference_project()
+        page = self.page
+        page.click('#settingsMenuBtn')
+        slider = page.locator('#noteLabelSize')
+        expect(slider).to_have_value('12')
+        slider.evaluate("el => {el.value='16'; el.dispatchEvent(new Event('input', {bubbles:true}));}")
+        expect(page.locator('#noteLabelSizeValue')).to_have_text('16 px')
+        fonts = page.evaluate("""async () => {
+            const preview = await import('./editor-previews.js');
+            const notes = await import('./note-render.js');
+            const capture = (id, paint) => {
+                const ctx=document.querySelector(id).getContext('2d'), original=ctx.fillText, fonts=[];
+                ctx.fillText=function(...args){fonts.push(this.font); return original.apply(this,args);};
+                try{paint();}finally{ctx.fillText=original;}
+                return fonts;
+            };
+            return {preview:capture('#noteAppearancePreview',preview.drawNoteAppearancePreview),
+                actual:capture('#stage',notes.drawNoteFx)};
+        }""")
+        self.assertTrue(fonts['preview'])
+        self.assertTrue(fonts['actual'])
+        self.assertTrue(all('16px' in font for font in fonts['preview']+fonts['actual']), fonts)
+        page.locator('#noteAppearancePreview').scroll_into_view_if_needed()
+        page.screenshot(path='design-shots/editor-note-appearance.png')
+        page.click('#settingsApply')
+        slider.evaluate("el => {el.value='10'; el.dispatchEvent(new Event('input', {bubbles:true}));}")
+        page.click('#settingsModalClose')
+        page.click('#settingsMenuBtn')
+        expect(slider).to_have_value('16')
+        expect(page.locator('#noteLabelSizeValue')).to_have_text('16 px')
+        page.click('#settingsModalClose')
+        page.reload()
+        page.click('#welcomeSettingsBtn')
+        page.click('[data-settings-pane=trace]')
+        expect(slider).to_have_value('16')
 
     def test_playback_and_fretboard_preferences(self):
         self.open_reference_project()
@@ -3013,6 +3090,233 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press('Control+Shift+z')
         expect(motif.locator('canvas')).to_have_attribute('aria-label', re.compile(r'Motif #1,.*3 notes$'))
 
+    def test_tone_designer_existing_presets_remain_live_references(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js'); const lane=S.state.editLanes[0];
+            (await import('/tone-markers.js')).openToneMarkerPop(600,200,lane.toneMarkers[0],lane);
+        }''')
+        page.select_option('#toneMarkerPreset', label='Bass Clean')
+        key = page.locator('#toneMarkerPreset').input_value()
+        page.click('#toneMarkerEditPreset')
+        expect(page.locator('#soundPreset')).to_be_enabled()
+        expect(page.locator('#soundPreset')).to_have_value(key)
+        expect(page.locator('#soundName')).to_have_value('Bass Clean')
+        expect(page.locator('#soundPresetScope')).to_have_count(0)
+        expect(page.locator('#soundPreset optgroup[label="Project presets"]')).to_have_count(0)
+        page.fill('#soundName', 'Live app bass')
+        page.fill('#soundVolumeNumber', '7')
+        page.click('#settingsApply')
+        page.click('#settingsModalClose')
+        result = page.evaluate('''async () => {
+            const {S} = await import('/store.js');
+            const {readAvailableSoundPresets} = await import('/sound-presets-core.js');
+            return {marker:S.state.editLanes[0].toneMarkers[0], presets:readAvailableSoundPresets()};
+        }''')
+        self.assertEqual(result['marker']['tone'], key)
+        self.assertNotIn('toneData', result['marker'])
+        self.assertEqual(len(result['presets']), 6, 'editing an existing preset keeps its identity')
+        current = next(p for p in result['presets'] if p['id'] == key)
+        self.assertEqual(current['tone']['Name'], 'Live app bass')
+        self.assertEqual(current['tone']['Volume'], '-7')
+        spec = page.evaluate('''async () => {
+            const {S} = await import('/store.js');
+            return (await import('/tablature.js')).buildSpecForLanesAsync([S.state.editLanes[0]]);
+        }''')
+        self.assertEqual(spec['tracks'][0]['toneMarkers'][0]['toneData']['Name'], 'Live app bass')
+        chart = self.data / 'reference-tones.chart'
+        chart.write_bytes(self.download('#saveAs').read_bytes())
+        saved = page.request.get(f'{self.url}api/projects/{self.reference_job}').json()
+        self.assertNotIn('toneData', saved['editLanes'][0]['toneMarkers'][0])
+        with zipfile.ZipFile(chart) as archive:
+            portable = json.loads(archive.read('project.json'))
+        self.assertEqual(portable['editLanes'][0]['toneMarkers'][0]['toneData']['Name'], 'Live app bass')
+        # Import where the preset exists: retain the reference and discard the definition.
+        self.home()
+        with page.expect_file_chooser() as chooser: page.click('#welcomeOpen')
+        chooser.value.set_files(chart)
+        expect(page.locator('#lanes .lane-row')).to_be_visible()
+        marker = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]''')
+        self.assertNotIn('toneData', marker)
+        # Import where it does not exist: use the portable definition as a project preset.
+        self.home()
+        page.evaluate("localStorage.removeItem('cw.soundPresets.v1')")
+        page.route('**/api/sound-presets', lambda route: route.fulfill(json={'presets': [], 'errors': [], 'folder': 'Other machine'}))
+        with page.expect_file_chooser() as chooser: page.click('#welcomeOpen')
+        chooser.value.set_files(chart)
+        expect(page.locator('#lanes .lane-row')).to_be_visible()
+        marker = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]''')
+        self.assertEqual(marker['toneData']['Name'], 'Live app bass')
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js'); const lane=S.state.editLanes[0];
+            (await import('/tone-markers.js')).openToneMarkerPop(600,200,lane.toneMarkers[0],lane);
+        }''')
+        page.click('#toneMarkerEditPreset')
+        expect(page.locator('#soundPreset')).to_be_enabled()
+        expect(page.locator('#soundPreset option:checked')).to_have_attribute('value', re.compile('^project:'))
+        expect(page.locator('#soundName')).to_have_value('Live app bass')
+
+    def test_tone_designer_imported_unavailable_versions_remain_project_local(self):
+        self.open_reference_project()
+        page = self.page
+        app_before = page.evaluate('''async () => {
+            const {S} = await import('/store.js');
+            const {readAvailableSoundPresets, cloneSound} = await import('/sound-presets-core.js');
+            const original = readAvailableSoundPresets().find(entry => entry.tone.Name === 'Bass Clean');
+            const preset = {id:'sound_imported_bass', tone:{...cloneSound(original.tone),Name:'Imported bass'}};
+            S.state.editLanes[0].toneMarkers = [
+                {id:'first',t:0,tone:preset.id,toneData:cloneSound(preset.tone)},
+                {id:'shared',t:4,tone:preset.id,toneData:cloneSound(preset.tone)},
+                {id:'variant',t:8,tone:preset.id,toneData:{...cloneSound(preset.tone),Name:'Other version'}},
+            ];
+            (await import('/repaint.js')).draw();
+            return readAvailableSoundPresets();
+        }''')
+        def snapshots():
+            return page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers.map(marker => marker.toneData)''')
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js'); const lane = S.state.editLanes[0];
+            (await import('/tone-markers.js')).openToneMarkerPop(600,200,lane.toneMarkers[1],lane);
+        }''')
+        expect(page.locator('#toneMarkerPreset option:checked')).to_have_text('Imported bass')
+        shots = Path(__file__).resolve().parents[1] / 'design-shots'
+        shots.mkdir(exist_ok=True)
+        page.locator('#toneMarkerPop').screenshot(path=str(shots / 'tone-switch-designer-link.png'))
+        page.click('#toneMarkerEditPreset')
+        expect(page.locator('#settingsModal')).to_be_visible()
+        expect(page.locator('#soundPreset')).to_be_enabled()
+        expect(page.locator('#soundName')).to_have_value('Imported bass')
+        expect(page.locator('#soundPreset option:checked')).to_have_attribute('value', re.compile('^project:'))
+        expect(page.locator('#soundPreset optgroup[label="Project presets"] option')).to_have_count(2)
+        expect(page.locator('#soundPresetScope')).to_have_count(0)
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.fill('#soundName', 'Song bass')
+        page.fill('#soundVolumeNumber', '7')
+        self.assertEqual(snapshots()[0]['Name'], 'Imported bass', 'project edits remain staged')
+        page.click('#settingsApply')
+        self.assertEqual([tone['Name'] for tone in snapshots()], ['Song bass', 'Song bass', 'Other version'])
+        self.assertEqual(snapshots()[1]['Volume'], '-7')
+        self.assertEqual(page.evaluate('''async () => (await import('/sound-presets-core.js')).readAvailableSoundPresets()'''), app_before)
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.locator('#settingsModal').screenshot(path=str(shots / 'project-tone-designer.png'))
+        page.click('#settingsModalClose')
+        page.evaluate('document.activeElement.blur()')
+        page.keyboard.press('Control+z')
+        self.assertEqual(snapshots()[0]['Name'], 'Imported bass')
+        page.keyboard.press('Control+Shift+z')
+        self.assertEqual(snapshots()[0]['Name'], 'Song bass')
+        page.evaluate('''async () => { await (await import('/project.js')).saveToServer(); }''')
+        page.reload()
+        page.evaluate('''async job => { await (await import('/project.js')).loadCached(job); }''', self.reference_job)
+        self.assertEqual([tone['Name'] for tone in snapshots()], ['Song bass', 'Song bass', 'Other version'])
+        page.click('#settingsMenuBtn')
+        page.click('[data-settings-pane=sounds]')
+        expect(page.locator('#soundPreset')).to_be_enabled()
+        project = page.locator('#soundPreset optgroup[label="Project presets"] option').filter(has_text='Song bass')
+        page.select_option('#soundPreset', project.get_attribute('value'))
+        expect(page.locator('#soundName')).to_have_value('Song bass')
+
+    def test_tone_designer_reference_edits_cancel_without_creating_presets(self):
+        self.open_reference_project()
+        page = self.page
+        before = page.evaluate('''async () => ({
+            marker:(await import('/store.js')).S.state.editLanes[0].toneMarkers[0],
+            library:localStorage.getItem('cw.soundPresets.v1')
+        })''')
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js'); const lane=S.state.editLanes[0];
+            (await import('/tone-markers.js')).openToneMarkerPop(600,200,lane.toneMarkers[0],lane);
+        }''')
+        page.click('#toneMarkerEditPreset')
+        expect(page.locator('#soundPreset')).to_be_enabled()
+        page.fill('#soundName', 'Discarded project edit')
+        page.click('[data-settings-pane=appearance]')
+        page.click('[data-settings-pane=sounds]')
+        expect(page.locator('#soundName')).to_have_value('Discarded project edit')
+        page.click('#settingsModalClose')
+        after = page.evaluate('''async () => ({
+            marker:(await import('/store.js')).S.state.editLanes[0].toneMarkers[0],
+            library:localStorage.getItem('cw.soundPresets.v1')
+        })''')
+        self.assertEqual(after, before)
+
+    def test_tone_switch_offers_only_current_presets_without_opening_settings(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            (await import('/tone-markers.js')).openToneMarkerPop(600, 200, lane.toneMarkers[0], lane);
+        }''')
+        options = page.locator('#toneMarkerPreset option')
+        expect(options).to_have_count(6)
+        self.assertEqual(options.evaluate_all('els => els.map(el => el.value).filter(value => ["lead","clean","crunch","bass"].includes(value))'), [])
+        self.assertEqual(options.evaluate_all('els => els.every(el => el.value.startsWith("sound_file_"))'), True)
+        page.select_option('#toneMarkerPreset', label='Bass Clean')
+        selected = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]''')
+        self.assertNotIn('toneData', selected)
+        expect(page.locator('#toneMarkerPreset option')).to_have_count(6)
+        expect(page.locator('#toneMarkerPreset option:disabled')).to_have_count(0)
+
+    def test_tone_switch_empty_library_does_not_restore_old_defaults(self):
+        page = self.page
+        page.route('**/api/sound-presets', lambda route: route.fulfill(json={'presets': [], 'errors': [], 'folder': 'Empty'}))
+        self.open_reference_project()
+        page.evaluate('''async () => (await import('/tone-markers.js')).addToneMarkerAtTime(3, 600, 200)''')
+        expect(page.locator('.toast').filter(has_text='No tone presets are available')).to_be_visible()
+        self.assertEqual(page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers'''), [])
+
+    def test_tone_switch_missing_presets_warn_on_load_and_can_be_repaired(self):
+        page = self.page
+        root = Path(__file__).resolve().parents[1]
+        data = json.loads((root / 'examples/reference-showcase/project.json').read_text('utf-8'))
+        tone = json.loads((root / 'presets/sounds/guitar-clean.json').read_text('utf-8'))
+        tone['Name'] = 'Removed custom preset'
+        data['editLanes'][0]['toneMarkers'] = [
+            {'id': f'removed_{key}', 't': index, 'tone': key}
+            for index, key in enumerate(['lead', 'clean', 'crunch', 'bass'])] + [
+            {'id': 'removed_custom', 't': 4, 'tone': 'sound_removed', 'toneData': tone}]
+        bundle = self.data / 'missing-tones.chart'
+        with zipfile.ZipFile(bundle, 'w') as archive:
+            archive.writestr('project.json', json.dumps(data))
+        with page.expect_file_chooser() as chooser:
+            page.click('#welcomeOpen')
+        chooser.value.set_files(bundle)
+        warning = page.locator('.toast').filter(has_text='Missing tone presets:')
+        expect(warning).to_have_count(1)
+        expect(warning.locator('.dot.warn')).to_be_visible()
+        self.assertEqual(warning.locator('.dot.warn').evaluate('el => getComputedStyle(el, "::before").content'), 'none')
+        for name in ['lead', 'clean', 'crunch', 'bass']:
+            expect(warning).to_contain_text(name)
+        before = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers''')
+        self.assertEqual([m['tone'] for m in before], ['lead', 'clean', 'crunch', 'bass', 'sound_removed'])
+        strokes = page.evaluate('''async () => {
+            const {sctx} = await import('/dom.js'), {PAINT} = await import('/stage-paint.js');
+            const original = sctx.stroke; let warnings = 0;
+            sctx.stroke = function(...args) { if (this.strokeStyle === PAINT.warn) warnings++; return original.apply(this, args); };
+            try { (await import('/tone-markers.js')).drawToneMarkers(); } finally { sctx.stroke = original; }
+            return warnings;
+        }''')
+        self.assertEqual(strokes, 4, 'each unresolved flag draws its warning triangle')
+        shots = root / 'design-shots'
+        shots.mkdir(exist_ok=True)
+        page.screenshot(path=str(shots / 'tone-missing-presets.png'))
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js'); const lane = S.state.editLanes[0];
+            (await import('/tone-markers.js')).openToneMarkerPop(600,200,lane.toneMarkers[0],lane);
+        }''')
+        expect(page.locator('#toneMarkerPreset')).to_have_value('lead')
+        expect(page.locator('#toneMarkerPreset option[value=lead]')).to_have_attribute('disabled', '')
+        expect(page.locator('#toneMarkerPreset option[value=lead]')).to_contain_text('Missing preset: lead')
+        expect(page.locator('#toneMarkerPreset option:not(:disabled)')).to_have_count(6)
+        page.select_option('#toneMarkerPreset', label='Guitar Clean')
+        expect(page.locator('#toneMarkerPreset option:disabled')).to_have_count(0)
+        repaired = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]''')
+        self.assertTrue(repaired['tone'].startswith('sound_file_'))
+        self.assertNotIn('toneData', repaired)
+        self.assertEqual(repaired['t'], 0)
+
     def test_all_marker_artifacts_edit_jump_and_update_live(self):
         self.open_reference_project()
         page = self.page
@@ -3021,10 +3325,14 @@ class EndToEndTests(unittest.TestCase):
             const lane = S.state.editLanes[0];
             S.state.sectionMarkers = [{id:'section_song', t:4, text:'Verse', sectionType:'verse'}];
             S.state.tempoMap = [{t:12, bpm:120, tsNum:3, tsDen:4, subdiv:2}];
-            lane.toneMarkers = [{id:'start', t:0, tone:'lead'}, {id:'tone_song', t:12, tone:'crunch'}];
+            const {readAvailableSoundPresets} = await import('/sound-presets-core.js');
+            const library = readAvailableSoundPresets();
+            const clean = library.find(p => p.tone.Name === 'Guitar Clean');
+            const crunch = library.find(p => p.tone.Name === 'Guitar Crunch');
+            lane.toneMarkers = [{id:'start', t:0, tone:clean.id}, {id:'tone_song', t:12, tone:crunch.id}];
             lane.phraseBoundaries = [{id:'phrase_song', t:6}];
             const other = {...lane, id:'other', name:'Other guitar', active:false,
-                notes:[], refBoxes:{}, toneMarkers:[{id:'tone_other', t:10, tone:'clean'}],
+                notes:[], refBoxes:{}, toneMarkers:[{id:'tone_other', t:10, tone:clean.id}],
                 phraseBoundaries:[{id:'phrase_other', t:14}, {id:'phrase_other2', t:18}]};
             S.state.editLanes.push(other);
             const {rebuildLanes, renderLanes} = await import('/lanes.js');
@@ -3059,8 +3367,8 @@ class EndToEndTests(unittest.TestCase):
         root.locator('[data-marker-kind="tempo"] .artifact-row').filter(has_text='Start').locator('.artifact-name').click()
         self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 0)
         tone.locator('.artifact-marker-edit').click()
-        page.locator('#toneMarkerPreset').select_option('bass')
-        expect(tone.locator('.artifact-name')).to_have_text('Bass')
+        page.locator('#toneMarkerPreset').select_option(label='Bass Clean')
+        expect(tone.locator('.artifact-name')).to_have_text('Bass Clean')
         page.locator('#toneMarkerPopClose').click()
         # Right-click opens the same phrase editor, with time and delete actions.
         phrase = root.locator('[data-marker-kind="phrase"] .artifact-row')
@@ -3095,10 +3403,11 @@ class EndToEndTests(unittest.TestCase):
         # Timeline-side edits also refresh an existing artifact row.
         page.evaluate("""async () => {
             const {S} = await import('/store.js');
-            S.state.editLanes[0].toneMarkers[1].tone = 'crunch';
+            S.state.editLanes[0].toneMarkers[1].tone = (await import('/sound-presets-core.js')).readAvailableSoundPresets().find(p => p.tone.Name === 'Guitar Crunch').id;
+            delete S.state.editLanes[0].toneMarkers[1].toneData;
             (await import('/repaint.js')).draw();
         }""")
-        expect(tone.locator('.artifact-name')).to_have_text('Crunch')
+        expect(tone.locator('.artifact-name')).to_have_text('Guitar Crunch')
         # Switching the active layer switches the list.
         page.locator('#lanes .lane-row').filter(has_text='Other guitar').click()
         expect(root.locator('[data-marker-kind="phrase"] .artifact-row')).to_have_count(2)
@@ -3405,6 +3714,183 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#appshell")).to_be_visible()
         notes(2)
 
+    def test_project_start_translates_all_timings_and_locked_references(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('./store.js');
+            const {addTiming} = await import('./timing.js');
+            const lane = S.state.editLanes[0];
+            lane.refBoxes[1].locked = true;
+            lane.notes[0].start += .013; lane.notes[0].end += .013;
+            lane.handHolds = [{t: 2, fret: 3}];
+            lane.phraseBoundaries = [{id:'p',t:8}];
+            S.state.tempoMap = [{t:4,bpm:160,tsNum:4,tsDen:4,subdiv:2},{t:12,bpm:100,tsNum:3,tsDen:4,subdiv:4}];
+            S.state.sectionMarkers = [{id:'v',t:0,text:'Verse',sectionType:'verse'},{id:'s',t:12,text:'Solo',sectionType:'solo'}];
+            const bars = await import('./score-structure-core.js');
+            S.state.scoreBars = bars.coverScoreDuration(bars.normalizeScoreBars([{seconds:0,durationSeconds:2},{seconds:2,durationSeconds:2}]),S.state.duration);
+            const own = addTiming({grid:{bpm:90,offset:.125,tsNum:4,tsDen:4,subdiv:2},
+                tempoMap:[{t:10,bpm:110,tsNum:4,tsDen:4,subdiv:2}],sectionMarkers:[{id:'other',t:2,text:'Riff'}],scoreBars:[{seconds:.125,durationSeconds:2}]});
+            S.state.editLanes.push({id:'own',name:'Own timing',kind:'edit',instrument:lane.instrument,tuning:lane.tuning,
+                active:false,locked:true,visible:false,timing:own,color:lane.color,volume:1,handHolds:[],phraseBoundaries:[],
+                refBoxes:{},notes:[{id:'own-note',start:14.137,end:15.137,pitch:45}],toneMarkers:[{id:'own-tone',t:0,tone:lane.toneMarkers[0].tone}]});
+            (await import('./lanes.js')).renderLanes();
+            (await import('./repaint.js')).drawNow();
+        }""")
+        state = """async () => {
+            const {S} = await import('./store.js');
+            const {timingSnapshot} = await import('./timing.js');
+            return {start:S.state.projectStart||0,duration:S.state.duration,
+                lanes:S.state.editLanes.map(l=>({notes:l.notes.map(n=>[n.start,n.end]),boxes:l.refBoxes,
+                    holds:l.handHolds,tones:l.toneMarkers,phrases:l.phraseBoundaries})),
+                timings:Object.fromEntries(Object.entries(timingSnapshot().timings).map(([id,t])=>[id,{grid:t.grid,
+                    tempoMap:t.tempoMap.map(m=>({t:m.t})),sectionMarkers:t.sectionMarkers.map(m=>({t:m.t})),scoreBars:t.scoreBars.map(b=>({seconds:b.seconds}))}]))};
+        }"""
+        before = page.evaluate(state)
+        handle = page.locator('#projectStartHandle')
+        expect(handle).to_be_visible()
+        def assert_start_alignment():
+            positions = page.evaluate("""async () => {
+                const {S}=await import('./store.js'); const {xOf}=await import('./geometry.js');
+                const {gridOffset}=await import('./grid.js'); const {firstMarkerViewportRect}=await import('./markers.js');
+                const {drawNow}=await import('./repaint.js'); drawNow();
+                const stage=document.querySelector('#stage').getBoundingClientRect();
+                const line=document.querySelector('#projectStartHandle').getBoundingClientRect();
+                const scroll=document.querySelector('#scroll');
+                return {tempo:firstMarkerViewportRect().left,tempoTime:stage.left+xOf(gridOffset())-scroll.scrollLeft,
+                    start:stage.left+xOf(S.state.projectStart||0)-scroll.scrollLeft,line:line.left+line.width/2};
+            }""")
+            self.assertAlmostEqual(positions['tempo'],positions['tempoTime'],delta=.1)
+            self.assertAlmostEqual(positions['start']-positions['line'],12,delta=.1)
+        assert_start_alignment()
+        self.assertEqual(handle.evaluate('e=>getComputedStyle(e).position'), 'absolute')
+        self.assertEqual(handle.evaluate('e=>getComputedStyle(e,"::before").width'), '1px')
+        self.assertEqual(handle.evaluate('e=>getComputedStyle(e).backgroundColor'), 'rgba(0, 0, 0, 0)')
+        box = handle.bounding_box()
+        x, y = box['x'] + box['width'] / 2 + 1, box['y'] + 175
+        px = page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
+        page.mouse.move(x,y)
+        expect(handle.locator('svg')).to_have_css('opacity','1')
+        page.mouse.down()
+        page.mouse.move(x + .375 * px,y,steps=8)
+        during = page.evaluate(state)
+        self.assertAlmostEqual(during['start'], .375, places=3)
+        page.mouse.up()
+        moved = page.evaluate(state)
+        assert_start_alignment()
+        self.assertEqual(moved, during, 'release must not quantize the imported rhythm')
+        for old, new in zip(before['lanes'], moved['lanes']):
+            for note0, note1 in zip(old['notes'],new['notes']):
+                for a,b in zip(note0,note1): self.assertAlmostEqual(b-a,.375,places=6)
+            for field in ['holds','tones','phrases']:
+                for a,b in zip(old[field],new[field]): self.assertAlmostEqual(b['t']-a['t'],.375,places=6)
+            for key, group in old['boxes'].items():
+                for a,b in zip(group['anchors'],new['boxes'][key]['anchors']): self.assertAlmostEqual(b-a,.375,places=6)
+        for key, timing in before['timings'].items():
+            shifted=moved['timings'][key]
+            self.assertAlmostEqual(shifted['grid']['offset']-timing['grid']['offset'],.375,places=6)
+            for field,time_key in [('tempoMap','t'),('sectionMarkers','t'),('scoreBars','seconds')]:
+                for a,b in zip(timing[field],shifted[field]): self.assertAlmostEqual(b[time_key]-a[time_key],.375,places=6)
+        self.assertEqual(page.evaluate("async () => (await import('./store.js')).S.undoStack.length"),1)
+        self.assertAlmostEqual(moved['duration']-before['duration'],.375,places=6)
+        page.keyboard.press('Control+z')
+        self.assertEqual(page.evaluate(state),before)
+        page.keyboard.press('Control+Shift+z')
+        self.assertEqual(page.evaluate(state),moved)
+        saved = page.evaluate("""async () => {
+            const {S}=await import('./store.js'); const p=await import('./project.js');
+            await p.saveToServer();
+            const saved=await (await fetch('/api/projects/'+S.state.job)).json();
+            await p.applyProject(saved);
+            return saved;
+        }""")
+        self.assertAlmostEqual(saved['projectStart'],.375,places=6)
+        self.assertEqual(page.evaluate(state),moved)
+        exported = page.request.post(self.url + 'api/projects/' + saved['job'] + '/export',data={})
+        self.assertTrue(exported.ok)
+        with zipfile.ZipFile(io.BytesIO(exported.body())) as chart:
+            self.assertAlmostEqual(json.loads(chart.read('project.json'))['projectStart'],.375)
+        handle = page.locator('#projectStartHandle')
+        box = handle.bounding_box()
+        page.mouse.move(box['x']+box['width']/2,box['y']+175)
+        page.screenshot(path='design-shots/project-start-implemented.png')
+
+    def test_project_start_blocks_placement_and_drag_can_be_cancelled(self):
+        self.open_reference_project()
+        page = self.page
+        handle = page.locator('#projectStartHandle')
+        handle.focus()
+        for _ in range(5): page.keyboard.press('Shift+ArrowRight')
+        page.evaluate('document.activeElement.blur()')
+        self.assertAlmostEqual(page.evaluate("async ()=>(await import('./store.js')).S.state.projectStart"),.5)
+        lane_state = "async ()=>JSON.stringify((await import('./edit.js')).snapshotEdit())"
+        before = page.evaluate(lane_state)
+        p = page.evaluate("""async () => {
+            const {xOf}=await import('./geometry.js'); const stage=document.querySelector('#stage').getBoundingClientRect();
+            return {x:stage.left+xOf(.1), y:stage.top+180};
+        }""")
+        page.mouse.dblclick(p['x'],p['y'])
+        page.mouse.click(p['x'],p['y'],button='right')
+        self.assertEqual(page.evaluate(lane_state),before)
+        self.assertEqual(page.locator('.ctxmenu:visible').count(),0)
+        self.assertGreaterEqual(page.evaluate("async ()=>(await import('./grid.js')).snap(-10)"),.5)
+        self.assertGreaterEqual(page.evaluate("async ()=>(await import('./tone-markers.js')).snapToneTime(-1)"),.5)
+        box=handle.bounding_box()
+        page.mouse.move(box['x']+box['width']/2,box['y']+170)
+        page.mouse.down(); page.mouse.move(box['x']+45,box['y']+170,steps=5)
+        page.keyboard.press('Escape');page.mouse.up()
+        self.assertAlmostEqual(page.evaluate("async ()=>(await import('./store.js')).S.state.projectStart"),.5)
+        self.assertEqual(page.evaluate(lane_state),before)
+
+    def test_project_start_keeps_audio_fixed_and_preserves_the_last_note(self):
+        self.new_audio_project()
+        page=self.page
+        original=page.evaluate("""async () => {
+            const {S}=await import('./store.js'); const {restoreGridState}=await import('./grid.js');
+            restoreGridState({bpm:120,offset:0,tsNum:4,tsDen:4,subdiv:2});
+            const lane=S.state.editLanes[0];
+            lane.notes=[{id:'tail',start:S.state.duration-1,end:S.state.duration-.25,pitch:45}];
+            (await import('./repaint.js')).drawNow();
+            return {duration:S.state.duration,src:document.querySelector('#audio').currentSrc,
+                image:S.spectImg?.src,grid:S.appliedGrid.offset};
+        }""")
+        handle=page.locator('#projectStartHandle');box=handle.bounding_box()
+        page.mouse.move(box['x']+box['width']/2+1,box['y']+170)
+        page.mouse.down();page.mouse.move(box['x']+180,box['y']+170,steps=10);page.mouse.up()
+        result=page.evaluate("""async()=>{
+            const {S}=await import('./store.js');return {start:S.state.projectStart,duration:S.state.duration,
+                end:S.state.editLanes[0].notes[0].end,src:document.querySelector('#audio').currentSrc,image:S.spectImg?.src};
+        }""")
+        self.assertAlmostEqual(result['start'],.25,places=6)
+        self.assertAlmostEqual(result['end'],original['duration'],places=6)
+        for key in ['duration','src','image']: self.assertEqual(result[key],original[key])
+        page.keyboard.press('Control+z')
+        self.assertAlmostEqual(page.evaluate("async ()=>(await import('./store.js')).S.state.projectStart||0"),0)
+
+    def test_guitar_pro_import_respects_an_existing_project_start(self):
+        self.open_reference_project()
+        page = self.page
+        page.locator('#projectStartHandle').focus()
+        for _ in range(5): page.keyboard.press('Shift+ArrowRight')
+        page.evaluate('document.activeElement.blur()')
+        page.click('#fileMenuBtn')
+        with page.expect_file_chooser() as chooser: page.click('#importGp')
+        chooser.value.set_files(self.data / 'song.gp5')
+        page.click('#gpImportConfirm')
+        expect(page.locator('#gpImportBackdrop')).to_be_hidden()
+        self.loaded()
+        imported = page.evaluate("""async () => {
+            const {S}=await import('./store.js'); const {timingData,timingIdOf}=await import('./timing.js');
+            const lane=S.state.editLanes.find(l=>l.sourceTrackIndex!=null);
+            const timing=timingData(timingIdOf(lane));
+            return {start:S.state.projectStart,notes:lane.notes.map(n=>n.start),offset:timing.grid.offset,
+                tones:lane.toneMarkers.map(m=>m.t),bars:timing.scoreBars.map(b=>b.seconds)};
+        }""")
+        self.assertAlmostEqual(imported['start'],.5)
+        self.assertAlmostEqual(imported['offset'],.5)
+        self.assertAlmostEqual(min(imported['notes']),.5)
+        self.assertTrue(all(t>=.5 for t in imported['tones']+imported['bars']))
+
     def test_dragging_a_tempo_marker_carries_what_is_in_its_span(self):
         page = self.page
         self.new_audio_project()
@@ -3428,7 +3914,8 @@ class EndToEndTests(unittest.TestCase):
                     lane.toneMarkers[0].t];
         }""")
         def drag(t, by, then=None):
-            (x, y), (x1, _) = self.rail_point(t), self.rail_point(t + by)
+            x, y = self.rail_point(t)
+            x1 = x + by * page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
             page.mouse.move(x, y)
             page.mouse.down()
             page.mouse.move(x1, y, steps=6)
@@ -3643,6 +4130,159 @@ class EndToEndTests(unittest.TestCase):
         expect(rows.nth(0)).to_contain_text("Rhythm")
         expect(rows.nth(1)).to_contain_text("Bass")
 
+    def test_tuning_string_rows_edit_pitch_and_preserve_order(self):
+        page = self.page
+        page.click('#welcomeSettingsBtn')
+        page.click('[data-settings-pane=tunings]')
+        page.click('#tuningNewBtn')
+        rows = page.locator('.tuning-string-row')
+        expect(rows).to_have_count(6)
+        self.assertEqual(rows.locator('.tuning-pitch').all_text_contents(), ['E4', 'B3', 'G3', 'D3', 'A2', 'E2'])
+        self.assertEqual(rows.evaluate_all('els => els.map(el => el.dataset.string)'), ['1', '2', '3', '4', '5', '6'])
+        low = page.locator('.tuning-string-row[data-string="6"]')
+        low.locator('.tuning-string-down').click()
+        expect(low.locator('.tuning-pitch')).to_have_text('D#2')
+        expect(low.locator('.tuning-string-down')).to_be_focused()
+        low.locator('.tuning-pitch').click()
+        low.locator('.tuning-note').select_option('2')
+        low.locator('.tuning-octave').select_option('1')
+        expect(low.locator('.tuning-pitch')).to_have_text('D1')
+        expect(low.locator('.tuning-octave')).to_be_focused()
+        page.keyboard.press('Escape')
+        expect(low.locator('.tuning-pitch-picker')).to_be_hidden()
+        expect(low.locator('.tuning-pitch')).to_be_focused()
+        expect(page.locator('#settingsModal')).to_be_visible()
+        expect(rows.first.locator('.tuning-pitch')).to_have_text('E4')
+        page.fill('.tuning-name', 'String row tuning')
+        page.click('#settingsApply')
+        page.click('#settingsModalClose')
+        page.reload()
+        page.click('#welcomeSettingsBtn')
+        page.click('[data-settings-pane=tunings]')
+        page.locator('.tuning-item', has_text='String row tuning').click()
+        expect(low.locator('.tuning-pitch')).to_have_text('D1')
+        expect(rows.first.locator('.tuning-pitch')).to_have_text('E4')
+        page.select_option('.tuning-shape select >> nth=1', '8')
+        expect(rows).to_have_count(8)
+        self.assertEqual(rows.locator('.tuning-pitch').all_text_contents(), ['E4', 'B3', 'G3', 'D3', 'A2', 'E2', 'B1', 'F#1'])
+        shots = Path(__file__).resolve().parents[1] / 'design-shots'
+        shots.mkdir(exist_ok=True)
+        page.locator('#settingsModal').screenshot(path=str(shots / 'tuning-string-rows-dark.png'))
+        page.click('[data-settings-pane=appearance]')
+        page.locator('input[name=theme][value=light]').check()
+        page.click('[data-settings-pane=tunings]')
+        page.locator('#settingsModal').screenshot(path=str(shots / 'tuning-string-rows-light.png'))
+        self.assertTrue(rows.evaluate_all('els => els.every(el => el.getBoundingClientRect().right <= document.querySelector("#tuningEditor").getBoundingClientRect().right)'))
+        rows.first.locator('.tuning-pitch').click()
+        page.locator('#settingsModal').screenshot(path=str(shots / 'tuning-string-pitch-picker.png'))
+        page.keyboard.press('Escape')
+        # Smaller windows keep the list and editor independently scrollable.
+        page.set_viewport_size({'width': 900, 'height': 720})
+        rows.last.locator('.tuning-pitch').scroll_into_view_if_needed()
+        expect(rows.last.locator('.tuning-pitch')).to_be_in_viewport()
+        page.locator('#tuningEditor .tuning-actions button').scroll_into_view_if_needed()
+        expect(page.locator('#tuningEditor .tuning-actions button')).to_be_in_viewport()
+
+    def test_settings_height_changes_ease_and_respect_reduced_motion(self):
+        page = self.page
+        page.emulate_media(reduced_motion='no-preference')
+        page.click('#welcomeSettingsBtn')
+        def sample(pane):
+            return page.evaluate('''async pane => {
+                const modal = document.querySelector('#settingsModal');
+                const initial = modal.getBoundingClientRect().height;
+                document.querySelector(`[data-settings-pane="${pane}"]`).click();
+                const heights = [], started = performance.now();
+                await new Promise(resolve => {
+                    const frame = now => {
+                        heights.push(modal.getBoundingClientRect().height);
+                        if (now - started < 350) requestAnimationFrame(frame); else resolve();
+                    };
+                    requestAnimationFrame(frame);
+                });
+                return {initial, heights, end: modal.getBoundingClientRect().height};
+            }''', pane)
+        standard = sample('tunings')
+        self.assertAlmostEqual(standard['end'],standard['initial'],delta=1)
+        grown = sample('trace')
+        self.assertGreater(grown['end'], grown['initial'])
+        self.assertTrue(any(grown['initial'] + 1 < h < grown['end'] - 1 for h in grown['heights']))
+        shrunk = sample('appearance')
+        self.assertAlmostEqual(shrunk['end'], grown['initial'], delta=1)
+        self.assertTrue(any(shrunk['end'] + 1 < h < shrunk['initial'] - 1 for h in shrunk['heights']))
+        page.emulate_media(reduced_motion='reduce')
+        page.click('[data-settings-pane=sounds]')
+        page.wait_for_function('document.querySelector("#settingsModal").getBoundingClientRect().height >= 799')
+        self.assertEqual(page.locator('#settingsModal').evaluate('el => getComputedStyle(el).transitionDuration'), '0.001s')
+
+    def test_tuning_string_order_preference(self):
+        page = self.page
+        page.click('#welcomeSettingsBtn')
+        modal = page.locator('#settingsModal')
+        original_size = modal.bounding_box()
+        page.click('[data-settings-pane=tunings]')
+        self.assertEqual(modal.bounding_box()['width'], original_size['width'])
+        expect(page.locator('#tuningStringOrder')).to_have_value('low-bottom')
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.select_option('#tuningStringOrder', 'low-top')
+        expect(page.locator('#settingsApply')).to_be_hidden()
+        page.reload()
+        page.click('#welcomeSettingsBtn')
+        page.click('[data-settings-pane=tunings]')
+        expect(page.locator('#tuningStringOrder')).to_have_value('low-top')
+        page.click('#tuningNewBtn')
+        rows = page.locator('.tuning-string-row')
+        expect(rows.first.locator('.tuning-pitch')).to_have_text('E2')
+        low = page.locator('.tuning-string-row[data-string="6"]')
+        low.locator('.tuning-string-up').click()
+        expect(rows.first.locator('.tuning-pitch')).to_have_text('F2')
+        page.select_option('#tuningStringOrder', 'low-bottom')
+        expect(rows.last.locator('.tuning-pitch')).to_have_text('F2')
+        expect(rows.first.locator('.tuning-pitch')).to_have_text('E4')
+        expect(page.locator('.tuning-item[aria-selected=true] .tuning-item-notes')).to_have_text('F A D G B E')
+
+    def test_tuning_builtin_string_changes_can_be_reset(self):
+        page = self.page
+        page.click('#welcomeSettingsBtn')
+        page.click('[data-settings-pane=tunings]')
+        page.get_by_role('option', name='Standard E A D G B E', exact=True).click()
+        low = page.locator('.tuning-string-row[data-string="6"]')
+        low.locator('.tuning-string-down').click()
+        expect(low.locator('.tuning-pitch')).to_have_text('D#2')
+        expect(page.locator('#tuningEditor').get_by_role('button', name='Save', exact=True)).to_be_enabled()
+        page.locator('.tuning-string-section .field-revert').click()
+        expect(low.locator('.tuning-pitch')).to_have_text('E2')
+        expect(page.locator('#tuningEditor').get_by_role('button', name='Save', exact=True)).to_be_disabled()
+        expect(page.locator('#settingsApply')).to_be_hidden()
+
+    def test_tuning_string_pitch_limits_disable_steps(self):
+        page = self.page
+        page.click('#welcomeSettingsBtn')
+        page.click('[data-settings-pane=tunings]')
+        page.click('#tuningNewBtn')
+        row = page.locator('.tuning-string-row[data-string="6"]')
+        row.locator('.tuning-pitch').click()
+        row.locator('.tuning-note').select_option('0')
+        row.locator('.tuning-octave').select_option('0')
+        expect(row.locator('.tuning-pitch')).to_have_text('C0')
+        expect(row.locator('.tuning-string-down')).to_be_disabled()
+        expect(page.locator('.tuning-whole-btn').first).to_be_disabled()
+        row.locator('.tuning-octave').select_option('6')
+        row.locator('.tuning-note').select_option('4')
+        expect(row.locator('.tuning-pitch')).to_have_text('E6')
+        expect(row.locator('.tuning-string-up')).to_be_disabled()
+        expect(row.locator('.tuning-note option[value="5"]')).to_have_attribute('disabled', '')
+        expect(page.locator('.tuning-whole-btn').last).to_be_disabled()
+        row.locator('.tuning-pitch').click()
+        row.locator('.tuning-string-down').click()
+        expect(row.locator('.tuning-pitch')).to_have_text('D#6')
+        expect(row.locator('.tuning-string-up')).to_be_enabled()
+        row.locator('.tuning-pitch').click()
+        row.locator('.tuning-octave').select_option('5')
+        row.locator('.tuning-note').select_option('11')
+        expect(row.locator('.tuning-pitch')).to_have_text('B5')
+        expect(row.locator('.tuning-octave option[value="6"]')).to_have_attribute('disabled', '')
+
     def test_tunings_are_their_strings_and_outlive_the_window(self):
         page = self.page
         self.open_guitar_pro_project()
@@ -3729,6 +4369,11 @@ class EndToEndTests(unittest.TestCase):
         seen = []
         while not card.locator(".tour-home").is_visible():
             expect(card.locator('.tour-body')).to_be_visible()
+            self.assertTrue(page.evaluate('''async () => {
+                const {S} = await import('/store.js');
+                const marker = S.state.editLanes.flatMap(lane => lane.toneMarkers || []).find(marker => marker.id === 'tour_tone_middle');
+                return !marker || marker.tone.startsWith('sound_file_') && !marker.toneData;
+            }'''))
             self.assertLess(len(seen), 400, "the walkthrough does not end")
             seen.append(head.inner_text())
             card.locator(".tour-next").click()          # "Next", or "Skip" on a card that waits for a task

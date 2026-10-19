@@ -449,7 +449,7 @@ function addEditLane() {
 
 function commitNewLane(lane) {
   // Now, not when the draft was made: the instrument is chosen in the dialog.
-  lane.toneMarkers = withStartTone(lane.toneMarkers, lane);
+  lane.toneMarkers = withStartTone(lane.toneMarkers, lane, undefined, Number(S.state.projectStart) || 0);
   S.state.editLanes.push(lane);
   rebuildLanes();
   S.state.lanes.forEach((l) => (l.active = l === lane));

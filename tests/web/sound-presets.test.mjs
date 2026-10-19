@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { SOUND_BASES, GEAR, GEAR_DATA, TONE_CATALOG, DESCRIPTORS, cloneSound, normalizeSound, readSoundLibrary, readSoundLibraryState, writeSoundLibrary, moveEffect, relocateEffect, removeEffect } from "../../web/sound-presets-core.js";
-import { normalizeToneMarkers, tonePresetLabel } from "../../web/tone-marker-core.js";
+import { normalizeToneMarkers, tonePresetLabel, toneMarkersForExport, tonePresetMissing } from "../../web/tone-marker-core.js";
 import { insertEffect } from "../../web/sound-presets-core.js";
 import { formatKnob } from "../../web/sound-presets-core.js";
 import { parsePresetJSON, presetJSON, presetFingerprint, loadPresetFolderData, readAvailableSoundPresets, isSoundId } from "../../web/sound-presets-core.js";
@@ -41,13 +41,23 @@ const tone = cloneSound(SOUND_BASES.lead);
 tone.Name = "My solo";
 tone.GearList.Amp.KnobValues.Amp_MarshallPlexi_Loudness1 = 42;
 const marker = { id: "m", t: 12, tone: "sound_test", toneData: tone };
+{
+  const current = { ...cloneSound(tone), Name:'Current app tone', Volume:'-9' };
+  const presets = [{id:'sound_test', tone:current}];
+  const references = normalizeToneMarkers([marker], Infinity, presets);
+  assert.equal(references[0].toneData, undefined, 'existing imported tones stay references');
+  assert.equal(tonePresetLabel(marker.tone, tone, presets), 'Current app tone');
+  assert.equal(toneMarkersForExport(references, presets)[0].toneData.Volume, '-9');
+  assert.equal(references[0].toneData, undefined, 'export resolution never changes project data');
+  assert.equal(tonePresetMissing('sound_unknown', [], tone), false, 'a valid imported definition is usable');
+}
 const loaded = normalizeToneMarkers(JSON.parse(JSON.stringify([marker])));
 assert.equal(loaded.length, 1);
 assert.equal(tonePresetLabel(loaded[0].tone, loaded[0].toneData), "My solo");
 assert.equal(loaded[0].toneData.GearList.Amp.KnobValues.Amp_MarshallPlexi_Loudness1, 42);
 loaded[0].toneData.Name = "Different";
 assert.equal(tone.Name, "My solo", "project normalization owns its snapshot");
-assert.deepEqual(normalizeToneMarkers([{ tone: "sound_missing", t: 3 }]), []);
+assert.equal(normalizeToneMarkers([{ tone: "sound_missing", t: 3 }])[0].tone, "sound_missing", "missing references remain visible for repair");
 const broken = cloneSound(tone); broken.GearList.Amp.Key = "unknown";
 assert.equal(normalizeSound(broken), null);
 const loud = cloneSound(tone); loud.Volume = "Infinity";

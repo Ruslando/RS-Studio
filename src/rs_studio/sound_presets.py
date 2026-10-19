@@ -2,12 +2,24 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 from .rocksmith.tones import custom_tone
 
 MAX_PRESET_BYTES = 1024 * 1024
 MAX_PRESET_FILES = 256
+
+
+def portable_tone_lanes(lanes: list, presets: dict) -> list:
+    """Embed definitions in an exported file without changing saved references."""
+    result = deepcopy(lanes)
+    for lane in result:
+        for marker in lane.get("toneMarkers") or []:
+            tone = presets.get(marker.get("tone"))
+            if tone is not None:
+                marker["toneData"] = custom_tone(tone, "Custom")
+    return result
 
 
 def decode_presets(data: bytes) -> list[dict]:
