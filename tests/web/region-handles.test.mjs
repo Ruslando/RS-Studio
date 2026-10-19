@@ -27,7 +27,7 @@ try {
     './detect.js': { updateDetectStatus: noop }, './note-motion.js': { finishNoteGesture: noop },
   }, { './constants.js': true, './util.js': true });
   init_interaction();
-  for (const tool of ['trace', 'select', 'frame', 'marquee']) {
+  for (const tool of ['pan', 'trace', 'select', 'frame', 'marquee']) {
     S.toolMode = tool; S.detectRegion = { t0: 2, t1: 4 };
     stage.emit('mousedown');
     assert.equal(S.drag?.mode, 'regionEdge', `${tool} does not swallow the loop handle`);

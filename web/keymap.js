@@ -14,7 +14,45 @@ export const KEY_COMMANDS = [
   // its four steps live. The marker lanes keep L for lanes.
   { id: "fretboard",   label: "Fretboard",               def: "F" },
   { id: "markerLanes", label: "Marker lanes",            def: "L" },
+  { id: "sidebar",     label: "Layer sidebar",           def: "B" },
+  { id: "artifacts",   label: "Artifacts sidebar",       def: "R" },
+  { id: "zoomIn",      label: "Zoom in",                 def: "+" },
+  { id: "zoomOut",     label: "Zoom out",                def: "-" },
   { id: "resetZoom",   label: "Reset zoom",              def: "0" },
+  // Existing actions offered for binding, without choosing defaults for the user.
+  ...[
+    ["slower", "Playback: slower"], ["faster", "Playback: faster"],
+    ["normalSpeed", "Playback: normal speed"], ["metronome", "Metronome"],
+    ["songStart", "Go to song start"], ["songEnd", "Go to song end"],
+    ["rangeStart", "Go to range start"], ["clearRange", "Clear loop / detection range"],
+    ["addTempo", "Add tempo / meter marker at playhead"],
+    ["addSection", "Add section marker at playhead"],
+    ["addPhrase", "Add phrase boundary at playhead"],
+    ["addTone", "Add tone switch at playhead"],
+    ["detectNotes", "Open note detection"], ["findSimilar", "Find similar passage"],
+    ["groupReference", "Group selection into reference"],
+    ["detachReference", "Detach selected reference occurrences (keep notes)"],
+    ["markMotif", "Mark selection as motif"], ["selectMotif", "Select entire motif"],
+    ["unmarkMotif", "Unmark selected motifs (keep notes)"],
+    ["fretboardShape", "Fretboard: build a grip"],
+    ["applyFretboardShape", "Fretboard: apply custom grip"],
+    ["chooseFretboardAlternative", "Fretboard: use previewed alternative"],
+    ["autoFretboard", "Fretboard: return to automatic"],
+    ["palmMute", "Toggle palm mute"], ["hammer", "Toggle hammer-on / pull-off"],
+    ["vibrato", "Toggle vibrato"], ["dead", "Toggle dead note"],
+    ["accent", "Toggle accent"], ["letRing", "Toggle let ring"],
+    ["previousLayer", "Previous note layer"], ["nextLayer", "Next note layer"],
+    ["addLayer", "Add note layer"], ["layerSettings", "Active note layer settings"],
+    ["layerVisible", "Show / hide active note layer"], ["layerLock", "Lock / unlock active note layer"],
+    ["tablature", "Open tablature view"], ["editorSettings", "Editor settings"],
+    ["projectDetails", "Project details"], ["tunings", "Manage tunings"],
+    ["toneDesigner", "Tone designer"], ["keyboardSettings", "Keyboard shortcuts"],
+    ["projectLibrary", "Open project from library"], ["closeProject", "Close project"],
+    ["importGuitarPro", "Import Guitar Pro tracks"], ["attachAudio", "Attach audio"],
+    ["exportGuitarPro", "Export Guitar Pro (.gp)"],
+    ["exportLegacyGuitarPro", "Export legacy Guitar Pro (.gp5)"],
+    ["exportRocksmith", "Export Rocksmith CDLC (.psarc)"],
+  ].map(([id, label]) => ({ id, label, def: null })),
 ];
 
 const LS = typeof localStorage !== "undefined" ? localStorage : null;   // Limitation: undefined under node test
@@ -37,28 +75,54 @@ export const FIXED_SHORTCUTS = [
   { keys: "Ctrl+Shift+S", label: "Export .chart…" },
   { keys: "Ctrl+N", label: "New project" },
   { keys: "Ctrl+O", label: "Import .chart…" },
-  { keys: "Esc", label: "Cancel · close · clear selection" },
+  { keys: "Esc", key: "Escape", label: "Cancel · close · clear selection" },
   { keys: "Tab", key: "Tab", label: "Open selected-note effects menu" },
   { keys: "Hold S + drag", key: "S", label: "Slice notes along a line" },
-  { keys: "← / →", label: "Previous / next chord — or match, while find-similar is live" },
-  { keys: "↑ / ↓", label: "Between simultaneous notes" },
+  { keys: "← / →", reserved: ['ArrowLeft', 'ArrowRight'], label: "Previous / next chord — or match, while find-similar is live" },
+  { keys: "Ctrl+← / Ctrl+→", label: "Previous / next marker of the active layer" },
+  { keys: "↑ / ↓", reserved: ['ArrowUp', 'ArrowDown'], label: "Between simultaneous notes" },
   { keys: "P", key: "P", label: "Preview focused match (find similar)" },
   { keys: "A", key: "A", label: "Accept all matches (find similar)" },
   { keys: "Enter", key: "Enter", label: "Accept focused match (find similar)" },
+  { keys: "Ctrl+click", label: "Add / remove note from selection" },
+  { keys: "Ctrl+left drag", label: "Draw notes along the spectrogram" },
+  { keys: "Left drag in empty space", label: "Pan the spectrogram" },
+  { keys: "Shift+drag", label: "Select notes in a rectangle" },
+  { keys: "Alt+drag", label: "Set loop / detection range" },
+  { keys: "Wheel · Shift+wheel", label: "Scroll time · scroll pitch" },
+  { keys: "Ctrl+wheel · Ctrl+Shift+wheel", label: "Zoom both axes · zoom pitch" },
+  { keys: "← / → · Shift+← / →", label: "Focused overview: seek 0.1 s · 1 s" },
+  { keys: "Home / End", label: "Focused overview: song start / end" },
+  { keys: "← / → · Shift+← / →", label: "Focused project start: move 0.01 s · 0.1 s" },
+  { keys: "← / →", label: "Fretboard editing: previous / next alternative or grip note" },
+  { keys: "↑ / ↓", label: "Focused capo / hand field: decrease / increase fret" },
+  { keys: "Alt+← / → · Delete", label: "Tone designer effect: reorder · remove" },
+  { keys: "Space / Enter · Esc", label: "Focused artifact preview: play · stop" },
+  { keys: "Shift+F10 · Menu key", label: "Focused artifact preview: open actions" },
+  { keys: "Arrow keys", label: "Focused volume control: adjust volume" },
+  { keys: "↑ / ↓ · Enter", label: "Note effects search: choose result · apply" },
 ];
 
-export const keyOf = (id) => overrides[id] || KEY_COMMANDS.find((c) => c.id === id).def;
+export function keyOf(id) {
+  if (Object.hasOwn(overrides, id)) return overrides[id];
+  const key = KEY_COMMANDS.find(command => command.id === id)?.def ?? null;
+  // A newly introduced default must never take a user's existing custom key.
+  return key && Object.entries(overrides).some(([other, value]) => other !== id && value === key &&
+    KEY_COMMANDS.some(command => command.id === other)) ? null : key;
+}
 
 // Command already bound to `key` (excluding `exceptId`), or null. Covers both the
 // editable hotkeys and the reserved fixed single-keys, so the editor's "already
 // used by …" guard stops a rebind from shadowing either.
 export const conflictOf = (key, exceptId) =>
-  KEY_COMMANDS.find((c) => c.id !== exceptId && keyOf(c.id) === key)
-  || FIXED_SHORTCUTS.find((f) => f.key === key)
+  key && (KEY_COMMANDS.find((c) => c.id !== exceptId && keyOf(c.id) === key)
+  || FIXED_SHORTCUTS.find((f) => f.key === key || f.reserved?.includes(key)))
   || null;
 
-export function setKey(id, key) { overrides[id] = key; if (LS) LS.setItem(STORE, JSON.stringify(overrides)); }
-export function resetKeys() { overrides = {}; if (LS) LS.removeItem(STORE); }
+const changed = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('cw-keymap-changed')); };
+export function shortcutTitle(label, id) { const key = keyOf(id); return key ? `${label} (${key})` : label; }
+export function setKey(id, key) { overrides[id] = key; if (LS) LS.setItem(STORE, JSON.stringify(overrides)); changed(); }
+export function resetKeys() { overrides = {}; if (LS) LS.removeItem(STORE); changed(); }
 
 // The shortcuts editor is a scrimmed modal, so it is staged (rule 17): it takes
 // a snapshot when it opens and puts the bindings back if you Cancel. Rebinding
@@ -68,6 +132,7 @@ export const keySnapshot = () => ({ ...overrides });
 export function restoreKeys(snap) {
   overrides = { ...snap };
   if (LS) LS.setItem(STORE, JSON.stringify(overrides));
+  changed();
 }
 
 // Normalize a keydown event to a binding string: "Space", "Delete", "F", "[", "0".

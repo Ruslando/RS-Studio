@@ -645,6 +645,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 }
 .keymap-list .keymap-row:last-child { border-bottom: none; }
 .keymap-name { color: var(--text); font: 400 var(--text-control)/1 var(--font-ui); }
+.keymap-actions { display: inline-flex; align-items: center; gap: var(--s-pair); flex: none; }
 
 .keymap-clash { margin: var(--s-sibling) 0 0; }
 

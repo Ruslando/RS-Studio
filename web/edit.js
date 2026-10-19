@@ -34,6 +34,8 @@ import { laneFretCount, laneFretTuning, refreshTabIfOpen, setView, tabViewOn } f
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { matchKey } from "./keymap.js";
+import { runEditorShortcut } from "./editor-shortcuts.js";
+import { navigateMarker } from "./marker-artifacts.js";
 import { normLayerVolume } from "./util.js";
 import { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, writeColumnOverride } from "./voicing.js";
 
@@ -577,7 +579,7 @@ function clearConflicts(n, name) {
 
 // Set/clear one effect flag on every selected edit note. Replaces the fx object
 // (never mutates it) so the {...n} undo snapshots taken earlier stay intact.
-function setFxOnSelection(key, on) {
+export function setFxOnSelection(key, on) {
   const notes = [...S.selection].filter((n) => laneOf(n));
   if (!notes.length) return;
   const prev = snapshotEdit();
@@ -618,13 +620,13 @@ export function markSelectionAsMotif() {
   return true;
 }
 
-function selectEntireMotif() {
+export function selectEntireMotif() {
   const member = [...S.selection].find(note => note.motifId && laneOf(note));
   if (!member) return;
   setSelection(new Set(motifGroups(laneOf(member).notes).get(member.motifId) || [])); draw();
 }
 
-function unmarkSelectedMotifs() {
+export function unmarkSelectedMotifs() {
   const previous = snapshotEdit();
   for (const note of S.selection) {
     const lane = laneOf(note);
@@ -1379,6 +1381,7 @@ export function init_edit() {
   // Copy / Cut / Paste / Delete are driven by the Edit menu and keyboard shortcuts
   // (their toolbar buttons were removed in the menu-bar refactor).
   window.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented) return;
     const mod = e.ctrlKey || e.metaKey;
     // Space = play/pause from anywhere (suppress button clicks / page scroll),
     // except while typing in a text field where a space is a real character.
@@ -1395,6 +1398,13 @@ export function init_edit() {
     if (mod && (e.key === "o" || e.key === "O")) { e.preventDefault(); openProject(); return; }
     // Overlays register themselves; see escape-stack.js for the depth order.
     if (e.key === "Escape" && closeTopmost()) { e.preventDefault(); return; }
+    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && !e.target.isContentEditable &&
+        ![...document.querySelectorAll('[aria-modal="true"]')].some(el => el.getClientRects().length && !el.closest('[hidden]'))) {
+      if (mod && !e.altKey && !e.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault(); navigateMarker(e.key === 'ArrowLeft' ? -1 : 1); return;
+      }
+      if (runEditorShortcut(e)) { e.preventDefault(); return; }
+    }
     if (/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) return;
     if (!mod && !e.altKey && e.key === "Tab" && openSelectedNoteMenu()) {
       e.preventDefault();

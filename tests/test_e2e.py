@@ -275,6 +275,246 @@ class EndToEndTests(unittest.TestCase):
         page.click('#welcomeSettingsBtn')
         expect(page.locator('input[name="theme"][value="light"]')).to_be_checked()
 
+    def test_arrow_navigation_steps_back_from_the_focused_chord(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.refBoxes = {}; lane.notes = [
+                {id:'nav0',start:1,end:1.4,pitch:40},
+                {id:'nav1',start:2,end:2.4,pitch:45},
+                {id:'nav1b',start:2.005,end:2.4,pitch:49},
+                {id:'nav2',start:3,end:3.4,pitch:52}];
+            (await import('/playback.js')).seekPlayback(1);
+            setSelection(new Set([lane.notes[0]]));
+            (await import('/repaint.js')).drawNow();
+            document.activeElement.blur();
+        }""")
+        page.mouse.move(700, 200)
+        time_at = lambda: page.evaluate("async () => (await import('/playback.js')).playbackTime()")
+        page.keyboard.press('ArrowRight')
+        self.assertAlmostEqual(time_at(), 2)
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.selection.size"), 2)
+        # Model the coarse time reported after a real media seek.
+        page.evaluate("async () => { (await import('/store.js')).S.scoreTime = 2.005; }")
+        page.keyboard.press('ArrowLeft')
+        self.assertAlmostEqual(time_at(), 1)
+        for key, expected in [('ArrowRight',2),('ArrowRight',3),('ArrowLeft',2),('ArrowLeft',1),('ArrowLeft',1)]:
+            page.keyboard.press(key)
+            self.assertAlmostEqual(time_at(), expected)
+
+    def test_plain_drag_pans_and_ctrl_drag_draws_without_changing_clicks(self):
+        self.open_reference_project()
+        page = self.page
+        start = page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            const {zoomBothTo} = await import('/geometry.js');
+            const {traceSnapInput} = await import('/dom.js');
+            const lane = S.state.editLanes[0];
+            lane.refBoxes = {}; lane.notes = [{id:'keep',start:.5,end:1,pitch:60}];
+            lane.toneMarkers = []; lane.phraseBoundaries = []; lane.handHolds = [];
+            S.state.sectionMarkers = []; S.state.tempoMap = []; S.detectRegion = null;
+            const image = document.createElement('canvas'); image.width = 500; image.height = 73;
+            const ctx = image.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0,0,500,73);
+            S.spectImg = image; (await import('/tracing.js')).prepareSpectSample();
+            traceSnapInput.checked = false;
+            const stage = document.querySelector('#stage'), scroll = document.querySelector('#scroll');
+            const rect = stage.getBoundingClientRect();
+            zoomBothTo(3, rect.left + rect.width/2, rect.top + rect.height/2);
+            (await import('/playback.js')).seekPlayback(1.25);
+            setSelection(new Set(lane.notes)); S.undoStack = []; S.redoStack = [];
+            scroll.scrollLeft = 300; scroll.scrollTop = 200;
+            (await import('/repaint.js')).drawNow();
+            const r = stage.getBoundingClientRect();
+            return [r.left + r.width*.65, r.top + r.height*.65];
+        }""")
+        state = lambda: page.evaluate("""async () => {
+            const {S} = await import('/store.js'); const scroll = document.querySelector('#scroll');
+            return {left:scroll.scrollLeft,top:scroll.scrollTop,notes:S.state.editLanes[0].notes,
+                selection:[...S.selection].map(n=>n.id),undo:S.undoStack.length,
+                time:(await import('/playback.js')).playbackTime()};
+        }""")
+        before = state()
+        page.mouse.move(*start); page.mouse.down()
+        page.mouse.move(start[0]-100, start[1]-80, steps=10)
+        expect(page.locator('#stage')).to_have_css('cursor', 'grabbing')
+        page.mouse.up()
+        after = state()
+        self.assertAlmostEqual(after['left']-before['left'], 100)
+        self.assertAlmostEqual(after['top']-before['top'], 80)
+        for key in ['notes','selection','undo','time']:
+            self.assertEqual(after[key], before[key], key)
+        expected_time = page.evaluate("""async ([x,y]) => {
+            const rect = document.querySelector('#stage').getBoundingClientRect();
+            return (await import('/geometry.js')).timeAt(x-rect.left+document.querySelector('#scroll').scrollLeft);
+        }""", start)
+        page.mouse.click(*start)
+        self.assertAlmostEqual(state()['time'], expected_time,
+                               delta=1/page.evaluate("async () => (await import('/store.js')).S.pxPerSec"))
+        self.assertEqual(state()['selection'], [])
+        self.assertEqual(state()['notes'], before['notes'])
+        # With Ctrl held, the same empty-space drag draws rather than pans.
+        before_draw = state()
+        page.keyboard.down('Control')
+        page.mouse.move(*start); page.mouse.down()
+        page.mouse.move(start[0]+120, start[1], steps=12)
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.drag.mode"), 'trace')
+        page.mouse.up(); page.keyboard.up('Control')
+        drawn = state()
+        self.assertGreater(len(drawn['notes']), len(before['notes']))
+        self.assertEqual(drawn['left'], before_draw['left'])
+        self.assertEqual(drawn['top'], before_draw['top'])
+        self.assertEqual(drawn['undo'], 1)
+        page.keyboard.press('Control+z')
+        self.assertEqual(state()['notes'], before['notes'])
+        page.mouse.dblclick(*start)
+        self.assertEqual(len(state()['notes']), len(before['notes']) + 1, 'plain double-click still inserts a note')
+        page.keyboard.press('Control+z')
+        self.assertEqual(state()['notes'], before['notes'])
+
+    def test_keyboard_zoom_panels_and_marker_navigation(self):
+        self.open_reference_project()
+        page = self.page
+        page.mouse.move(700, 200)
+        page.evaluate("document.activeElement.blur()")
+        next_note = page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            return Math.min(...S.state.editLanes[0].notes.filter(n => n.start > .001).map(n => n.start));
+        }""")
+        page.keyboard.press('ArrowRight')
+        self.assertAlmostEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), next_note)
+        zoom = lambda: page.evaluate("async () => (await import('/store.js')).S.zoomX")
+        initial_zoom = zoom()
+        page.keyboard.press('+')
+        self.assertGreater(zoom(), initial_zoom)
+        page.keyboard.press('-')
+        self.assertAlmostEqual(zoom(), initial_zoom)
+        self.assertFalse(page.evaluate("""() => {
+            const event = new KeyboardEvent('keydown', {key:'+', ctrlKey:true, bubbles:true, cancelable:true});
+            document.body.dispatchEvent(event); return event.defaultPrevented;
+        }"""), 'Ctrl+plus is left to browser zoom')
+        self.assertAlmostEqual(zoom(), initial_zoom)
+        for key, selector in [('b', '#appshell'), ('r', '#artifactsPanel')]:
+            collapsed = lambda: page.locator(selector).evaluate("el => el.id === 'appshell' ? el.classList.contains('side-collapsed') : el.hasAttribute('data-collapsed')")
+            before = collapsed()
+            page.keyboard.press(key)
+            self.assertNotEqual(collapsed(), before)
+            page.keyboard.press(key)
+            self.assertEqual(collapsed(), before)
+
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            S.state.tempoMap = [{t:12, bpm:120, tsNum:3, tsDen:4, subdiv:2}];
+            S.state.sectionMarkers = [{id:'nav_section', t:4, text:'Verse', sectionType:'verse'}];
+            lane.phraseBoundaries = [{id:'nav_phrase', t:6}];
+            lane.handHolds = [{t:8, fret:3}];
+            lane.toneMarkers = [{id:'nav_start', t:0, tone:'missing'}, {id:'nav_tone', t:12, tone:'missing'}];
+            const other = {...lane, id:'nav_other', active:false, notes:[], refBoxes:{}, handHolds:[],
+                phraseBoundaries:[{id:'other_phrase',t:10}], toneMarkers:[]};
+            other.timing = (await import('/timing.js')).addTiming({
+                grid:{bpm:120,offset:0,tsNum:4,tsDen:4,subdiv:2},
+                tempoMap:[{t:16,bpm:100,tsNum:4,tsDen:4,subdiv:2}], sectionMarkers:[],scoreBars:[]});
+            S.state.editLanes.push(other);
+            const {rebuildLanes,renderLanes} = await import('/lanes.js');
+            rebuildLanes(); renderLanes();
+            (await import('/playback.js')).seekPlayback(0);
+            (await import('/repaint.js')).drawNow();
+        }""")
+        time_at = lambda: page.evaluate("async () => (await import('/playback.js')).playbackTime()")
+        expect(page.locator('#previousMarker')).to_be_disabled()
+        # The overview's local arrows must let Ctrl+arrows reach marker navigation.
+        page.locator('#overviewRuler').focus()
+        page.keyboard.press('Control+ArrowRight')
+        self.assertAlmostEqual(time_at(), 4)
+        page.locator('#nextMarker').click()
+        self.assertAlmostEqual(time_at(), 6)
+        # Ctrl+arrows also work while the pointer is over the fretboard.
+        if page.locator('#fretboardToggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#fretboardToggle').click()
+        page.locator('#fretboard').hover()
+        page.keyboard.press('Control+ArrowRight')
+        self.assertAlmostEqual(time_at(), 8)
+        page.keyboard.press('Control+ArrowRight')
+        self.assertAlmostEqual(time_at(), 12, msg='skip inactive-layer markers and duplicate timestamps')
+        expect(page.locator('#nextMarker')).to_be_disabled()
+        page.keyboard.press('Control+ArrowLeft')
+        self.assertAlmostEqual(time_at(), 8)
+        page.locator('#previousMarker').click()
+        self.assertAlmostEqual(time_at(), 6)
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            (await import('/lanes.js')).activateLane(S.state.editLanes.at(-1));
+        }""")
+        page.keyboard.press('Control+ArrowRight')
+        self.assertAlmostEqual(time_at(), 10, msg='navigation follows the newly active layer')
+        page.keyboard.press('Control+ArrowRight')
+        self.assertAlmostEqual(time_at(), 16, msg='use the active layer timing rather than song markers')
+        page.mouse.move(700, 200)
+        page.locator('#settingsMenuBtn').click()
+        page.locator('[data-settings-pane="keys"]').click()
+        page.screenshot(path=str(Path('.runs/keyboard-shortcuts.png')), full_page=True)
+
+    def test_keyboard_unassigned_actions_bind_clear_cancel_and_apply(self):
+        self.open_reference_project()
+        page = self.page
+        page.locator('#settingsMenuBtn').click()
+        page.locator('[data-settings-pane="keys"]').click()
+        row = page.locator('[data-command="metronome"]')
+        expect(row.locator('.keymap-key')).to_have_text('Unassigned')
+        row.locator('.keymap-key').click()
+        page.keyboard.press('ArrowRight')
+        expect(page.locator('#keymapNote')).to_contain_text('already used')
+        expect(row.locator('.keymap-key')).to_have_text('Unassigned')
+        row.locator('.keymap-key').click()
+        page.keyboard.press('q')
+        expect(row.locator('.keymap-key')).to_have_text('Q')
+        page.keyboard.press('Escape')  # Cancel restores the original unbound state.
+        self.assertIsNone(page.evaluate("async () => (await import('/keymap.js')).keyOf('metronome')"))
+        page.locator('#settingsMenuBtn').click()
+        page.locator('[data-settings-pane="keys"]').click()
+        row.locator('.keymap-key').click()
+        page.keyboard.press('q')
+        page.locator('#settingsApply').click()
+        page.keyboard.press('Escape')
+        page.evaluate('document.activeElement.blur()')
+        before = page.locator('#metro').is_checked()
+        page.keyboard.press('q')
+        self.assertNotEqual(page.locator('#metro').is_checked(), before)
+        # A newly bindable note technique uses the normal undoable edit path.
+        page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            const note = S.state.editLanes[0].notes[0];
+            setSelection(new Set([note]));
+            (await import('/keymap.js')).setKey('palmMute', 'U');
+        }""")
+        palm_muted = lambda: page.evaluate("async () => !!(await import('/store.js')).S.state.editLanes[0].notes[0].fx?.palmMute")
+        original = palm_muted()
+        page.keyboard.press('u')
+        self.assertNotEqual(palm_muted(), original)
+        page.keyboard.press('Control+z')
+        self.assertEqual(palm_muted(), original)
+        page.locator('#settingsMenuBtn').click()
+        page.locator('[data-settings-pane="keys"]').click()
+        row.get_by_role('button', name='Unbind Metronome', exact=True).click()
+        expect(row.locator('.keymap-key')).to_have_text('Unassigned')
+        zoom_row = page.locator('[data-command="zoomIn"]')
+        zoom_row.get_by_role('button', name='Unbind Zoom in', exact=True).click()
+        expect(page.locator('#zoomIn')).to_have_attribute('title', 'Zoom in')
+        page.keyboard.press('Escape')
+        expect(page.locator('#zoomIn')).to_have_attribute('title', 'Zoom in (+)')
+        self.assertEqual(page.evaluate("async () => (await import('/keymap.js')).keyOf('metronome')"), 'Q')
+        # Input and modal keystrokes do not activate project commands.
+        page.evaluate("async () => (await import('/keymap.js')).setKey('layerSettings', 'W')")
+        page.evaluate('document.activeElement.blur()')
+        page.keyboard.press('w')
+        field = page.locator('#layerName')
+        field.fill('')
+        field.press_sequentially('B+R-')
+        expect(field).to_have_value('B+R-')
+        page.keyboard.press('Escape')
+
     def test_settings_contextual_apply_and_footer_actions(self):
         page = self.page
         reads = []

@@ -14,7 +14,7 @@ import { initCollapsibleSections } from './collapsible-sections.js';
 import { setTimelineScrollPreviewVisible } from "./timeline-scroll-preview.js";
 import { doCopy, doCut, doDelete, doPaste, redo, undo, updateUndoButtons } from "./edit.js";
 import { resetZoom, zoomCenter } from "./geometry.js";
-import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey } from "./keymap.js";
+import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey, shortcutTitle } from "./keymap.js";
 import { renderLayerSettings } from "./lanes.js";
 import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen, tuningDraftDirty } from "./tuning-editor.js";
 import { beginSoundDraft, dropSoundDraft, saveSoundDraft, selectToneSound, soundDraftDirty } from "./sound-designer.js";
@@ -29,8 +29,8 @@ import { exportModernGp, exportTab, setView } from "./tablature.js";
 import { runFindSimilar } from "./tracing.js";
 
 // ---- spectrogram drag mode ----
-// A plain drag traces notes; modifiers retain their existing alternate gestures.
-export const TOOL_CURSOR = { select: "default", trace: "crosshair", marquee: "crosshair", frame: "col-resize" };
+// Empty-space drag pans; Ctrl/Cmd draws and Shift/Alt retain selection gestures.
+export const TOOL_CURSOR = { pan: "grab", select: "default", trace: "crosshair", marquee: "crosshair", frame: "col-resize" };
 
 function setTool(tool) {
   S.toolMode = tool;
@@ -181,7 +181,7 @@ function showSettingsPane(section) {
 }
 
 let tuningSelect = null;   // the tuning the Tunings page opens on
-function openSettingsModal(section = "trace", selectTuning = null) {
+export function openSettingsModal(section = "trace", selectTuning = null) {
   dropTuningDraft();
   dropSoundDraft();
   tuningSelect = selectTuning;
@@ -323,6 +323,7 @@ function renderKeymap() {
   list.replaceChildren(...KEY_COMMANDS.map((c) => {
     const row = document.createElement("div");
     row.className = "keymap-row";
+    row.dataset.command = c.id;
     const name = document.createElement("span");
     name.className = "keymap-name"; name.textContent = c.label;
     const btn = document.createElement("button");
@@ -330,9 +331,17 @@ function renderKeymap() {
     // The paragraph that said this is gone (rule 24); the sentence belongs to
     // the control it is about, and the control is the chip you click.
     btn.title = "Click, then press the new key";
-    btn.textContent = keyCapture && keyCapture.id === c.id ? "press a key…" : keyOf(c.id);
+    btn.setAttribute('aria-label', `Bind ${c.label}`);
+    btn.textContent = keyCapture && keyCapture.id === c.id ? "press a key…" : keyOf(c.id) || "Unassigned";
     btn.addEventListener("click", () => { keyCapture = { id: c.id }; renderKeymap(); });
-    row.append(name, btn);
+    const controls = document.createElement('span'); controls.className = 'keymap-actions';
+    controls.append(btn);
+    const clear = document.createElement('button'); clear.type = 'button';
+    clear.className = 'icon-btn icon-btn--compact'; clear.innerHTML = icon('close', 12);
+    clear.title = 'Remove shortcut'; clear.setAttribute('aria-label', `Unbind ${c.label}`);
+    clear.disabled = !keyOf(c.id);
+    clear.addEventListener('click', () => { keyCapture = null; setKey(c.id, null); renderKeymap(); });
+    controls.append(clear); row.append(name, controls);
     return row;
   }));
   $("keymapFixed").replaceChildren(...FIXED_SHORTCUTS.map((f) => {
@@ -412,6 +421,23 @@ export function gridDivLabelFor(value) {
 
 // Keep the toolbar's read-only tempo/meter/grid readout in sync with grid state.
 export function init_ui() {
+  const syncShortcutHints = () => {
+    for (const [id, command, label] of [
+      ['zoomIn', 'zoomIn', 'Zoom in'], ['zoomOut', 'zoomOut', 'Zoom out'],
+      ['zoomReset', 'resetZoom', 'Reset zoom'], ['menuZoomReset', 'resetZoom', 'Reset zoom'],
+      ['menuDelete', 'delete', 'Delete selection'],
+    ]) $(id).title = shortcutTitle(label, command);
+    $('menuZoomIn').querySelector('.kbd').textContent = keyOf('zoomIn') || '';
+    $('menuZoomOut').querySelector('.kbd').textContent = keyOf('zoomOut') || '';
+    $('menuZoomReset').querySelector('.kbd').textContent = keyOf('resetZoom') || '';
+    $('menuDelete').querySelector('.kbd').textContent = keyOf('delete') || '';
+    for (const control of document.querySelectorAll('[data-panel-toggle]')) {
+      const id = { sidebar: 'sidebar', artifacts: 'artifacts', markers: 'markerLanes', fretboard: 'fretboard' }[control.dataset.panelToggle];
+      if (id) control.title = shortcutTitle(control.getAttribute('aria-label'), id);
+    }
+  };
+  window.addEventListener('cw-keymap-changed', syncShortcutHints);
+  syncShortcutHints();
   initCollapsibleSections($("spTrace"), 'rs-studio.editor-sections.collapsed', () => {
     refreshEditorPreviews();
     setTimelineScrollPreviewVisible(!$("spTrace").hidden && !$("spectrogramSettings").hasAttribute('data-collapsed'));
@@ -460,7 +486,7 @@ export function init_ui() {
     if (layerSettingsBackdrop.hidden) return false;
     cancelLayerSettings(); return true;
   });
-  setTool("trace");
+  setTool("pan");
   wireMenuAnchors(menubarEl, updateUndoButtons);
   $("settingsMenuBtn").addEventListener("click", () => openSettingsModal("trace"));
   $("welcomeSettingsBtn").addEventListener("click", () => openSettingsModal("appearance"));
