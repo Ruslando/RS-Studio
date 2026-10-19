@@ -7,6 +7,7 @@ import { audio, scroll, sctx, traceRangeSel, traceSnapInput, traceThresholdInput
 import { draw } from "./repaint.js";
 import { commit, confirmPasteMode, copyEffects, snapshotEdit } from "./edit.js";
 import { boxOfNote } from "./references.js";
+import { normalizeTraceRange } from './drawing-options.js';
 import { contentH, pitchAt, songWidth, timeAt, xOf, yOf } from "./geometry.js";
 import { gridOffset, gridStep } from "./grid.js";
 import { nid } from "./ids.js";
@@ -53,7 +54,7 @@ function traceThreshold() {
 }
 
 function traceSearchRange() {
-  return parseInt(traceRangeSel.value, 10) || 2;
+  return Number(normalizeTraceRange(traceRangeSel.value));
 }
 
 // On (default): trace snaps each note to the brightest nearby spectrogram pitch.
@@ -74,8 +75,18 @@ function updateTraceThresholdLabel() {
   document.querySelectorAll(".trace-thresh-val").forEach((el) => (el.textContent = txt));
 }
 
+let quickHeatPreview = false;
+let heatPreviewRequested = false;
+export function setQuickHeatPreview(on) {
+  quickHeatPreview = !!on;
+  refreshHeatPreview();
+}
 function setHeatPreview(on) {
-  S.heatPreview = !!on;
+  heatPreviewRequested = !!on;
+  refreshHeatPreview();
+}
+function refreshHeatPreview() {
+  S.heatPreview = (quickHeatPreview || heatPreviewRequested) && traceSnap();
   draw();
 }
 
@@ -710,7 +721,7 @@ export function init_tracing() {
     traceThresholdInput.addEventListener("input", () => {
       updateTraceThresholdLabel();
       scheduleHeatMaskRebuild();
-      showHeatPreviewBriefly();
+      if (!quickHeatPreview) showHeatPreviewBriefly();
     });
     traceThresholdInput.addEventListener("focus", () => setHeatPreview(true));
     traceThresholdInput.addEventListener("blur", () => setHeatPreview(false));

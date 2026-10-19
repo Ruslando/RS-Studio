@@ -275,6 +275,12 @@ main { flex: 1; min-height: 0; overflow: hidden; background: var(--workspace-gro
 .tap-tempo-readout { color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; user-select: text; white-space: nowrap; }
 
 .zoom-cluster { position: relative; gap: var(--s-sibling); }
+.drawing-settings-button { display: inline-flex; align-items: center; gap: var(--s-sibling); flex: none; height: var(--h-control); }
+#drawingSettingsStatus { color: var(--label); font: 400 var(--text-data)/1 var(--font-mono); white-space: nowrap; }
+#drawingSettings[aria-expanded="true"] { background: var(--control-hover); }
+#drawingQuickPanel .dp-body { display: flex; flex-direction: column; gap: var(--s-row); }
+#drawingQuickPanel .field-slider > .label { width: 96px; }
+#drawingQuickPanel .kbd { color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); }
 
 .zoom-cluster #zoomSlider { width: 76px; }
 .zoom-cluster .zval { min-width: 34px; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); color: var(--hint); font-variant-numeric: tabular-nums; }

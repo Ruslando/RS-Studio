@@ -28,7 +28,8 @@ import { nid } from "./ids.js";
 import { S, setSelection } from "./store.js";
 import { acceptMatch, addTracePoint, clearMatches, matchAt, notesFromTrace } from "./tracing.js";
 import { clamp } from "./util.js";
-import { manualViewportNavigation } from "./viewport-motion.js";
+import { coastViewport, manualViewportNavigation } from "./viewport-motion.js";
+import { createPanTracker } from './pan-momentum.js';
 
 let sliceHeld = false;
 
@@ -147,6 +148,7 @@ function updateDrag(x, y) {
     }
     scroll.scrollLeft = clamp(drag.scrollLeft - dx, 0, Math.max(0, scroll.scrollWidth - scroll.clientWidth));
     scroll.scrollTop = clamp(drag.scrollTop - dy, 0, Math.max(0, scroll.scrollHeight - scroll.clientHeight));
+    drag.tracker.sample(scroll.scrollLeft, scroll.scrollTop, performance.now());
     draw(); return;
   }
   if (S.drag.mode === "scrub") {
@@ -491,7 +493,8 @@ export function init_interaction() {
       // Wait for the gesture: a click seeks, a drag moves only the viewport.
       e.preventDefault();
       S.drag = { mode: 'panPending', time: t, clientX: e.clientX, clientY: e.clientY,
-        scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop };
+        scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop,
+        tracker: createPanTracker(scroll.scrollLeft, scroll.scrollTop, performance.now()) };
     }
   });
   // A double-click on empty space adds one grid cell; double-clicking a bend
@@ -667,6 +670,8 @@ export function init_interaction() {
       } else if (!toggleSelection) seekPlayback(timeAt(x));
     } else if (S.drag.mode === 'panPending') {
       setSelection(new Set()); seekPlayback(S.drag.time);
+    } else if (S.drag.mode === 'pan') {
+      coastViewport(S.drag.tracker.velocity(performance.now()));
     } else if (S.drag.mode === "trace") {
       const lane = targetLane();
       if (lane && lane.visible && !lane.locked) {

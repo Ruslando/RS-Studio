@@ -339,6 +339,7 @@ class EndToEndTests(unittest.TestCase):
         page.mouse.move(*start); page.mouse.down()
         page.mouse.move(start[0]-100, start[1]-80, steps=10)
         expect(page.locator('#stage')).to_have_css('cursor', 'grabbing')
+        page.wait_for_timeout(120)  # Release after stopping, so this is a pan rather than a flick.
         page.mouse.up()
         after = state()
         self.assertAlmostEqual(after['left']-before['left'], 100)
@@ -372,6 +373,133 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(len(state()['notes']), len(before['notes']) + 1, 'plain double-click still inserts a note')
         page.keyboard.press('Control+z')
         self.assertEqual(state()['notes'], before['notes'])
+
+    def test_panning_coasts_after_a_flick_and_new_input_stops_it(self):
+        self.open_reference_project()
+        page = self.page
+        start = page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            const lane = S.state.editLanes[0]; lane.notes = []; lane.refBoxes = {};
+            lane.handHolds = []; lane.phraseBoundaries = []; lane.toneMarkers = [];
+            S.detectRegion = null;
+            const stage = document.querySelector('#stage'), scroll = document.querySelector('#scroll');
+            const rect = stage.getBoundingClientRect();
+            (await import('/geometry.js')).zoomBothTo(3,rect.left+rect.width/2,rect.top+rect.height/2);
+            (await import('/playback.js')).seekPlayback(1.25);
+            setSelection(new Set()); S.undoStack = []; S.redoStack = [];
+            scroll.scrollLeft = 500; scroll.scrollTop = 300;
+            (await import('/repaint.js')).drawNow();
+            const r = stage.getBoundingClientRect();
+            return [r.left+r.width*.65,r.top+r.height*.65];
+        }""")
+        position = lambda: page.locator('#scroll').evaluate('el => [el.scrollLeft,el.scrollTop]')
+        page.mouse.move(*start); page.mouse.down()
+        page.mouse.move(start[0]-120,start[1]-60,steps=8); page.mouse.up()
+        released = position()
+        page.wait_for_function('left => document.querySelector("#scroll").scrollLeft > left+5', arg=released[0])
+        self.assertGreater(position()[1], released[1])
+        page.wait_for_function("async () => !(await import('/viewport-motion.js')).viewportMoving()")
+        self.assertEqual(page.evaluate("async () => (await import('/playback.js')).playbackTime()"), 1.25)
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.undoStack.length"), 0)
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.length"), 0)
+        # A second flick is interrupted immediately by a new keyboard gesture.
+        page.mouse.move(*start); page.mouse.down()
+        page.mouse.move(start[0]-100,start[1],steps=6); page.mouse.up()
+        page.keyboard.down('Control')
+        stopped = position()
+        page.wait_for_timeout(80)
+        self.assertEqual(position(), stopped)
+        self.assertFalse(page.evaluate("async () => (await import('/viewport-motion.js')).viewportMoving()"))
+        page.keyboard.up('Control')
+
+    def test_drawing_quick_settings_sync_preview_and_remappable_shortcuts(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate('document.activeElement.blur()')
+        expect(page.locator('#drawingSettingsStatus')).to_have_text('Snap · 18%')
+        page.keyboard.press('t')
+        expect(page.locator('#traceSnap')).not_to_be_checked()
+        expect(page.locator('#traceSnapM')).not_to_be_checked()
+        expect(page.locator('#drawingSettingsStatus')).to_have_text('Free draw')
+        page.keyboard.press('h')
+        expect(page.locator('#drawingQuickPanel')).to_be_visible()
+        expect(page.locator('#quickTraceSnap')).to_be_focused()
+        expect(page.locator('#quickTraceThreshold')).to_be_disabled()
+        expect(page.locator('#quickTraceRange')).to_be_disabled()
+        page.keyboard.press('Space')
+        expect(page.locator('#traceSnap')).to_be_checked()
+        self.assertFalse(page.evaluate("async () => (await import('/playback.js')).transportPlaying()"))
+        page.keyboard.press('h')
+        expect(page.locator('#drawingQuickPanel')).to_be_hidden()
+        page.keyboard.press('h')
+        expect(page.locator('#quickTraceThreshold')).to_be_focused()
+        self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.heatPreview"))
+        page.keyboard.press('ArrowRight')
+        expect(page.locator('#traceThreshold')).to_have_value('19')
+        expect(page.locator('#traceThresholdM')).to_have_value('19')
+        expect(page.locator('#quickTraceThresholdValue')).to_have_text('19%')
+        expect(page.locator('#drawingSettingsStatus')).to_have_text('Snap · 19%')
+        page.locator('#quickTraceRange').select_option('3')
+        expect(page.locator('#traceRange')).to_have_value('3')
+        expect(page.locator('#traceRangeM')).to_have_value('3')
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.settings')).traceRange"), '3')
+        page.wait_for_timeout(1500)
+        self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.heatPreview"), 'preview stays visible while the popover is open')
+        page.screenshot(path=str(Path('.runs/drawing-quick-settings.png')), full_page=True)
+        page.set_viewport_size({'width':900,'height':700})
+        page.wait_for_timeout(100)
+        rect = page.locator('#drawingQuickPanel').bounding_box()
+        self.assertGreaterEqual(rect['x'], 0)
+        self.assertLessEqual(rect['x']+rect['width'], 900)
+        self.assertLessEqual(rect['y']+rect['height'], 700)
+        page.set_viewport_size({'width':1440,'height':900})
+        page.keyboard.press('Escape')
+        expect(page.locator('#drawingQuickPanel')).to_be_hidden()
+        self.assertFalse(page.evaluate("async () => (await import('/store.js')).S.heatPreview"))
+
+        # The existing modal remains staged and synchronizes back when cancelled.
+        page.locator('#settingsMenuBtn').click()
+        page.locator('[data-settings-pane="trace"]').click()
+        page.locator('#traceSnapM').uncheck()
+        expect(page.locator('#quickTraceSnap')).not_to_be_checked()
+        page.keyboard.press('Escape')
+        expect(page.locator('#quickTraceSnap')).to_be_checked()
+        page.locator('#settingsMenuBtn').click()
+        page.locator('[data-settings-pane="keys"]').click()
+        for action, key in [('drawingSnap','g'),('drawingSettings','j')]:
+            page.locator(f'[data-command="{action}"] .keymap-key').click()
+            page.keyboard.press(key)
+        page.locator('#settingsApply').click()
+        page.keyboard.press('Escape')
+        expect(page.locator('#drawingSettings')).to_have_attribute('title', re.compile(r'\(J\)$'))
+        page.evaluate('document.activeElement.blur()')
+        page.keyboard.press('h')
+        expect(page.locator('#drawingQuickPanel')).to_be_hidden()
+        page.keyboard.press('j')
+        expect(page.locator('#quickTraceThreshold')).to_be_focused()
+        expect(page.locator('#quickTraceSnapKey')).to_have_text('G')
+        page.keyboard.press('g')
+        expect(page.locator('#traceSnap')).not_to_be_checked()
+        expect(page.locator('#quickTraceSnap')).to_be_focused()
+        page.keyboard.press('Escape')
+        page.reload()
+        self.open_reference_project()
+        expect(page.locator('#drawingSettingsStatus')).to_have_text('Free draw')
+        page.evaluate('document.activeElement.blur()')
+        page.keyboard.press('j')
+        expect(page.locator('#drawingQuickPanel')).to_be_visible()
+        expect(page.locator('#quickTraceSnapKey')).to_have_text('G')
+        expect(page.locator('#quickTraceRange')).to_have_value('3')
+        expect(page.locator('#quickTraceThreshold')).to_have_value('19')
+
+    def test_drawing_search_range_five_is_removed_and_migrated(self):
+        page = self.page
+        page.add_init_script("localStorage.setItem('cw.settings', JSON.stringify({traceRange:'5'}))")
+        page.reload()
+        for control in ['traceRange','traceRangeM','quickTraceRange']:
+            expect(page.locator(f'#{control}')).to_have_value('3')
+            self.assertEqual(page.locator(f'#{control} option').evaluate_all('options => options.map(o=>o.value)'), ['1','2','3'])
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.settings')).traceRange"), '3')
 
     def test_keyboard_zoom_panels_and_marker_navigation(self):
         self.open_reference_project()

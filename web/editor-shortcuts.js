@@ -16,6 +16,7 @@ import { addPhraseBoundaryAtTime } from './phrase-markers.js';
 import { addToneMarkerAtTime } from './tone-markers.js';
 import { xOf } from './geometry.js';
 import { moveViewportTo } from './viewport-motion.js';
+import { toggleDrawingSettings, toggleDrawingSnap } from './drawing-settings.js';
 
 const click = id => { const control = $(id); if (control && !control.disabled) control.click(); };
 const layerControl = selector => document.querySelector(`#lanes .lane-row.active ${selector}`)?.click();
@@ -47,6 +48,7 @@ function withSelection(action) {
 export const EDITOR_COMMAND_HANDLERS = {
   sidebar: () => click('sidebarToggle'), artifacts: () => click('artifactsToggle'),
   zoomIn: () => click('zoomIn'), zoomOut: () => click('zoomOut'),
+  drawingSnap: toggleDrawingSnap, drawingSettings: toggleDrawingSettings,
   slower: () => speed(-1), faster: () => speed(1),
   normalSpeed: () => { $('speed').value = '1'; $('speed').dispatchEvent(new Event('change', { bubbles: true })); },
   metronome: () => click('metro'),

@@ -10,6 +10,7 @@ import { draw } from "./repaint.js";
 import { initTimelineScrollPreview, refreshTimelineScrollPreview } from "./timeline-scroll-preview.js";
 import { initEditorPreviews, refreshEditorPreviews } from "./editor-previews.js";
 import { migrateNoteAppearanceSettings } from "./spectrogram-labels.js";
+import { normalizeTraceRange } from './drawing-options.js';
 
 const KEY = "cw.settings";
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
@@ -76,9 +77,12 @@ function init_theme() {
 
 // Restore must happen before the feature inits read these inputs (see main.js).
 export function init_settings() {
-  persistSetting($("traceSnap"), { mirror: $("traceSnapM"), bool: true });
-  persistSetting($("traceRange"), { mirror: $("traceRangeM") });
-  persistSetting($("traceThreshold"), { mirror: $("traceThresholdM") });
+  if ('traceRange' in store && store.traceRange !== normalizeTraceRange(store.traceRange)) {
+    store.traceRange = normalizeTraceRange(store.traceRange); persist();
+  }
+  persistSetting($("traceSnap"), { mirror: [$("traceSnapM"), $('quickTraceSnap')], bool: true });
+  persistSetting($("traceRange"), { mirror: [$("traceRangeM"), $('quickTraceRange')] });
+  persistSetting($("traceThreshold"), { mirror: [$("traceThresholdM"), $('quickTraceThreshold')] });
   // The fretboard reads its options straight off the inputs while it draws, the way
   // the voicing engine reads its own preferences — so persisting them and repainting
   // is the whole wiring. These controls live in Editor options.

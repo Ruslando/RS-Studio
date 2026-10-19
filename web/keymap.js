@@ -19,6 +19,8 @@ export const KEY_COMMANDS = [
   { id: "zoomIn",      label: "Zoom in",                 def: "+" },
   { id: "zoomOut",     label: "Zoom out",                def: "-" },
   { id: "resetZoom",   label: "Reset zoom",              def: "0" },
+  { id: "drawingSnap", label: "Drawing: toggle snap to pitch", def: "T" },
+  { id: "drawingSettings", label: "Drawing quick settings", def: "H" },
   // Existing actions offered for binding, without choosing defaults for the user.
   ...[
     ["slower", "Playback: slower"], ["faster", "Playback: faster"],
