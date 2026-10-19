@@ -138,13 +138,27 @@ export function hoveredStageNote() {
 // the viewport pans under a stationary cursor).
 function updateDrag(x, y) {
   if (S.drag.mode === "projectStart") { updateProjectStartAt(x); return; }
+  if (S.drag.mode === 'panPending' || S.drag.mode === 'pan') {
+    const drag = S.drag, dx = S.lastPointerX - drag.clientX, dy = S.lastPointerY - drag.clientY;
+    if (drag.mode === 'panPending') {
+      if (Math.hypot(dx, dy) < 4) return;
+      drag.mode = 'pan'; manualViewportNavigation();
+      stage.style.cursor = 'grabbing';
+    }
+    scroll.scrollLeft = clamp(drag.scrollLeft - dx, 0, Math.max(0, scroll.scrollWidth - scroll.clientWidth));
+    scroll.scrollTop = clamp(drag.scrollTop - dy, 0, Math.max(0, scroll.scrollHeight - scroll.clientHeight));
+    draw(); return;
+  }
   if (S.drag.mode === "scrub") {
     seekPlayback(timeAt(x)); return;
   }
   if (S.drag.mode === "tracePending") {
     if (Math.hypot(x - S.drag.x0, y - S.drag.y0) < 4) return;
+    S.drag.moved = true;
+    if (!S.spectImg) return;
     const { x0, y0 } = S.drag;
     S.drag.mode = "trace";
+    setSelection(new Set());
     S.drag.points = [];
     addTracePoint(S.drag.points, x0, y0);
     addTracePoint(S.drag.points, x, y);
@@ -236,7 +250,7 @@ function updateDrag(x, y) {
 // the vertical scrollbar on the right doesn't drag the timeline along). The right
 // edge is measured from the content width, excluding the scrollbar gutter.
 export function updateAutoScroll(clientX) {
-  if (!S.state || !S.drag) { stopAutoScroll(); return; }
+  if (!S.state || !S.drag || ['panPending', 'pan', 'tracePending'].includes(S.drag.mode)) { stopAutoScroll(); return; }
   const r = scroll.getBoundingClientRect();
   const left = clientX - r.left, right = r.left + scroll.clientWidth - clientX;
   let vel = 0;
@@ -274,6 +288,15 @@ function stopAutoScroll() {
 }
 
 export function init_interaction() {
+  const traceModifier = event => {
+    S.traceHeld = !!(event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey &&
+      !/^(INPUT|SELECT|TEXTAREA)$/.test(event.target?.tagName) && !event.target?.isContentEditable;
+    if (!S.drag) stage.style.cursor = S.traceHeld || sliceHeld ? 'crosshair' : 'grab';
+    draw();
+  };
+  window.addEventListener('keydown', traceModifier);
+  window.addEventListener('keyup', traceModifier);
+  window.addEventListener('blur', () => { S.traceHeld = false; });
   // Like FL Studio's temporary tools, Slice exists only while its key is held.
   // It deliberately does not alter the active persistent Select/Trace/etc. mode.
   window.addEventListener("keydown", (e) => {
@@ -292,21 +315,13 @@ export function init_interaction() {
   });
   stage.addEventListener("mousedown", (e) => {
     if (!S.state || e.button !== 0) return; // right-click handled by contextmenu
-    if (e.ctrlKey || e.metaKey) {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
       const [x, y] = localXY(e);
       if (y - scroll.scrollTop <= railsBottom()) return;
       const hit = pickNote(timeAt(x), pitchAt(y));
-      if (!hit) return;
       e.preventDefault();
-      const selection = new Set(S.selection);
-      if (hit.lane !== activeLane()) {
-        selection.clear();
-        S.state.lanes.forEach(lane => { lane.active = lane === hit.lane; });
-        renderLanes();
-      }
-      if (selection.has(hit.note)) selection.delete(hit.note);
-      else selection.add(hit.note);
-      setSelection(selection); draw(); return;
+      S.drag = { mode: 'tracePending', x0: x, y0: y, hit, toggleSelection: true };
+      return;
     }
     // Bottom-up: the lowest rail gets first refusal, then tempo/meter flags.
     const rails = markerRails();
@@ -324,7 +339,7 @@ export function init_interaction() {
     const wantMarquee = e.shiftKey || tool === "marquee";
     const wantFrame = e.altKey || tool === "frame";
     const wantSlice = sliceHeld && noMod;
-    const plainSelect = noMod && (S.toolMode === "select" || defaultTrace);
+    const plainSelect = noMod && (["select", "pan"].includes(S.toolMode) || defaultTrace);
     const noteHit = plainSelect ? pickNote(t, pitch) : null;
 
     // Existing range edges stay grabbable in every tool, including the default
@@ -473,10 +488,10 @@ export function init_interaction() {
       beginNoteGesture(S.state, hit.lane, S.drag.notes, S.drag.mode);
       draw();
     } else {
-      // empty space: move the time cursor, drag to scrub
-      setSelection(new Set());
-      seekPlayback(t);
-      S.drag = { mode: "scrub" };
+      // Wait for the gesture: a click seeks, a drag moves only the viewport.
+      e.preventDefault();
+      S.drag = { mode: 'panPending', time: t, clientX: e.clientX, clientY: e.clientY,
+        scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop };
     }
   });
   // A double-click on empty space adds one grid cell; double-clicking a bend
@@ -495,7 +510,7 @@ export function init_interaction() {
     if (bendHandleAt(x, y)) return;              // already a point here
     const hit = bendCurveAt(x, y);
     if (hit) { e.preventDefault(); addBendPoint(hit.note, hit.t); }
-    else if (S.toolMode === "trace" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+    else if (["trace", "pan"].includes(S.toolMode) && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
              y - scroll.scrollTop >= railsBottom() + 2 && !pickNote(timeAt(x), pitchAt(y))) {
       const lane = targetLane(), step = minDur();
       if (!canEditLane(lane) || !step) return;
@@ -567,7 +582,7 @@ export function init_interaction() {
     updateDrag(x, y);
   });
   stage.addEventListener("mousemove", (e) => {
-    if (!S.state || S.drag || sliceHeld || !["select", "trace"].includes(S.toolMode)) return;
+    if (!S.state || S.drag || sliceHeld || !["select", "trace", "pan"].includes(S.toolMode)) return;
     const [x, y] = localXY(e);
     const markerCursor = markerCursorAt(x, y) || markerRails().map(rail => rail.cursorAt?.(x, y)).find(Boolean);
     if (markerCursor) { stage.style.cursor = markerCursor; return; }
@@ -577,9 +592,9 @@ export function init_interaction() {
     // Reference labels and edges set their own cursor in draw.js's handler.
     if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (refLockAt(x, y) || refBadgeAt(x, y) || refBoxEdgeAt(x, y))) return;
     const hit = pickNote(timeAt(x), pitchAt(y));
-    stage.style.cursor = hit
+    stage.style.cursor = e.ctrlKey || e.metaKey ? 'crosshair' : hit
       ? (!hit.grace && edgeOf(hit.note, x) ? "ew-resize" : "move")
-      : (S.toolMode === "trace" ? "crosshair" : "default");
+      : (S.toolMode === "trace" ? "crosshair" : "grab");
   });
   // Pointer motion over the spectrogram feeds auto-scroll (#stage events bubble
   // up to #scroll), so it works whether or not a drag is in progress.
@@ -638,7 +653,20 @@ export function init_interaction() {
     const [x, y] = localXY(e);
     try {
     if (S.drag.mode === "tracePending") {
-      seekPlayback(timeAt(x));
+      const { hit, toggleSelection, moved } = S.drag;
+      if (toggleSelection && !moved) {
+        if (hit) {
+          const selection = new Set(S.selection);
+          if (hit.lane !== activeLane()) {
+            selection.clear();
+            S.state.lanes.forEach(lane => { lane.active = lane === hit.lane; }); renderLanes();
+          }
+          if (selection.has(hit.note)) selection.delete(hit.note); else selection.add(hit.note);
+          setSelection(selection);
+        }
+      } else if (!toggleSelection) seekPlayback(timeAt(x));
+    } else if (S.drag.mode === 'panPending') {
+      setSelection(new Set()); seekPlayback(S.drag.time);
     } else if (S.drag.mode === "trace") {
       const lane = targetLane();
       if (lane && lane.visible && !lane.locked) {
@@ -725,7 +753,7 @@ export function init_interaction() {
     }
     finishNoteGesture(S.state, S.drag);
     S.marquee = null; S.drag = null; stopAutoScroll();
-    stage.style.cursor = sliceHeld || S.toolMode === "trace" ? "crosshair" : "default";
+    stage.style.cursor = sliceHeld || S.traceHeld || S.toolMode === "trace" ? "crosshair" : "grab";
     draw();
   });
 }

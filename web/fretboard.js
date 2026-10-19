@@ -1825,6 +1825,7 @@ export function init_fretboard() {
     useAlternative(); $("fretboardChoose").blur();
   });
   const navigateAlternative = e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (!editing || transportPlaying() || fretboardPanel.hasAttribute("data-edit-blocked")) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault(); e.stopPropagation();

@@ -60,13 +60,15 @@ export const S = {
   autoScrollVel: 0,  // px/frame; sign = direction, 0 = idle
   mmDragging: false,  // dragging within the overview minimap to navigate
   mmSeeking: false,  // dragging the playhead pin in the overview headroom to scrub
-  // Active spectrogram tool. The toolbar defaults this to Select; modifier keys
-  // (Ctrl/Shift/Alt) still force their gesture regardless.
-  //   select  → click/move notes, drag = marquee   (default)
-  //   trace   → drag draws notes along the spectrogram
+  // Empty-space drag pans by default. Ctrl/Cmd-drag traces; a Ctrl/Cmd-click
+  // toggles note selection. Existing note/marker/handle gestures take priority.
+  //   pan     → click seeks, empty-space drag pans (default)
+  //   select  → click/move notes
+  //   trace   → explicit trace mode
   //   marquee → drag box-selects notes             (= Shift-drag)
   //   frame   → drag a time range for looping / detection (= Alt-drag)
-  toolMode: "select",
+  toolMode: "pan",
+  traceHeld: false,
   sliceHeld: false,  // temporary FL-style Slice gesture while the S key is held
   heatPreview: false,
   heatPreviewTimer: 0,

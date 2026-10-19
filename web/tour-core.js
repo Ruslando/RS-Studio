@@ -300,7 +300,7 @@ export const TOURS = {
         do: ACT.prepareDraw,
         spot: "phraseArea",
         title: "Draw a line",
-        body: "To place multiple notes at once, click and hold the mouse button to draw a line. Trace the bright lines at the bottom with your mouse, and the app will place the notes for you.",
+        body: "To place multiple notes at once, hold [[Ctrl]] and drag with the left mouse button. Trace the bright lines at the bottom, and the app will place the notes for you. Drag empty space without Ctrl to pan the view.",
         until: UNTIL.notes,
         task: "Draw a line to add notes",
         optional: true,

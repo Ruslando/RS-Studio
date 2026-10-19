@@ -1,7 +1,7 @@
 // Run: node tests/web/helpers.test.mjs
 // Note names and tunings, shortcuts, and which Rocksmith arrangement a layer defaults to.
 import assert from "node:assert/strict";
-import { conflictOf, eventKey, keyOf, matchKey, resetKeys, setKey } from "../../web/keymap.js";
+import { conflictOf, eventKey, keyOf, keySnapshot, matchKey, resetKeys, restoreKeys, setKey, shortcutTitle } from "../../web/keymap.js";
 import { assignRsKinds, defaultRsKind, isTablatureLane, rsKindFits, selectedTablatureLane } from "../../web/layer-role.js";
 import { fmtTime, followerTrim, isAudioFile, isGuitarProFile, noteName, noteToMidi, onsetSec, parseTuning, playheadScrollLeft, songTimeToTabMs, tabMsToSongTime, tuningToNames, volumeToDb } from "../../web/util.js";
 
@@ -63,6 +63,25 @@ import { fmtTime, followerTrim, isAudioFile, isGuitarProFile, noteName, noteToMi
   assert.equal(conflictOf("M", "fretboard"), null, "the old key is free again");
   resetKeys();
   assert.equal(keyOf("muteLayer"), "M");
+  assert.ok(matchKey(key('+'), 'zoomIn') && matchKey(key('-'), 'zoomOut'));
+  assert.ok(!matchKey(key('+', { ctrlKey: true }), 'zoomIn'), 'browser zoom remains separate');
+  assert.equal(conflictOf('ArrowLeft', 'findSimilar').label, 'Previous / next chord — or match, while find-similar is live');
+  assert.equal(keyOf('findSimilar'), null, 'new actions start unbound');
+  setKey('findSimilar', 'Q');
+  assert.ok(matchKey(key('q'), 'findSimilar'));
+  const snapshot = keySnapshot();
+  setKey('findSimilar', null);
+  setKey('zoomIn', null);
+  assert.equal(keyOf('zoomIn'), null, 'a default binding can also be removed');
+  assert.ok(!matchKey(key('+'), 'zoomIn'));
+  assert.equal(shortcutTitle('Zoom in', 'zoomIn'), 'Zoom in');
+  restoreKeys(snapshot);
+  assert.equal(keyOf('findSimilar'), 'Q');
+  assert.equal(keyOf('zoomIn'), '+');
+  setKey('muteLayer', 'B');
+  assert.equal(keyOf('sidebar'), null, 'new defaults yield to existing custom bindings');
+  assert.ok(matchKey(key('b'), 'muteLayer'));
+  resetKeys();
 }
 
 // ---- which arrangement a layer exports as ---------------------------------

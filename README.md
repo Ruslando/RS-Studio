@@ -84,6 +84,8 @@ On Linux it uses the system's FFmpeg. With the NVIDIA libraries installed, run
 
 ## Good to know
 
+- [Keyboard shortcuts](docs/keyboard-shortcuts.md): defaults, marker navigation,
+  and actions available for custom bindings.
 - Models are optional downloads: **Settings > Models**.
 - **Settings > Tone presets**: edit a starting tone to create your own preset, change its gear
   and controls, then choose **Apply**. Select your preset in a project's

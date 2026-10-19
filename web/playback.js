@@ -13,6 +13,7 @@ import { followViewportTo, stopViewportMotion, viewportFollowing, viewportMoving
 import { busLevel } from "./volume.js";
 import { playbackEvents, playSampleEvent } from "./playback-effects.js";
 import { createRegionLoop } from "./region-loop.js";
+import { shortcutTitle } from './keymap.js';
 
 const regionLoop = createRegionLoop();
 window.addEventListener("cw-project-opened", () => regionLoop.reset());
@@ -680,6 +681,9 @@ const PLAY_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="current
 const PAUSE_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
 
 export function init_playback() {
+  const syncPlayHint = () => { playBtn.title = shortcutTitle(transportPlaying() ? 'Pause' : 'Play', 'playPause'); };
+  window.addEventListener('cw-keymap-changed', syncPlayHint);
+  syncPlayHint();
   startScheduler();
   audio.addEventListener("play", () => { regionLoop.reset(); updateRegionLoop(); });
   audio.addEventListener("ended", () => {
@@ -689,7 +693,7 @@ export function init_playback() {
   });
   playBtn.addEventListener("click", async () => { await ensureTone(); togglePlay(); });
   audio.addEventListener("play", () => {
-    scrollingSuspended = false; playBtn.innerHTML = PAUSE_ICON; playBtn.title = "Pause (Space)";
+    scrollingSuspended = false; playBtn.innerHTML = PAUSE_ICON; syncPlayHint();
     setSynthsMuted(false); ensureStemMixer(); startFollowers(); resetSchedule();
     window.dispatchEvent(new CustomEvent("cw-transport", { detail: "play" }));
     tick();
@@ -698,7 +702,7 @@ export function init_playback() {
     cancelPassagePreview();
     clearPreview();
     pauseFollowers();
-    playBtn.innerHTML = PLAY_ICON; playBtn.title = "Play (Space)";
+    playBtn.innerHTML = PLAY_ICON; syncPlayHint();
     if (S.state) for (const l of S.state.lanes) releaseLaneSynth(l);
     setSynthsMuted(true); // silence notes already scheduled in the LOOKAHEAD window (releaseAll can't recall them)
     window.dispatchEvent(new CustomEvent("cw-transport", { detail: "pause" }));

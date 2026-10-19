@@ -12,7 +12,8 @@ import { openToneMarkerPop, closeToneMarkerPop } from './tone-markers.js';
 import { openHandAnchorPop, closeHandAnchorPop } from './hand-anchors.js';
 import { sectionTypeLabel } from './section-marker-core.js';
 import { tonePresetLabel, tonePresetMissing } from './tone-marker-core.js';
-import { seekPlayback } from './playback.js';
+import { playbackTime, seekPlayback } from './playback.js';
+import { adjacentMarkerTime } from './marker-navigation-core.js';
 import { xOf } from './geometry.js';
 import { moveViewportTo, stopViewportMotion } from './viewport-motion.js';
 import { stopArtifactPreview } from './artifact-preview.js';
@@ -84,7 +85,25 @@ function actOnMarker(key, edit, target, event) {
   draw();
 }
 
+export function navigateMarker(direction) {
+  if (!S.state) return;
+  // Closing a marker editor commits its draft before resolving the live list.
+  closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeToneMarkerPop(); closeHandAnchorPop();
+  const time = adjacentMarkerTime(markerArtifacts(), playbackTime(), direction, S.state.duration);
+  if (time === null) return;
+  stopArtifactPreview(); stopViewportMotion();
+  seekPlayback(time);
+  moveViewportTo(xOf(time) - scroll.clientWidth * .2, scroll.scrollTop);
+  draw();
+}
+
 export function initMarkerArtifacts() {
+  for (const [id, direction] of [['previousMarker', -1], ['nextMarker', 1]]) {
+    $(id).addEventListener('click', event => {
+      navigateMarker(direction);
+      event.currentTarget.blur();
+    });
+  }
   const root = $('artifactMarkers');
   for (const [kind, label] of categories) {
     const head = document.createElement('div'); head.className = 'side-header';
@@ -109,6 +128,8 @@ export function initMarkerArtifacts() {
 export function renderMarkerArtifacts() {
   if (!sections.size) return;
   const entries = markerArtifacts(), live = new Set(entries.map(entry => entry.key));
+  for (const [id, direction] of [['previousMarker', -1], ['nextMarker', 1]])
+    $(id).disabled = !S.state || adjacentMarkerTime(entries, playbackTime(), direction, S.state.duration) === null;
   for (const [key, row] of rows) if (!live.has(key)) { row.remove(); rows.delete(key); }
   for (const [kind, {list, count, head, body}] of sections) {
     const group = entries.filter(entry => entry.kind === kind);

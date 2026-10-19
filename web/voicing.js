@@ -23,6 +23,7 @@ import { S, setSelection } from "./store.js";
 import { setPlaybackCursor } from "./tracing.js";
 import { clamp } from "./util.js";
 import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey } from "./voicing-core.js";
+import { adjacentColumn } from './column-navigation.js';
 
 export * from "./voicing-core.js";
 export { analyzeChord, detectChord, PC_NAMES, pcName } from "./chords.js";
@@ -208,10 +209,7 @@ export function stepColumnFocus(dir) {
   if (!lane) return;
   const cols = chordColumns(lane.notes);
   if (!cols.length) return;
-  // A hair of slack, or → from a column's own onset finds that same column again:
-  // the playhead is parked on it to the microsecond.
-  const t = playbackTime() + (dir > 0 ? 1e-3 : -1e-3);
-  const next = dir > 0 ? cols.find((c) => c.t0 > t) : [...cols].reverse().find((c) => c.t0 < t);
+  const next = adjacentColumn(cols, playbackTime(), dir, S.selection);
   if (next) focusColumn(next.notes[0]);
 }
 

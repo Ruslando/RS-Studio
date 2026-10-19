@@ -44,6 +44,8 @@ const OUTLINE = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   trash: '<path d="M4 7h16M9 7V5h6v2m2 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/>',
   jump: '<path d="M4 12h12m-4-4 4 4-4 4M20 5v14"/>',
+  previousMarker: '<path d="M5 5v14m14-13-9 6 9 6Z"/>',
+  nextMarker: '<path d="M19 5v14M5 6l9 6-9 6Z"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
   chevronUp: '<path d="m6 15 6-6 6 6"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',

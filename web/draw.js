@@ -378,7 +378,7 @@ function paintFrame() {
   drawGrid();
   if (S.detectRegion) drawDetectRegion(vx0, vx1);
   if (S.drag && S.drag.mode === "trace") drawTraceRange(S.drag.points);
-  else if ((S.toolMode === "trace" || S.heatPreview) && S.mouseX != null && S.mouseY != null) drawTraceRange([[S.mouseX, S.mouseY]]);
+  else if ((S.toolMode === "trace" || S.traceHeld || S.heatPreview) && S.mouseX != null && S.mouseY != null) drawTraceRange([[S.mouseX, S.mouseY]]);
 
   // Overlap stacks (same pitch + overlapping time inside one edit lane) are no
   // longer merged — flag them with a hot color + a count badge instead.
@@ -813,7 +813,7 @@ export function init_draw() {
     S.mmSeeking = true; minimapSeekTo(e.clientX);
   });
   overviewRuler.addEventListener("keydown", (e) => {
-    if (!S.state) return;
+    if (!S.state || e.ctrlKey || e.metaKey || e.altKey) return;
     const delta = e.shiftKey ? 1 : .1;
     const time = playbackTime();
     const target = e.key === "ArrowLeft" ? time - delta : e.key === "ArrowRight" ? time + delta : e.key === "Home" ? 0 : e.key === "End" ? S.state.duration : null;
@@ -876,7 +876,7 @@ export function init_draw() {
     for (let i = markerRails().length - 1; i >= 0 && !mkCur; i--)
       mkCur = markerRails()[i].cursorAt?.(x, y) || null;
     mkCur = mkCur || markerCursorAt(x, y);
-    if (e.ctrlKey || e.metaKey) cur = "pointer";             // Ctrl + click = seek
+    if (e.ctrlKey || e.metaKey) cur = "crosshair";           // Ctrl/Cmd-drag draws; click toggles selection
     else if (mkCur) cur = mkCur;                             // over a timing or section flag
     else if (!e.shiftKey && !S.sliceHeld && regionEdgeAt(x)) cur = "ew-resize";
     else if (mi >= 0) cur = "pointer";                       // hovering a suggestion
@@ -888,7 +888,7 @@ export function init_draw() {
     else if (e.altKey) cur = "col-resize";                   // Alt = detect-frame band
     else if (hit && hit.lane !== activeLane()) cur = "pointer";  // click switches the edit target to this layer
     else if (hit) cur = edgeOf(hit.note, x) ? "ew-resize" : "move";
-    else cur = "default";                                    // empty = scrub
+    else cur = "grab";                                       // empty = pan; a click still seeks
     stage.style.cursor = cur;
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
     S.refLockHover = refLockAt(x, y);
