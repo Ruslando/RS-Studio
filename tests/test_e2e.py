@@ -369,6 +369,38 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate('window.__midNoteAttacks.slice(-2)'), ['C4','E4'])
         page.locator('#play').click()
 
+    def test_rocksmith_issues_follow_the_chart_while_it_is_edited(self):
+        page = self.page
+        note = lambda i, start, fret, **fx: {"id": f"n{i}", "start": start, "end": start + 1, "pitch": 55 + fret,
+                                             "pos": {"string": 3, "fret": fret, "scope": "local"}, **fx}
+        lane = {"id": "edit", "name": "Lead", "kind": "edit", "color": "#6ee7b7", "visible": True, "active": True,
+                "instrument": "electric", "tablatureEnabled": True, "tuning": "guitar6", "capo": 0,
+                "rocksmithArrangement": "lead",
+                "notes": [note(1, 2.0, 12, harmonic="natural", bend="full"), note(2, 4.0, 5)]}
+        project = {"name": "Rocksmith check", "duration": 12.0, "scoreDuration": 12.0, "editLanes": [lane],
+                   "grid": {"bpm": 120, "offset": 0.0, "tsNum": 4, "tsDen": 4, "subdiv": 2, "tempoMap": []},
+                   "sectionMarkers": [], "stems": [], "metadata": {"title": "Check", "artist": "E2E"}}
+        bundle = self.data / "rocksmith-check.chart"
+        with zipfile.ZipFile(bundle, "w") as archive:
+            archive.writestr("project.json", json.dumps(project))
+        with page.expect_file_chooser() as chooser:
+            page.click("#welcomeOpen")
+        chooser.value.set_files(bundle)
+        # The export's own checker reports the harmonic bend once edits settle.
+        row = page.locator("#rocksmithIssues .artifact-issue-row", has_text="Natural harmonic with bend")
+        expect(row).to_be_visible()
+        self.assertIn("I35", row.get_attribute("title"))
+        row.click()
+        time_at = lambda: page.evaluate("async () => (await import('/playback.js')).playbackTime()")
+        self.assertAlmostEqual(time_at(), 2.0, places=2)
+        # Delete that note: the issue goes, and an empty list hides its section.
+        page.mouse.move(700, 200)
+        page.keyboard.press("ArrowRight")
+        page.keyboard.press("ArrowLeft")
+        page.keyboard.press("Delete")
+        expect(page.locator("#rocksmithIssues .artifact-issue-row")).to_have_count(0)
+        expect(page.locator("#artifactRocksmithBody")).to_be_hidden()
+
     def test_arrow_navigation_steps_back_from_the_focused_chord(self):
         self.open_reference_project()
         page = self.page

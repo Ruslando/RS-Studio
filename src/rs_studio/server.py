@@ -1722,6 +1722,21 @@ def api_rocksmith_audio_converter() -> dict:
     return audio_converter_status()
 
 
+@app.post("/api/rocksmith/check")
+def api_rocksmith_check(payload: dict = Body(...)) -> list:
+    """What the Rocksmith export would report, without building anything.
+
+    The editor's live check: the same compile and DLC Builder checker as the
+    export, per arrangement, timed in the editor's own time. Takes the spec the
+    export sends, plus `duration` in place of the audio's length.
+    """
+    from .rocksmith import builder as rs_builder  # lazy: pulls in cryptography/PIL
+    try:
+        return rs_builder.check_spec(payload or {})
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Rocksmith check failed: {exc}") from exc
+
+
 @app.get("/api/setup")
 def api_setup_status() -> dict:
     """A durable first-run marker, independent of the desktop server's port."""

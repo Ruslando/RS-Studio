@@ -20,6 +20,7 @@ import { clipOf, doCopy, doPaste, openRefMenu, openMotifMenu, placeClip } from "
 import { motifGroups } from './motifs.js';
 import { artifactName, beginArtifactRename } from './artifact-names.js';
 import { initMarkerArtifacts, renderMarkerArtifacts, clearMarkerArtifacts } from './marker-artifacts.js';
+import { initRocksmithIssues, renderRocksmithIssues } from './rocksmith-check.js';
 
 const rows = new Map();
 let dragged = null;
@@ -179,6 +180,7 @@ export function renderArtifacts() {
   }
   paintArtifactPreviews();
   renderMarkerArtifacts();
+  renderRocksmithIssues();
 }
 
 // Transposition is enabled when occurrences may use independent pitch offsets.
@@ -288,6 +290,7 @@ export function init_artifacts() {
   });
   initArtifactsPanel();
   initMarkerArtifacts();
+  initRocksmithIssues();
   for (const [toggleId, bodyId, name] of [['artifactReferencesToggle','artifactReferencesBody','references'],['artifactMotifsToggle','artifactMotifsBody','motifs']]) {
     $(toggleId).addEventListener('click', () => {
       const button = $(toggleId), body = $(bodyId);
