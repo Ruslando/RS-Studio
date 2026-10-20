@@ -429,6 +429,7 @@ class _Notes:
     per_pi: list                   # note count per phrase iteration
     ignored_per_pi: list           # of which ignored (_ignored)
     dropped_slides: int            # connected slides with no fretted target
+    unlinked_slides: int = 0       # legato slides into a chord, exported unlinked
 
 
 # Both lookups walk backwards from the end because callers ask in time order and
@@ -879,16 +880,18 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
     last_fret_on_string: dict[int, int] = {}
     prev_note: S.Note | None = None
     dropped_connected_slides = 0
+    unlinked_slides = 0
 
     # string -> index of a legato Parent still waiting for its Child. The index
     # is the note's own: one SNG note per entity, so it equals `idx`.
     link_parents: dict[int, int] = {}
 
-    def next_on_string(idx: int, string: int) -> tuple[int, float] | None:
+    def next_on_string(idx: int, string: int) -> tuple[int, float, bool] | None:
+        """(fret, time, whether it is part of a chord) of the next note on the string."""
         for e2 in entities[idx + 1:]:
             for s, f, _ in e2.notes:
                 if s == string:
-                    return f, e2.time
+                    return f, e2.time, len(e2.notes) > 1
         return None
 
     def techniques(n: dict, string: int, fret: int, sustain: float, time: float, idx: int) -> tuple:
@@ -896,7 +899,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         per-string chord notes (XmlToSngNote.fs applies this same set to both;
         Open/Sustain/PalmMute/Vibrato/etc are handled by _base_note_mask instead).
         """
-        nonlocal dropped_connected_slides
+        nonlocal dropped_connected_slides, unlinked_slides
         mask = 0
         slide_to = -1
         unpitch_to = -1
@@ -922,8 +925,13 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                     # notwithstanding: the game only links a Child that starts
                     # where its Parent's sustain ends.
                     sustain = target[1] - time
-                    mask |= S.PARENT
-                    link_parents[string] = idx
+                    if target[2]:
+                        # Rocksmith links a note only to a single note (I03),
+                        # so a slide into a chord is picked again on arrival.
+                        unlinked_slides += 1
+                    else:
+                        mask |= S.PARENT
+                        link_parents[string] = idx
             else:
                 dropped_connected_slides += 1
         elif slide in ("outDown", "outUp"):
@@ -1104,7 +1112,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
 
     return _Notes(notes=notes, chord_notes=chord_notes_list, anchor_extensions=anchor_exts,
                   arr_props=arr_props, per_pi=notes_per_pi, ignored_per_pi=ignored_per_pi,
-                  dropped_slides=dropped_connected_slides)
+                  dropped_slides=dropped_connected_slides, unlinked_slides=unlinked_slides)
 
 
 def compile_track(track: dict, grid: dict, song_length: float,
@@ -1192,6 +1200,10 @@ def compile_track(track: dict, grid: dict, song_length: float,
 
     duration = arr.beats[-1][0] - arr.beats[0][0]
     average_tempo = (len(arr.beats) - 1) / duration * 60.0 if duration > 0 else 120.0
+    if emitted.unlinked_slides:
+        warnings.append(
+            f"{emitted.unlinked_slides} legato slide(s) end on a chord; Rocksmith cannot "
+            "link a note to a chord, so the chord is picked again")
     if emitted.dropped_slides:
         warnings.append(
             f"{emitted.dropped_slides} connected slide(s) had no fretted "
