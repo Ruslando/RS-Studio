@@ -368,13 +368,17 @@ def _fingering_cost(frets: list, grouping: list[list[int]], assignment: tuple[in
 
 
 def _chord_fingers(frets: list) -> list:
-    """Physical fingers for a Rocksmith chord (open=0, unused=-1).
+    """Physical fingers for a Rocksmith chord (1-4; -1 for open and unused strings).
+
+    Rocksmith's 0 is the thumb, so an open string must stay -1: marked 0 the
+    game draws a "T" on it, and DLC Builder reads two of them as a thumb barre
+    over open strings (I28).
 
     Automatic editor voicings already reject shapes needing more than four
     groups. If an external/manual spec still supplies one, excess groups stay
     unlabeled instead of falsely reusing finger 4 on another position.
     """
-    fingers = [0 if f == 0 else -1 for f in frets]
+    fingers = [-1] * len(frets)
     best = None
     for grouping in _finger_groupings(frets):
         for assignment in itertools.permutations(range(1, 5), len(grouping)):
