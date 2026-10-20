@@ -4096,7 +4096,7 @@ class EndToEndTests(unittest.TestCase):
         page.click("#rsVersion ~ .stepper-nudge [aria-label=Increase]")
         expect(page.locator("#rsVersion")).to_have_value("2")
         page.click(".stepper:has(#rsLeadIn) [aria-label=Decrease]")
-        expect(page.locator("#rsLeadIn")).to_have_value("4.5")
+        expect(page.locator("#rsLeadIn")).to_have_value("9.5")
         row = page.locator(".rs-arr-row")
         expect(row).to_have_count(1)
         expect(row.locator(".rs-arr-on")).to_be_checked()

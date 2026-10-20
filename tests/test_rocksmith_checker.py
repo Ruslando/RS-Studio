@@ -35,10 +35,10 @@ def _codes(spec):
 
 
 class ThroughTheExporter(unittest.TestCase):
-    def test_first_phrase_must_be_empty_unless_there_is_a_lead_in(self):
+    def test_the_export_keeps_the_first_phrase_empty(self):
+        """However little silence is asked for, the first note leaves an empty COUNT measure."""
         notes = [_note(0.0, 0.5, 6, 3), _note(4.0, 4.5, 6, 5)]
-        self.assertIn(("I25", 0.0), _codes(_spec(notes)))
-        self.assertNotIn("I25", [c for c, _ in _codes(_spec(notes, lead=5))])
+        self.assertNotIn("I25", [c for c, _ in _codes(_spec(notes))])
 
     def test_times_come_back_in_editor_time(self):
         notes = [_note(2.0, 2.5, 4, 5), _note(4.0, 4.5, 4, 5)]
@@ -67,10 +67,10 @@ class ThroughTheExporter(unittest.TestCase):
         self.assertIsNone(lead["error"])
         self.assertEqual(rhythm["error"], "No voiced notes to export")
 
-    def test_export_warnings_carry_the_issues(self):
-        _, warnings, _ = builder.build_cdlc(_spec([_note(0.0, 0.5, 6, 3), _note(4.0, 4.5, 6, 5)]), None,
-                                            _wems=(b"a", b"b"), _song_length=20.0)
-        self.assertIn("Lead: I25 at 0:00.000: The first phrase contains notes", warnings)
+    def test_export_warnings_carry_the_issues_in_editor_time(self):
+        notes = [_note(4.0, 5.0, 3, 12, harmonic="natural", bend="full")]
+        _, warnings, _ = builder.build_cdlc(_spec(notes), None, _wems=(b"a", b"b"), _song_length=20.0)
+        self.assertIn("Lead: I35 at 0:04.000: Natural harmonic with bend", warnings)
 
 
 def _chord(start, end, frets_lo_hi, **effects_by_string):
@@ -272,6 +272,10 @@ class HandBuiltArrangements(unittest.TestCase):
         self.assertIn(("I28", 2.0), _found(_song(chords=[chord], templates=[template])))
         template.fingers = [-1, 2, 3, -1, -1, -1]
         self.assertNotIn(("I28", 2.0), _found(_song(chords=[chord], templates=[template])))
+
+    def test_first_phrase_with_notes(self):
+        self.assertIn(("I25", 0.5), _found(_song([_single(0.5, 1, 5)])))
+        self.assertNotIn("I25", [c for c, _ in _found(_song([_single(2.0, 1, 5)]))])
 
     def test_strings_frets_and_phrases(self):
         self.assertIn(("I36", 2.0), _found(_song([_single(2.0, 4, 5)]), is_bass=True))

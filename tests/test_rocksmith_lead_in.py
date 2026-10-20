@@ -58,6 +58,31 @@ class LeadInTest(unittest.TestCase):
         notes = compile_track(moved["tracks"][0], moved["grid"], 20.0).sng.levels[0].notes
         self.assertAlmostEqual(notes[0].time, 5.5)
 
+    def test_the_first_note_comes_at_ten_seconds_or_later(self):
+        """EOF reports a first note before 10 s as an error: the silence grows to reach it."""
+        self.assertEqual(builder._package_lead_in(_spec(5), [0]), 9.5)    # first note at 0.5 s
+        self.assertEqual(builder._package_lead_in(_spec(12), [0]), 12.0)  # more was asked for
+        spec = _spec(0)
+        spec["tracks"][0]["notes"][0].update(start=30.0, end=31.0)
+        spec["sections"][0]["t"] = 30.0
+        self.assertEqual(builder._package_lead_in(spec, [0]), 0.0, "late enough already")
+
+    def test_a_whole_empty_measure_comes_first(self):
+        spec = _spec(0)
+        spec["tracks"][0]["notes"][0].update(start=30.0, end=31.0)
+        # A section on the first beat would start the first phrase there: one measure more.
+        self.assertEqual(builder._package_lead_in(spec, [0]), 2.0)
+        # 20 BPM: a 12 s measure does not fit into 10 s of silence; whole measures are added.
+        slow = _spec(10)
+        slow["grid"] = {"bpm": 20, "offset": 0.0, "tsNum": 4}
+        slow["sections"] = []
+        slow["tracks"][0]["notes"][0].update(start=0.0, end=1.0)
+        lead = builder._package_lead_in(slow, [0])
+        self.assertEqual(lead, 22.0)
+        moved = builder._with_lead_in(slow, lead)
+        first_beat = moved["grid"]["offset"]
+        self.assertGreaterEqual(moved["tracks"][0]["notes"][0]["start"], first_beat + 12.0)
+
     def test_clamped(self):
         self.assertEqual(builder._lead_in_seconds(_spec(999)), builder.MAX_LEAD_IN)
         self.assertEqual(builder._lead_in_seconds(_spec(-3)), 0.0)
