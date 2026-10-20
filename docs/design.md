@@ -882,8 +882,11 @@ newer check cancels one in flight. A row leads with a warning triangle
 (`--warn`; `--error` for what DLC Builder marks important), then the issue's
 name and, when it has one, its time in mono. The code and the explanation are
 the row's tooltip (3, rule 19). A timed row moves there like a marker row. On
-the stage the notes an issue concerns are framed like an unplayable chord. An
-empty list is hidden, header included.
+the stage the notes an issue concerns are framed like an unplayable chord, and
+hovering the frame's triangle shows the same code and explanation. What the
+export changes on its own to avoid an issue (a slide into a chord, a dead note
+in a chord) is listed and framed the same way, never as important. An empty list
+is hidden, header included.
 
 Hand anchors are explicit fretting-hand positions, stored compatibly in the
 existing `handHolds` field. The active visible layer's anchors occupy a compact

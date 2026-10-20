@@ -1,5 +1,5 @@
 import { paintNoteRow } from './timeline-paint.js';
-import { chordWarnings } from "./chord-warnings.js";
+import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
 import { rocksmithIssueNotes } from "./rocksmith-check.js";
 import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
 import { renderArtifacts } from "./artifacts.js";
@@ -36,6 +36,7 @@ import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from
 const overrideEffectCache = new WeakMap();
 const overrideEffectJobs = new WeakMap();
 const omittedArrangementCache = new WeakMap();
+let warningMarks = [];   // last frame's warning marks: { x0, x1, y0, y1, tip }
 
 function overrideEffectKey(lane, tuning) {
   return `${S.voicingRevision}:${tuning.join(",")}:${songBarStarts().join(",")}`;
@@ -573,7 +574,8 @@ function paintFrame() {
   sctx.save();
   sctx.strokeStyle = PAINT.warn; sctx.fillStyle = PAINT.warn; sctx.lineWidth = 1.5;
   sctx.font = stageUi(14); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
-  const frameWarning = notes => {
+  warningMarks = [];
+  const frameWarning = (notes, tip) => {
     const left = xOf(Math.min(...notes.map(n => n.start))) - 3;
     const right = xOf(Math.max(...notes.map(n => n.end))) + 3;
     if (left > vx1 || right < vx0) return;
@@ -581,13 +583,17 @@ function paintFrame() {
     const bottom = Math.max(...notes.map(n => yOf(n.pitch))) + S.state.rowH + 4;
     sctx.setLineDash([4, 3]); sctx.strokeRect(left, top, right - left, bottom - top);
     sctx.setLineDash([]);
-    sctx.fillText("⚠", Math.max(left, vx0 + 4), top - 2);
+    const markX = Math.max(left, vx0 + 4);
+    sctx.fillText("⚠", markX, top - 2);
+    warningMarks.push({ x0: markX - 3, x1: markX + 17, y0: top - 19, y1: top + 1, tip });
   };
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
-    for (const { notes } of chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)) frameWarning(notes);
+    for (const { notes, kind } of chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision))
+      frameWarning(notes, SHAPE_WARNINGS[kind].join("\n"));
     // What the Rocksmith export would report about these notes (rocksmith-check.js).
-    for (const { notes } of rocksmithIssueNotes(lane)) frameWarning(notes);
+    for (const { notes, issue } of rocksmithIssueNotes(lane))
+      frameWarning(notes, `${issue.code} · ${issue.title}\n${issue.help}`);
   }
   sctx.restore();
   drawGhostNotes(ghostNotes);
@@ -894,6 +900,9 @@ export function init_draw() {
     else if (hit) cur = edgeOf(hit.note, x) ? "ew-resize" : "move";
     else cur = "grab";                                       // empty = pan; a click still seeks
     stage.style.cursor = cur;
+    // A warning mark explains itself in the stage's tooltip.
+    const tip = warningMarks.filter(m => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1).map(m => m.tip).join("\n\n");
+    if (stage.title !== tip) stage.title = tip;
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
     S.refLockHover = refLockAt(x, y);
     S.mouseX = x;
@@ -904,6 +913,7 @@ export function init_draw() {
   stage.addEventListener("mouseleave", () => {
     S.pitchHoverClientY = null;
     stage.style.cursor = "default";
+    stage.title = "";
     cancelHoverPreview();
     S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; S.refEdgeHover = null; S.refLockHover = null; draw();
   });

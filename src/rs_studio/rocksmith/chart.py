@@ -81,6 +81,7 @@ class Compiled:
     arr_props: dict
     average_tempo: float
     warnings: list = field(default_factory=list)
+    fixes: list = field(default_factory=list)   # (issue code, time): what the export changed, where
 
 
 def _f(value, default=0.0) -> float:
@@ -415,6 +416,7 @@ class _Voicing:
     slide_ins: int                 # slide-ins seen; they have no RS equivalent
     first_t: float
     last_end: float
+    dead_left_out: list = field(default_factory=list)   # chord times that lost a dead note (I29)
 
 
 @dataclass
@@ -439,7 +441,7 @@ class _Notes:
     per_pi: list                   # note count per phrase iteration
     ignored_per_pi: list           # of which ignored (_ignored)
     dropped_slides: int            # connected slides with no fretted target
-    unlinked_slides: int = 0       # legato slides into a chord, exported unlinked
+    slides_into_chords: list = field(default_factory=list)   # chord times a legato slide reaches unlinked (I03)
 
 
 # Both lookups walk backwards from the end because callers ask in time order and
@@ -555,7 +557,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         }
 
     entities: list[_Entity] = []
-    muted_in_chords = 0
+    dead_left_out = []
     i = 0
     while i < len(voiced):
         j = i
@@ -570,7 +572,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             # BasicFixes.removeMutedNotesFromChords: the game needs every chord
             # note's pitch to detect the chord (I29). A fully muted chord stays.
             notes = [item for item in notes if item not in dead]
-            muted_in_chords += len(dead)
+            dead_left_out.append(t)
         dur = max(_f(n.get("end"), t) - t for _, _, n in notes)
         sustain = dur if sustained(t, dur) else 0.0
         if not sustain and any((n.get("fx") or {}).get("vibrato") or n.get("tremPick") for _, _, n in notes):
@@ -591,8 +593,6 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         entities.append(ent)
         i = j
 
-    if muted_in_chords:
-        warnings.append(f"{muted_in_chords} dead note(s) were left out of chords that are not fully muted")
     return _Voicing(
         entities=entities,
         chord_templates=chord_templates,
@@ -601,6 +601,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
                       if note.get("slide") in ("inBelow", "inAbove")),
         first_t=entities[0].time,
         last_end=max(e.time + e.sustain for e in entities),
+        dead_left_out=dead_left_out,
     )
 
 
@@ -945,7 +946,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
     last_fret_on_string: dict[int, int] = {}
     prev_note: S.Note | None = None
     dropped_connected_slides = 0
-    unlinked_slides = 0
+    slides_into_chords = []
 
     # string -> index of a legato Parent still waiting for its Child. The index
     # is the note's own: one SNG note per entity, so it equals `idx`.
@@ -964,7 +965,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         per-string chord notes (XmlToSngNote.fs applies this same set to both;
         Open/Sustain/PalmMute/Vibrato/etc are handled by _base_note_mask instead).
         """
-        nonlocal dropped_connected_slides, unlinked_slides
+        nonlocal dropped_connected_slides
         mask = 0
         slide_to = -1
         unpitch_to = -1
@@ -993,7 +994,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                     if target[2]:
                         # Rocksmith links a note only to a single note (I03),
                         # so a slide into a chord is picked again on arrival.
-                        unlinked_slides += 1
+                        slides_into_chords.append(target[1])
                     else:
                         mask |= S.PARENT
                         link_parents[string] = idx
@@ -1184,7 +1185,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
 
     return _Notes(notes=notes, chord_notes=chord_notes_list, anchor_extensions=anchor_exts,
                   arr_props=arr_props, per_pi=notes_per_pi, ignored_per_pi=ignored_per_pi,
-                  dropped_slides=dropped_connected_slides, unlinked_slides=unlinked_slides)
+                  dropped_slides=dropped_connected_slides, slides_into_chords=slides_into_chords)
 
 
 def compile_track(track: dict, grid: dict, song_length: float,
@@ -1272,13 +1273,11 @@ def compile_track(track: dict, grid: dict, song_length: float,
 
     duration = arr.beats[-1][0] - arr.beats[0][0]
     average_tempo = (len(arr.beats) - 1) / duration * 60.0 if duration > 0 else 120.0
-    if emitted.unlinked_slides:
-        warnings.append(
-            f"{emitted.unlinked_slides} legato slide(s) end on a chord; Rocksmith cannot "
-            "link a note to a chord, so the chord is picked again")
     if emitted.dropped_slides:
         warnings.append(
             f"{emitted.dropped_slides} connected slide(s) had no fretted "
             "same-string target and were dropped")
     return Compiled(sng=sng_obj, note_count=len(notes), arr_props=emitted.arr_props,
-                    average_tempo=average_tempo, warnings=warnings)
+                    average_tempo=average_tempo, warnings=warnings,
+                    fixes=sorted([("I29", t) for t in voicing.dead_left_out]
+                                 + [("I03", t) for t in emitted.slides_into_chords], key=lambda f: f[1]))
