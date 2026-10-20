@@ -749,7 +749,34 @@ def _plan_anchors(entities: list, shape_info: dict, capo: int = 0) -> list:
     return anchors_raw
 
 
-def _handshapes(entities: list, shape_info: dict, end_t: float) -> tuple[list, list]:
+def _phrase_start_anchors(anchors: list, pi_times: list) -> list:
+    """Every phrase starts with an anchor: EOFFixes.fixPhraseStartAnchors.
+
+    DLC Builder applies this to every package it builds, even with its other
+    improvements turned off: riff repeater and DD levels start playing at a
+    phrase and need the hand position there. The anchor in force is copied to
+    the phrase start; before the first anchor, the next one moves up to it (or
+    is copied, when it already starts another phrase). The first and the END
+    phrase are skipped, as there.
+    """
+    anchors = list(anchors)
+    same = lambda a, b: abs(a - b) < 1e-5  # noqa: E731
+    for t in pi_times[1:-1]:
+        active = next((k for k in range(len(anchors) - 1, -1, -1) if anchors[k][0] <= t + 1e-5), None)
+        if active is not None:
+            if not same(anchors[active][0], t):
+                anchors.insert(active + 1, (t, *anchors[active][1:]))
+            continue
+        if anchors:
+            first = anchors[0]
+            if any(same(first[0], p) for p in pi_times):
+                anchors.insert(0, (t, *first[1:]))
+            else:
+                anchors[0] = (t, *first[1:])
+    return anchors
+
+
+def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) -> tuple[list, list]:
     """Fingerprints (runs of the same chord) and arpeggios (editor Shapes).
 
     A run may only skip ChordNotes (HighDensity "just repeat the last one") when
@@ -757,7 +784,15 @@ def _handshapes(entities: list, shape_info: dict, end_t: float) -> tuple[list, l
     isn't enough: XmlToSngNote.fs's FixHighDensity explicitly keeps ChordNotes on
     the chord where a whole-chord mute/palm-mute starts or ends, even mid-run,
     so the mute transition doesn't get silently dropped as "identical repeat".
+
+    A run also stops at a phrase start, and its shape ends there: every phrase
+    begins with an anchor (_phrase_start_anchors), and an anchor inside a held
+    shape breaks it (DLC Builder's I21/I22). The first chord of the new phrase
+    opens a fresh shape, the "crazy" chord EOF charters are told to set.
     """
+    def phrase_of(t: float) -> int:
+        return _find_pi(pi_times, t, inclusive=True)
+
     def _mute_state(e: _Entity) -> tuple:
         return (all((n.get("fx") or {}).get("dead") for _, _, n in e.notes),
                 all((n.get("fx") or {}).get("palmMute") for _, _, n in e.notes))
@@ -772,14 +807,15 @@ def _handshapes(entities: list, shape_info: dict, end_t: float) -> tuple[list, l
         run = [e]
         j = k + 1
         while (j < len(entities) and entities[j].chord_id == e.chord_id and not entities[j].shape_id
-               and _mute_state(entities[j]) == _mute_state(e)):
+               and _mute_state(entities[j]) == _mute_state(e)
+               and phrase_of(entities[j].time) == phrase_of(e.time)):
             run.append(entities[j])
             j += 1
         last = run[-1]
         end = last.time + max(last.sustain, 0.05) + 0.001
         if j < len(entities):
             end = min(end, entities[j].time - 0.001)
-        end = min(end, end_t)
+        end = min(end, end_t, next((t for t in pi_times if t > last.time + 1e-5), end_t))
         end = max(end, last.time + 0.02)
         fp_id = len(fingerprints)
         last_note_t = last.time + last.sustain
@@ -1075,8 +1111,8 @@ def compile_track(track: dict, grid: dict, song_length: float,
     arr = _beats_phrases_sections(grid, song_length, section_markers, phrase_boundaries,
                                   voicing.first_t, voicing.last_end, warnings)
 
-    anchors_raw = _plan_anchors(entities, voicing.shape_info, capo)
-    fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t)
+    anchors_raw = _phrase_start_anchors(_plan_anchors(entities, voicing.shape_info, capo), arr.pi_times)
+    fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)
     emitted = _emit_notes(entities, voicing.chord_templates, arr)
     notes = emitted.notes
 
