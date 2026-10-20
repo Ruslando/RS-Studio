@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from . import bnk, chart, dds, manifest, psarc, sng, wem
+from . import bnk, chart, checker, dds, manifest, psarc, sng, wem
 from .tones import custom_tone
 from .wem import AudioConverterNotFoundError, WwiseNotFoundError  # public error types
 
@@ -378,6 +378,77 @@ def _arrangement_tones(track: dict, is_bass: bool, key: str, tag: str,
     return base, slots, events
 
 
+def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: float,
+                         key: str, warnings: list[str]) -> tuple[chart.Compiled, bool, dict, list[dict]]:
+    """One requested arrangement as the SNG it ships as: (compiled, is_bass, base tone, tone slots)."""
+    track = dict(base_track)
+    if req.get("tuning"):
+        track["tuning"] = req["tuning"]
+    if req.get("capo") is not None:
+        track["capo"] = int(req["capo"])
+    offsets, is_bass = _tuning_offsets(track.get("tuning") or [], warnings)
+    arr = ARRANGEMENTS[req["kind"]]
+    if arr["is_bass"] != is_bass:
+        need = "4-string bass" if arr["is_bass"] else "6-string guitar"
+        raise ValueError(f"{arr['full_name']} needs a {need} tuning")
+
+    compiled = chart.compile_track(
+        track, track.get("grid") or spec.get("grid") or {}, song_length,
+        section_markers=(track["sections"] if "sections" in track else spec.get("sections")) or [],
+        phrase_boundaries=(
+            track.get("phraseBoundaries")
+            or track.get("practiceBoundaries")
+            or []))
+    warnings.extend(compiled.warnings)
+    compiled.sng.metadata.tuning = tuple(offsets)
+    compiled.sng.metadata.part = 3 if is_bass else (2 if arr["path"] == "rhythm" else 1)
+    base_tone, tone_slots, tone_events = _arrangement_tones(
+        track, is_bass, key, arr["tag"], song_length, warnings)
+    compiled.sng.tones = tone_events
+    return compiled, is_bass, base_tone, tone_slots
+
+
+def check_spec(spec: dict) -> list[dict]:
+    """What the export would warn about, per requested arrangement, without building it.
+
+    For the editor's live check: the same compile and the same checker as
+    build_cdlc, with every time moved back to the editor's own (before the lead-in).
+    One arrangement failing to compile is reported against that arrangement and
+    does not stop the others. `spec["duration"]` stands in for the audio length.
+    """
+    lead = _lead_in_seconds(spec)
+    try:
+        length = max(0.0, float(spec.get("duration") or 0.0))
+    except (TypeError, ValueError):
+        length = 0.0
+    spec = _with_lead_in(spec, lead)
+    tracks = spec.get("tracks") or []
+    artist, title, _, _ = _song_meta(spec)
+    key = _dlc_key(artist, title)
+    out = []
+    for item in (spec.get("rocksmith") or {}).get("arrangements") or []:
+        index = item.get("track")
+        arr = ARRANGEMENTS.get(item.get("kind") or "lead")
+        if not isinstance(index, int) or not 0 <= index < len(tracks) or arr is None:
+            continue
+        found = {"track": index, "arrangement": arr["full_name"], "issues": [], "warnings": [], "error": None}
+        out.append(found)
+        warnings: list[str] = []
+        try:
+            compiled, is_bass, _, _ = _compile_arrangement(
+                spec, tracks[index], {**item, "kind": item.get("kind") or "lead"},
+                length + lead, key, warnings)
+        except ValueError as exc:
+            found["error"] = str(exc)
+            continue
+        found["warnings"] = list(dict.fromkeys(warnings))
+        found["issues"] = [
+            {"code": issue.code, "time": None if issue.time is None else round(issue.time - lead, 3),
+             "title": issue.title, "help": issue.help, "important": issue.important}
+            for issue in checker.check(compiled.sng, is_bass=is_bass)]
+    return out
+
+
 def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None = None,
                _wems: tuple[bytes, bytes] | None = None,
                _song_length: float | None = None,
@@ -423,31 +494,11 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         contexts: list[SongContext] = []
         arrangement_entries: list[tuple[str, bytes]] = []
         for sort_idx, req in enumerate(arr_requests):
-            base_track = tracks[req["track"]]
-            track = dict(base_track)
-            if req.get("tuning"):
-                track["tuning"] = req["tuning"]
-            if req.get("capo") is not None:
-                track["capo"] = int(req["capo"])
-            offsets, is_bass = _tuning_offsets(track.get("tuning") or [], warnings)
             arr = ARRANGEMENTS[req["kind"]]
-            if arr["is_bass"] != is_bass:
-                need = "4-string bass" if arr["is_bass"] else "6-string guitar"
-                raise ValueError(f"{arr['full_name']} needs a {need} tuning")
-
-            compiled = chart.compile_track(
-                track, track.get("grid") or spec.get("grid") or {}, song_length,
-                section_markers=(track["sections"] if "sections" in track else spec.get("sections")) or [],
-                phrase_boundaries=(
-                    track.get("phraseBoundaries")
-                    or track.get("practiceBoundaries")
-                    or []))
-            warnings.extend(compiled.warnings)
-            compiled.sng.metadata.tuning = tuple(offsets)
-            compiled.sng.metadata.part = 3 if is_bass else (2 if arr["path"] == "rhythm" else 1)
-            base_tone, tone_slots, tone_events = _arrangement_tones(
-                track, is_bass, key, arr["tag"], song_length, warnings)
-            compiled.sng.tones = tone_events
+            compiled, is_bass, base_tone, tone_slots = _compile_arrangement(
+                spec, tracks[req["track"]], req, song_length, key, warnings)
+            warnings.extend(f"{arr['full_name']}: {issue.text()}"
+                            for issue in checker.check(compiled.sng, is_bass=is_bass))
             sng_packed = sng.pack(sng.serialize(compiled.sng))
             representative = arr["priority"] == "main"
 

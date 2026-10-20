@@ -1,0 +1,158 @@
+"""The port of DLC Builder's arrangement checker (rocksmith/checker.py).
+
+Parity with DLC Builder itself was established by building packages and running
+Rocksmith2014.NET's own checker on them; these tests pin the cases down. The
+first group goes through the exporter, the second builds SNG data by hand for
+the issues the exporter cannot produce on its own.
+"""
+import unittest
+
+from rs_studio.rocksmith import builder, checker
+from rs_studio.rocksmith import sng as S
+
+GUITAR = [64, 59, 55, 50, 45, 40]
+
+
+def _note(start, end, string, fret, **effects):
+    """string: 1 = highest, as the export spec has it."""
+    return {"start": start, "end": end, "pitch": GUITAR[string - 1] + fret,
+            "string": string, "fret": fret, **effects}
+
+
+def _spec(notes, lead=0, **track):
+    return {"metadata": {"title": "Song", "artist": "Band"},
+            "grid": {"bpm": 120, "offset": 0.0, "tsNum": 4, "tsDen": 4},
+            "duration": 20.0,
+            "tracks": [{"name": "Gtr", "tuning": GUITAR, "notes": notes, **track}],
+            "rocksmith": {"arrangements": [{"track": 0, "kind": "lead"}], "leadingSilence": lead}}
+
+
+def _codes(spec):
+    [found] = builder.check_spec(spec)
+    return [(i["code"], i["time"]) for i in found["issues"]]
+
+
+class ThroughTheExporter(unittest.TestCase):
+    def test_first_phrase_must_be_empty_unless_there_is_a_lead_in(self):
+        notes = [_note(0.0, 0.5, 6, 3), _note(4.0, 4.5, 6, 5)]
+        self.assertIn(("I25", 0.0), _codes(_spec(notes)))
+        self.assertNotIn("I25", [c for c, _ in _codes(_spec(notes, lead=5))])
+
+    def test_times_come_back_in_editor_time(self):
+        notes = [_note(2.0, 2.5, 4, 5), _note(4.0, 4.5, 4, 5)]
+        spec = _spec(notes, lead=5, toneMarkers=[{"t": 4.0, "tone": "lead"}])
+        self.assertIn(("I15", 4.0), _codes(spec))
+
+    def test_content_issues(self):
+        notes = [
+            _note(2.0, 2.5, 3, 5), _note(2.5, 3.0, 3, 5, fx={"hammer": True}),   # I31
+            _note(4.0, 5.0, 3, 12, harmonic="natural", bend="full"),             # I35
+            _note(6.5, 7.0, 4, 5),                                               # I16
+            _note(8.0, 9.0, 4, 7),
+        ]
+        spec = _spec(notes, lead=5, sections=[
+            {"t": 2.0, "sectionType": "riff"}, {"t": 6.0, "sectionType": "noguitar"},
+            {"t": 8.0, "sectionType": "riff"}])
+        codes = _codes(spec)
+        for expected in [("I31", 2.5), ("I35", 4.0), ("I16", 6.5)]:
+            self.assertIn(expected, codes)
+
+    def test_one_failing_arrangement_does_not_hide_the_others(self):
+        spec = _spec([_note(2.0, 2.5, 6, 3)])
+        spec["tracks"].append({"name": "Empty", "tuning": GUITAR, "notes": []})
+        spec["rocksmith"]["arrangements"].append({"track": 1, "kind": "rhythm"})
+        lead, rhythm = builder.check_spec(spec)
+        self.assertIsNone(lead["error"])
+        self.assertEqual(rhythm["error"], "No voiced notes to export")
+
+    def test_export_warnings_carry_the_issues(self):
+        _, warnings, _ = builder.build_cdlc(_spec([_note(0.0, 0.5, 6, 3), _note(4.0, 4.5, 6, 5)]), None,
+                                            _wems=(b"a", b"b"), _song_length=20.0)
+        self.assertIn("Lead: I25 at 0:00.000: The first phrase contains notes", warnings)
+
+
+def _song(notes=(), chords=(), anchors=(), handshapes=(), phrases=("COUNT", "p1", "END"),
+          iterations=(0.0, 1.0, 10.0), templates=(), tuning=(0,) * 6):
+    return S.SNG(
+        phrases=[S.Phrase(name=n) for n in phrases],
+        phrase_iterations=[S.PhraseIteration(phrase_id=min(i, len(phrases) - 1), start_time=t, end_time=0.0)
+                           for i, t in enumerate(iterations)],
+        sections=[S.Section(name="riff", number=1, start_time=1.0, end_time=10.0, start_pi=1, end_pi=1,
+                            string_mask=[0] * 36)],
+        chords=list(templates),
+        levels=[S.Level(notes=sorted([*notes, *chords], key=lambda n: n.time),
+                        anchors=[S.Anchor(start_time=t, end_time=0, first_note_time=0, last_note_time=0,
+                                          fret=f, width=4, phrase_iteration_id=0) for t, f in anchors],
+                        handshapes=[S.FingerPrint(chord_id=c, start_time=a, end_time=b, first_note_time=a,
+                                                  last_note_time=-1) for c, a, b in handshapes])],
+        metadata=S.MetaData(song_length=12.0, tuning=tuning),
+    )
+
+
+def _single(time, string, fret, mask=0, sustain=0.0, **fields):
+    return S.Note(mask=S.SINGLE | mask, time=time, string=string, fret=fret, sustain=sustain, **fields)
+
+
+def _found(song, is_bass=False):
+    return [(i.code, i.time) for i in checker.check(song, is_bass=is_bass)]
+
+
+class HandBuiltArrangements(unittest.TestCase):
+    def test_link_next_targets(self):
+        missing = _single(2.0, 1, 5, S.PARENT, 0.5)
+        self.assertIn(("I04", 2.0), _found(_song([missing])))
+        gap = [_single(2.0, 1, 5, S.PARENT, 0.5), _single(3.0, 1, 5)]
+        self.assertIn(("I08", 2.0), _found(_song(gap)))
+        fret = [_single(2.0, 1, 5, S.PARENT, 1.0), _single(3.0, 1, 7)]
+        self.assertIn(("I06", 3.0), _found(_song(fret)))
+        slide = [_single(2.0, 1, 5, S.PARENT, 1.0, slide_to=9), _single(3.0, 1, 7)]
+        self.assertIn(("I05", 2.0), _found(_song(slide)))
+        fine = [_single(2.0, 1, 5, S.PARENT, 1.0, slide_to=7), _single(3.0, 1, 7)]
+        self.assertEqual([c for c, _ in _found(_song(fine))], [])
+
+    def test_linked_chord_without_linked_notes(self):
+        template = S.ChordTemplate(frets=[3, 5, -1, -1, -1, -1], fingers=[1, 3, -1, -1, -1, -1], notes=[0] * 6)
+        chord = S.Note(mask=S.CHORD | S.PARENT | S.CHORDPANEL, time=2.0, chord_id=0)
+        self.assertIn(("I18", 2.0), _found(_song(chords=[chord], templates=[template])))
+
+    def test_anchor_inside_handshape(self):
+        template = S.ChordTemplate(frets=[3, 5, -1, -1, -1, -1], fingers=[1, 3, -1, -1, -1, -1], notes=[0] * 6)
+        song = _song(anchors=[(1.0, 3), (3.0, 5)], handshapes=[(0, 2.0, 4.0)], templates=[template])
+        self.assertIn(("I21", 3.0), _found(song))
+        song = _song(anchors=[(1.0, 3), (3.0, 5)], handshapes=[(0, 2.0, 4.0)], templates=[template],
+                     phrases=("COUNT", "p1", "p2", "END"), iterations=(0.0, 1.0, 3.0, 10.0))
+        self.assertIn(("I22", 3.0), _found(song))
+
+    def test_fingering_against_anchor(self):
+        template = S.ChordTemplate(frets=[-1, 5, 7, 7, -1, -1], fingers=[-1, 2, 3, 4, -1, -1], notes=[0] * 6)
+        song = _song(anchors=[(1.0, 5)], handshapes=[(0, 2.0, 3.0)], templates=[template])
+        self.assertIn(("I20", 2.0), _found(song))
+
+    def test_open_strings_are_not_fingered(self):
+        """Finger 0 is the thumb: an open string marked 0 reads as a thumb barre."""
+        template = S.ChordTemplate(frets=[0, 2, 2, 0, 0, 0], fingers=[0, 2, 3, 0, 0, 0], notes=[0] * 6)
+        chord = S.Note(mask=S.CHORD | S.CHORDPANEL, time=2.0, chord_id=0)
+        self.assertIn(("I28", 2.0), _found(_song(chords=[chord], templates=[template])))
+        template.fingers = [-1, 2, 3, -1, -1, -1]
+        self.assertNotIn(("I28", 2.0), _found(_song(chords=[chord], templates=[template])))
+
+    def test_strings_frets_and_phrases(self):
+        self.assertIn(("I36", 2.0), _found(_song([_single(2.0, 4, 5)]), is_bass=True))
+        self.assertIn(("I38", 2.0), _found(_song([_single(2.0, 1, 25)])))
+        self.assertIn(("I26", None), _found(_song([_single(2.0, 1, 5)], phrases=("COUNT", "p1"))))
+        many = tuple(float(i) for i in range(102))
+        self.assertIn(("I30", None), _found(_song([_single(2.5, 1, 5)], iterations=many)))
+
+    def test_low_bass_tuning(self):
+        self.assertEqual([i.code for i in checker.check_bass_tuning([-5, -5, -5, -5], 0.0)], ["I41"])
+        self.assertEqual(checker.check_bass_tuning([7, 7, 7, 7], -1200.0), [])
+        self.assertEqual([i.code for i in checker.check_bass_tuning([-1, 0, 0, 0], -1200.0)], ["I42"])
+
+    def test_times_round_like_dlc_builder(self):
+        """Through float32, as the SNG stores them: 1.0005 s is 1000 ms, not 1001."""
+        self.assertEqual(checker._ms(1.0005), 1000)
+        self.assertEqual(checker._ms(2.25), 2250)
+
+
+if __name__ == "__main__":
+    unittest.main()
