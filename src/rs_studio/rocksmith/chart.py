@@ -427,6 +427,7 @@ class _Notes:
     anchor_extensions: list        # S.AnchorExtension
     arr_props: dict
     per_pi: list                   # note count per phrase iteration
+    ignored_per_pi: list           # of which ignored (_ignored)
     dropped_slides: int            # connected slides with no fretted target
 
 
@@ -846,6 +847,19 @@ def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) 
     return fingerprints, arpeggios
 
 
+def _ignored(e: _Entity, note: S.Note) -> bool:
+    """BasicFixes.addIgnores: notes the game cannot score, left out of the score.
+
+    Frets 23 and 24 are not detected reliably, nor is a 7th fret natural
+    harmonic held on (DLC Builder's I13). A chord is ignored when any of its
+    notes is; its chord notes carry no flag of their own.
+    """
+    def unscorable(fret: int, n: dict) -> bool:
+        harmonic = n.get("harmonic") and n.get("harmonic") != "pinch"
+        return fret >= 23 or (fret == 7 and harmonic and note.sustain > 0)
+    return any(unscorable(fret, n) for _, fret, n in e.notes)
+
+
 def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _Notes:
     """Entities -> SNG notes: masks, techniques, chord notes, arrangement flags.
 
@@ -857,6 +871,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
     anchor_exts: list[S.AnchorExtension] = []
     notes: list[S.Note] = []
     notes_per_pi = [0] * len(arr.pi_times)
+    ignored_per_pi = [0] * len(arr.pi_times)
     arr_props = dict.fromkeys((
         "powerChords", "openChords", "doubleStops", "palmMutes", "harmonics",
         "pinchHarmonics", "hopo", "tremolo", "slides", "unpitchedSlides",
@@ -1051,6 +1066,9 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 sec.string_mask[0] |= 1 << s
                 last_fret_on_string[s] = fret
 
+        if _ignored(e, note):
+            note.mask |= S.IGNORE
+            ignored_per_pi[pi_id] += 1
         m = note.mask
         arr_props["palmMutes"] |= bool(m & S.PALMMUTE)
         arr_props["fretHandMutes"] |= bool(m & (S.MUTE | S.FRETHANDMUTE))
@@ -1085,7 +1103,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             note.next_iter_note = k + 1
 
     return _Notes(notes=notes, chord_notes=chord_notes_list, anchor_extensions=anchor_exts,
-                  arr_props=arr_props, per_pi=notes_per_pi,
+                  arr_props=arr_props, per_pi=notes_per_pi, ignored_per_pi=ignored_per_pi,
                   dropped_slides=dropped_connected_slides)
 
 
@@ -1144,13 +1162,13 @@ def compile_track(track: dict, grid: dict, song_length: float,
         arpeggios=arpeggios,
         notes=notes,
         average_notes_per_iteration=[float(emitted.per_pi[k]) for k in range(len(arr.phrases))],
-        notes_in_pi_excl_ignored=list(emitted.per_pi),
+        notes_in_pi_excl_ignored=[a - b for a, b in zip(emitted.per_pi, emitted.ignored_per_pi)],
         notes_in_pi_all=list(emitted.per_pi),
     )
 
     metadata = S.MetaData(
         max_notes_and_chords=float(len(notes)),
-        max_notes_and_chords_real=float(len(notes)),
+        max_notes_and_chords_real=float(len(notes) - sum(emitted.ignored_per_pi)),
         points_per_note=100_000.0 / max(1, len(notes)),
         first_beat_length=arr.beats[1][0] - arr.beats[0][0],
         start_time=arr.beats[0][0],
