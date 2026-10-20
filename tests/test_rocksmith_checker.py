@@ -99,6 +99,23 @@ class ExporterFixes(unittest.TestCase):
         self.assertTrue(all(fingers[s] > 0 for s in (1, 2)), "fretted strings")
         self.assertNotIn("I28", [c for c, _ in _codes(_spec(_chord(2.0, 3.0, "022000"), lead=5))])
 
+    def test_every_phrase_starts_with_an_anchor(self):
+        # One hand position across two phrases (120 BPM: a phrase every 8 measures = 16 s).
+        notes = [_note(2.0 + i, 2.5 + i, 3, 5) for i in range(20)]
+        song = _compiled(notes, phraseBoundaries=[{"t": 10.0}])
+        starts = [round(pi.start_time, 3) for pi in song.phrase_iterations]
+        anchors = [round(a.start_time, 3) for a in song.levels[0].anchors]
+        for start in starts[1:-1]:
+            self.assertIn(start, anchors)
+
+    def test_repeated_chords_restart_their_shape_at_a_phrase(self):
+        chords = [n for i in range(12) for n in _chord(2.0 + i, 2.9 + i, "x355xx")]
+        spec = _spec(chords, lead=5, phraseBoundaries=[{"t": 8.0}])
+        codes = [c for c, _ in _codes(spec)]
+        self.assertFalse({"I21", "I22"} & set(codes), codes)
+        song = _compiled(chords, phraseBoundaries=[{"t": 8.0}])
+        self.assertEqual(len(song.levels[0].handshapes), 2)
+
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""
         a_std = [p - 7 for p in GUITAR]
