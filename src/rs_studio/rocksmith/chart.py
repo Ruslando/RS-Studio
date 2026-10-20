@@ -214,6 +214,16 @@ def _bend_curve(n: dict, time: float, sustain: float) -> tuple[list, float]:
     values = [S.BendValue(time + t * sustain, v / 2.0) for t, v in pts]
     if values and values[0].step == 0.0:
         values = values[1:]
+    # BasicFixes.removeOverlappingBendValues: one value per moment, the first
+    # one (I34). Same moment = same millisecond, the resolution it is read at.
+    seen: set[int] = set()
+    unique = []
+    for b in values:
+        ms = round(b.time * 1000)
+        if ms not in seen:
+            seen.add(ms)
+            unique.append(b)
+    values = unique
     return values[:32], max((v for _, v in pts), default=0.0) / 2.0
 
 

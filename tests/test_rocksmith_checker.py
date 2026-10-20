@@ -159,6 +159,12 @@ class ExporterFixes(unittest.TestCase):
         self.assertEqual(song.chords[first.chord_id].frets, [3, 5, 5, -1, -1, -1])
         self.assertTrue(second.mask & S.FRETHANDMUTE, "a fully muted chord stays")
 
+    def test_bend_points_at_the_same_moment_collapse(self):
+        notes = [_note(2.0, 3.0, 3, 7, bend="custom", bendPoints=[[0, 0], [0.5, 2], [0.5, 2], [0.5004, 1], [1, 2]])]
+        self.assertNotIn("I34", [c for c, _ in _codes(_spec(notes, lead=5))])
+        values = _compiled(notes).levels[0].notes[0].bend_values
+        self.assertEqual([(round(b.time, 3), b.step) for b in values], [(7.5, 1.0), (8.0, 1.0)])
+
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""
         a_std = [p - 7 for p in GUITAR]
