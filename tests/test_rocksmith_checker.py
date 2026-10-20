@@ -147,6 +147,18 @@ class ExporterFixes(unittest.TestCase):
         self.assertFalse(source.mask & S.PARENT)
         self.assertEqual(source.slide_to, 2)     # the G string of x02270
 
+    def test_dead_notes_leave_chords_that_are_not_muted(self):
+        partly = _chord(2.0, 3.0, "355xxx") + [_note(2.0, 3.0, 3, 5, fx={"dead": True})]
+        fully = _chord(4.0, 5.0, "355xxx", s6={"fx": {"dead": True}}, s5={"fx": {"dead": True}},
+                       s4={"fx": {"dead": True}})
+        [found] = builder.check_spec(_spec(partly + fully, lead=5))
+        self.assertNotIn("I29", [i["code"] for i in found["issues"]])
+        self.assertIn("1 dead note(s) were left out of chords that are not fully muted", found["warnings"])
+        song = _compiled(partly + fully)
+        first, second = song.levels[0].notes
+        self.assertEqual(song.chords[first.chord_id].frets, [3, 5, 5, -1, -1, -1])
+        self.assertTrue(second.mask & S.FRETHANDMUTE, "a fully muted chord stays")
+
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""
         a_std = [p - 7 for p in GUITAR]
