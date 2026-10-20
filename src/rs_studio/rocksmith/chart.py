@@ -1009,6 +1009,13 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             # stays clamped at MAX_FRET.
             unpitch_to = max(1, fret - 5) if slide == "outDown" else min(MAX_FRET, fret + 5)
             arr_props["unpitchedSlides"] = True
+            # An anchor where the slide ends may not show in the game (I23), and
+            # anchors sit on note onsets and phrase starts. End a little before.
+            later = itertools.takewhile(lambda t: t < time + sustain + 0.004,
+                                        (e2.time for e2 in entities[idx + 1:]))
+            for boundary in [*later, *(t for t in arr.pi_times if t > time)]:
+                if abs(time + sustain - boundary) < 0.004 and boundary - time > 0.02:
+                    sustain = boundary - time - 0.01
         if n.get("bend"):
             sustain = max(sustain, 0.2)
             mask |= S.BEND | S.SUSTAIN

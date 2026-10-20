@@ -178,6 +178,11 @@ class ExporterFixes(unittest.TestCase):
         self.assertEqual([(round(a.start_time, 3), a.fret) for a in anchors], [(7.0, 5), (8.0, 10)],
                          "the third finger slides from fret 7 to 12")
 
+    def test_slide_out_ends_before_the_next_position(self):
+        notes = [_note(2.0, 2.5, 1, 3, slide="outUp"), _note(2.5, 3.0, 1, 12)]
+        self.assertNotIn("I23", [c for c, _ in _codes(_spec(notes, lead=5))])
+        self.assertAlmostEqual(_compiled(notes).levels[0].notes[0].sustain, 0.49)
+
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""
         a_std = [p - 7 for p in GUITAR]
