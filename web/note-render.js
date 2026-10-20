@@ -160,6 +160,20 @@ export function bendHandles(n) {
   return pts.map(([t, v], i) => ({ i, note: n, x: x + w * t, y: ym - v * rowH }));
 }
 
+// Bend points on the same millisecond, the resolution Rocksmith reads them at:
+// one { x, y, count } per such moment, at its first point. The export keeps only
+// that first one.
+export function stackedBendPoints(n) {
+  const pts = bendCurve(n);
+  if (!pts || pts.length < 2) return [];
+  const handles = bendHandles(n), ms = (t) => Math.round(t * (n.end - n.start) * 1000), out = [];
+  for (let i = 0, j; i < pts.length; i = j) {
+    for (j = i + 1; j < pts.length && ms(pts[j][0]) === ms(pts[i][0]); j++);
+    if (j - i > 1) out.push({ x: handles[i].x, y: handles[i].y, count: j - i });
+  }
+  return out;
+}
+
 // Find overlapping same-pitch note clusters within one edit lane. Fills the
 // shared `counts` map (note -> cluster size) for recoloring, and pushes one
 // badge per cluster (anchored at its earliest note) for the numbered marker.

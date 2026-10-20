@@ -10,7 +10,7 @@ import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGho
 
 import { bendCurve, bendPeak, slideRibbon } from "./bend.js";
 import { BEND_HANDLE_R, MM_HEAD, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
-import { bendHandles, collectStacks, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, regionEdgeAt } from "./note-render.js";
+import { bendHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, regionEdgeAt } from "./note-render.js";
 import { editorEl, minimap, mmctx, overviewRuler, overviewRulerCtx, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
@@ -37,7 +37,9 @@ import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from
 const overrideEffectCache = new WeakMap();
 const overrideEffectJobs = new WeakMap();
 const omittedArrangementCache = new WeakMap();
-let warningMarks = [];   // last frame's warning marks: { x0, x1, y0, y1, tip }
+let warningMarks = [];
+const STACKED_BEND_TIP = { title: "Bend points at the same moment", tone: "warning",
+  body: "Rocksmith keeps only the first of them. Move one point a little apart." };   // last frame's warning marks: { x0, x1, y0, y1, tip }
 
 function overrideEffectKey(lane, tuning) {
   return `${S.voicingRevision}:${tuning.join(",")}:${songBarStarts().join(",")}`;
@@ -603,6 +605,23 @@ function paintFrame() {
   }
   // Errors last, so a frame that is both shows red.
   for (const [notes, tip] of frames.sort((a, b) => (a[1].tone === "error") - (b[1].tone === "error"))) frameWarning(notes, tip);
+  // Bend points stacked on one moment: a count like an overlap stack's, in --warn
+  // because the export resolves it, up and right of the point so its handle stays free.
+  sctx.font = stageMono(STAGE_ANCHORED, 600); sctx.textAlign = "center"; sctx.textBaseline = "middle";
+  for (const lane of S.state.lanes) {
+    if (!lane.visible) continue;
+    for (const note of lane.notes) {
+      if (!note.bend || xOf(note.end) < vx0 || xOf(note.start) > vx1) continue;
+      for (const { x, y, count } of stackedBendPoints(note)) {
+        const cx = x + 10, cy = y - 10;
+        sctx.beginPath(); sctx.arc(cx, cy, 7.5, 0, Math.PI * 2);
+        sctx.fillStyle = veil(PAINT.ground); sctx.fill();
+        sctx.lineWidth = 2; sctx.strokeStyle = PAINT.warn; sctx.stroke();
+        sctx.fillStyle = PAINT.text; sctx.fillText(String(count), cx, cy + 0.5);
+        warningMarks.push({ x0: cx - 9, x1: cx + 9, y0: cy - 9, y1: cy + 9, tip: STACKED_BEND_TIP });
+      }
+    }
+  }
   sctx.restore();
   drawGhostNotes(ghostNotes);
   drawReferences();

@@ -912,6 +912,11 @@ export function clearOverrideAt(lane, colNotes, t) {
 // Adding an effect is an entry here plus its setter; openNoteMenu below does not
 // need to know it exists.
 const RS_NOTE = { absent: "Not in Rocksmith", simulated: "Simulated in Rocksmith" };
+// [short note in the row, tooltip] for an effect greyed out by another one.
+const NO_BEND_ON_NATURAL = ["Not on a natural harmonic",
+  "A natural harmonic is only touched, so its string cannot be bent.\nUse a pinch harmonic to bend it."];
+const NO_NATURAL_WITH_BEND = ["Not with a bend",
+  "A natural harmonic is only touched, so its string cannot be bent.\nRemove the bend, or use a pinch harmonic."];
 const EFFECT_MENU = [
   { label: "Bends & slides", kw: "pitch expression", items: [
     { toggle: "vibrato", kw: "wobble" },
@@ -1157,9 +1162,22 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // opts = [[value, label], …]; value null is the clear item.
   const pick = (field, label, kw, set, opts, rs) => {
     const cur = common(field);
-    return { label: (cur ? "✓ " : "") + label, kw, note: RS_NOTE[rs],
-      children: opts.map(([v, l, vrs]) => ({ label: (cur === v ? "✓ " : "") + l, note: RS_NOTE[vrs], fn: () => set(v) })) };
+    const parentBlock = blocked(field, "any");
+    return { label: (cur ? "✓ " : "") + label, kw, note: parentBlock?.[0] || RS_NOTE[rs], tip: parentBlock?.[1],
+      children: opts.map(([v, l, vrs]) => {
+        const block = v == null ? null : blocked(field, v);
+        return { label: (cur === v ? "✓ " : "") + l, note: block?.[0] || RS_NOTE[vrs], tip: block?.[1],
+          disabled: !!block, fn: () => set(v) };
+      }) };
   };
+  // A natural harmonic is only touched, never pressed, so its string cannot be
+  // bent; the two exclude each other. A pinch harmonic can be bent.
+  const natural = sel.some((n) => n.harmonic === "natural"), bent = sel.some((n) => n.bend);
+  function blocked(field, value) {
+    if (field === "bend" && natural) return NO_BEND_ON_NATURAL;
+    if (field === "harmonic" && value === "natural" && bent) return NO_NATURAL_WITH_BEND;
+    return null;
+  }
   const families = EFFECT_MENU
     .filter((family) => !family.only || family.only === (isChord ? "chord" : "single"))
     .map((family) => ({
@@ -1338,12 +1356,14 @@ function buildMenu(parent, entries) {
       const wrap = document.createElement("div"); wrap.className = "ctxmenu-sub";
       if (e.family) wrap.classList.add("ctxmenu-family");
       const row = document.createElement("button"); row.type = "button"; row.className = "ctxmenu-item ctxmenu-parent"; labelItem(row, e.label, e.note);
+      if (e.tip) row.dataset.tip = e.tip;
       const child = document.createElement("div"); child.className = "ctxmenu ctxmenu-child";
       buildMenu(child, e.children);
       wrap.append(row, child); parent.append(wrap);
       wireContextSubmenu(wrap, row, child);
     } else {
       const b = document.createElement("button"); b.className = "ctxmenu-item"; b.disabled = !!e.disabled; labelItem(b, e.label, e.note);
+      if (e.tip) b.dataset.tip = e.tip;
       b.onclick = () => { e.fn(); if (!e.keepOpen) hideNoteMenu(); };
       parent.append(b);
     }
