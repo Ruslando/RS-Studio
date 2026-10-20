@@ -416,6 +416,11 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
                     border-radius: var(--r-control); box-shadow: var(--e1);
                     padding: var(--s-sibling) var(--s-row);
                     font: 400 var(--text-control)/1.4 var(--font-ui); color: var(--text); }
+.app-tooltip      { position: fixed; z-index: var(--z-tooltip); pointer-events: none;
+                    white-space: pre-line; color: var(--label); }
+.app-tooltip-title { color: var(--text); font-weight: 600; }
+.app-tooltip-block + .app-tooltip-block { margin-top: var(--s-sibling); padding-top: var(--s-sibling);
+                    border-top: 1px solid var(--line); }
 
 .popover { max-width: var(--w-popover); background: var(--panel);
            border: 1px solid var(--line); border-radius: var(--r-container);
