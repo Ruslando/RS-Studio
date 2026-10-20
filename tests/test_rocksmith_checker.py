@@ -123,6 +123,19 @@ class ExporterFixes(unittest.TestCase):
         sustains = [round(n.sustain, 3) for n in _compiled(notes).levels[0].notes]
         self.assertEqual(sustains, [0.1, 0.1, 0.1])
 
+    def test_unscorable_notes_are_ignored(self):
+        notes = [_note(2.0, 3.0, 3, 7, harmonic="natural"),       # held 7th fret harmonic
+                 _note(4.0, 4.5, 1, 23),                          # fret 23
+                 _note(6.0, 6.5, 2, 21), _note(6.0, 6.5, 1, 23),  # chord reaching fret 23
+                 _note(8.0, 9.0, 3, 7, harmonic="pinch"),         # pinch: scored
+                 _note(10.0, 10.5, 3, 5)]
+        song = _compiled(notes)
+        ignored = [bool(n.mask & S.IGNORE) for n in song.levels[0].notes]
+        self.assertEqual(ignored, [True, True, True, False, False])
+        self.assertEqual(song.metadata.max_notes_and_chords_real, 2.0)
+        self.assertEqual(sum(song.levels[0].notes_in_pi_excl_ignored), 2)
+        self.assertNotIn("I13", [c for c, _ in _codes(_spec(notes, lead=5))])
+
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""
         a_std = [p - 7 for p in GUITAR]
