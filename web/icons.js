@@ -47,6 +47,7 @@ const OUTLINE = {
   previousMarker: '<path d="M5 5v14m14-13-9 6 9 6Z"/>',
   nextMarker: '<path d="M19 5v14M5 6l9 6-9 6Z"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
+  warning: '<path d="M12 4 2.5 20h19L12 4Z"/><path d="M12 10v4M12 17.5v.01"/>',
   chevronUp: '<path d="m6 15 6-6 6 6"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
 };

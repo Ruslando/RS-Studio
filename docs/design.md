@@ -872,6 +872,19 @@ owning layer for layer-specific markers. Marker rows resolve live data on every
 paint and action; they store no copies. Popover edits remain bound to their
 original timing/layer, including song markers when all layers use own timings.
 
+### Rocksmith issues
+
+The pane's first list, Rocksmith, is what the Rocksmith export would report for
+the active layer: DLC Builder's arrangement checks (`rocksmith/checker.py`) and
+the export's own warnings. The server runs the export's compile about 700 ms
+after edits settle, with the leading silence the export window last used; a
+newer check cancels one in flight. A row leads with a warning triangle
+(`--warn`; `--error` for what DLC Builder marks important), then the issue's
+name and, when it has one, its time in mono. The code and the explanation are
+the row's tooltip (3, rule 19). A timed row moves there like a marker row. On
+the stage the notes an issue concerns are framed like an unplayable chord. An
+empty list is hidden, header included.
+
 Hand anchors are explicit fretting-hand positions, stored compatibly in the
 existing `handHolds` field. The active visible layer's anchors occupy a compact
 20px marker rail, using the same tinted frame as other flags and a `Fret N`

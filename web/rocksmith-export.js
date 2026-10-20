@@ -6,6 +6,7 @@ import { $ } from "./dom.js";
 import { MAX_CAPO, editLanes } from "./lanes.js";
 import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane } from "./layer-role.js";
 import { applyCoverChange, clearProjectCover, coverStatus, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { icon } from "./icons.js";
 import { downloadProjectBlob, toast } from "./notify.js";
 import { jobRequest } from "./operation-progress.js";
 import { S } from "./store.js";
@@ -114,7 +115,7 @@ function renderRsCover(meta) {
 // wrapping span — `title` on an <svg> is inert without a <title> child, and an
 // aria-hidden svg would leave the mark with no accessible name either.
 const OFF_REASON = "Tablature is off for this note layer. Check it to export anyway.";
-const WARN_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 2.5 20h19L12 4Z"/><path d="M12 10v4M12 17.5v.01"/></svg>`;
+const WARN_ICON = icon("warning", 14);
 
 // Lanes shown in the currently-open export dialog, indexed by rs-arr-row
 // dataset.track. Includes layers with tablature off (shown but unchecked) so
@@ -256,6 +257,14 @@ const LS_LEAD_IN = "cw.rsLeadIn", LEAD_IN_DEFAULT = 5;
 function leadIn(raw) {
   const value = raw === null || raw === "" ? NaN : Number(raw);
   return Number.isFinite(value) ? Math.min(30, Math.max(0, value)) : LEAD_IN_DEFAULT;
+}
+
+// The leading silence the next export will use: the live check times its
+// issues the same way (a first note needs an empty first phrase before it).
+export function rsLeadIn() {
+  let stored = null;
+  try { stored = localStorage.getItem(LS_LEAD_IN); } catch { /* storage blocked: the default */ }
+  return leadIn(stored);
 }
 
 export function exportRocksmith() {
