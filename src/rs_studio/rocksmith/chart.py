@@ -748,7 +748,7 @@ def _plan_anchors(entities: list, shape_info: dict, capo: int = 0) -> list:
     floor = capo + 1
     anchors_raw = []
     cur = cur_w = None
-    for e in entities:
+    for k, e in enumerate(entities):
         held_frets = shape_info[e.shape_id]["frets"] if e.shape_id in shape_info else [f for _, f, _ in e.notes]
         fretted = [f for f in held_frets if f > 0]
         lo = min(fretted) if fretted else None
@@ -767,12 +767,58 @@ def _plan_anchors(entities: list, shape_info: dict, capo: int = 0) -> list:
             stale_wide = cur_w > ANCHOR_WIDTH and span <= ANCHOR_WIDTH and not (
                 cur <= lo and hi <= cur + ANCHOR_WIDTH - 1)
             if not fits or stale_wide:
-                cur_w = max(ANCHOR_WIDTH, span)
-                cur = max(floor, min(lo, MAX_FRET - cur_w + 1))
-                anchors_raw.append((e.time, cur, cur_w))
+                previous = entities[k - 1]
+                slid = _slide_window(previous, e, cur, cur_w, lo, hi, floor)
+                legato = None if slid else _legato_window(previous, e, shape_info, floor)
+                if slid:
+                    cur, cur_w = slid
+                    anchors_raw.append((e.time, cur, cur_w))
+                elif legato:
+                    # Shift on the note the hammer-on/pull-off starts from (I33).
+                    cur, cur_w = legato
+                    if anchors_raw[-1][0] == previous.time:
+                        anchors_raw[-1] = (previous.time, cur, cur_w)
+                    else:
+                        anchors_raw.append((previous.time, cur, cur_w))
+                    previous.anchor_fret, previous.anchor_width = cur, cur_w
+                else:
+                    cur_w = max(ANCHOR_WIDTH, span)
+                    cur = max(floor, min(lo, MAX_FRET - cur_w + 1))
+                    anchors_raw.append((e.time, cur, cur_w))
         e.anchor_fret = cur
         e.anchor_width = cur_w
     return anchors_raw
+
+
+def _slide_window(previous: _Entity, e: _Entity, cur: int, cur_w: int, lo: int, hi: int,
+                  floor: int) -> tuple[int, int] | None:
+    """The window at a legato slide's target that keeps the sliding finger.
+
+    A plain window would put the target under the first finger; DLC Builder
+    reads a finger change from the two anchors (I32). Only a single note is a
+    slide target that stays linked.
+    """
+    if len(e.notes) != 1:
+        return None
+    string, target, _ = e.notes[0]
+    source = next((fret for s, fret, n in previous.notes if s == string and n.get("slide") == "legato"), None)
+    if source is None or source <= 0:
+        return None
+    finger = min(4, max(1, 1 + source - cur - (cur_w - ANCHOR_WIDTH)))
+    start = target - (finger - 1)
+    if floor <= start <= MAX_FRET - ANCHOR_WIDTH + 1 and start <= lo and hi <= start + ANCHOR_WIDTH - 1:
+        return start, ANCHOR_WIDTH
+    return None
+
+
+def _legato_window(previous: _Entity, e: _Entity, shape_info: dict, floor: int) -> tuple[int, int] | None:
+    """One window for a hammer-on/pull-off and the note it starts from, if one fits."""
+    if previous.shape_id or not any((n.get("fx") or {}).get("hammer") for _, _, n in e.notes):
+        return None
+    fretted = [f for _, f, _ in [*previous.notes, *e.notes] if f > 0]
+    if not fretted or max(fretted) - min(fretted) + 1 > ANCHOR_WIDTH:
+        return None
+    return max(floor, min(min(fretted), MAX_FRET - ANCHOR_WIDTH + 1)), ANCHOR_WIDTH
 
 
 def _phrase_start_anchors(anchors: list, pi_times: list) -> list:

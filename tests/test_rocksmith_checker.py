@@ -165,6 +165,19 @@ class ExporterFixes(unittest.TestCase):
         values = _compiled(notes).levels[0].notes[0].bend_values
         self.assertEqual([(round(b.time, 3), b.step) for b in values], [(7.5, 1.0), (8.0, 1.0)])
 
+    def test_position_shifts_before_a_pull_off(self):
+        notes = [_note(2.0, 2.4, 1, 8), _note(2.5, 3.0, 1, 5, fx={"hammer": True})]
+        self.assertNotIn("I33", [c for c, _ in _codes(_spec(notes, lead=5))])
+        anchors = _compiled(notes).levels[0].anchors
+        self.assertEqual([(round(a.start_time, 3), a.fret) for a in anchors], [(7.0, 5)])
+
+    def test_a_slide_keeps_its_finger(self):
+        notes = [_note(2.0, 2.4, 2, 5), _note(2.5, 3.0, 2, 7, slide="legato"), _note(3.0, 4.0, 2, 12)]
+        self.assertNotIn("I32", [c for c, _ in _codes(_spec(notes, lead=5))])
+        anchors = _compiled(notes).levels[0].anchors
+        self.assertEqual([(round(a.start_time, 3), a.fret) for a in anchors], [(7.0, 5), (8.0, 10)],
+                         "the third finger slides from fret 7 to 12")
+
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""
         a_std = [p - 7 for p in GUITAR]
