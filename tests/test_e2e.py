@@ -389,7 +389,11 @@ class EndToEndTests(unittest.TestCase):
         # The export's own checker reports the harmonic bend once edits settle.
         row = page.locator("#rocksmithIssues .artifact-issue-row", has_text="Natural harmonic with bend")
         expect(row).to_be_visible()
-        self.assertIn("I35", row.get_attribute("title"))
+        self.assertEqual(row.get_attribute("data-tip-tone"), "warning")
+        self.assertNotIn("I35", row.get_attribute("data-tip"), "DLC Builder's codes stay internal")
+        row.hover()
+        expect(page.locator(".app-tooltip")).to_contain_text("Warning")
+        expect(page.locator(".app-tooltip")).to_contain_text("pinch harmonic")
         row.click()
         time_at = lambda: page.evaluate("async () => (await import('/playback.js')).playbackTime()")
         self.assertAlmostEqual(time_at(), 2.0, places=2)

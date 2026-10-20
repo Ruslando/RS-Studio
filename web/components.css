@@ -419,6 +419,9 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .app-tooltip      { position: fixed; z-index: var(--z-tooltip); pointer-events: none;
                     white-space: pre-line; color: var(--label); }
 .app-tooltip-title { color: var(--text); font-weight: 600; }
+.app-tooltip-kind { display: flex; align-items: center; gap: 4px; font-size: var(--text-caption); color: var(--label); }
+.app-tooltip-kind svg { color: var(--warn); }
+.app-tooltip-kind[data-tone="error"] svg { color: var(--error); }
 .app-tooltip-block + .app-tooltip-block { margin-top: var(--s-sibling); padding-top: var(--s-sibling);
                     border-top: 1px solid var(--line); }
 

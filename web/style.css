@@ -514,6 +514,7 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #fretboardResetStatus.busy::before { border-color: var(--stage-hint); border-top-color: var(--stage-text); }
 #fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
 #fretboardWarning { position: absolute; z-index: 3; top: 50%; left: 50%; transform: translate(-50%, -50%); width: max-content; max-width: calc(100% - 48px); padding: 8px 12px; border-radius: var(--r-control); background: var(--stage); color: var(--stage-warn); font-size: var(--text-control); text-align: center; overflow-wrap: anywhere; pointer-events: none; }
+#fretboardWarning[data-error] { color: var(--stage-error); }
 #fretboardPanel[data-edit-blocked] :is(#fretboardSetup, #fretboardPin, #fretboardBusy, #fretboardResetStatus, #fretboardChevron),
 #fretboardPanel:not([data-editing]) :is(#fretboardSetup, #fretboardPin) { display: none; }
 

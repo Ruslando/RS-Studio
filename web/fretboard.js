@@ -956,6 +956,7 @@ export function drawFretboard() {
   const [shapeTitle, shapeHelp] = SHAPE_WARNINGS[here?.kind] || SHAPE_WARNINGS.impossible;
   warning.textContent = selectionError || (impossible ? `⚠ ${shapeTitle}` : "");
   warning.title = selectionError || shapeHelp;
+  warning.toggleAttribute("data-error", impossible && !stretchKey && !selectionError);
   fretboardShowAnyway.hidden = !impossible || !stretchKey || !!selectionError;
   fretboardShowAnyway.dataset.key = stretchKey || "";
   fretboardPanel.toggleAttribute("data-unplayable", impossible);
