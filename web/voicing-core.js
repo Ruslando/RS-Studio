@@ -35,6 +35,10 @@ export const COST_W = {
 };
 
 const MAX_HAND_SPAN_MM = 115;
+// The limits below are what ordinary playing asks for. A big hand with practice
+// reaches further: a shape that fits only this much more is "not reasonable",
+// one that fails even here is not playable at all.
+const STRETCH_REACH = 2.0;
 const MAX_BARRE_SPAN_BY_FINGER = { 1: Infinity, 2: 3, 3: 3, 4: 3 };
 
 export const GUITAR_HAND_PROFILE = Object.freeze({
@@ -57,6 +61,13 @@ export function handProfileForTuning(tuning) {
   }
   return profile;
 }
+
+const STRETCH_CACHE = new Map();
+const stretchProfile = (profile) => {
+  let stretched = STRETCH_CACHE.get(profile.id);
+  if (!stretched) STRETCH_CACHE.set(profile.id, stretched = { ...profile, id: `${profile.id}:stretch`, reach: STRETCH_REACH });
+  return stretched;
+};
 
 const fretXmm = (fret, profile) => fret <= 0 ? 0
   : profile.scaleLengthMm * (1 - 2 ** (-(fret - 0.5) / 12));
@@ -330,6 +341,7 @@ export function fingerSplayCost(a, b, profile = GUITAR_HAND_PROFILE) {
 }
 
 function gripParts(shape, fingering, profile) {
+  const stretch = profile.reach || 1;
   const groups = fingering.groups;
   const parts = { fingers: groups.reduce((sum, g) => sum + 0.25 + 0.1 * (g.finger - 1), 0), stretch: 0, barre: 0, control: 0 };
   for (const g of groups) {
@@ -350,7 +362,7 @@ function gripParts(shape, fingering, profile) {
           (Math.min(a.finger, b.finger) > 1 && groups.some(g => g.finger === 1 && g.fret < a.fret))) return null;
       parts.control += stringGap(a, b);
     }
-    const [frets, mm, across] = FINGER_REACH[pairKey(a, b)];
+    const [frets, mm, across] = FINGER_REACH[pairKey(a, b)].map(limit => limit * stretch);
     if (Math.abs(a.fret - b.fret) > frets) return null;
     // Length and width share one reach budget. A barre leaves less freedom
     // to stretch; a wide split cannot hide behind individually legal axes.
@@ -370,7 +382,7 @@ function gripParts(shape, fingering, profile) {
   if (groups.length === 1 && Number.isFinite(fingering.seat)) {
     const g = groups[0], distance = g.fret - fingering.seat;
     if (distance < 0 || distance > g.finger ||
-        fretXmm(g.fret, profile) - fretXmm(fingering.seat, profile) > MAX_HAND_SPAN_MM) return null;
+        fretXmm(g.fret, profile) - fretXmm(fingering.seat, profile) > MAX_HAND_SPAN_MM * stretch) return null;
     parts.stretch += 0.5 * Math.abs(distance - (g.finger - 1));
   }
   const stroke = [...shape.keys()].some(n => !!n.stroke);
@@ -673,7 +685,7 @@ export function transitionCostBreakdown(prevShape, prevFingering, curShape, curF
 // share a number only when fingerGroups proves that a real barre can connect
 // them without overriding an open/lower note on an intervening string.
 export function assignFingers(shape, profile = GUITAR_HAND_PROFILE) {
-  const best = fingeringOptions(shape, profile)[0];
+  const best = fingeringOptions(shape, profile)[0] || fingeringOptions(shape, stretchProfile(profile))[0];
   if (best) return new Map(best.fingers);
   // Imported/manual impossible shapes still render without inventing a fifth
   // finger. This fallback mirrors the old deterministic labelling.
@@ -768,8 +780,7 @@ export function shapeFault(notes, tuning, shape, limits = null, maxFret = MAX_FR
 // neighbouring columns prune further.
 // ============================================================================
 
-export function enumerateShapes(notes, tuning, maxFret = MAX_FRET, pins = null) {
-  const profile = handProfileForTuning(tuning);
+export function enumerateShapes(notes, tuning, maxFret = MAX_FRET, pins = null, profile = handProfileForTuning(tuning)) {
   const cand = notes.map(note => ({
     note,
     options: fretOptions(note, tuning).filter(option => option.fret <= maxFret &&
@@ -813,17 +824,21 @@ export const outOfFretboardRange = (pitch, tuning, maxFret = MAX_FRET) =>
 // playable fingering — so "these notes cannot be played together" is otherwise
 // invisible to callers and reaches the UI as a shape smeared across the neck.
 // This is the explicit test for it.
-export const unplayableColumn = (notes, tuning, maxFret = MAX_FRET) => {
-  if (notes.length > tuning.length || notes.some(n => outOfFretboardRange(n.pitch, tuning, maxFret))) return true;
-  const profile = handProfileForTuning(tuning);
+// "ok", "stretch" (only a big hand with practice reaches it) or "impossible".
+export const chordPlayability = (notes, tuning, maxFret = MAX_FRET) => {
+  if (notes.length > tuning.length || notes.some(n => outOfFretboardRange(n.pitch, tuning, maxFret))) return "impossible";
   const pins = pinnedPositions(notes, tuning);
   // A stored, sounding pin is part of the requested chord, including partial pins.
-  return !enumerateShapes(notes, tuning, maxFret, pins).some(shape =>
+  const fits = (profile) => enumerateShapes(notes, tuning, maxFret, pins, profile).some(shape =>
     shape.size === notes.length && new Set([...shape.values()].map(p => p.string)).size === notes.length &&
     [...shape.values()].every(p => p.fret >= 0 && p.fret <= maxFret) &&
     [...pins].every(([note, p]) => shape.get(note)?.string === p.string && shape.get(note)?.fret === p.fret) &&
     hasPlayableFingering(shape, profile));
+  const profile = handProfileForTuning(tuning);
+  return fits(profile) ? "ok" : fits(stretchProfile(profile)) ? "stretch" : "impossible";
 };
+
+export const unplayableColumn = (notes, tuning, maxFret = MAX_FRET) => chordPlayability(notes, tuning, maxFret) !== "ok";
 
 // Canonical key for a shape (string+fret set), so duplicate voicings dedupe and
 // a pinned shape can be matched against the enumerated alternatives.

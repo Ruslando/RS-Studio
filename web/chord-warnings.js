@@ -1,4 +1,4 @@
-import { chordColumns, unplayableColumn } from './voicing-core.js';
+import { chordColumns, chordPlayability } from './voicing-core.js';
 
 const laneCache = new WeakMap();
 const shapeCache = new Map();
@@ -11,13 +11,15 @@ export function chordWarnings(lane, tuning, maxFret, revision = 0) {
     lane.notes.map(n => [n.id, n.start, n.end, n.pitch, n.pos?.string, n.pos?.fret])]);
   const cached = laneCache.get(lane);
   if (cached?.signature === signature) return cached.warnings;
-  const warnings = chordColumns(lane.notes).filter(column => {
+  // kind: "stretch" (only the widest hands reach it) or "impossible".
+  const warnings = chordColumns(lane.notes).flatMap(column => {
     const key = JSON.stringify([tuning, maxFret, column.notes.map(n => [n.pitch, n.pos?.string, n.pos?.fret])]);
     if (!shapeCache.has(key)) {
-      shapeCache.set(key, unplayableColumn(column.notes, tuning, maxFret));
+      shapeCache.set(key, chordPlayability(column.notes, tuning, maxFret));
       if (shapeCache.size > 512) shapeCache.delete(shapeCache.keys().next().value);
     }
-    return shapeCache.get(key);
+    const kind = shapeCache.get(key);
+    return kind === "ok" ? [] : [{ ...column, kind }];
   });
   laneCache.set(lane, { signature, warnings });
   return warnings;

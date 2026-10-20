@@ -2169,6 +2169,7 @@ class EndToEndTests(unittest.TestCase):
         for start in [96,100,104,108]:
             page.evaluate("async t => (await import('/playback.js')).seekPlayback(t)", start)
             expect(page.locator('#fretboardWarning')).to_be_visible()
+            expect(page.locator('#fretboardShowAnyway')).to_be_hidden()
             count = page.evaluate("""async () => {
                 const ctx = document.querySelector('#fretboard').getContext('2d'), original = ctx.fillText;
                 let digits = 0; const strings = [];
