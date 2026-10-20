@@ -1,5 +1,6 @@
 import { paintNoteRow } from './timeline-paint.js';
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
+import { hideTooltip, showTooltip } from "./tooltip.js";
 import { rocksmithIssueNotes } from "./rocksmith-check.js";
 import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
 import { renderArtifacts } from "./artifacts.js";
@@ -900,9 +901,9 @@ export function init_draw() {
     else if (hit) cur = edgeOf(hit.note, x) ? "ew-resize" : "move";
     else cur = "grab";                                       // empty = pan; a click still seeks
     stage.style.cursor = cur;
-    // A warning mark explains itself in the stage's tooltip.
-    const tip = warningMarks.filter(m => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1).map(m => m.tip).join("\n\n");
-    if (stage.title !== tip) stage.title = tip;
+    // A warning mark explains itself in a tooltip at the pointer.
+    showTooltip(warningMarks.filter(m => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1)
+      .map(m => m.tip).join("\n\n"), e.clientX, e.clientY);
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
     S.refLockHover = refLockAt(x, y);
     S.mouseX = x;
@@ -913,7 +914,7 @@ export function init_draw() {
   stage.addEventListener("mouseleave", () => {
     S.pitchHoverClientY = null;
     stage.style.cursor = "default";
-    stage.title = "";
+    hideTooltip();
     cancelHoverPreview();
     S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; S.refEdgeHover = null; S.refLockHover = null; draw();
   });

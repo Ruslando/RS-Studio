@@ -608,6 +608,17 @@ moves.
 
 ---
 
+### 4.19 Tooltip
+
+Class: `.tooltip` (`.app-tooltip` in `tooltip.js`). `--panel`, `--line`, radius
+6, `--e1`, at most 240 wide, 13/1.4. It appears 400 ms after the pointer
+arrives, below it and kept 8 inside the viewport, and closes on leave, click,
+wheel or a key; moving straight to another tip shows that one without the wait.
+Any element gets it with `data-tip`; a canvas mark calls `showTooltip` with the
+pointer. Blocks are separated by a blank line, each with its first line as a
+600 title in `--text` and the rest in `--label`; blocks are divided by a
+hairline. The browser's own `title` tooltip is still used elsewhere.
+
 ## 5. The stage
 
 The stage has its own palette because it sits on a dark picture in both themes.
@@ -883,7 +894,8 @@ newer check cancels one in flight. A row leads with a warning triangle
 name and, when it has one, its time in mono. The code and the explanation are
 the row's tooltip (3, rule 19). A timed row moves there like a marker row. On
 the stage the notes an issue concerns are framed like an unplayable chord, and
-hovering the frame's triangle shows the same code and explanation. What the
+hovering the frame's triangle shows the same code and explanation in a
+tooltip (4.19), as does hovering the row. What the
 export changes on its own to avoid an issue (a slide into a chord, a dead note
 in a chord) is listed and framed the same way, never as important. An empty list
 is hidden, header included.

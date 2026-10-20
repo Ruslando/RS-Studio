@@ -54,7 +54,7 @@
   --z-splitter: 12; --z-edge: 15; --z-outline: 20;
   --z-menu: 50; --z-flyout: 60; --z-popover: 75; --z-launcher: 90;
   --z-window: 100; --z-window-editor: 110; --z-window-menu: 120; --z-window-setup: 121; --z-confirm: 130;
-  --z-context: 200; --z-tour: 250; --z-tour-menu: 255; --z-tour-card: 260;
+  --z-context: 200; --z-tour: 250; --z-tour-menu: 255; --z-tour-card: 260; --z-tooltip: 270;
   --z-loading: 280; --z-tour-confirm: 300; --z-toast: 1000;
   --s-pair:    4px;
   --s-sibling: 8px;
