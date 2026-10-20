@@ -116,8 +116,9 @@ function issueRow(entry) {
   const row = document.createElement('li');
   row.className = 'artifact-row artifact-marker-row artifact-issue-row';
   row.toggleAttribute('data-important', !!entry.important);
-  row.dataset.tip = entry.code ? `${entry.code} · ${entry.title}\n${entry.help}` : entry.title;
-  row.setAttribute('aria-description', row.dataset.tip);
+  row.dataset.tip = entry.help ? `${entry.title}\n${entry.help}` : entry.title;
+  row.dataset.tipTone = entry.important ? 'error' : 'warning';
+  row.setAttribute('aria-description', `${entry.important ? 'Error' : 'Warning'}: ${row.dataset.tip}`);
   const mark = document.createElement('span'); mark.className = 'artifact-issue-mark'; mark.innerHTML = icon('warning', 14);
   const copy = document.createElement('div'); copy.className = 'artifact-copy';
   const name = document.createElement('span'); name.className = 'artifact-name'; name.textContent = entry.title;
