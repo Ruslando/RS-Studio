@@ -112,6 +112,23 @@ ISSUES = {
 }
 
 
+# What the export changed so the issue cannot happen: code -> (title, help).
+# Shown where it happened, never important: the chart is still fine to ship.
+FIXED = {
+    "I03": ("Slide into a chord is picked again",
+            "Rocksmith cannot link a note to a chord, so the export ends the legato slide and the chord "
+            "is picked again. End the slide on a single note to keep it legato."),
+    "I29": ("Dead note left out of the chord",
+            "Rocksmith needs the pitch of every chord note, so the export leaves the dead note out. "
+            "Mute every string of the chord to keep it."),
+}
+
+
+def fixed(code: str, seconds: float) -> Issue:
+    title, help_ = FIXED[code]
+    return Issue(code, round(seconds, 3), title, help_, False)
+
+
 def _issue(code: str, ms: int | None) -> Issue:
     title, help_, important = ISSUES[code]
     return Issue(code, None if ms is None else ms / 1000, title, help_, important)

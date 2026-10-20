@@ -3,7 +3,7 @@ import { previewPositionReferences } from "./references.js";
 import { positionPreviewHand, positionPreviewLane } from "./position-preview.js";
 import { positionEditTargets, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { fretboardHandKey } from "./fretboard-cache.js";
-import { chordWarnings } from "./chord-warnings.js";
+import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
 import { overrideResetPreview } from './override-reset.js';
 import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // The fretboard panel: a canvas under the spectrogram showing the neck the song
@@ -953,10 +953,9 @@ export function drawFretboard() {
   const selectionError = editing && !transportPlaying() ? selectedPositions(lane).error : null;
   const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
   warning.hidden = !selectionError && !impossible;
-  warning.textContent = selectionError || (!impossible ? ""
-    : stretchKey ? "⚠ No reasonable shape found" : "⚠ No valid shape found");
-  warning.title = selectionError || (stretchKey ? "Only a very wide hand reaches these notes together."
-    : "The notes cannot all be played together with this tuning, fret range and fingering.");
+  const [shapeTitle, shapeHelp] = SHAPE_WARNINGS[here?.kind] || SHAPE_WARNINGS.impossible;
+  warning.textContent = selectionError || (impossible ? `⚠ ${shapeTitle}` : "");
+  warning.title = selectionError || shapeHelp;
   fretboardShowAnyway.hidden = !impossible || !stretchKey || !!selectionError;
   fretboardShowAnyway.dataset.key = stretchKey || "";
   fretboardPanel.toggleAttribute("data-unplayable", impossible);

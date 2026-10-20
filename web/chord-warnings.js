@@ -1,5 +1,11 @@
 import { chordColumns, chordPlayability } from './voicing-core.js';
 
+// What each kind says, on the fretboard and on the stage's warning mark.
+export const SHAPE_WARNINGS = {
+  stretch: ["No reasonable shape found", "Only a very wide hand reaches these notes together."],
+  impossible: ["No valid shape found", "The notes cannot all be played together with this tuning, fret range and fingering."],
+};
+
 const laneCache = new WeakMap();
 const shapeCache = new Map();
 

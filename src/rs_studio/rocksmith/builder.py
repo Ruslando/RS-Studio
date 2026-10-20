@@ -465,7 +465,9 @@ class _Built:
     tone_slots: list[dict]
 
     def issues(self) -> list[checker.Issue]:
-        return checker.check(self.compiled.sng, is_bass=self.is_bass, cent_offset=self.cent_offset)
+        found = checker.check(self.compiled.sng, is_bass=self.is_bass, cent_offset=self.cent_offset)
+        found += [checker.fixed(code, t) for code, t in self.compiled.fixes]
+        return sorted(found, key=lambda issue: (issue.time is not None, issue.time or 0.0))
 
 
 def _template_midi(templates: list, offsets: list[int], capo: int, is_bass: bool) -> None:

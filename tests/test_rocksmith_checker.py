@@ -139,9 +139,9 @@ class ExporterFixes(unittest.TestCase):
     def test_legato_slide_into_a_chord_is_not_linked(self):
         notes = [_note(2.0, 2.5, 3, 5, slide="legato"), *_chord(3.0, 4.0, "x02270")]
         [found] = builder.check_spec(_spec(notes, lead=5))
-        self.assertNotIn("I03", [i["code"] for i in found["issues"]])
-        self.assertIn("1 legato slide(s) end on a chord; Rocksmith cannot link a note to a chord, "
-                      "so the chord is picked again", found["warnings"])
+        # Shown at the chord, as what the export did rather than as DLC Builder's issue.
+        self.assertEqual([(i["code"], i["time"], i["title"], i["important"]) for i in found["issues"]],
+                         [("I03", 3.0, "Slide into a chord is picked again", False)])
         source = _compiled(notes).levels[0].notes[0]
         self.assertTrue(source.mask & S.SLIDE)
         self.assertFalse(source.mask & S.PARENT)
@@ -152,8 +152,8 @@ class ExporterFixes(unittest.TestCase):
         fully = _chord(4.0, 5.0, "355xxx", s6={"fx": {"dead": True}}, s5={"fx": {"dead": True}},
                        s4={"fx": {"dead": True}})
         [found] = builder.check_spec(_spec(partly + fully, lead=5))
-        self.assertNotIn("I29", [i["code"] for i in found["issues"]])
-        self.assertIn("1 dead note(s) were left out of chords that are not fully muted", found["warnings"])
+        self.assertEqual([(i["code"], i["time"], i["title"], i["important"]) for i in found["issues"]],
+                         [("I29", 2.0, "Dead note left out of the chord", False)])
         song = _compiled(partly + fully)
         first, second = song.levels[0].notes
         self.assertEqual(song.chords[first.chord_id].frets, [3, 5, 5, -1, -1, -1])
