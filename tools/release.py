@@ -45,6 +45,28 @@ def current_version(root: Path = ROOT) -> str:
     return re.search(r'(?m)^__version__ = "([^"]+)"$', (root / "src/rs_studio/__init__.py").read_text(encoding="utf-8"))[1]
 
 
+def check_version_metadata(root: Path = ROOT, expected: str | None = None) -> str:
+    patterns = {
+        "pyproject.toml": r'(?m)^version = "([^"]+)"$',
+        "src/rs_studio/__init__.py": r'(?m)^__version__ = "([^"]+)"$',
+        "uv.lock": r'name = "rs-studio"\nversion = "([^"]+)"',
+    }
+    values = {}
+    for name, pattern in patterns.items():
+        match = re.search(pattern, (root / name).read_text(encoding="utf-8"))
+        if not match:
+            raise SystemExit(f"Version not found in {name}")
+        values[name] = match.group(1)
+    distinct = set(values.values())
+    if len(distinct) != 1:
+        detail = ", ".join(f"{name}={value}" for name, value in values.items())
+        raise SystemExit(f"Version metadata does not match: {detail}")
+    version = distinct.pop()
+    if expected is not None and version != expected:
+        raise SystemExit(f"Version metadata says {version}, expected {expected}")
+    return version
+
+
 def set_version(version: str, root: Path = ROOT) -> None:
     for name, pattern, template in VERSION_FILES:
         path = root / name
@@ -64,6 +86,7 @@ def check(args) -> None:
         raise SystemExit(f"Unsupported release version: {args.version}")
     if parsed.is_devrelease and not args.prerelease:
         raise SystemExit("Development builds must use --preview or --prerelease.")
+    check_version_metadata()
     if run("git", "rev-parse", "--abbrev-ref", "HEAD", capture=True) != "main":
         raise SystemExit("Releases are made from main.")
     if run("git", "status", "--porcelain", capture=True):
@@ -103,7 +126,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("version", help="e.g. 0.2.2-alpha (tag v0.2.2-alpha)")
     parser.add_argument("--preview", "--prerelease", dest="prerelease", action="store_true",
-                        help="Publish the specified version to the preview channel; preserve its exact name and restore the checkout's version after building")
+                        help="Publish the specified version to the preview channel; commit its version metadata before tagging")
     parser.add_argument("--notes", type=Path, help="Optional release notes (plain text): shown in the app's update dialog and above GitHub's generated changelog")
     parser.add_argument("--dry-run", action="store_true", help="Build everything, publish nothing")
     args = parser.parse_args()
@@ -119,13 +142,16 @@ def main() -> None:
         if bump:
             run("git", "checkout", "--", *(name for name, _, _ in VERSION_FILES))
         raise
-    if args.dry_run or args.prerelease:
+    if args.dry_run:
         if bump:
             run("git", "checkout", "--", *(name for name, _, _ in VERSION_FILES))
-        if args.dry_run:
-            print("\nDry run: built", *assets, sep="\n  ")
-            return
-    if bump and not args.prerelease:
+        print("\nDry run: built", *assets, sep="\n  ")
+        return
+    # Tags must point at source that reports the same version as the release.
+    # This applies to previews too, so source checkouts of a prerelease show
+    # the right version in the app.
+    check_version_metadata(expected=args.version)
+    if bump:
         run("git", "commit", "-m", f"chore(release): bump version to {args.version}", "--", *(name for name, _, _ in VERSION_FILES))
     run("git", "tag", tag)
     run("git", "push", "origin", "main", tag)
