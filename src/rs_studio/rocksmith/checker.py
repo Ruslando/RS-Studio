@@ -18,7 +18,7 @@ crowd-event placement (we write no events), vocals (no lyrics) and showlights
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from . import sng as S
 
@@ -30,6 +30,10 @@ class Issue:
     title: str
     help: str
     important: bool
+
+    def in_editor(self, lead: float) -> "Issue":
+        """The same issue timed before `lead` seconds of leading silence."""
+        return self if self.time is None else replace(self, time=round(self.time - lead, 3))
 
     def text(self) -> str:
         at = "" if self.time is None else f" at {_clock(self.time)}"

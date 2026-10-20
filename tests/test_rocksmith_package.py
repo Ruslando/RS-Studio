@@ -41,7 +41,7 @@ class RocksmithPackageTests(unittest.TestCase):
     def test_package_carries_every_arrangement_and_the_audio(self):
         spec = _spec([_track("Gtr", DROP_D, [0, 3, 5, 7]), _track("Bass", BASS, [0, 3, 5])],
                      [{"track": 0, "kind": "lead", "tuning": DROP_D}, {"track": 1, "kind": "bass", "tuning": BASS}],
-                     leadingSilence=5, version=4)
+                     leadingSilence=12, version=4)
         files, songs, warnings, name = _build(spec)
         self.assertEqual(warnings, [])
         self.assertEqual(name, "Band_Song_v4_p.psarc")
@@ -50,7 +50,7 @@ class RocksmithPackageTests(unittest.TestCase):
         lead, bass = songs["Lead"], songs["Bass"]
         self.assertEqual((lead["SongName"], lead["ArtistName"], lead["AlbumName"], lead["SongYear"]), ("Song", "Band", "LP", 2020))
         self.assertEqual((lead["NotesHard"], bass["NotesHard"]), (4, 3))
-        self.assertEqual(lead["SongLength"], 25.0, "20 s of audio behind 5 s of silence")
+        self.assertEqual(lead["SongLength"], 32.0, "20 s of audio behind 12 s of silence")
         self.assertEqual(lead["Tuning"]["string0"], -2, "the low string is tuned down to D")
         self.assertEqual(set(bass["Tuning"].values()), {0})
         self.assertNotIn("CapoFret", lead)

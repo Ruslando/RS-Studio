@@ -243,13 +243,72 @@ def _grid_lead_in(grid, lead: float, moved) -> None:
         return
     for marker in grid.get("tempoMap") or []:
         moved(marker)
+    placed = _lead_grid(grid, lead)
+    if placed is not None:
+        grid["offset"] = placed[0]
+
+
+def _lead_grid(grid: dict, lead: float) -> tuple[float, float] | None:
+    """(first beat, measure length) of a grid behind `lead` seconds of silence.
+
+    With silence, the grid runs back into it by whole measures (_grid_lead_in);
+    without, it starts where it always did.
+    """
     try:
         bpm = float(grid.get("bpm") or 120.0) or 120.0
         measure = 60.0 / bpm * max(1, int(grid.get("tsNum") or 4))
-        start = max(0.0, float(grid.get("offset") or 0.0)) + lead
+        start = max(0.0, float(grid.get("offset") or 0.0))
     except (TypeError, ValueError):
-        return
-    grid["offset"] = start - int(start / measure) * measure
+        return None
+    if lead <= 0:
+        return start, measure
+    start += lead
+    return start - int(start / measure) * measure, measure
+
+
+MIN_FIRST_NOTE = 10.0   # EOF: "At least one note begins < 10 seconds" is an error
+
+
+def _package_lead_in(spec: dict, track_indexes) -> float:
+    """The silence the package starts with: what the export asked for, or more.
+
+    Raised until EOF's rules for the start of a Rocksmith arrangement hold for
+    every exported lane: the first note comes at 10 s or later, and a whole
+    empty measure lies before it, the COUNT phrase (DLC Builder's I25). That
+    measure fails only when a section snaps onto the first beat, or a measure is
+    longer than the silence; then the silence grows by whole measures, so the
+    downbeats stay where the music puts them.
+    """
+    lead = _lead_in_seconds(spec)
+    tracks = spec.get("tracks") or []
+    starts = []
+    for index in track_indexes:
+        track = tracks[index]
+        notes = [n["start"] for n in track.get("notes") or [] if isinstance(n.get("start"), (int, float))]
+        if not notes:
+            continue
+        sections = (track["sections"] if "sections" in track else spec.get("sections")) or []
+        marks = [s["t"] for s in sections if isinstance(s, dict) and isinstance(s.get("t"), (int, float)) and s["t"] >= 0]
+        starts.append((min(notes), min(marks, default=float("inf")),
+                       track.get("grid") or spec.get("grid") or {}))
+    if not starts:
+        return lead
+    lead = max(lead, MIN_FIRST_NOTE - min(note for note, _, _ in starts))
+    for _ in range(64):
+        grow = 0.0
+        for note, section, grid in starts:
+            placed = _lead_grid(grid, lead)
+            if placed is None:
+                continue
+            first, measure = placed
+            # A section snaps to the nearest downbeat: within half a measure of
+            # the first one, it would start the first phrase there.
+            if note + lead < first + measure - 1e-6 or section + lead < first + measure / 2 - 1e-6:
+                grow = max(grow, measure)
+        if not grow:
+            break
+        lead += grow
+    return lead
 
 
 def _prepare_audio(audio_path: Path, first_note: float, workdir: Path,
@@ -461,11 +520,14 @@ def check_spec(spec: dict) -> list[dict]:
     One arrangement failing to compile is reported against that arrangement and
     does not stop the others. `spec["duration"]` stands in for the audio length.
     """
-    lead = _lead_in_seconds(spec)
     try:
         length = max(0.0, float(spec.get("duration") or 0.0))
     except (TypeError, ValueError):
         length = 0.0
+    count = len(spec.get("tracks") or [])
+    lead = _package_lead_in(spec, sorted({
+        item.get("track") for item in (spec.get("rocksmith") or {}).get("arrangements") or []
+        if isinstance(item.get("track"), int) and 0 <= item["track"] < count}))
     spec = _with_lead_in(spec, lead)
     tracks = spec.get("tracks") or []
     artist, title, _, _ = _song_meta(spec)
@@ -487,10 +549,9 @@ def check_spec(spec: dict) -> list[dict]:
             found["error"] = str(exc)
             continue
         found["warnings"] = list(dict.fromkeys(warnings))
-        found["issues"] = [
-            {"code": issue.code, "time": None if issue.time is None else round(issue.time - lead, 3),
-             "title": issue.title, "help": issue.help, "important": issue.important}
-            for issue in built.issues()]
+        issues = [issue.in_editor(lead) for issue in built.issues()]
+        found["issues"] = [{"code": i.code, "time": i.time, "title": i.title, "help": i.help,
+                            "important": i.important} for i in issues]
     return out
 
 
@@ -503,14 +564,14 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
     _wems/_song_length bypass the WEM conversion + audio steps for the self-check.
     """
     warnings: list[str] = []
-    lead = _lead_in_seconds(spec)
     version = _package_version(spec)
     source_tracks = spec.get("tracks") or []      # still in the audio's own time
+    if not source_tracks:
+        raise ValueError("No lanes with notes to export")
+    arr_requests = _arrangement_specs(spec, source_tracks, warnings)
+    lead = _package_lead_in(spec, [req["track"] for req in arr_requests])
     spec = _with_lead_in(spec, lead)
     tracks = spec.get("tracks") or []
-    if not tracks:
-        raise ValueError("No lanes with notes to export")
-    arr_requests = _arrangement_specs(spec, tracks, warnings)
     artist, title, album, year = _song_meta(spec)
     key = _dlc_key(artist, title)
     latin = _latin_names(spec, artist, title, album)
@@ -541,7 +602,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         for sort_idx, req in enumerate(arr_requests):
             arr = ARRANGEMENTS[req["kind"]]
             built = _compile_arrangement(spec, tracks[req["track"]], req, song_length, key, warnings)
-            warnings.extend(f"{arr['full_name']}: {issue.text()}" for issue in built.issues())
+            # Timed as in the editor, before the silence, like the live check.
+            warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in built.issues())
             sng_packed = sng.pack(sng.serialize(built.compiled.sng))
             representative = arr["priority"] == "main"
 
