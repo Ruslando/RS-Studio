@@ -37,6 +37,7 @@ def _conversion_stamp() -> str:
 
 SUSTAIN_MIN = 0.18       # tail floor for slides, so the slide has something to draw
 SUSTAIN_TAIL = 0.25      # a note value this long at the song's main tempo gets a tail
+TECHNIQUE_SUSTAIN_MIN = 0.01  # vibrato/tremolo need a tail; DLC Builder asks for 5 ms
 SECTION_MEASURES = 8     # riff-repeater section granularity
 MAX_FRET = 24
 ANCHOR_WIDTH = 4
@@ -553,6 +554,10 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         notes = [(s, fret, n) for s, (_, _, fret, n) in sorted(group.items())]
         dur = max(_f(n.get("end"), t) - t for _, _, n in notes)
         sustain = dur if sustained(t, dur) else 0.0
+        if not sustain and any((n.get("fx") or {}).get("vibrato") or n.get("tremPick") for _, _, n in notes):
+            # Vibrato and tremolo are drawn on the tail; without one DLC Builder
+            # reports I40. Such a note keeps the length it has in the editor.
+            sustain = max(dur, TECHNIQUE_SUSTAIN_MIN)
         ent = _Entity(time=t, sustain=sustain, notes=notes)
         entity_shape_ids = {n.get("shapeId") for _, _, n in notes if n.get("shapeId") in shape_info}
         if len(entity_shape_ids) == 1 and all(n.get("shapeId") in entity_shape_ids for _, _, n in notes):

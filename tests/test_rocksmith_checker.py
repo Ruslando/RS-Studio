@@ -116,6 +116,13 @@ class ExporterFixes(unittest.TestCase):
         song = _compiled(chords, phraseBoundaries=[{"t": 8.0}])
         self.assertEqual(len(song.levels[0].handshapes), 2)
 
+    def test_short_vibrato_and_tremolo_keep_a_tail(self):
+        notes = [_note(2.0, 2.1, 3, 7, fx={"vibrato": True}), _note(3.0, 3.1, 3, 7, tremPick=True),
+                 *_chord(4.0, 4.1, "x355xx", s4={"fx": {"vibrato": True}})]
+        self.assertNotIn("I40", [c for c, _ in _codes(_spec(notes, lead=5))])
+        sustains = [round(n.sustain, 3) for n in _compiled(notes).levels[0].notes]
+        self.assertEqual(sustains, [0.1, 0.1, 0.1])
+
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""
         a_std = [p - 7 for p in GUITAR]
