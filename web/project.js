@@ -750,7 +750,7 @@ async function openAddStemMenu(anchor) {
   placeFloating(menu, r.left, r.bottom, 4);
   setTimeout(() => document.addEventListener("click", onceCloseAddStem), 0);
 
-  if (!separators.length) await loadSeparators();
+  await loadSeparators();
   if (addStemMenuEl !== menu) return;  // closed while separator metadata was loading
   menu.classList.remove("busy");
 
@@ -778,7 +778,7 @@ async function openAddStemMenu(anchor) {
     row.className = "sc-source-row";
     const backend = document.createElement("select");
     backend.setAttribute("aria-label", "Separation model");
-    backend.innerHTML = models.map((separator) => `<option value="${separator.id}" ${separator.available ? "" : "disabled"}>${separator.label}${separator.available ? "" : " — unavailable"}</option>`).join("");
+    backend.innerHTML = models.map((separator) => `<option value="${separator.id}" ${separator.available ? "" : "disabled"}>${separator.label}${separator.available ? "" : ` — ${separator.reason || "Missing model files"}`}</option>`).join("");
     backend.value = S.state?.job === "tutorial" ? "demucs" : available[0].id;
     const part = document.createElement("select");
     part.setAttribute("aria-label", "Part to separate");
@@ -1068,6 +1068,7 @@ export function init_project() {
   // Stem cards parked in the "choosing" state render the backend list, so they
   // need a nudge once it arrives; loadSeparators itself no longer knows them.
   loadSeparators().then(refreshChoosingCards);
+  window.addEventListener("models-changed", () => loadSeparators().then(refreshChoosingCards));
   showWelcome();
 }
 import { placeFloating } from "./floating-position.js";

@@ -1131,7 +1131,11 @@ def api_projects() -> JSONResponse:
 
 @app.get("/api/version")
 def api_version() -> JSONResponse:
-    return JSONResponse({"version": __version__})
+    import torch
+
+    cuda_build = torch.version.cuda is not None
+    return JSONResponse({"version": __version__, "variant": "CUDA" if cuda_build else "CPU",
+                         "cuda_available": torch.cuda.is_available() if cuda_build else False})
 
 
 @app.get("/api/update")
@@ -1482,7 +1486,7 @@ def api_detect(payload: dict = Body(...)) -> JSONResponse:
     if not detector.get("available", True):
         raise HTTPException(
             status_code=400,
-            detail="Detection model is unavailable; download it in Settings > Models",
+            detail=f"{detector.get('reason', 'Missing model files')}; download it in Settings > Models",
         )
     label = detector["label"]
 
@@ -1554,7 +1558,8 @@ def api_stem_add(payload: dict = Body(...)) -> JSONResponse:
     separator = backend or m.get("separator") or "demucs"
     sep = next((item for item in pipeline.list_separators() if item["id"] == separator), None)
     if not sep or not sep.get("available"):
-        raise HTTPException(status_code=400, detail="Selected separation model is unavailable")
+        reason = sep.get("reason", "Missing model files") if sep else "Unknown separation model"
+        raise HTTPException(status_code=400, detail=f"{reason}; download it in Settings > Models")
 
     job_dir = _job_dir(job)
     source = _project_input(job_dir, m)

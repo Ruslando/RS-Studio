@@ -23,7 +23,7 @@ import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadata
 import { toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
-import { DEFAULT_PART_ORDER, backendLabel, separators } from "./separators.js";
+import { DEFAULT_PART_ORDER, backendLabel, loadSeparators, separators } from "./separators.js";
 import { previewIcon, syncScrub, wireScrub } from "./stem-preview.js";
 import { isAudioFile } from "./util.js";
 
@@ -174,7 +174,7 @@ function createStemCard() {
           <div class="sc-source-row">
             <select class="sc-backend">
               ${separators.map((s) => `<option value="${s.id}" ${s.available ? "" : "disabled"}
-                ${s.id === selectedBackend?.id ? "selected" : ""}>${s.label}${s.available ? "" : " — unavailable"}</option>`).join("")}
+                ${s.id === selectedBackend?.id ? "selected" : ""}>${s.label}${s.available ? "" : ` — ${s.reason || "Missing model files"}`}</option>`).join("")}
             </select>
             <select class="sc-part"></select>
             <button type="button" class="primary sc-go" ${avail.length ? "" : "disabled"}>Separate</button>
@@ -458,6 +458,7 @@ function disposeStemCards() {
 // has to wait for that, and gets nothing when the question was answered "cancel".
 export async function openNewProject() {
   if (!await canLeaveOpenProject()) return false;
+  await loadSeparators();
   if (npSongTitleInput) npSongTitleInput.value = "";
   if (npArtistInput) npArtistInput.value = "";
   if (npAlbumInput) npAlbumInput.value = "";

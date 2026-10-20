@@ -21,7 +21,7 @@ import { $, stemSettCard, stemSettingsBackdrop, stemSettingsClose, stemSettName,
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { UPLOAD_ARROW_ICON } from "./icons.js";
 import { toast } from "./notify.js";
-import { DEFAULT_PART_ORDER, backendLabel, separators } from "./separators.js";
+import { DEFAULT_PART_ORDER, backendLabel, loadSeparators, separators } from "./separators.js";
 import { previewIcon, syncScrub, wireScrub } from "./stem-preview.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { S } from "./store.js";
@@ -68,6 +68,9 @@ export function openStemSettings(stem, isMaster) {
   renderStemSettings();
   stemSettingsBackdrop.hidden = false;
   stemSettNameInput.focus();
+  loadSeparators().then(() => {
+    if (stemEditTarget === stem && stemEditState === "idle") renderStemEditCard();
+  });
 }
 
 export function closeStemSettings() {

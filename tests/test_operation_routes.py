@@ -28,7 +28,7 @@ class OperationRouteTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as error:
                 server.api_detect({"job": "job", "stem": "mix", "model": "mt3"})
         self.assertEqual(error.exception.status_code, 400)
-        self.assertIn("unavailable", error.exception.detail)
+        self.assertIn("Missing model files", error.exception.detail)
 
     def test_separation_cancellation_does_not_append_stem(self):
         with patch.object(server, "_draft_manifest", return_value={"stems": [{"id": "mix"}]}), patch.object(server, "_job_dir", return_value=Path("job")), patch.object(server, "_project_input", return_value=Path("mix.wav")), patch.object(server.pipeline, "list_separators", return_value=[{"id": "demucs"}]), patch.object(processing, "run", side_effect=processing.OperationCancelled("Operation cancelled")), patch.object(server, "_append_processed_stem") as append:

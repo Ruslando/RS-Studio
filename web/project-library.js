@@ -50,7 +50,10 @@ async function loadVersion() {
   try {
     const data = await (await fetch("/api/version")).json();
     if (data.version) {
-      welcomeVersion.textContent = `v${data.version}`;
+      welcomeVersion.textContent = `v${data.version} · ${data.variant} version`;
+      welcomeVersion.title = data.variant === "CUDA" && !data.cuda_available
+        ? "CUDA is installed, but no CUDA device is accessible. Models will use CPU where supported."
+        : "";
       welcomeVersion.hidden = false;
     }
   } catch {

@@ -79,9 +79,11 @@ export function cancelPendingDetection() {
 async function loadDetectors() {
   if (!detectModelSel) return;
   try {
+    const selected = detectModelSel.value;
     const items = await (await fetch("/api/detectors")).json();
     detectModelSel.innerHTML = items
-      .map((d) => `<option value="${d.id}" ${d.available ? "" : "disabled"}>${d.label}${d.available ? "" : " — unavailable"}</option>`).join("");
+      .map((d) => `<option value="${d.id}" ${d.available ? "" : "disabled"}>${d.label}${d.available ? "" : ` — ${d.reason || "Missing model files"}`}</option>`).join("");
+    if (items.some((item) => item.id === selected && item.available)) detectModelSel.value = selected;
     if (requiredModel && [...detectModelSel.options].some((option) => option.value === requiredModel))
       detectModelSel.value = requiredModel;
     updateDetectButton();
@@ -263,6 +265,7 @@ function detectPanelOutside(e) {
 export function openDetectPanel(clientX, clientY) {
   if (!detectPanel || !S.state) return;
   if (detectStemNameEl) detectStemNameEl.textContent = curStemObj() ? curStemObj().name : S.state.curStem;
+  loadDetectors();
   updateDetectStatus();
   detectPanel.hidden = false;
   // Clamp into the viewport near the click.
@@ -278,5 +281,6 @@ export function init_detect() {
   if (detectBtn) detectBtn.addEventListener("click", () => { runDetect(); });
   detectModelSel?.addEventListener("change", updateDetectButton);
   loadDetectors();
+  window.addEventListener("models-changed", loadDetectors);
   detectClose?.addEventListener("click", closeDetectPanel);
 }
