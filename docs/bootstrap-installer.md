@@ -134,10 +134,13 @@ Choose the complete version, including its suffix, yourself:
     build/cpu-venv/Scripts/python tools/release.py 0.5.0-alpha.2 --preview --notes notes.txt
 
 The specified name is preserved exactly: no timestamp or suffix is added.
-The command builds and publishes a GitHub **pre-release**, without a version-bump
-commit or changing the Stable channel. The checkout's original version is
-restored after building, including on build failures. As with regular releases,
-commit your work to main first. `--dry-run` builds locally without publishing.
+The command builds and publishes a GitHub **pre-release** without changing the
+Stable channel. If the release version differs from the checkout, the command
+updates all three version fields and commits that change before tagging, just
+like a regular release. This keeps source checkouts of the tag reporting the
+same version as the release. As with regular releases, commit your work to main
+first. `--dry-run` builds locally and restores the original version without
+publishing.
 
 `--prerelease` is an alias for `--preview`, for example:
 
