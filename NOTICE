@@ -47,7 +47,9 @@ their own licenses:
   src/rs_studio/rocksmith/bnk.py is a direct port of SoundBank.fs,
   and psarc.py, sng.py, wem.py, dds.py and manifest.py follow its reading of the
   container, the SNG structures, the audio wrapper, the texture header and the
-  manifest schema. res/ carries its flat-model files, Wwise project templates
+  manifest schema. src/rs_studio/rocksmith/checker.py ports DLC Builder's
+  arrangement checks (InstrumentalChecker.fs and checkBassTuning), with issue
+  titles from its English locale. res/ carries its flat-model files, Wwise project templates
   and default tones. The Sound Designer also bundles DLC Builder's complete
   tone gear definitions and native tone descriptions, pinned to commit
   4cf3325174e13f1dc5ce997e7663b2851c6afcce. The shared catalogue is generated
