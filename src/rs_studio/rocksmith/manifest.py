@@ -121,7 +121,7 @@ def build_attributes(ctx, header: bool) -> dict:
         "ArrangementName": arr_name,
         "ArtistName": ctx.artist,
         "ArtistNameSort": _sort_field(ctx.latin["artist"], ctx.dlc_key),
-        "CentOffset": 0.0,
+        "CentOffset": ctx.cent_offset,
         "DLC": True,
         "DLCKey": key,
         "DNA_Chords": 0.0,

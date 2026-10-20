@@ -5,10 +5,12 @@ Rocksmith2014.NET's own checker on them; these tests pin the cases down. The
 first group goes through the exporter, the second builds SNG data by hand for
 the issues the exporter cannot produce on its own.
 """
+import json
 import unittest
 
 from rs_studio.rocksmith import builder, checker
 from rs_studio.rocksmith import sng as S
+from rs_studio.rocksmith.psarc import read_psarc
 
 GUITAR = [64, 59, 55, 50, 45, 40]
 
@@ -77,12 +79,14 @@ def _chord(start, end, frets_lo_hi, **effects_by_string):
             for i, f in enumerate(frets_lo_hi) if f != "x"]
 
 
-def _compiled(notes, lead=5, **track):
-    """The SNG the export would ship for one lead lane."""
+def _built(notes, lead=5, kind="lead", **track):
+    """What the export would ship for one lane."""
     spec = builder._with_lead_in(_spec(notes, lead, **track), lead)
-    compiled, _, _, _ = builder._compile_arrangement(spec, spec["tracks"][0], {"kind": "lead"},
-                                                     20.0 + lead, "KEY", [])
-    return compiled.sng
+    return builder._compile_arrangement(spec, spec["tracks"][0], {"kind": kind}, 20.0 + lead, "KEY", [])
+
+
+def _compiled(notes, lead=5, **track):
+    return _built(notes, lead, **track).compiled.sng
 
 
 class ExporterFixes(unittest.TestCase):
@@ -94,6 +98,30 @@ class ExporterFixes(unittest.TestCase):
         self.assertEqual([fingers[s] for s in (0, 3, 4, 5)], [-1] * 4, "open strings")
         self.assertTrue(all(fingers[s] > 0 for s in (1, 2)), "fretted strings")
         self.assertNotIn("I28", [c for c, _ in _codes(_spec(_chord(2.0, 3.0, "022000"), lead=5))])
+
+    def test_low_tunings_stay_low(self):
+        """A standard is seven steps down, not five up."""
+        a_std = [p - 7 for p in GUITAR]
+        notes = [{"start": 2.0, "end": 2.5, "pitch": a_std[5], "string": 6, "fret": 0}]
+        self.assertEqual(_compiled(notes, tuning=a_std).metadata.tuning, (-7,) * 6)
+
+    def test_low_bass_gets_dlc_builders_low_tuning_fix(self):
+        b_std = [38, 33, 28, 23]
+        notes = [{"start": 2.0, "end": 2.5, "pitch": 23, "string": 4, "fret": 0},
+                 {"start": 3.0, "end": 3.5, "pitch": 28, "string": 4, "fret": 5},
+                 {"start": 3.0, "end": 3.5, "pitch": 35, "string": 3, "fret": 7}]
+        built = _built(notes, kind="bass", tuning=b_std)
+        self.assertEqual(built.compiled.sng.metadata.tuning, (7, 7, 7, 7, 0, 0))
+        self.assertEqual(built.cent_offset, -1200.0)
+        self.assertEqual(built.issues(), [])
+        # Template pitches follow the reported tuning, as DLC Builder writes them.
+        self.assertEqual(built.compiled.sng.chords[0].notes, [40, 47, -1, -1, -1, -1])
+        spec = _spec(notes, lead=5, tuning=b_std)
+        spec["rocksmith"]["arrangements"] = [{"track": 0, "kind": "bass"}]
+        files, _, _ = builder.build_cdlc(spec, None, _wems=(b"a", b"b"), _song_length=20.0)
+        [attrs] = [next(iter(json.loads(blob)["Entries"].values()))["Attributes"]
+                   for path, blob in read_psarc(files).items() if path.endswith(".json")]
+        self.assertEqual(attrs["CentOffset"], -1200.0)
 
 
 def _song(notes=(), chords=(), anchors=(), handshapes=(), phrases=("COUNT", "p1", "END"),

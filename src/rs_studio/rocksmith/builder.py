@@ -48,6 +48,7 @@ class SongContext:
     tone: dict
     tone_slots: list[dict]
     compiled: chart.Compiled
+    cent_offset: float = 0.0
 
 
 # "type" is the RS ArrangementType ordinal (Rocksmith2014.XML ArrangementName
@@ -140,8 +141,20 @@ def _cdlc_filename(artist: str, title: str, key: str, version: int = 1) -> str:
     return f"{clean(artist) or 'Unknown'}_{clean(title) or key}_v{version}_p.psarc"
 
 
-def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[int], bool]:
-    """Editor tuning (hi->lo midi) -> RS int16[6] offsets from standard."""
+LOW_BASS_CENTS = -1200.0   # DLC Builder's low tuning fix: a 220 Hz reference
+
+
+def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[int], bool, float]:
+    """Editor tuning (hi->lo midi) -> (RS int16[6] offsets from standard, is bass, cent offset).
+
+    A lane may sit whole octaves off, so offsets fold into -11..+4: tunings go
+    far down (A standard is -7) and hardly ever more than a few steps up.
+
+    Rocksmith does not detect bass notes below about -4 at the normal 440 Hz
+    reference. DLC Builder's "low tuning fix" halves the reference and raises
+    every string an octave, which sounds the same; it is applied here
+    automatically instead of being reported as I41.
+    """
     n = len(tuning_hi_lo)
     if n == 6:
         ref, is_bass = _STANDARD_GUITAR, False
@@ -153,11 +166,16 @@ def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[
     offsets = []
     for midi, std in zip(low_high, ref):
         off = midi - std
-        reduced = ((off + 6) % 12) - 6  # octave-reduce (lanes may sit an octave off)
+        reduced = ((off + 11) % 12) - 11
         if reduced != off:
             warnings.append(f"Tuning offset {off:+d} octave-reduced to {reduced:+d}")
         offsets.append(reduced)
-    return offsets + [0] * (6 - len(offsets)), is_bass
+    cents = 0.0
+    if is_bass and any(off < -4 for off in offsets):
+        offsets = [off + 12 for off in offsets]
+        cents = LOW_BASS_CENTS
+        warnings.append("Low bass tuning: exported an octave up at a 220 Hz reference so Rocksmith detects it")
+    return offsets + [0] * (6 - len(offsets)), is_bass, cents
 
 
 MAX_LEAD_IN = 30.0
@@ -277,7 +295,7 @@ def _arrangement_specs(spec: dict, tracks: list[dict], warnings: list[str]) -> l
             # The warnings this would emit are about the *chosen* tuning, and
             # here we only want to know guitar vs bass; the real call below runs
             # on the same tuning and collects them.
-            _, is_bass = _tuning_offsets(track.get("tuning") or [], [])
+            _, is_bass, _ = _tuning_offsets(track.get("tuning") or [], [])
         except ValueError:
             is_bass = False
         if len(tracks) > 1:
@@ -378,15 +396,41 @@ def _arrangement_tones(track: dict, is_bass: bool, key: str, tag: str,
     return base, slots, events
 
 
+@dataclass
+class _Built:
+    """One arrangement as it ships: its SNG plus what the manifest needs beside it."""
+    compiled: chart.Compiled
+    is_bass: bool
+    cent_offset: float
+    base_tone: dict
+    tone_slots: list[dict]
+
+    def issues(self) -> list[checker.Issue]:
+        return checker.check(self.compiled.sng, is_bass=self.is_bass, cent_offset=self.cent_offset)
+
+
+def _template_midi(templates: list, offsets: list[int], capo: int, is_bass: bool) -> None:
+    """Chord template pitches from the RS tuning, as Rocksmith2014.NET's Midi.toMidiNote.
+
+    Not the editor's pitches: after an octave fold or the low bass fix the
+    template has to agree with the tuning the manifest reports.
+    """
+    for template in templates:
+        template.notes = [
+            -1 if fret == -1 else
+            _STANDARD_GUITAR[s] + offsets[s] + (capo if capo > 0 and fret == 0 else fret) - (12 if is_bass else 0)
+            for s, fret in enumerate(template.frets)]
+
+
 def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: float,
-                         key: str, warnings: list[str]) -> tuple[chart.Compiled, bool, dict, list[dict]]:
-    """One requested arrangement as the SNG it ships as: (compiled, is_bass, base tone, tone slots)."""
+                         key: str, warnings: list[str]) -> _Built:
+    """One requested arrangement as the SNG it ships as."""
     track = dict(base_track)
     if req.get("tuning"):
         track["tuning"] = req["tuning"]
     if req.get("capo") is not None:
         track["capo"] = int(req["capo"])
-    offsets, is_bass = _tuning_offsets(track.get("tuning") or [], warnings)
+    offsets, is_bass, cents = _tuning_offsets(track.get("tuning") or [], warnings)
     arr = ARRANGEMENTS[req["kind"]]
     if arr["is_bass"] != is_bass:
         need = "4-string bass" if arr["is_bass"] else "6-string guitar"
@@ -402,10 +446,11 @@ def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: f
     warnings.extend(compiled.warnings)
     compiled.sng.metadata.tuning = tuple(offsets)
     compiled.sng.metadata.part = 3 if is_bass else (2 if arr["path"] == "rhythm" else 1)
+    _template_midi(compiled.sng.chords, offsets, max(0, int(track.get("capo") or 0)), is_bass)
     base_tone, tone_slots, tone_events = _arrangement_tones(
         track, is_bass, key, arr["tag"], song_length, warnings)
     compiled.sng.tones = tone_events
-    return compiled, is_bass, base_tone, tone_slots
+    return _Built(compiled, is_bass, cents, base_tone, tone_slots)
 
 
 def check_spec(spec: dict) -> list[dict]:
@@ -435,7 +480,7 @@ def check_spec(spec: dict) -> list[dict]:
         out.append(found)
         warnings: list[str] = []
         try:
-            compiled, is_bass, _, _ = _compile_arrangement(
+            built = _compile_arrangement(
                 spec, tracks[index], {**item, "kind": item.get("kind") or "lead"},
                 length + lead, key, warnings)
         except ValueError as exc:
@@ -445,7 +490,7 @@ def check_spec(spec: dict) -> list[dict]:
         found["issues"] = [
             {"code": issue.code, "time": None if issue.time is None else round(issue.time - lead, 3),
              "title": issue.title, "help": issue.help, "important": issue.important}
-            for issue in checker.check(compiled.sng, is_bass=is_bass)]
+            for issue in built.issues()]
     return out
 
 
@@ -495,22 +540,21 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         arrangement_entries: list[tuple[str, bytes]] = []
         for sort_idx, req in enumerate(arr_requests):
             arr = ARRANGEMENTS[req["kind"]]
-            compiled, is_bass, base_tone, tone_slots = _compile_arrangement(
-                spec, tracks[req["track"]], req, song_length, key, warnings)
-            warnings.extend(f"{arr['full_name']}: {issue.text()}"
-                            for issue in checker.check(compiled.sng, is_bass=is_bass))
-            sng_packed = sng.pack(sng.serialize(compiled.sng))
+            built = _compile_arrangement(spec, tracks[req["track"]], req, song_length, key, warnings)
+            warnings.extend(f"{arr['full_name']}: {issue.text()}" for issue in built.issues())
+            sng_packed = sng.pack(sng.serialize(built.compiled.sng))
             representative = arr["priority"] == "main"
 
             ctx = SongContext(
                 dlc_key=key, title=title, artist=artist, album=album, latin=latin, year=year,
-                is_bass=is_bass, arrangement=arr, representative=representative,
+                is_bass=built.is_bass, arrangement=arr, representative=representative,
                 arrangement_sort=sort_idx,
                 persistent_id=manifest.stable_uuid(key, arr["tag"]),
                 master_id=manifest.stable_id32(key, arr["tag"]),
-                tone=base_tone,
-                tone_slots=tone_slots,
-                compiled=compiled,
+                tone=built.base_tone,
+                tone_slots=built.tone_slots,
+                compiled=built.compiled,
+                cent_offset=built.cent_offset,
             )
             contexts.append(ctx)
             arrangement_entries.extend([
