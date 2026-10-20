@@ -2149,6 +2149,27 @@ class EndToEndTests(unittest.TestCase):
         self.assertLess(result['middle'], max(result['from'], result['to']), result)
         self.assertAlmostEqual(result['off'],result['from'],places=5)
 
+    def test_bend_and_natural_harmonic_exclude_each_other(self):
+        self.open_reference_project()
+        page = self.page
+        stacked = page.evaluate("""async () => {
+            const { S, setSelection } = await import('/store.js');
+            const note = S.state.editLanes[0].notes[0];
+            note.bend = 'custom'; note.bendPoints = [[0, 0], [0.5, 2], [0.5, 2], [1, 2]];
+            setSelection(new Set([note]));
+            (await import('/edit.js')).openNoteMenu(400, 200);
+            return (await import('/note-render.js')).stackedBendPoints(note).map(p => p.count);
+        }""")
+        self.assertEqual(stacked, [2], "two points on one moment are flagged once")
+        page.locator(".ctxmenu-family > .ctxmenu-parent", has_text="Picking").hover()
+        page.get_by_role("button", name="Harmonic", exact=True).hover()
+        natural = page.locator(".ctxmenu-item", has_text="Natural")
+        expect(natural).to_be_disabled()
+        expect(natural).to_contain_text("Not with a bend")
+        expect(page.locator(".ctxmenu-item", has_text="Pinch")).to_be_enabled()
+        natural.hover(force=True)
+        expect(page.locator(".app-tooltip")).to_contain_text("cannot be bent")
+
     def test_unplayable_chord_warning_and_shape_exit_on_seek(self):
         page = self.page
         bundle = self.data / 'chord-warnings.chart'

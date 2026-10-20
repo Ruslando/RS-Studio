@@ -416,7 +416,10 @@ min-width 172–220. Row: 24 high, radius 4, padding `0 12`, 13px; hover
 `--control-hover`; shortcut right aligned in mono 11 `--hint`; a check or a
 submenu arrow sits in the same right column: the check is the `check` icon at
 14, the arrow is drawn in CSS, neither is a character. Separator: 1px `--line`, 4 above
-and below. Items that open a window end in "…".
+and below. Items that open a window end in "…". An item another choice rules
+out is disabled, says why in its grey note ("Not with a bend") and explains it
+in a tooltip beside the row (4.19): a natural harmonic and a bend exclude each
+other.
 
 ### 4.9 Popover (live editor)
 
@@ -618,7 +621,9 @@ Any element gets it with `data-tip` (first line the title) and `data-tip-tone`;
 a canvas mark calls `showTooltip` with the pointer and a list of blocks. A block
 is an optional caption line (the warning triangle in `--error` or `--warn`, then
 "Error" or "Warning" in 12 `--label`), a 600 title in `--text` and the
-explanation in `--label`; blocks are divided by a hairline, errors first. The browser's own `title` tooltip is still used elsewhere.
+explanation in `--label`; blocks are divided by a hairline, errors first.
+Beside a menu row it opens to the right of the row instead, so it does not
+cover the rows below. The browser's own `title` tooltip is still used elsewhere.
 
 ## 5. The stage
 
@@ -898,7 +903,9 @@ internal. A timed row moves there like a marker row. On
 the stage the notes an issue concerns are framed like an unplayable chord, in
 `--error` or `--warn` like the row, and hovering the frame's triangle shows the
 same tooltip (4.19). An unplayable chord is an error, one only a very wide hand
-reaches is a warning. What the
+reaches is a warning. Bend points on the same millisecond carry a count badge
+like an overlap stack's, ringed in `--warn` because the export keeps the first
+and drops the rest; it sits up and right of the point and has a tooltip. What the
 export changes on its own to avoid an issue (a slide into a chord, a dead note
 in a chord) is listed and framed the same way, never as important. An empty list
 is hidden, header included.

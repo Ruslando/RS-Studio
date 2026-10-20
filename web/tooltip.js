@@ -79,6 +79,9 @@ document.addEventListener('mouseover', event => {
   if (!target) { if (owner) hideTooltip(); return; }
   if (target === owner) return;
   const rect = target.getBoundingClientRect();
-  showTooltip(target.dataset.tip, Math.max(rect.left, event.clientX - 12), rect.bottom - 8, target, target.dataset.tipTone);
+  // Beside a menu row, so it does not cover the rows below; under anything else.
+  const [x, y] = target.closest('.ctxmenu') ? [rect.right + 8, rect.top - 14]
+    : [Math.max(rect.left, event.clientX - 12), rect.bottom - 8];
+  showTooltip(target.dataset.tip, x, y, target, target.dataset.tipTone);
 });
 for (const type of ['mousedown', 'wheel', 'keydown', 'blur']) window.addEventListener(type, hideTooltip, true);
