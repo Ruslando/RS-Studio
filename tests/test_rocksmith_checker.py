@@ -71,6 +71,31 @@ class ThroughTheExporter(unittest.TestCase):
         self.assertIn("Lead: I25 at 0:00.000: The first phrase contains notes", warnings)
 
 
+def _chord(start, end, frets_lo_hi, **effects_by_string):
+    """frets low->high like '022000'; effects keyed 's1'..'s6' (1 = highest)."""
+    return [_note(start, end, 6 - i, int(f), **effects_by_string.get(f"s{6 - i}", {}))
+            for i, f in enumerate(frets_lo_hi) if f != "x"]
+
+
+def _compiled(notes, lead=5, **track):
+    """The SNG the export would ship for one lead lane."""
+    spec = builder._with_lead_in(_spec(notes, lead, **track), lead)
+    compiled, _, _, _ = builder._compile_arrangement(spec, spec["tracks"][0], {"kind": "lead"},
+                                                     20.0 + lead, "KEY", [])
+    return compiled.sng
+
+
+class ExporterFixes(unittest.TestCase):
+    """Problems DLC Builder found in our packages, fixed at the source."""
+
+    def test_open_strings_carry_no_finger(self):
+        song = _compiled(_chord(2.0, 3.0, "022000"))
+        fingers = song.chords[0].fingers
+        self.assertEqual([fingers[s] for s in (0, 3, 4, 5)], [-1] * 4, "open strings")
+        self.assertTrue(all(fingers[s] > 0 for s in (1, 2)), "fretted strings")
+        self.assertNotIn("I28", [c for c, _ in _codes(_spec(_chord(2.0, 3.0, "022000"), lead=5))])
+
+
 def _song(notes=(), chords=(), anchors=(), handshapes=(), phrases=("COUNT", "p1", "END"),
           iterations=(0.0, 1.0, 10.0), templates=(), tuning=(0,) * 6):
     return S.SNG(
