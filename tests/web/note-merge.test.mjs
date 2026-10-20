@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { uniqueDetectedNotes, makeResizeRoom } from '../../web/note-merge.js';
-import { unplayableColumn } from '../../web/voicing-core.js';
+import { unplayableColumn, chordPlayability } from '../../web/voicing-core.js';
 import { chordWarnings } from '../../web/chord-warnings.js';
 import { readFileSync } from 'node:fs';
 
@@ -31,9 +31,15 @@ assert.equal(unplayableColumn([n(0,1,40), n(0,1,41)], tuning), true, 'two notes 
 assert.equal(unplayableColumn([n(0,1,40), n(0,1,92)], tuning), true, 'missing pitches cannot count as a complete shape');
 assert.equal(unplayableColumn([n(0,1,86)], tuning, 21), true, 'actual neck length is respected');
 assert.equal(unplayableColumn([n(0,1,40), n(0,1,47), n(0,1,52)], tuning), false);
+const at = (pitch, string, fret) => ({ ...n(0, 1, pitch), pos: { string, fret, scope: 'local' } });
+assert.equal(chordPlayability([at(45,4,0), at(52,3,2), at(57,2,2), at(66,1,7), at(64,0,0)], tuning), 'stretch',
+  'frets 2 to 7 low on the neck: only a very wide hand');
+assert.equal(chordPlayability([at(41,5,1), at(54,4,9), at(66,0,2)], tuning), 'impossible', 'frets 1 to 9 reach no hand');
+assert.equal(chordPlayability([at(45,4,0), at(52,3,2), at(57,2,2), at(61,1,2), at(64,0,0)], tuning), 'ok');
 const project = JSON.parse(readFileSync(new URL('../../examples/chord-showcase/project.json', import.meta.url)));
 const lane = project.editLanes[0];
 const warnings = chordWarnings(lane, tuning, 22);
-assert.deepEqual(warnings.filter(c => c.t0 >= 96).map(c => c.t0), [96,100,104,108]);
+assert.deepEqual(warnings.filter(c => c.t0 >= 96).map(c => [c.t0, c.kind]),
+  [[96,'impossible'],[100,'impossible'],[104,'impossible'],[108,'impossible']]);
 assert.equal(chordWarnings(lane, tuning, 22), warnings, 'unchanged frames reuse their analysis');
 console.log('note merging, resize neighbours and chord warnings passed');

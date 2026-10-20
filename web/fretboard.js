@@ -237,7 +237,8 @@ function gripsFor(lane) {
     laneFingering(lane).then((fingering) => {
       if (handJob !== key) return;    // a later edit already asked for a newer one
       const columns = gripsFrom(fingering);
-      const blocked = new Set(chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision).map(column => column.t0));
+      const blocked = new Set(chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
+        .filter(column => column.kind === "impossible").map(column => column.t0));
       const playableColumns = columns.filter(column => !blocked.has(column.start));
       const fingers = playableColumns.flatMap(column => column.fingers);
       hand = { key, strings: fingering.tuning.length, columns, playableColumns, voiced: fingering.voiced,
@@ -339,6 +340,8 @@ let spots = null;     // last frame's targets: { note, string, fret, x0, x1, y0,
 let spotHover = -1;
 
 // Custom shape entry keeps its existing staged walk; its redesign is separate.
+let shownAnyway = null;   // "laneId:t0" of the stretched chord the user asked to see
+const fretboardShowAnyway = $("fretboardShowAnyway");
 let shaping = null;   // { notes, index, picked: Map(note -> { string, fret }) }
 
 // THE MOMENT THE BOARD SHOWS. While the song runs that is the playhead. Stopped, it is
@@ -942,13 +945,20 @@ export function drawFretboard() {
   const lane = currentLane();
   const warning = $("fretboardWarning");
   const warningTime = frozenAt(lane) ?? boardTime();
-  const impossible = !!lane && chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
-    .some(({ t0, notes }) => warningTime >= t0 - 1e-5 && warningTime < Math.max(...notes.map(n => n.end)));
+  const here = lane ? chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
+    .find(({ t0, notes }) => warningTime >= t0 - 1e-5 && warningTime < Math.max(...notes.map(n => n.end))) : null;
+  // A stretch the user asked to see anyway is drawn like any other chord.
+  const stretchKey = here?.kind === "stretch" ? `${lane.id}:${here.t0}` : null;
+  const impossible = !!here && !(stretchKey && shownAnyway === stretchKey);
   const selectionError = editing && !transportPlaying() ? selectedPositions(lane).error : null;
   const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
   warning.hidden = !selectionError && !impossible;
-  warning.textContent = selectionError || (impossible ? "⚠ No valid shape found" : "");
-  warning.title = selectionError || "The notes cannot all be played together with this tuning, fret range and fingering.";
+  warning.textContent = selectionError || (!impossible ? ""
+    : stretchKey ? "⚠ No reasonable shape found" : "⚠ No valid shape found");
+  warning.title = selectionError || (stretchKey ? "Only a very wide hand reaches these notes together."
+    : "The notes cannot all be played together with this tuning, fret range and fingering.");
+  fretboardShowAnyway.hidden = !impossible || !stretchKey || !!selectionError;
+  fretboardShowAnyway.dataset.key = stretchKey || "";
   fretboardPanel.toggleAttribute("data-unplayable", impossible);
   if (fretboardPanel.hasAttribute("data-edit-blocked") !== blocked) {
     fretboardPanel.toggleAttribute("data-edit-blocked", blocked);
@@ -1914,6 +1924,11 @@ export function init_fretboard() {
       alternativeIndex = -1; previewAlternative = false;
     }
     if (shaping && (event.detail === "seek" || event.detail === "play")) setFretboardShape(false);
+  });
+  fretboardShowAnyway.addEventListener("click", () => {
+    shownAnyway = fretboardShowAnyway.dataset.key || null;
+    fretboardShowAnyway.blur();
+    draw();
   });
   fretboardShape.addEventListener("click", () => {
     fretboardShape.blur();
