@@ -136,6 +136,17 @@ class ExporterFixes(unittest.TestCase):
         self.assertEqual(sum(song.levels[0].notes_in_pi_excl_ignored), 2)
         self.assertNotIn("I13", [c for c, _ in _codes(_spec(notes, lead=5))])
 
+    def test_legato_slide_into_a_chord_is_not_linked(self):
+        notes = [_note(2.0, 2.5, 3, 5, slide="legato"), *_chord(3.0, 4.0, "x02270")]
+        [found] = builder.check_spec(_spec(notes, lead=5))
+        self.assertNotIn("I03", [i["code"] for i in found["issues"]])
+        self.assertIn("1 legato slide(s) end on a chord; Rocksmith cannot link a note to a chord, "
+                      "so the chord is picked again", found["warnings"])
+        source = _compiled(notes).levels[0].notes[0]
+        self.assertTrue(source.mask & S.SLIDE)
+        self.assertFalse(source.mask & S.PARENT)
+        self.assertEqual(source.slide_to, 2)     # the G string of x02270
+
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""
         a_std = [p - 7 for p in GUITAR]
