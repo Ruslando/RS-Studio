@@ -545,6 +545,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         }
 
     entities: list[_Entity] = []
+    muted_in_chords = 0
     i = 0
     while i < len(voiced):
         j = i
@@ -554,6 +555,12 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             j += 1
         t = voiced[i][0]
         notes = [(s, fret, n) for s, (_, _, fret, n) in sorted(group.items())]
+        dead = [item for item in notes if (item[2].get("fx") or {}).get("dead")]
+        if dead and len(dead) < len(notes):
+            # BasicFixes.removeMutedNotesFromChords: the game needs every chord
+            # note's pitch to detect the chord (I29). A fully muted chord stays.
+            notes = [item for item in notes if item not in dead]
+            muted_in_chords += len(dead)
         dur = max(_f(n.get("end"), t) - t for _, _, n in notes)
         sustain = dur if sustained(t, dur) else 0.0
         if not sustain and any((n.get("fx") or {}).get("vibrato") or n.get("tremPick") for _, _, n in notes):
@@ -574,6 +581,8 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         entities.append(ent)
         i = j
 
+    if muted_in_chords:
+        warnings.append(f"{muted_in_chords} dead note(s) were left out of chords that are not fully muted")
     return _Voicing(
         entities=entities,
         chord_templates=chord_templates,
