@@ -135,6 +135,63 @@ class EndToEndTests(unittest.TestCase):
         expect(self.page.locator("#settingsApply")).to_be_hidden()
         self.page.click("#settingsModalClose")
 
+    def test_model_download_refreshes_pickers_and_displays_supported_modes(self):
+        page = self.page
+        ready = False
+
+        def separators(route):
+            route.fulfill(json=[
+                {"id": "demucs", "label": "Demucs", "available": True,
+                 "stems": [{"id": "bass", "label": "Bass"}]},
+                {"id": "roformer", "label": "BS-RoFormer", "available": ready,
+                 "reason": "" if ready else "Not downloaded",
+                 "stems": [{"id": "bass", "label": "Bass"}]},
+            ])
+
+        page.route("**/api/separators", separators)
+        page.route("**/api/version", lambda route: route.fulfill(json={
+            "version": "0.5.0rc1", "variant": "CUDA", "cuda_available": False}))
+        page.route("**/api/setup", lambda route: route.fulfill(json={"complete": True}))
+        page.reload()
+        expect(page.locator("#welcomeVersion")).to_have_text("v0.5.0rc1 · CUDA version")
+        expect(page.locator("#welcomeVersion")).to_have_attribute("title", re.compile("no CUDA device"))
+        self.new_audio_project()
+        page.click("#stemTabs .layer-add")
+        option = page.locator('.stem-add-menu option[value="roformer"]')
+        expect(option).to_be_disabled()
+        expect(option).to_have_text("BS-RoFormer — Not downloaded")
+        page.keyboard.press("Escape")
+
+        # Completion while the picker is closed must work even if Settings has
+        # stopped polling. No page reload or app restart is involved.
+        ready = True
+        page.click("#stemTabs .layer-add")
+        expect(option).to_be_enabled()
+        page.locator('.stem-add-menu select[aria-label="Separation model"]').select_option("roformer")
+        page.keyboard.press("Escape")
+        ready = False
+        page.click("#stemTabs .layer-add")
+        expect(option).to_be_disabled()
+        page.keyboard.press("Escape")
+
+        # Inventory rendering also publishes changes to existing picker data.
+        await_render = """async () => {
+            const root = document.createElement('div');
+            root.innerHTML = '<div class="model-status"></div><div class="model-list-separation"></div><div class="model-list-detection"></div>';
+            document.body.append(root);
+            root.id = 'modelTest';
+            await (await import('/models.js')).renderModels(root);
+        }"""
+        page.route("**/api/models", lambda route: route.fulfill(json=[{
+            "id": "roformer", "label": "BS-RoFormer", "kind": "Stem separation",
+            "state": "ready", "modes": ["cpu", "cuda"], "size": 100,
+            "downloadable": True, "files": ["model.ckpt"]}]))
+        ready = True
+        page.evaluate(await_render)
+        expect(page.locator("#modelTest .model-mode")).to_have_text(["CPU", "CUDA"])
+        page.wait_for_function("async () => (await import('/separators.js')).separators.find(model => model.id === 'roformer')?.available")
+        page.evaluate("document.getElementById('modelTest').remove()")
+
     def test_update_dialog_checks_both_channels_and_survives_reload(self):
         page = self.page
         page.request.post(self.url + 'api/update/channel', data={'channel': 'stable'})

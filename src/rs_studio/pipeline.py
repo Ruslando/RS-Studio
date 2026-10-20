@@ -666,14 +666,20 @@ def list_detectors() -> list[dict]:
     the separator picker. Detection never downloads weights implicitly; users
     install them explicitly from Settings > Models.
     """
-    return [
-        {
+    from .models import availability_reason
+
+    rows = []
+    for detector_id, entry in DETECTORS.items():
+        available = bool(entry.get("ready", _always_ready)())
+        row = {
             "id": detector_id,
             "label": entry["label"],
-            "available": bool(entry.get("ready", _always_ready)()),
+            "available": available,
         }
-        for detector_id, entry in DETECTORS.items()
-    ]
+        if not available:
+            row["reason"] = availability_reason(detector_id) or "Missing model files"
+        rows.append(row)
+    return rows
 
 
 def _always_ready() -> bool:
@@ -736,16 +742,20 @@ def list_separators() -> list[dict]:
     always-present full mix), shaped as [{id, label}] for the new-project picker.
     """
     from . import roformer
+    from .models import availability_reason
 
     demucs_stems = [{"id": sid, "label": label} for sid, label in SEPARABLE_STEMS]
     rofo_stems = [
         {"id": sid, "label": STEM_LABELS.get(sid, sid.title())}
         for sid in roformer.instruments()
     ]
+    demucs_reason = availability_reason("demucs")
     return [
-        {"id": "demucs", "label": "Demucs (6-stem model)", "available": True,
+        {"id": "demucs", "label": "Demucs (6-stem model)",
+         "available": not demucs_reason, "reason": demucs_reason,
          "stems": demucs_stems},
         {"id": "roformer", "label": "BS-RoFormer (6-stem model)", "available": roformer.available(),
+         "reason": availability_reason("roformer"),
          "stems": rofo_stems},
     ]
 

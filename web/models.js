@@ -11,6 +11,7 @@ import { $ } from "./dom.js";
 
 const POLL_MS = 1000;
 let pollTimer = null;
+let inventoryState = "";
 
 // Rule 8: state is a dot, never coloured text. Ready and bundled are the same
 // answer to the only question the row asks — can I use this now.
@@ -144,6 +145,16 @@ export function modelRow(model, root) {
   label.className = "model-label";
   label.textContent = model.label;
   name.append(label);
+  const modes = document.createElement("span");
+  modes.className = "model-modes";
+  modes.setAttribute("aria-label", "Supported modes");
+  for (const mode of model.modes || []) {
+    const pill = document.createElement("span");
+    pill.className = "model-mode";
+    pill.textContent = mode.toUpperCase();
+    modes.append(pill);
+  }
+  name.append(modes);
   if (model.warning) name.append(warnMark(model.warning));
 
   const value = document.createElement("span");
@@ -172,6 +183,11 @@ export function modelRow(model, root) {
 }
 
 function render(list, root) {
+  const state = JSON.stringify(list.map(({ id, state }) => [id, state]));
+  if (state !== inventoryState) {
+    inventoryState = state;
+    window.dispatchEvent(new Event("models-changed"));
+  }
   if (root.closest("[hidden]")) return;
   const panes = {
     "Stem separation": root.querySelector(".model-list-separation"),

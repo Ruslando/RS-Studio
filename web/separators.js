@@ -1,4 +1,5 @@
-// The server's separation backends and what each can produce, fetched once.
+// The server's separation backends and what each can produce, refreshed when
+// opening a picker and when the model inventory changes.
 //
 // Three UIs offer separation and all three read this list: the Stems tab strip's
 // Add-stem menu, the stem settings panel, and the New Project modal. It was a
@@ -17,7 +18,11 @@ export const DEFAULT_PART_ORDER = ["guitar", "bass", "vocals", "drums", "piano",
 
 // Never throws: with no backends, each caller shows its own "unavailable" copy.
 export async function loadSeparators() {
-  try { separators = await (await fetch("/api/separators")).json(); }
+  try {
+    const response = await fetch("/api/separators");
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    separators = await response.json();
+  }
   catch { separators = []; }
   return separators;
 }

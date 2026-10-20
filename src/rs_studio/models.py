@@ -76,12 +76,12 @@ def _torch_checkpoints() -> Path:
 # Hardware support shown in the model pane. Keep this factual and avoid rating
 # model performance; the labels describe what each model is intended to handle.
 _RUNS = {
-    "demucs": {"needs": "GPU or CPU."},
-    "roformer": {"needs": "CUDA GPU or CPU. 174.7M parameters, 44.1 kHz."},
-    "piano": {"needs": "CPU. No GPU needed."},
-    "mt3": {"needs": "CPU. No GPU needed."},
-    "basic_pitch": {"needs": "CPU. No GPU needed."},
-    "torchcrepe": {"needs": "GPU or CPU."},
+    "demucs": {"modes": ["cpu", "cuda"], "needs": "GPU or CPU."},
+    "roformer": {"modes": ["cpu", "cuda"], "needs": "CUDA GPU or CPU. 174.7M parameters, 44.1 kHz."},
+    "piano": {"modes": ["cpu", "cuda"], "needs": "CUDA GPU or CPU."},
+    "mt3": {"modes": ["cpu", "cuda"], "needs": "CUDA GPU or CPU."},
+    "basic_pitch": {"modes": ["cpu"], "needs": "CPU. No GPU needed."},
+    "torchcrepe": {"modes": ["cpu", "cuda"], "needs": "GPU or CPU."},
 }
 
 
@@ -133,6 +133,19 @@ def _entry(model_id: str) -> dict | None:
     return next((m for m in _catalog() if m["id"] == model_id), None)
 
 
+def availability_reason(model_id: str) -> str:
+    """Explain missing weights without importing inference backends."""
+    model = _entry(model_id)
+    if not model or model.get("bundled"):
+        return ""
+    files = model["files"]
+    if all(path.is_file() for path in files):
+        return ""
+    if any(path.exists() or path.with_name(path.name + ".part").exists() for path in files):
+        return "Missing model files"
+    return "Not downloaded"
+
+
 def _sources(m: dict) -> list[tuple[Path, list[str], str | None]]:
     """(destination, mirrors, expected sha256) per file. Empty if not fetchable.
 
@@ -159,7 +172,8 @@ def status() -> list[dict]:
         row = {"id": m["id"], "label": m["label"], "kind": m["kind"],
                "size": m.get("size"), "done": 0,
                "downloadable": bool(_sources(m)), "detail": "",
-                "needs": runs.get("needs", ""), "warning": ""}
+                "needs": runs.get("needs", ""), "warning": "",
+                "modes": runs.get("modes", [])}
         if m.get("bundled"):
             row["state"] = "bundled"
         else:
