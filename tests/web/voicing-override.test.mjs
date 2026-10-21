@@ -146,12 +146,12 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   const { seats, fingers } = voiceNotesFingered(run, bass, Infinity, { bars: [0, 4], instrument: "bass" });
   assert.deepEqual(run.map((n) => seats.get(n)), [13, 13, 8, 8, 8, 8, 2]);
   assert.deepEqual(run.map((n) => fingers.get(n)), [1, 1, 3, 2, 2, 1, 1]);
-  // A bass stretch from fret 5 to 9 exceeds the physical hand-span limit.
-  // The register may stay at 5, but the actual hand must move to play the note.
+  // Fret 5 to 9 is five frets: inside the six a stretch reaches, so the hand stays
+  // and the pinky takes the 9.
   const reachy = [5, 5, 9, 5].map((fret, i) => note(i * 0.5, bass[2] + fret, { pos: pin(2, fret, off) }));
   const got = voiceNotesFingered(reachy, bass, Infinity, { bars: [0, 4], instrument: "bass" });
-  assert.deepEqual([got.seats.get(reachy[0]), got.seats.get(reachy[1]), got.seats.get(reachy[3])], [5, 5, 5]);
-  assert.ok(got.seats.get(reachy[2]) > 5 && got.seats.get(reachy[2]) <= 9);
+  assert.deepEqual(reachy.map((n) => got.seats.get(n)), [5, 5, 5, 5]);
+  assert.equal(got.fingers.get(reachy[2]), 4);
   // Three outside is not: 5 5 12 5 moves there and back.
   reachy[2].pitch = bass[2] + 12; reachy[2].pos = pin(2, 12, off);
   const moved = voiceNotesFingered(reachy, bass, Infinity, { bars: [0, 4], instrument: "bass" });
@@ -218,35 +218,34 @@ for (const chordPin of [false, true]) {
   const before = voiceNotesFingered(lane, tuning, Infinity, options);
   const anchor = before.seats.get(selected[0]);
   assert.equal(anchor, 2);
+  // A hand anchor moves no note; adapting to the override is what moves the notes after it.
   const direct = voiceNotesFingered(lane, tuning, Infinity,
     { ...options, holds: [{ t: time, fret: anchor }] });
+  for (const n of lane) assert.deepEqual(direct.voiced.get(n), before.voiced.get(n),
+    `a hand anchor moves no note (chord=${chordPin}, t=${n.start})`);
   for (const n of selected) n.pos.adaptNext = true;
   const adapted = voiceNotesFingered(lane, tuning, Infinity, options);
-  for (const n of lane) {
-    assert.deepEqual(adapted.voiced.get(n), direct.voiced.get(n),
-      `same positions as direct hand hold (chord=${chordPin}, t=${n.start})`);
-    assert.equal(adapted.seats.get(n), direct.seats.get(n),
-      `same hand as direct hand hold (chord=${chordPin}, t=${n.start})`);
-    if (n.start < time) assert.deepEqual(adapted.voiced.get(n), before.voiced.get(n),
-      "forward adaptation leaves the approach unchanged");
-  }
+  for (const n of lane) if (n.start < time) assert.deepEqual(adapted.voiced.get(n), before.voiced.get(n),
+    "forward adaptation leaves the approach unchanged");
 }
 
 // From hand position 2, the exact E3/G3/B3 chord may use D2/G0/B0.
 // Single G3 still avoids its open string; chord techniques still require frets.
 {
-  const lane = [note(0, 52), note(1, 55), note(2, 57),
+  // Position 2 is set by a first note the rest adapt to (a hand anchor moves no note).
+  const lane = [note(0, 52, { pos: pin(3, 2, { influencePrevious: false, influenceNext: false,
+    adaptPrevious: false, adaptNext: true }) }), note(1, 55), note(2, 57),
     ...[52, 55, 59].map(p => note(3, p))];
-  const options = { bars: [0, 4], holds: [{ t: 0, fret: 2 }] };
+  const options = { bars: [0, 4] };
   const { voiced, seats } = voiceNotesFingered(lane, tuning, Infinity, options);
   assert.notEqual(voiced.get(lane[1]).fret, 0, "single notes keep the open-string restriction");
   assert.deepEqual(lane.slice(3).map(n => at(voiced, n)), ["3:2", "2:0", "1:0"]);
   assert.equal(seats.get(lane[3]), 2, "the chord needs no shift away from hand position 2");
   const columns = chordColumns(lane);
   const shape = new Map(lane.slice(3).map(n => [n, voiced.get(n)]));
-  const [offer] = scoreShapesAsDecided([shape], chordColumns(lane.slice(3)), 0, tuning,
-    { bars: [0, 4], holds: [{ t: 3, fret: 2 }] });
-  assert.equal(offer.cost, .25, "only D2's weighted distance to register 3 is charged; chord opens cost zero");
+  const higher = new Map(lane.slice(3).map((n, k) => [n, [{ string: 4, fret: 7 }, { string: 3, fret: 5 }, { string: 2, fret: 4 }][k]]));
+  const [open, up] = scoreShapesAsDecided([shape, higher], columns, 3, tuning, options);
+  assert.ok(open.cost < up.cost, "from hand position 2 the open grip is cheaper; its open strings cost nothing");
   lane[4].slide = "outUp";
   const constrained = voiceNotes(lane, tuning, Infinity, options);
   assert.notEqual(constrained.get(lane[4]).fret, 0, "a chord slide still requires a fret");

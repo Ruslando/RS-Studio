@@ -15,7 +15,10 @@ WEMS = (b"RIFF main audio", b"RIFF preview audio")
 
 def _track(name, tuning, frets, **extra):
     low = len(tuning)                                   # the lowest string
-    notes = [{"start": 1 + i * 0.5, "end": 1.4 + i * 0.5, "pitch": tuning[-1] + fret, "string": low, "fret": fret}
+    # The hand as the editor sends it: the index on the first fretted note, reaching up.
+    hand = min([f for f in frets if f > 0], default=1)
+    notes = [{"start": 1 + i * 0.5, "end": 1.4 + i * 0.5, "pitch": tuning[-1] + fret, "string": low, "fret": fret,
+              "hand": hand}
              for i, fret in enumerate(frets)]
     return {"name": name, "tuning": tuning, "notes": notes, **extra}
 

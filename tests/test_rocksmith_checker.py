@@ -165,18 +165,31 @@ class ExporterFixes(unittest.TestCase):
         values = _compiled(notes).levels[0].notes[0].bend_values
         self.assertEqual([(round(b.time, 3), b.step) for b in values], [(7.5, 1.0), (8.0, 1.0)])
 
-    def test_position_shifts_before_a_pull_off(self):
-        notes = [_note(2.0, 2.4, 1, 8), _note(2.5, 3.0, 1, 5, fx={"hammer": True})]
-        self.assertNotIn("I33", [c for c, _ in _codes(_spec(notes, lead=5))])
+    def test_hand_positions_are_the_editors(self):
+        """Every hand position comes from the editor; the export only translates it."""
+        hands = [5, 5, 10, 10, 2]
+        notes = [_note(2.0 + i * 0.5, 2.4 + i * 0.5, 2, fret, hand=hand)
+                 for i, (fret, hand) in enumerate(zip([5, 8, 12, 14, 2], hands))]
         anchors = _compiled(notes).levels[0].anchors
-        self.assertEqual([(round(a.start_time, 3), a.fret) for a in anchors], [(7.0, 5)])
+        self.assertEqual([(round(a.start_time, 3), a.fret, a.width) for a in anchors],
+                         [(7.0, 5, 4), (8.0, 10, 5), (9.0, 2, 4)],   # 5 s of lead-in
+                         "a position where the hand moves, four frets wide or as far as a note reaches")
+        song = _compiled(notes)
+        for note, hand in zip(song.levels[0].notes, hands):
+            self.assertEqual(note.anchor_fret, hand)
 
-    def test_a_slide_keeps_its_finger(self):
-        notes = [_note(2.0, 2.4, 2, 5), _note(2.5, 3.0, 2, 7, slide="legato"), _note(3.0, 4.0, 2, 12)]
-        self.assertNotIn("I32", [c for c, _ in _codes(_spec(notes, lead=5))])
-        anchors = _compiled(notes).levels[0].anchors
-        self.assertEqual([(round(a.start_time, 3), a.fret) for a in anchors], [(7.0, 5), (8.0, 10)],
-                         "the third finger slides from fret 7 to 12")
+    def test_hand_positions_count_from_the_nut_and_start_every_phrase(self):
+        notes = [_note(2.0, 2.4, 2, 3, hand=3), _note(9.0, 9.4, 2, 3, hand=3)]
+        song = _compiled(notes, capo=2, phraseBoundaries=[{"t": 8.0}])
+        self.assertEqual([(round(a.start_time, 3), a.fret) for a in song.levels[0].anchors],
+                         [(7.0, 5), (13.0, 5)], "capo added; the phrase at 8 s (13 s after the lead-in) starts with the hand in force")
+
+    def test_a_note_without_a_hand_is_reported(self):
+        built = builder._compile_arrangement(_spec([_note(2.0, 2.4, 2, 5)]),
+                                             _spec([_note(2.0, 2.4, 2, 5)])["tracks"][0],
+                                             {"track": 0, "kind": "lead"}, 20.0, "KEY", warnings := [])
+        self.assertEqual(built.compiled.sng.levels[0].anchors[0].fret, 5)
+        self.assertIn("1 note(s) had no hand position from the editor; the export placed the hand on them", warnings)
 
     def test_slide_out_ends_before_the_next_position(self):
         notes = [_note(2.0, 2.5, 1, 3, slide="outUp"), _note(2.5, 3.0, 1, 12)]

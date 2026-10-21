@@ -458,20 +458,20 @@ export const hasPlayableFingering = (shape, profile = GUITAR_HAND_PROFILE) => fi
 // register is context, not an independent index position. For a chord its pull
 // is bounded so it cannot buy an unnecessarily split barre to save a shift.
 export function handForShape(shape, seat, profile = GUITAR_HAND_PROFILE, required = new Map(), fixedSeat = false) {
-  let poses = fingeringOptions(shape, profile);
-  // A single fretted contact can stretch without moving the whole hand. Evaluate
-  // that actual anchored pose in millimetres, rather than clamping its finger
-  // number to four and claiming the stretch is automatically possible.
   const contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !noteIsDead(note));
-  if (contacts.length === 1 && Number.isFinite(seat) && seat >= 1) {
-    const [note] = contacts[0];
-    poses = [...poses, ...poses.flatMap(pose => {
-      if (pose.fingers.get(note) === 1 || pose.seat === seat) return [];
-      const anchored = { ...pose, groups: pose.groups.map(group => ({ ...group })), seat };
-      const parts = gripParts(shape, anchored, profile);
-      return parts ? [{ ...anchored, parts, cost: Object.values(parts).reduce((sum, value) => sum + value, 0) }] : [];
-    })];
+  // ONE FRETTED NOTE: the finger is where the hand puts it (fret − hand + 1, the
+  // pinky for a stretch), so any hand within reach plays it and the index is on it
+  // when the hand is on its fret. Out of reach, the hand comes to the note.
+  if (contacts.length === 1) {
+    const [note, pos] = contacts[0];
+    const at = Number.isFinite(seat) && seat >= 1 && pos.fret - seat >= 0 && pos.fret - seat < MAX_REACH ? seat : pos.fret;
+    const fingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([n]) => [n, 0]));
+    fingers.set(note, Math.min(4, pos.fret - at + 1));
+    return { fingers, seat: at, playable: true };
   }
+  let poses = fingeringOptions(shape, profile);
+  // A chord only the widest hands reach still has a hand and fingers.
+  if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
   const compatible = poses.filter(pose => [...required].every(([note, finger]) => pose.fingers.get(note) === finger));
   let choices = compatible.length ? compatible : poses;
   if (fixedSeat) {
@@ -487,6 +487,25 @@ export function handForShape(shape, seat, profile = GUITAR_HAND_PROFILE, require
   };
   const chosen = choices.reduce((best, pose) => cost(pose) < cost(best) ? pose : best);
   return { fingers: new Map(chosen.fingers), seat: chosen.seat ?? seat ?? null, playable: true };
+}
+
+// THE HANDS THAT CAN PLAY ONE COLUMN, lowest first: what the fretboard's hand
+// buttons offer. One fretted note: any hand within reach of it. A chord: the hands
+// of its valid fingerings, so a chord fingered with the index has exactly that fret.
+// Nothing fretted: no hand to choose.
+export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infinity) {
+  const contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !noteIsDead(note));
+  if (!contacts.length) return [];
+  let seats;
+  if (contacts.length === 1) {
+    const fret = contacts[0][1].fret;
+    seats = Array.from({ length: Math.min(fret, MAX_REACH) }, (_, k) => fret - k);
+  } else {
+    let poses = fingeringOptions(shape, profile);
+    if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
+    seats = poses.map((pose) => pose.seat);
+  }
+  return [...new Set(seats)].filter((g) => Number.isInteger(g) && g >= 1 && g <= maxHand).sort((a, b) => a - b);
 }
 
 export function fingersAtSeat(shape, seat, profile = GUITAR_HAND_PROFILE, required = new Map()) {
@@ -1612,7 +1631,9 @@ function registerColumns(columns, tuning, options = {}) {
     const locked = pins[i] || handed;
     const flow = locked ? normalizeOverrideInfluence(overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes)) : null;
     return {
-      hold: holds[i],
+      // A hand put here by the player fixes the hand of this column only. It does not
+      // move notes: where they go is decided before the hand (see planHand).
+      handAt: holds[i]?.fret ?? null,
       pitches: notes.map((n) => n.pitch),
       // Onset and release. Lean decides the register once per bar and charges
       // less to change it across a rest, so it needs both — without them the
@@ -1946,6 +1967,7 @@ export function overrideEffectKinds(notes, tuning, options = {}) {
 // docs/voicing-engine.md for the numbers and what they mean.
 
 const SPAN = 4;          // the hand covers four frets. Corpus: 99.9% of chords fit three.
+export const MAX_REACH = 6;   // with a stretch: the pinky reaches two frets past the four
 
 // HOW MANY FRETS THERE ARE IS A FACT ABOUT THE INSTRUMENT, so the caller states
 // it and this is only the default for a caller that cannot. `web/fretboard-core.js`
@@ -2669,7 +2691,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
   const sorted = columns.map((c) => {
     const idx = c.pitches.map((_, i) => i).sort((a, b) => c.pitches[a] - c.pitches[b]);
     return {
-      idx, t0: c.t0, end: c.end, hold: c.hold, cut: !!c.cut, soft: !!c.soft, aside: !!c.aside,
+      idx, t0: c.t0, end: c.end, hold: c.hold, handAt: c.handAt ?? null, cut: !!c.cut, soft: !!c.soft, aside: !!c.aside,
       pitches: idx.map((i) => c.pitches[i]),
       fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
       pinned: c.pinned ? idx.map((i) => c.pinned[i]) : null,
@@ -2759,6 +2781,11 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       }
       return Number.isFinite(lo) ? { lo, hi } : null;
     });
+    // The player's hand, where it can play what is there; otherwise it has lapsed.
+    sorted.forEach((c, i) => {
+      const g = c.handAt, r = reach[i];
+      if (g != null && r && g >= 1 && g <= r.lo && r.hi - g < MAX_REACH) named[i] = g;
+    });
     const planned = planHand(reach, named, span);
     for (let i = 0; i < n; i++) seats[i] = planned[i] ?? Math.max(1, registers[blocks.findIndex((idx) => idx.includes(i))] || 1);
   }
@@ -2798,7 +2825,9 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
 // with nothing fretted take the hand that is already there. This reads the hand off
 // the notes; it does not move them — where each note goes is still the register's.
 const HAND_SHIFT = 4;
-const stretchCost = (frets, span) => (frets <= span ? 0 : 3 ** (frets - span - 1));
+// Past MAX_REACH no hand reaches: priced out, but still finite, so a column that
+// cannot be held any other way (a chord wider than six frets) keeps a hand.
+const stretchCost = (frets, span) => (frets <= span ? 0 : frets > MAX_REACH ? 1e6 : 3 ** (frets - span - 1));
 
 function planHand(reach, named, span = SPAN) {
   const n = reach.length, out = new Array(n).fill(null);
@@ -2811,7 +2840,7 @@ function planHand(reach, named, span = SPAN) {
     // wider than any reach (fret 2 and fret 14 at once) still has the first: the
     // index on its lowest note. With none, the walk below had no state to read.
     const frets = named[i] != null ? [named[i]]
-      : Array.from({ length: r.lo - Math.min(r.lo, Math.max(1, r.hi - span - 3)) + 1 }, (_, k) => r.lo - k);
+      : Array.from({ length: r.lo - Math.min(r.lo, Math.max(1, r.hi - MAX_REACH + 1)) + 1 }, (_, k) => r.lo - k);
     const states = frets.map((g) => {
       const own = named[i] != null ? 0 : stretchCost(r.hi - g + 1, span) + 0.01 * (r.lo - g);
       let best = 0, from = -1;
