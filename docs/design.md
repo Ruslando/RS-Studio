@@ -956,5 +956,10 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
   one fret get separate fingers by default; the barre stays a Finger choice. Every
   valid fingering is a Finger choice (the search itself keeps the cheapest 12). A
   barre may lie over a string the chord leaves out (pressed, not picked).
+- Finger numbers are Rocksmith's: 1 index … 4 pinky, 0 the thumb, -1 none (open
+  strings). The thumb is only ever chosen, never automatic, and offered only where
+  it is played: on the lowest string, at the fret of the lowest other fretted note,
+  with the next string left out (its tip mutes it), e.g. D/F# `2x0232`, E-shape
+  `1x3211`. It comes after the other fingerings and the board marks it "T".
 - In the package: anchors where the hand changes, plus one at every phrase start,
   four frets wide or as far as a note reaches, counted from the nut (capo added).

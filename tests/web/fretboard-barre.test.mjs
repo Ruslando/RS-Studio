@@ -11,7 +11,7 @@ assert.deepEqual(strings(gap), [[2, 3, 5]], "a string the chord leaves out may l
 assert.deepEqual(strings([mark(5), mark(4), mark(3), mark(2)]), [[2, 3, 4, 5]], "adjacent strings form a barre");
 assert.deepEqual(strings([...gap, mark(4, 7, 3)]), [[2, 3, 5], [4]], "a higher fretted A string covers the gap");
 assert.deepEqual(strings([...gap, mark(4, 3, 2)]), [[2, 3], [5], [4]], "a lower A string cannot be covered");
-assert.deepEqual(strings([...gap, mark(4, 0, 0)]), [[4], [2, 3], [5]], "an open A string breaks the barre");
+assert.deepEqual(strings([...gap, mark(4, 0, -1)]), [[4], [2, 3], [5]], "an open A string breaks the barre");
 for (const extra of [{ dead: true }, { note: { fx: { dead: true } } }, { note: { harmonic: "natural" } }]) {
   assert.equal(barreSpanSupported([...gap, mark(4, 7, 3, extra)], 5, 2, 5), false);
 }
@@ -27,7 +27,7 @@ assert.deepEqual(strings([...gap, mark(4, 7, 3, { opacity: 0 })]), [[2, 3], [5],
 assert.deepEqual(gap.map(m => m.string), [5, 3, 2], "grouping does not reorder the source marks");
 
 // Finger assignment and every enumerated pose must obey the same geometry.
-for (const bridge of [null, mark(4, 0, 0), mark(4, 3, 2), mark(4, 7, 3)]) {
+for (const bridge of [null, mark(4, 0, -1), mark(4, 3, 2), mark(4, 7, 3)]) {
   const marks = bridge ? [...gap, bridge] : gap;
   const shape = new Map(marks.map(m => [m.note, { string: m.string, fret: m.fret }]));
   const fingers = assignFingers(shape);

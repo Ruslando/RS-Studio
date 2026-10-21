@@ -2256,7 +2256,7 @@ class EndToEndTests(unittest.TestCase):
         chooser.value.set_files(bundle)
         expect(page.locator('#lanes .lane-row')).to_be_visible()
         self.fretboard_hover_points(68)
-        for start, anchor, digits in [(20,2,[1,2,4]), (68,4,[1,2,3,4]), (72,6,[1,2,3,4]), (84,5,[1,3]), (92,5,[1,3])]:
+        for start, anchor, digits in [(20,2,[1,2,3]), (68,4,[1,2,3,4]), (72,6,[1,2,3,4]), (84,5,[1,3]), (92,5,[1,3])]:
             page.evaluate("async t => (await import('/playback.js')).seekPlayback(t)", start)
             expect(page.locator('#fretboardAltCount')).not_to_contain_text('Loading')
             actual = page.evaluate("""async start => {

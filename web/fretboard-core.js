@@ -37,6 +37,12 @@ import { graceBefore } from "./grace.js";
 import { noteName } from "./util.js";
 import { SLIDES_TO_NEXT, bendCurve, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
 
+// Finger numbers as Rocksmith has them: 1 index … 4 pinky, 0 the thumb (only ever
+// chosen, see thumbPoses), -1 none (an open string).
+export const THUMB = 0;
+export const NO_FINGER = -1;
+export const fingerLabel = (finger, none) => finger === THUMB ? "T" : finger > 0 ? String(finger) : none;
+
 export const GUITAR = {
   name: "Electric guitar",
   scale: 647.7,          // 25.5" — Fender, Ibanez, most superstrats
@@ -278,7 +284,7 @@ const travelWindow = (cur, next, travel) =>
 
 // Only a known finger can carry its marker into the next position.
 function originFor(f, origins) {
-  if (!(f.fret > 0) || !f.finger || f.dead) return null;
+  if (!(f.fret > 0) || !(f.finger >= THUMB) || f.dead) return null;
   return origins.find((o) => o.fret > 0 && !o.dead && o.finger === f.finger) || null;
 }
 
@@ -324,8 +330,8 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
     const grace = graceBefore(f.note, next.eighth ? 30 / next.eighth : 120, f.fret);
     if (!grace || t < grace.start || t >= f.note.start) return [];
     const lower = f.fret + grace.offset;
-    const targetFinger = lower > 0 ? Math.max(2, f.finger || 1) : f.finger || 1;
-    const m = markAt({ ...f, fret: lower, finger: lower > 0 ? targetFinger - 1 : 0,
+    const targetFinger = lower > 0 ? Math.max(2, f.finger) : Math.max(1, f.finger);
+    const m = markAt({ ...f, fret: lower, finger: lower > 0 ? targetFinger - 1 : NO_FINGER,
       start: grace.start, strikeStart: grace.start, tremoloStep: 0 }, s);
     m.graceTarget = { fret: f.fret, x: fretCentre(f.fret, s), finger: targetFinger };
     return [m];
@@ -408,7 +414,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
       const grace = graceBefore(note, cur.eighth ? 30 / cur.eighth : 120, f.fret);
       if (grace) {
         const lower = f.fret + grace.offset;
-        m.finger = lower > 0 ? Math.max(2, f.finger || 1) : f.finger || 1;
+        m.finger = lower > 0 ? Math.max(2, f.finger) : Math.max(1, f.finger);
         m.slurred = true;
         m.hammerMotion = "hammer";
         const release = (t - note.start) / grace.duration;
@@ -430,7 +436,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
       if (interval && t >= note.start && t < note.end && f.fret + interval <= s.frets) {
         const fret = f.fret + interval;
         const used = new Set(cur.fingers.filter((g) => g !== f).map((g) => g.finger));
-        const finger = [1, 2, 3, 4].find((v) => v > (f.finger || 0) && !used.has(v)) || 0;
+        const finger = [1, 2, 3, 4].find((v) => v > f.finger && !used.has(v)) ?? NO_FINGER;
         m.trill = { fret, x: fretCentre(fret, s), finger,
           down: !!trillOffsetAt(note, t - note.start, cur.eighth ? 30 / cur.eighth : 120) };
       }
@@ -461,7 +467,7 @@ export function handAt(columns, t, travel, s = GUITAR, animate = true) {
       const end = Math.min(f.note?.end ?? col.end, next?.start ?? Infinity);
       if (t < end || t >= end + MARK_RELEASE_SECONDS) continue;
       // A moving finger already owns its marker; do not leave a second one behind.
-      if (marks.some((m) => (f.finger && m.finger === f.finger && !m.dead && !f.dead)
+      if (marks.some((m) => (f.finger >= THUMB && m.finger === f.finger && !m.dead && !f.dead)
         || (m.string === f.string && m.fret === f.fret))) continue;
       const last = handPoseAt(columns, end - 1e-8, 0, s)?.marks.find((m) =>
         m.note === f.note && m.string === f.string);

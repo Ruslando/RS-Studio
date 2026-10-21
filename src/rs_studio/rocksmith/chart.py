@@ -290,13 +290,13 @@ def _chord_name(midi: list) -> str:
 
 
 def _finger(n: dict, fret: int) -> int:
-    """The editor's finger on a fretted note (1 index .. 4 pinky), else -1.
+    """The editor's finger on a fretted note (0 thumb, 1 index .. 4 pinky), else -1.
 
-    -1 is also Rocksmith's "no finger", which an open string must have: its 0 is
-    the thumb, and a 0 there draws a T on the string (DLC Builder's I28).
+    The editor numbers fingers as Rocksmith does. -1 is "no finger", which an open
+    string must have: a 0 there draws a T on the string (DLC Builder's I28).
     """
     finger = n.get("finger")
-    return finger if fret > 0 and isinstance(finger, int) and 1 <= finger <= 4 else -1
+    return finger if fret > 0 and isinstance(finger, int) and 0 <= finger <= 4 else -1
 
 
 @dataclass

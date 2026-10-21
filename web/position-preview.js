@@ -32,7 +32,7 @@ export function positionPreviewHand(columnNotes, noteFor, fingering) {
   for (const note of columnNotes) {
     const target = noteFor(note), position = fingering.voiced.get(target);
     if (!position) return null;
-    const finger = fingering.fingers?.get(target) ?? 0;
+    const finger = fingering.fingers?.get(target) ?? -1;   // none (NO_FINGER)
     fingers.set(note, finger);
     byString.set(position.string, finger);
     seat ??= fingering.seats?.get(target) ?? null;

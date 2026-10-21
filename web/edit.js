@@ -803,7 +803,7 @@ export function setColumnFingers(lane, placed, fingers) {
   const { follow } = overrideFlow(placed.map(({ note }) => note));
   for (const { note, string, fret } of placed) {
     const finger = fret > 0 ? fingers.get(note) : null;
-    note.pos = { string, fret, scope: "local", follow, ...(finger ? { finger } : {}) };
+    note.pos = { string, fret, scope: "local", follow, ...(finger >= 0 ? { finger } : {}) };
   }
   const columns = chordColumns(lane.notes), t0 = Math.min(...placed.map(({ note }) => note.start));
   const i = columns.findIndex((c) => Math.abs(c.t0 - t0) < 1e-6);
