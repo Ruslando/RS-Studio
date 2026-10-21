@@ -1,4 +1,4 @@
-import { normalizeOverrideInfluence, overrideFlow } from './voicing-core.js';
+import { overrideFlow } from './voicing-core.js';
 import { applySharedPositionPlan, positionSelection, sharedPositionPlan } from './position-selection.js';
 
 // Build the actual prospective edit on detached musical data. The normal lane
@@ -15,13 +15,11 @@ export function positionPreviewLane(lane, columnNotes, shape, selection, tuning,
     if (plan.error) return null;
     applySharedPositionPlan({ ...plan, changes: plan.changes.map(change => ({ ...change, note: noteFor(change.note) })) });
   } else {
-    const flow = normalizeOverrideInfluence(overrideFlow(columnNotes));
+    const flow = overrideFlow(columnNotes);
     for (const note of columnNotes) {
       const target = noteFor(note), pos = shape.get(note);
       if (!target || !pos) return null;
-      target.pos = { string: pos.string, fret: pos.fret, scope: 'local',
-        influencePrevious: flow.previous, influenceNext: flow.next,
-        adaptPrevious: flow.adaptPrevious, adaptNext: flow.adaptNext };
+      target.pos = { string: pos.string, fret: pos.fret, scope: 'local', follow: flow.follow };
       if (kind === 'chord') delete target.arrangement;
     }
   }

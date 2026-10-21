@@ -23,8 +23,10 @@ const noop = () => {};
 try {
   Object.assign(globalThis, { window: win, localStorage: { getItem: () => null }, ResizeObserver: class { observe() {} } });
   const dom = Object.fromEntries(['editorEl', 'fretboardApply', 'fretboardAuto', 'fretboardBusy', 'fretboardBusyLabel',
-    'fretboardEl', 'fretboardName', 'fretboardPanel', 'fretboardAdaptNext', 'fretboardAdaptPrev', 'fretboardPin',
-    'fretboardReachNext', 'fretboardReachPrev', 'fretboardShape', 'fretboardStage'].map(id => [id, $(id)]));
+    'fretboardEl', 'fretboardFollow', 'fretboardName', 'fretboardPanel', 'fretboardPin',
+    'fretboardShape', 'fretboardStage'].map(id => [id, $(id)]));
+  dom.fretboardFollow.children = ['here', 'guided', 'locked'].map(follow =>
+    Object.assign(new Element(), { dataset: { follow } }));
   const board = await mockImport(new URL('../../web/fretboard.js', import.meta.url), {
     './dom.js': { ...dom, $ }, './store.js': { S },
     './playback.js': { transportPlaying: () => playing },

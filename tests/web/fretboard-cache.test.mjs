@@ -5,8 +5,7 @@ import { chordColumns, voiceNotesFingered, writeColumnOverride } from "../../web
 const tuning = [64, 59, 55, 50, 45, 40];
 const lane = { id: "edit", tuning: "guitar6", notes: [
   { id: "n1", start: 0, end: .8, pitch: 52,
-    pos: { string: 3, fret: 2, scope: "local", influencePrevious: false,
-      influenceNext: false, adaptPrevious: false, adaptNext: false } },
+    pos: { string: 3, fret: 2, scope: "local", follow: "here" } },
   { id: "n2", start: 1, end: 1.8, pitch: 55 },
 ] };
 const key = l => fretboardHandKey(l, 4, "0:60");

@@ -4,7 +4,7 @@ import { chordColumns, placementFault, placementLimits, voiceNotes } from '../..
 
 const tuning = [64, 59, 55, 50, 45, 40];
 const note = (start, pitch, extra = {}) => ({ start, end: start + .4, pitch, ...extra });
-const flags = { influencePrevious: true, influenceNext: true, adaptPrevious: true, adaptNext: true };
+const flags = { follow: 'locked' };
 
 // Edit highlighting follows every recipient, including occurrences away from
 // the playhead, and never advertises edits for an invalid shared selection.
@@ -58,7 +58,7 @@ const plan = (lane, selection, source, shape, maxFret = 22) => {
   assert.equal(applySharedPositionPlan(accepted), true);
   assert.deepEqual(a.pos, b.pos);
   assert.notEqual(a.pos, b.pos, 'pins never share mutable state');
-  assert.ok([a, b].every(n => ['influencePrevious', 'influenceNext', 'adaptPrevious', 'adaptNext'].every(k => n.pos[k] === false)));
+  assert.ok([a, b].every(n => n.pos.follow === 'here'), 'a shared edit is only here');
   assert.deepEqual([JSON.stringify(a.fx), JSON.stringify(b.fx), b.bend], effects);
   assert.equal(untouched.pos, undefined);
   assert.deepEqual(lane.handHolds, [{ t: 0, fret: 2 }]);

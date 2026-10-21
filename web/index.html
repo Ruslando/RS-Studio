@@ -412,11 +412,12 @@
                         title="Place every note of the chord by hand">Custom shape</button>
                 <button type="button" id="fretboardApply" class="btn btn--compact btn--primary" hidden>Done</button>
                 </div>
-                <div id="fretboardInfluence" role="group" aria-label="Apply to neighbouring notes">
-                <button type="button" id="fretboardReachPrev" class="icon-btn icon-btn--compact" aria-pressed="false" title="Also use for the same notes before" aria-label="Also use for the same notes before"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5v14"/><path d="M11 12H4"/><path d="M7 9l-3 3 3 3"/></svg></button>
-                <button type="button" id="fretboardReachNext" class="icon-btn icon-btn--compact" aria-pressed="false" title="Also use for the same notes after" aria-label="Also use for the same notes after"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5v14"/><path d="M13 12h7"/><path d="M17 9l3 3-3 3"/></svg></button>
-                <button type="button" id="fretboardAdaptPrev" class="icon-btn icon-btn--compact" aria-pressed="false" title="Notes before adapt to this override" aria-label="Notes before adapt to this override"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17" cy="12" r="2.5"/><path d="M11.5 7.5a6.4 6.4 0 0 0 0 9"/><path d="M7 4.5a10.6 10.6 0 0 0 0 15"/></svg></button>
-                <button type="button" id="fretboardAdaptNext" class="icon-btn icon-btn--compact" aria-pressed="false" title="Notes after adapt to this override" aria-label="Notes after adapt to this override"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.5"/><path d="M12.5 7.5a6.4 6.4 0 0 1 0 9"/><path d="M17 4.5a10.6 10.6 0 0 1 0 15"/></svg></button>
+                <div id="fretboardInfluence" role="group" aria-label="Override">
+                <div id="fretboardFollow" class="pill" role="radiogroup" aria-label="How this override carries on" hidden>
+                  <button type="button" role="radio" data-follow="here" aria-checked="true" data-tip="Only here&#10;This note or chord only; nothing after it changes.">Only here</button>
+                  <button type="button" role="radio" data-follow="guided" aria-checked="false" data-tip="Guided&#10;The same notes after it prefer this, unless the hand is better placed elsewhere by then.">Guided</button>
+                  <button type="button" role="radio" data-follow="locked" aria-checked="false" data-tip="Locked&#10;The same notes after it are always played this way.">Locked</button>
+                </div>
                 <button type="button" id="fretboardAuto" class="icon-btn icon-btn--compact" title="Reset override (hover to preview)" aria-label="Reset override"><span data-ui-icon="return" aria-hidden="true"></span></button>
                 </div>
               </div>

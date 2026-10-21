@@ -48,8 +48,7 @@ export const fretboardPanel = $("fretboardPanel"), fretboardEl = $("fretboard"),
 export const fretboardBusy = $("fretboardBusy"), fretboardBusyLabel = $("fretboardBusyLabel");
 export const fretboardStage = $("fretboardStage"), fretboardName = $("fretboardName");
 export const fretboardPin = $("fretboardPin"), fretboardAuto = $("fretboardAuto");
-export const fretboardShape = $("fretboardShape"), fretboardApply = $("fretboardApply"), fretboardAdaptPrev = $("fretboardAdaptPrev"), fretboardAdaptNext = $("fretboardAdaptNext");
-export const fretboardReachPrev = $("fretboardReachPrev"), fretboardReachNext = $("fretboardReachNext");
+export const fretboardShape = $("fretboardShape"), fretboardApply = $("fretboardApply"), fretboardFollow = $("fretboardFollow");
 export const appbar = $("appbar");
 export const projTab = $("projTab"), projTabName = $("projTabName"), projDirtyDot = $("projDirtyDot");
 export const welcome = $("welcome"), welcomeNewBtn = $("welcomeNew"), welcomeOpenBtn = $("welcomeOpen");

@@ -13,8 +13,7 @@ function arrangementSignature(arrangement) {
       (a.pitch - b.pitch) || (a.string - b.string) || (a.fret - b.fret))
     : [];
   return JSON.stringify({
-    influencePrevious: arrangement?.influencePrevious,
-    influenceNext: arrangement?.influenceNext,
+    follow: arrangement?.follow,
     notes,
   });
 }
@@ -81,10 +80,7 @@ export function effectSig(note, { includePos = false } = {}) {
       string: value.string,
       fret: value.fret,
       scope: value.scope || "local",
-      influencePrevious: value.influencePrevious,
-      influenceNext: value.influenceNext,
-      adaptPrevious: value.adaptPrevious,
-      adaptNext: value.adaptNext ?? value.adapt,
+      follow: value.follow,
     });
     else if (key === "arrangement") value = arrangementSignature(value);
     signature += key + ":" + value + ";";
