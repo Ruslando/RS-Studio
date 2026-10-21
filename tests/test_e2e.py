@@ -4891,8 +4891,17 @@ class EndToEndTests(unittest.TestCase):
         page.click("#lanes .lane-row .edit-btn")
         page.select_option("#layerCapo", "2")
         page.select_option("#layerArrangement", "rhythm")
+        speed = page.locator("#layerScrollSpeed")
+        expect(speed).to_have_value("1.3")             # DLC Builder's default
+        speed.fill("0.2"); speed.press("Tab")
+        expect(speed).to_have_value("0.5")             # its fastest
+        speed.fill("2"); speed.press("Tab")
+        expect(speed).to_have_value("2.0")
         page.click("#layerSave"); expect(page.locator("#layerSettingsBackdrop")).to_be_visible(); expect(page.locator("#layerSave")).to_be_hidden(); page.click("#settingsClose")
         expect(page.locator("#layerSettingsBackdrop")).to_be_hidden()
+        page.hover("#lanes .lane-row"); page.click("#lanes .lane-row .edit-btn")
+        expect(speed).to_have_value("2.0")
+        page.click("#settingsClose")
         expect(page.locator("#lanes")).to_contain_text("Rhythm")
         expect(page.locator("#lanes")).to_contain_text("Capo 2")
         self.file_menu("#menuExportRocksmith")
@@ -4904,6 +4913,7 @@ class EndToEndTests(unittest.TestCase):
         # A second layer takes the next free arrangement, and cannot take the first one's.
         page.click("#addLane")
         expect(page.locator("#layerArrangement")).to_have_value("lead")
+        expect(page.locator("#layerScrollSpeed")).to_have_value("1.3")
         expect(page.locator("#layerArrangement option[value=rhythm]")).to_have_js_property("disabled", True)
         expect(page.locator("#layerArrangement option[value=bass]")).to_have_js_property("disabled", True)   # not on a guitar neck
         expect(page.locator("#layerArrangement option[value=auto]")).to_have_count(0)

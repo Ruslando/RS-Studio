@@ -48,6 +48,13 @@ const RS_KIND_ORDER = ["lead", "rhythm", "bass",
 const isRsKind = (kind) => RS_KIND_OPTIONS.some(([known]) => known === kind);
 const isBassTuning = (tuning) => tuning.length === 4 || (tuning.length === 5 && Math.max(...tuning) < 52);
 
+// Rocksmith scroll speed, as DLC Builder sets it: 0.5 to 5, lower is faster, 1.3 the usual.
+const SCROLL_SPEED = 1.3;
+export function laneScrollSpeed(lane) {
+  const v = lane?.scrollSpeed == null || lane.scrollSpeed === "" ? NaN : Number(lane.scrollSpeed);
+  return Number.isFinite(v) ? Math.round(Math.min(5, Math.max(0.5, v)) * 10) / 10 : SCROLL_SPEED;
+}
+
 // A bass arrangement needs a bass neck and a guitar one a guitar neck: Rocksmith
 // loads nothing else, so a kind that does not fit is never offered or assigned.
 export const rsKindFits = (kind, tuning) => kind.includes("bass") === isBassTuning(tuning || []);

@@ -73,6 +73,16 @@ class RocksmithPackageTests(unittest.TestCase):
         removed = _build(_spec(tracks, [{"track": 0, "kind": "lead", "tuning": GUITAR, "capo": 0}]))[1]["Lead"]
         self.assertNotIn("CapoFret", removed)
 
+    def test_scroll_speed_is_each_arrangements_own(self):
+        spec = _spec([_track("Gtr", GUITAR, [0, 3]), _track("Bass", BASS, [0, 3])],
+                     [{"track": 0, "kind": "lead", "tuning": GUITAR, "scrollSpeed": 2.04},
+                      {"track": 1, "kind": "bass", "tuning": BASS}])
+        songs = _build(spec)[1]
+        self.assertEqual(songs["Lead"]["DynamicVisualDensity"], [2.0] * 20)
+        self.assertEqual(songs["Bass"]["DynamicVisualDensity"], [1.3] * 20, "unset: the usual 1.3")
+        self.assertEqual(builder._scroll_speed(0.1), 0.5)
+        self.assertEqual(builder._scroll_speed(9), 5.0)
+
     def test_tone_switches_become_tone_slots(self):
         markers = [{"t": 0, "tone": "clean"}, {"t": 2.0, "tone": "lead"}, {"t": 3.0, "tone": "clean"}]
         tracks = [_track("Gtr", GUITAR, [0, 3], toneMarkers=markers)]
