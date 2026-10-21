@@ -922,7 +922,7 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
 `chart.py` turns the changes into anchors):
 
 - The hand position is the fret under the index finger. It covers four frets and
-  reaches six with a stretch; a note's finger is `fret − hand + 1`, the pinky past four.
+  reaches six with a stretch (five on a bass); a note's finger is `fret − hand + 1`, the pinky past four.
 - A chord fingered with the index has its hand on that fret and nowhere else.
 - Planned automatically: index on the lowest note to start, stay while the notes
   are in reach, otherwise move.
