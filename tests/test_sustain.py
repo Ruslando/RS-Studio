@@ -32,5 +32,30 @@ class SustainTests(unittest.TestCase):
         self.assertFalse(any(_tails(160, 0.5, tempo_map=[{"t": 3.0, "bpm": 100}, {"t": 5.0, "bpm": 160}])))
 
 
+def _sustains(notes, bpm=120):
+    grid = {"bpm": bpm, "offset": 0.0, "tsNum": 4, "tsDen": 4, "tempoMap": []}
+    sng = chart.compile_track({"name": "G", "tuning": STANDARD, "notes": notes}, grid, 30.0).sng
+    return [round(n.sustain, 4) for n in sng.levels[-1].notes]
+
+
+def _note(start, end, string, fret=3):
+    return {"start": start, "end": end, "pitch": STANDARD[5 - string] + fret, "string": string, "fret": fret}
+
+
+class NoteGapTests(unittest.TestCase):
+    # 120 BPM, 4/4: a measure is 2 s, so the gap is 1/32 of it, 62.5 ms.
+    def test_a_tail_played_up_to_the_next_note_ends_a_32nd_early(self):
+        self.assertEqual(_sustains([_note(1, 2, 5), _note(2, 3, 4)])[0], 0.9375)
+
+    def test_a_tail_into_the_same_string_is_cut(self):
+        self.assertEqual(_sustains([_note(1, 2.5, 5), _note(2, 3, 5, fret=5)])[0], 0.9375)
+
+    def test_a_tail_ringing_over_other_strings_rings(self):
+        self.assertEqual(_sustains([_note(1, 3, 5), _note(2, 3, 4)])[0], 2.0)
+
+    def test_a_tail_ending_well_before_the_next_note_is_kept(self):
+        self.assertEqual(_sustains([_note(1, 1.8, 5), _note(2, 3, 4)])[0], 0.8)
+
+
 if __name__ == "__main__":
     unittest.main()
