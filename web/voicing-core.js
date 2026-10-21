@@ -509,6 +509,27 @@ export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infi
   return [...new Set(seats)].filter((g) => Number.isInteger(g) && g >= 1 && g <= maxHand).sort((a, b) => a - b);
 }
 
+// THE FINGERINGS ONE COLUMN CAN BE PLAYED WITH, as Map(note -> finger): what the
+// fretboard's Finger buttons step through. One fretted note: each finger whose hand
+// (fret − finger + 1) is on the neck. A chord: its valid fingerings, cheapest first.
+export function fingeringChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infinity) {
+  const contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !noteIsDead(note));
+  if (!contacts.length) return [];
+  if (contacts.length === 1) {
+    const [note, pos] = contacts[0];
+    return [1, 2, 3, 4].filter((f) => pos.fret - f + 1 >= 1 && pos.fret - f + 1 <= maxHand).map((f) => new Map([[note, f]]));
+  }
+  let poses = fingeringOptions(shape, profile);
+  if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
+  const seen = new Set(), out = [];
+  for (const pose of poses) {
+    const fingers = new Map(contacts.map(([note]) => [note, pose.fingers.get(note)]));
+    const key = contacts.map(([note]) => fingers.get(note)).join(",");
+    if (!seen.has(key) && pose.seat <= maxHand) { seen.add(key); out.push(fingers); }
+  }
+  return out;
+}
+
 export function fingersAtSeat(shape, seat, profile = GUITAR_HAND_PROFILE, required = new Map()) {
   return handForShape(shape, seat, profile, required).fingers;
 }
@@ -1589,10 +1610,13 @@ function registerColumns(columns, tuning, options = {}) {
     }) ? spread[i] : null;
     const locked = pins[i] || handed;
     const flow = locked ? overrideFlow(columns[pins[i] ? i : spread.from[i]].notes) : null;
+    const fingers = locked ? chosenFingers(notes, pins[i] ? notes : columns[spread.from[i]].notes) : new Map();
     return {
       // A hand put here by the player fixes the hand of this column only. It does not
-      // move notes: where they go is decided before the hand (see planHand).
-      handAt: holds[i]?.fret ?? null,
+      // move notes: where they go is decided before the hand (see planHand). A chosen
+      // fingering puts the hand where those fingers are (handOfFingers).
+      handAt: holds[i]?.fret ?? (fingers.size ? handOfFingers(locked, fingers, handProfileForTuning(tuning)) : null),
+      fingers,
       pitches: notes.map((n) => n.pitch),
       // Onset and release. Lean decides the register once per bar and charges
       // less to change it across a rest, so it needs both — without them the
@@ -1649,6 +1673,7 @@ function registerColumns(columns, tuning, options = {}) {
 
   const seats = [];
   let voiced = null;
+  const fingerMemory = new Map();   // grip -> string -> finger, in time order (see the hands below)
   voiced ||= voiceRegister(low, input, undefined, seats, options.bars, frets, price);
   // One entry per offered shape, in order: that is the contract scoreShapesAsDecided
   // reads back. `fingers` is empty because the engine has none to give — the board falls
@@ -1663,9 +1688,48 @@ function registerColumns(columns, tuning, options = {}) {
       if (p.string < 0) return;
       shape.set(note, { string: order[p.string], fret: p.fret });
     });
-    if (options.hands) options.hands[i] = handForShape(shape, seats[i], handProfileForTuning(tuning), new Map(), !!holds[i]);
+    if (options.hands) {
+      // The fingers this column must have: the ones chosen for it, or else the ones
+      // the same grip had last time (a preference: a hand that cannot play them
+      // there picks its own). An override only here teaches nothing.
+      const key = shapeKey(shape), contacts = [...shape.values()].filter((p) => p.fret > 0).length;
+      let required = input[i].fingers;
+      if (!required.size && contacts > 1 && fingerMemory.has(key))
+        required = new Map([...shape].map(([note, p]) => [note, fingerMemory.get(key).get(p.string)]).filter(([, f]) => f));
+      const hand = handForShape(shape, seats[i], handProfileForTuning(tuning), required, !!holds[i] || input[i].fingers.size > 0);
+      options.hands[i] = hand;
+      if (contacts > 1 && !input[i].aside)
+        fingerMemory.set(key, new Map([...shape].map(([note, p]) => [p.string, hand.fingers.get(note)])));
+    }
     return shape.size ? shape : null;
   });
+}
+
+// The fingers a pin asks for, on this column's notes. A locked override handed on
+// from another column brings that column's fingers, matched by pitch as spreadPins
+// matches the positions.
+function chosenFingers(notes, source) {
+  const low = (list) => [...list].sort((a, b) => a.pitch - b.pitch);
+  const from = low(source), to = low(notes), out = new Map();
+  to.forEach((note, k) => {
+    const finger = from[k]?.pos?.finger;
+    if (Number.isInteger(finger) && finger >= 1 && finger <= 4) out.set(note, finger);
+  });
+  return out;
+}
+
+// Where the hand stands for a chosen fingering: a single note's finger is
+// fret − hand + 1, a chord's fingering is one of its poses.
+function handOfFingers(shape, fingers, profile) {
+  const contacts = [...shape].filter(([note, p]) => p.fret > 0 && !noteIsDead(note));
+  if (contacts.length === 1) {
+    const [note, p] = contacts[0], finger = fingers.get(note);
+    return finger ? Math.max(1, p.fret - finger + 1) : null;
+  }
+  let poses = fingeringOptions(shape, profile);
+  if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
+  const pose = poses.find((pose) => [...fingers].every(([note, f]) => pose.fingers.get(note) === f));
+  return pose?.seat ?? null;
 }
 
 // Every entry point below goes through here, so this is the one place the engine

@@ -451,8 +451,50 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[1].pos.follow ?? 'here'"),
                          "here", "the choice is undone like any edit")
 
+    def test_finger_buttons_choose_a_notes_finger_and_a_chords_fingering(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            const pin = (string, fret) => ({ string, fret, scope: 'local' });
+            lane.notes = [{ id: 'g1', start: 1, end: 1.6, pitch: 52, pos: pin(4, 7) },
+                          ...[[4, 0, 45], [3, 2, 52], [2, 2, 57], [1, 2, 61], [0, 0, 64]].map(([s, f, p], k) =>
+                            ({ id: 'g' + (k + 2), start: 3, end: 3.6, pitch: p, pos: pin(s, f) }))];
+            lane.handHolds = [{ t: 1, fret: 7 }]; lane.refBoxes = {};
+            S.voicingRevision++;
+        }""")
+        state = """async () => {
+            const { S } = await import('/store.js');
+            const tab = await import('/tablature.js');
+            const lane = S.state.editLanes[0], f = await tab.laneFingering(lane);
+            return { fingers: f.notes.map(n => f.fingers.get(n) ?? null), seats: f.notes.map(n => f.seats.get(n) ?? null),
+                     chosen: lane.notes.map(n => n.pos?.finger ?? null), holds: lane.handHolds };
+        }"""
+        self.fretboard_hover_points(1.1)
+        expect(page.locator("#fretboardFingerLabel")).to_have_text("Finger")
+        expect(page.locator("#fretboardFinger")).to_have_text("1")
+        page.click("#fretboardFingerNext")
+        expect(page.locator("#fretboardFinger")).to_have_text("2")
+        got = page.evaluate(state)
+        self.assertEqual((got["chosen"][0], got["fingers"][0], got["seats"][0]), (2, 2, 6), "finger 2 puts the hand on 6")
+        self.assertEqual(got["holds"], [], "the chosen finger replaces the hand anchor")
+        # The chord: its fingerings in turn, chosen on every fretted string.
+        self.fretboard_hover_points(3.1)
+        expect(page.locator("#fretboardFingerLabel")).to_have_text("Fingering")
+        shot = Path(__file__).resolve().parents[1] / ".runs" / "fretboard-fingering.png"
+        shot.parent.mkdir(exist_ok=True)
+        page.locator("#fretboardPanel").screenshot(path=str(shot))
+        before = page.locator("#fretboardFinger").inner_text()
+        page.click("#fretboardFingerNext")
+        expect(page.locator("#fretboardFinger")).not_to_have_text(before)
+        got = page.evaluate(state)
+        self.assertEqual([c is not None for c in got["chosen"][1:]], [False, True, True, True, False],
+                         "open strings get no finger")
+        self.assertEqual(got["chosen"][2:5], got["fingers"][2:5], "the board plays the chosen fingering")
+
     def test_rocksmith_hand_positions_are_the_fretboards(self):
-        """What the fretboard shows is what Rocksmith gets: every note's hand position."""
+        """What the fretboard shows is what Rocksmith gets: every note's hand position and every chord's fingers."""
         from rs_studio.rocksmith import builder
         page = self.page
         for example, capo in (("override-showcase", 0), ("chord-showcase", 0), ("override-showcase", 3)):
@@ -471,11 +513,14 @@ class EndToEndTests(unittest.TestCase):
                 lane.capo = capo;
                 const spec = await tab.buildSpecForLanesAsync([lane]);
                 const fingering = await tab.laneFingering(lane);
-                return { spec, shown: fingering.notes.map(n => fingering.seats.get(n) ?? null), duration: S.state.duration };
+                return { spec, shown: fingering.notes.map(n => fingering.seats.get(n) ?? null),
+                         fingers: fingering.notes.map(n => (fingering.voiced.get(n)?.fret > 0 ? fingering.fingers.get(n) : null) ?? null),
+                         duration: S.state.duration };
             }""", capo)
             spec, shown = got["spec"], got["shown"]
             notes = spec["tracks"][0]["notes"]
             self.assertEqual([n.get("hand") for n in notes], shown, f"{example}: the spec carries the fretboard's hands")
+            self.assertEqual([n.get("finger") for n in notes], got["fingers"], f"{example}: and its fingers")
             warnings = []
             built = builder._compile_arrangement(spec, spec["tracks"][0], {"kind": "lead"},
                                                  float(got["duration"]) + 1, "KEY", warnings)
@@ -492,6 +537,25 @@ class EndToEndTests(unittest.TestCase):
                                  f"{example} capo {capo}: note at {sng_note.time:.3f}s")
                 checked += 1
             self.assertGreater(checked, 10, example)
+            # Every chord box shows the fretboard's fingers; open strings none.
+            strings = len(spec["tracks"][0]["tuning"])
+            by_time = {}
+            for n in notes:
+                if n.get("string") is not None:
+                    by_time.setdefault(round(n["start"], 3), {}).setdefault(strings - n["string"], n)
+            chords = 0
+            sng = built.compiled.sng
+            for sng_note in sng.levels[0].notes:
+                if sng_note.chord_id < 0 or sng_note.finger_print_id[1] != -1:
+                    continue
+                template = sng.chords[sng_note.chord_id]
+                at = by_time[round(sng_note.time, 3)]
+                want = [at[s]["finger"] if s in at and at[s]["fret"] > 0 and not (at[s].get("fx") or {}).get("dead")
+                        and "finger" in at[s] else -1 for s in range(6)]
+                self.assertEqual(list(template.fingers), want, f"{example}: chord at {sng_note.time:.3f}s")
+                chords += 1
+            if example == "chord-showcase":
+                self.assertGreater(chords, 10)
 
     def test_rocksmith_issues_follow_the_chart_while_it_is_edited(self):
         page = self.page

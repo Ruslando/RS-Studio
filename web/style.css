@@ -1504,12 +1504,14 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardPanel:not([data-editing]) #fretboardControls { border-top-color: transparent; background: transparent; }
 #fretboardSetup { display: flex; align-items: center; gap: 8px; flex: none; }
 #fretboardSetup > * { flex: none; }
-#fretboardCapoField, #fretboardHandField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
+#fretboardCapoField, #fretboardHandField, #fretboardFingerField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
 #fretboardSetup > :first-child { border-left: 0; padding-left: 0; }
-#fretboardCapoField label, #fretboardHandField label { color: var(--stage-label); font-size: var(--text-caption); }
+#fretboardCapoField label, #fretboardHandField label, #fretboardFingerLabel { color: var(--stage-label); font-size: var(--text-caption); }
 #fretboardCapo, #fretboardHand { width: 46px; min-width: 0; text-align: center; padding-inline: 4px; }
 #fretboardHandAuto { color: var(--stage-label); font-size: var(--text-caption); white-space: nowrap; }
-#fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField) { display: none; }
+#fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField, #fretboardFingerField) { display: none; }
+#fretboardFinger { min-width: 4ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
+#fretboardFinger[data-auto] { color: var(--stage-label); }
 #fretboardControls #fretboardPin {
   position: static; flex: 1 0 auto; min-width: max-content; max-width: none; flex-wrap: nowrap;
   padding: 0; border: 0; border-radius: 0; background: transparent; gap: 12px;
