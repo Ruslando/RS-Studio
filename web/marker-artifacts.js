@@ -10,6 +10,7 @@ import { openSectionMarkerPop, closeSectionMarkerPop } from './section-markers.j
 import { openPhraseMarkerPop, closePhraseMarkerPop } from './phrase-markers.js';
 import { openToneMarkerPop, closeToneMarkerPop } from './tone-markers.js';
 import { openHandAnchorPop, closeHandAnchorPop } from './hand-anchors.js';
+import { handColumnAt, laneHandColumns } from './tablature.js';
 import { sectionTypeLabel } from './section-marker-core.js';
 import { tonePresetLabel, tonePresetMissing } from './tone-marker-core.js';
 import { playbackTime, seekPlayback } from './playback.js';
@@ -45,10 +46,16 @@ export function markerArtifacts() {
     });
   }
   for (const lane of lanes) {
-    (lane.handHolds || []).forEach((marker, index) => entries.push({
-      key: `anchor:${lane.id}:${index}`, kind: 'anchor', lane, owner: lane.name,
-      marker, t: marker.t, name: `Fret ${Math.round(marker.fret)}`,
-    }));
+    // An anchor that cannot reach its note says so, as on its flag (hand-anchors.js).
+    const reach = lane.handHolds?.length ? laneHandColumns(lane) : null;
+    (lane.handHolds || []).forEach((marker, index) => {
+      const column = handColumnAt(reach, marker.t);
+      const lost = !!column && !column.choices.includes(Number(marker.fret));
+      entries.push({
+        key: `anchor:${lane.id}:${index}`, kind: 'anchor', lane, owner: lane.name,
+        marker, t: marker.t, name: `${lost ? '⚠ ' : ''}Fret ${Math.round(marker.fret)}${lost ? " · can't reach" : ''}`,
+      });
+    });
     [...lane.phraseBoundaries || []].sort((a, b) => a.t - b.t).forEach((marker, index) => entries.push({
       key: `phrase:${lane.id}:${marker.id}`, kind: 'phrase', lane, owner: lane.name,
       marker, t: marker.t, name: `Phrase ${index + 1}`,

@@ -398,21 +398,15 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(got["before"], [1, 1])
         self.assertEqual(got["holds"], [{"t": 2, "fret": 8}], "the hand moved with the note, keeping the stretch")
         self.assertEqual(got["after"], [1, 8])
-        # The hand buttons step only through hands that can play the note at fret 12.
+        # The hand list offers only hands that can play the note at fret 12.
         self.fretboard_hover_points(2.1)
-        hand = page.locator("#fretboardHand")
-        expect(hand).to_have_value("8")
-        page.click("#fretboardHandNext")
-        expect(hand).to_have_value("9")
-        for _ in range(3):
-            page.click("#fretboardHandNext")
-        expect(hand).to_have_value("12")
-        expect(page.locator("#fretboardHandNext")).to_be_disabled()
-        hand.fill("3")
-        hand.press("Enter")
-        expect(hand).to_have_value("12")
+        hands = page.locator("#fretboardHandList [data-value]")
+        expect(hands).to_have_text([re.compile(r"Auto"), "7", "8", "9", "10", "11", "12"])
+        expect(page.locator('#fretboardHandList [data-value="8"]')).to_have_attribute("aria-checked", "true")
+        page.click('#fretboardHandList [data-value="12"]')
+        expect(page.locator('#fretboardHandList [data-value="12"]')).to_have_attribute("aria-checked", "true")
         holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
-        self.assertEqual(holds, [{"t": 2, "fret": 12}], "a hand that cannot reach the note is refused")
+        self.assertEqual(holds, [{"t": 2, "fret": 12}], "only reachable hands are on offer")
         pos = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[1].pos")
         self.assertEqual((pos["string"], pos["fret"]), (5, 12), "changing the hand moves no note")
 
@@ -1899,18 +1893,17 @@ class EndToEndTests(unittest.TestCase):
         page = self.page
         self.fretboard_hover_points()
         pitches = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.pitch)")
-        expect(page.locator('#fretboardCapo')).to_be_visible()
-        expect(page.locator('#fretboardCapo')).to_be_enabled()
-        page.locator('#fretboardCapo').fill('2')
-        page.locator('#fretboardCapo').press('Enter')
+        capo = lambda value: page.locator(f'#fretboardCapoList [data-value="{value}"]')
+        expect(page.locator('#fretboardCapoList [data-value]')).to_have_count(13)
+        capo(2).click()
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].capo"), 2)
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.pitch)"), pitches)
         page.keyboard.press('Control+z')
-        expect(page.locator('#fretboardCapo')).to_have_value('0')
+        expect(capo(0)).to_have_attribute('aria-checked', 'true')
         page.locator('#lanes .lock-btn').click()
-        expect(page.locator('#fretboardCapo')).to_be_disabled()
+        expect(capo(3)).to_be_disabled()
         page.locator('#lanes .lock-btn').click()
-        expect(page.locator('#fretboardCapo')).to_be_enabled()
+        expect(capo(3)).to_be_enabled()
 
     def test_marker_flags_snap_to_note_subdivisions(self):
         self.open_reference_project()
@@ -2285,7 +2278,7 @@ class EndToEndTests(unittest.TestCase):
             }""", start)
             self.assertEqual(set(actual['seats']), {anchor})
             self.assertEqual(actual['digits'], digits)
-            expect(page.locator('#fretboardHandAuto')).to_have_text(f'({anchor})')
+            expect(page.locator('#fretboardHandList [data-value="auto"]')).to_have_text(f'Auto ({anchor})')
             expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count','0')
             shot = Path(__file__).resolve().parents[1] / '.runs' / f'joint-hand-case-{int(start/4+1)}.png'
             shot.parent.mkdir(exist_ok=True)
@@ -2477,59 +2470,46 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press('Control+z')
         self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.some(n => n.start === 80 && n.written)"))
 
-    def test_fretboard_integer_steppers_and_defaults(self):
+    def test_fretboard_value_lists_and_defaults(self):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
-        expect(page.locator('#fretboardHand')).to_have_attribute('type','text')
-        expect(page.locator('#fretboardCapo')).to_have_attribute('type','text')
-        expect(page.locator('#fretboardHandAuto')).to_have_text(re.compile(r'\([1-9][0-9]*\)'))
-        page.locator('#fretboardCapoNext').click()
-        expect(page.locator('#fretboardCapo')).to_have_value('1')
-        page.locator('#fretboardCapoPrev').click()
-        expect(page.locator('#fretboardCapo')).to_have_value('0')
-        for invalid in ['-1','1.5','text']:
-            page.locator('#fretboardCapo').fill(invalid)
-            page.locator('#fretboardCapo').press('Enter')
-            expect(page.locator('#fretboardCapo')).to_have_value('0')
-        page.locator('#fretboardHand').fill('7')
-        page.locator('#fretboardHand').press('Enter')
-        # The note here is on fret 7: a hand on 8 cannot reach it, so + stops at 7.
-        expect(page.locator('#fretboardHandNext')).to_be_disabled()
-        page.locator('#fretboardHandPrev').click()
-        expect(page.locator('#fretboardHand')).to_have_value('6')
-        page.locator('#fretboardHandNext').click()
-        expect(page.locator('#fretboardHand')).to_have_value('7')
-        expect(page.locator('#fretboardHandAuto')).to_be_hidden()
-        for invalid in ['0','-1','1.5']:
-            page.locator('#fretboardHand').fill(invalid)
-            page.locator('#fretboardHand').press('Enter')
-            expect(page.locator('#fretboardHand')).to_have_value('7')
-        page.locator('#fretboardHand').fill('')
-        page.locator('#fretboardHand').press('Enter')
-        expect(page.locator('#fretboardHandAuto')).to_be_visible()
+        capo = lambda value: page.locator(f'#fretboardCapoList [data-value="{value}"]')
+        hand = lambda value: page.locator(f'#fretboardHandList [data-value="{value}"]')
+        expect(capo(0)).to_have_attribute('aria-checked', 'true')
+        capo(1).click()
+        expect(capo(1)).to_have_attribute('aria-checked', 'true')
+        capo(0).click()
+        expect(capo(0)).to_have_attribute('aria-checked', 'true')
+        # The note here is on fret 7: the hands that reach it are 2 to 7, and only those.
+        expect(page.locator('#fretboardHandList [data-value]')).to_have_text(
+            [re.compile(r'Auto \([1-9][0-9]*\)'), '2', '3', '4', '5', '6', '7'])
+        expect(hand('auto')).to_have_attribute('aria-checked', 'true')
+        hand(7).click()
+        expect(hand(7)).to_have_attribute('aria-checked', 'true')
+        expect(hand(8)).to_have_count(0)
+        hand('auto').click()
+        expect(hand('auto')).to_have_attribute('aria-checked', 'true')
         defaults = page.evaluate("async () => (await import('/voicing-core.js')).defaultPinFlags()")
         self.assertEqual(defaults, {"follow": "here"}, "an override is only here unless chosen otherwise")
 
-    def test_fretboard_hand_position_field(self):
+    def test_fretboard_hand_position_list(self):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
-        expect(page.locator('#fretboardHand')).to_be_visible()
-        expect(page.locator('#fretboardHand')).to_be_enabled()
-        page.locator('#fretboardHand').fill('7')
-        page.locator('#fretboardHand').press('Enter')
+        hand = lambda value: page.locator(f'#fretboardHandList [data-value="{value}"]')
+        expect(hand(7)).to_be_enabled()
+        hand(7).click()
         holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
         self.assertEqual(holds, [{'t': 2, 'fret': 7}])
-        page.locator('#fretboardHand').fill('')
-        page.locator('#fretboardHand').press('Enter')
+        hand('auto').click()
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds"), [])
         page.keyboard.press('Control+z')
-        expect(page.locator('#fretboardHand')).to_have_value('7')
+        expect(hand(7)).to_have_attribute('aria-checked', 'true')
         page.locator('#lanes .lock-btn').click()
-        expect(page.locator('#fretboardHand')).to_be_disabled()
+        expect(hand(7)).to_be_disabled()
         page.locator('#lanes .lock-btn').click()
-        expect(page.locator('#fretboardHand')).to_be_enabled()
+        expect(hand(7)).to_be_enabled()
 
     def test_minimap_eases_while_pointer_keeps_moving(self):
         self.open_reference_project()
@@ -4145,15 +4125,14 @@ class EndToEndTests(unittest.TestCase):
             const {S} = await import('/store.js');
             const {setHandAnchor} = await import('/edit.js');
             setHandAnchor(S.state.editLanes[0], 2, 5);
-            setHandAnchor(S.state.editLanes[0], 6, 9);
+            setHandAnchor(S.state.editLanes[0], 6, 6);   // the note at 8 s is on fret 8: hands 3 to 8 reach it
         }""")
         anchors = page.locator('[data-marker-kind="anchor"] .artifact-row')
         expect(anchors).to_have_count(2)
-        expect(anchors.locator('.artifact-name')).to_have_text(['Fret 5', 'Fret 9'])
+        expect(anchors.locator('.artifact-name')).to_have_text(['Fret 5', 'Fret 6'])
         anchors.first.locator('.artifact-marker-edit').click()
         expect(page.locator('#handAnchorPop')).to_be_visible()
-        page.locator('#handAnchorFret').fill('7')
-        page.locator('#handAnchorFret').press('Tab')
+        page.locator('#handAnchorFret [data-value="7"]').click()
         expect(anchors.first.locator('.artifact-name')).to_have_text('Fret 7')
         page.locator('#handAnchorPopClose').click()
         page.keyboard.press('Control+z')
@@ -4207,7 +4186,7 @@ class EndToEndTests(unittest.TestCase):
         page.reload()
         page.locator(f'#recentList [data-job="{self.reference_job}"] .ri-open').click()
         expect(anchors).to_have_count(2)
-        expect(anchors.locator('.artifact-name')).to_have_text(['Fret 7', 'Fret 9'])
+        expect(anchors.locator('.artifact-name')).to_have_text(['Fret 7', 'Fret 6'])
         page.get_by_role('button', name='Collapse hand anchors', exact=True).click()
         expect(page.locator('#artifact-anchor-body')).to_be_hidden()
         page.get_by_role('button', name='Expand hand anchors', exact=True).click()
@@ -4220,8 +4199,10 @@ class EndToEndTests(unittest.TestCase):
             const {S} = await import('/store.js');
             const lane = S.state.editLanes[0];
             lane.handHolds = [{t:2, fret:5}];
+            // A note on fret 6 at 4 s, so the anchor there has hands to choose from (1 to 6).
             const other = {...lane, id:'anchor_other', name:'Other guitar', active:false,
-                notes:[], refBoxes:{}, handHolds:[{t:4, fret:3}]};
+                notes:[{id:'o1', start:4, end:4.5, pitch:46, pos:{string:5, fret:6, scope:'local'}}],
+                refBoxes:{}, handHolds:[{t:4, fret:3}]};
             S.state.editLanes.push(other);
             const {rebuildLanes, renderLanes} = await import('/lanes.js');
             rebuildLanes(); renderLanes(); (await import('/repaint.js')).draw();
@@ -4231,8 +4212,7 @@ class EndToEndTests(unittest.TestCase):
         page.locator('#lanes .lane-row').filter(has_text='Other guitar').click()
         expect(anchors.locator('.artifact-name')).to_have_text(['Fret 3'])
         anchors.first.locator('.artifact-marker-edit').click()
-        page.locator('#handAnchorFret').fill('4')
-        page.locator('#handAnchorFret').press('Tab')
+        page.locator('#handAnchorFret [data-value="4"]').click()
         page.locator('#handAnchorPopClose').click()
         expect(anchors.first.locator('.artifact-name')).to_have_text('Fret 4')
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds[0].fret"), 5)

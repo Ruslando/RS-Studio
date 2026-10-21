@@ -926,9 +926,14 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
 - A chord fingered with the index has its hand on that fret and nowhere else.
 - Planned automatically: index on the lowest note to start, stay while the notes
   are in reach, otherwise move.
-- A hand anchor fixes the hand of its own note or chord only. It moves no note; the
-  fretboard's Hand buttons offer only hands that can play that note or chord
-  (`handChoices`), and one that can no longer play it lapses.
+- A hand anchor fixes the hand of its own note or chord only. It moves no note. The
+  fretboard's Hand list (a `.pill` row: Auto, then only the hands that can play that
+  note or chord, `handChoices`) and the anchor's editor offer nothing else, and a
+  dragged anchor only lands where its hand reaches. One whose note later changes so
+  it no longer reaches is ignored and its flag says so in `--error` ("can't reach").
+  The capo is the same kind of row, 0–12.
+- Notes of a layer that is not being edited (or is locked) are gray and half
+  transparent, labels included.
 - A note moved along its string keeps its finger and stretch: the hand moves with it
   as an anchor on that note (`followHand`), undone with the move.
 - A position override carries on in one of three ways, chosen on the fretboard

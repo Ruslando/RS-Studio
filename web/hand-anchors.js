@@ -4,7 +4,7 @@ import { $, scroll, stage, sctx, mmctx } from './dom.js';
 import { S } from './store.js';
 import { stageMono } from './constants.js';
 import { activeLane, canEditLane } from './lanes.js';
-import { laneFretCount, refreshTabIfOpen } from './tablature.js';
+import { handColumnAt, laneHandColumns, refreshTabIfOpen } from './tablature.js';
 import { snap } from './grid.js';
 import { timingIdOf, withTiming } from './timing.js';
 import { xOf, timeAt } from './geometry.js';
@@ -52,23 +52,50 @@ export function openHandAnchorPop(clientX, clientY, anchor, lane) {
   closeHandAnchorPop();
   if (!canEditLane(lane) || !lane.handHolds?.includes(anchor)) return;
   editAnchor = anchor; editLaneId = lane.id;
-  $('handAnchorFret').value = String(anchor.fret);
-  $('handAnchorFret').max = String(laneFretCount(lane));
+  fillFrets(lane, anchor);
   $('handAnchorTime').value = String(+Number(anchor.t).toFixed(3));
   $('handAnchorTime').max = String(S.state.duration || S.state.scoreDuration);
   $('handAnchorPop').hidden = false;
   placeFloating($('handAnchorPop'), clientX, clientY);
-  $('handAnchorFret').focus();
+  $('handAnchorFret').querySelector('[aria-checked="true"]')?.focus();
 }
 
-function applyFields() {
+// THE FRETS THIS ANCHOR CAN BE: the hands that can play its note or chord
+// (laneHandColumns), so an unreachable one cannot be chosen. Its own fret stays on
+// offer while it is still chosen, however it came about.
+function fillFrets(lane, anchor) {
+  const choices = handColumnAt(laneHandColumns(lane, { now: true }), anchor.t)?.choices || [];
+  const frets = [...new Set([...choices, Number(anchor.fret)])].sort((a, b) => a - b);
+  $('handAnchorFret').replaceChildren(...frets.map(fret => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.setAttribute('role', 'radio');
+    button.dataset.value = String(fret); button.textContent = String(fret);
+    button.setAttribute('aria-checked', String(fret === Number(anchor.fret)));
+    button.disabled = !choices.includes(fret) && fret !== Number(anchor.fret);
+    return button;
+  }));
+}
+
+// Whether a hand on `fret` can play the note or chord an anchor at `t` belongs to.
+// Unknown while the lane's fingering is still being worked out: allowed, and the
+// rail shows it once it is known.
+function reaches(lane, t, fret, now = false) {
+  const column = handColumnAt(laneHandColumns(lane, { now }), t);
+  return !column || column.choices.includes(Number(fret));
+}
+
+function applyFields(fretValue = null) {
   const lane = editingLane();
   if (!stillEditing(lane)) return;
-  const fretInput = $('handAnchorFret'), timeInput = $('handAnchorTime');
-  if (!fretInput.checkValidity() || !timeInput.checkValidity()) return;
-  const fret = Number(fretInput.value), time = Number(timeInput.value);
-  if (fretInput.value === '' || timeInput.value === '' || !Number.isFinite(time) || !Number.isInteger(fret)) return;
+  const timeInput = $('handAnchorTime');
+  if (!timeInput.checkValidity()) return;
+  const fret = fretValue ?? Number(editAnchor.fret), time = Number(timeInput.value);
+  if (timeInput.value === '' || !Number.isFinite(time) || !Number.isInteger(fret)) return;
   const t = snapAnchorTime(time, lane);
+  if (!reaches(lane, t, fret, true)) {
+    timeInput.value = String(+Number(editAnchor.t).toFixed(3));
+    toast(`A hand on fret ${fret} cannot reach the note there`); return;
+  }
   if (lane.handHolds.some(anchor => anchor !== editAnchor && sameTime(anchor.t, t))) {
     timeInput.value = String(+Number(editAnchor.t).toFixed(3));
     toast('A hand anchor already exists at this beat'); return;
@@ -78,6 +105,7 @@ function applyFields() {
   if (!popSnapshot) popSnapshot = snapshotEdit();
   editAnchor.t = t; editAnchor.fret = fret;
   lane.handHolds.sort((a, b) => a.t - b.t);
+  fillFrets(lane, editAnchor);
   // Fingering previews must respond before this editor session is committed.
   S.voicingRevision++;
   changed();
@@ -101,6 +129,7 @@ function mouseDown(event) {
   const move = event => {
     const [x] = localPoint(event), t = snapAnchorTime(timeAt(x) - delta, lane);
     if (sameTime(t, anchor.t) || lane.handHolds.some(other => other !== anchor && sameTime(other.t, t))) return;
+    if (!reaches(lane, t, anchor.fret)) return;       // only onto notes this hand can play
     if (!previous) previous = snapshotEdit();
     anchor.t = t; lane.handHolds.sort((a, b) => a.t - b.t);
     S.voicingRevision++; changed();
@@ -120,13 +149,17 @@ function drawAnchors() {
   if (!lane) return;
   const top = scroll.scrollTop + railBand(RAIL).y;
   sctx.save(); sctx.font = stageMono(11, 500); sctx.textAlign = 'left'; sctx.textBaseline = 'middle';
+  const columns = laneHandColumns(lane);
   for (const anchor of lane.handHolds || []) {
-    const label = `Fret ${Math.round(anchor.fret)}`, x = xOf(anchor.t);
+    // One that no longer reaches its note (the note changed under it) says so.
+    const column = handColumnAt(columns, anchor.t);
+    const lost = !!column && !column.choices.includes(Number(anchor.fret));
+    const label = `Fret ${Math.round(anchor.fret)}${lost ? " · can't reach" : ""}`, x = xOf(anchor.t);
     const width = Math.ceil(sctx.measureText(label).width) + 14;
     if (x > scroll.scrollLeft + scroll.clientWidth || x + width < scroll.scrollLeft) continue;
     const rect = {anchor, lane, x0:x, x1:x + width, y0:top + 2, y1:top + HEIGHT - 2};
     rects.push(rect);
-    paintMarkerFlag(sctx, rect, lane.color || PAINT.accent);
+    paintMarkerFlag(sctx, rect, lost ? PAINT.error : lane.color || PAINT.accent);
     sctx.fillStyle = PAINT.text; sctx.fillText(label, x + 7, top + HEIGHT / 2);
   }
   sctx.restore();
@@ -155,8 +188,11 @@ export function init_hand_anchors() {
       }
     },
   });
-  $('handAnchorFret').addEventListener('change', applyFields);
-  $('handAnchorTime').addEventListener('change', applyFields);
+  $('handAnchorFret').addEventListener('click', event => {
+    const button = event.target.closest('[data-value]');
+    if (button && !button.disabled) applyFields(Number(button.dataset.value));
+  });
+  $('handAnchorTime').addEventListener('change', () => applyFields());
   $('handAnchorPopClose').addEventListener('click', closeHandAnchorPop);
   $('handAnchorDelete').addEventListener('click', () => {
     const lane = editingLane();

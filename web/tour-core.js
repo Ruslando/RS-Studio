@@ -556,14 +556,14 @@ export const TOURS = {
       {
         target: "fretboardStage",
         title: "Override settings",
-        body: "By default, an override doesn't affect the notes and chords before it, but the notes after it adapt to the change. The two active forward arrows show this, and you can change it freely.\n\nIf you want to undo the change, click Reset override.",
+        body: "An override never changes the notes before it. Only here changes just this note or chord. Guided lets the same notes after it prefer it, where the hand allows. Locked plays them all this way.\n\nIf you want to undo the change, click Reset override.",
       },
       {
         target: "fretboardStage",
         title: "Hand anchors",
-        body: "Click a fret to set a hand anchor, and RS Studio picks a fitting fingering for the notes around it. Hand anchors appear as small framed markers in the timeline and in Artifacts.",
+        body: "The Hand list shows every hand position that can play this note or chord. Pick one to set a hand anchor; it fingers this note or chord and moves no note. Hand anchors appear as small framed markers in the timeline and in Artifacts.",
         until: UNTIL.fretboardHandHold,
-        task: "Click a fret to move the hand",
+        task: "Pick a hand position in the Hand list",
         optional: true,
         freeApp: "#fretboardStage",
       },

@@ -977,23 +977,16 @@ export function drawFretboard() {
   // and this only has to choose between three sizes. A string at the nut is a pitch
   // row, so it gets rule 6's anchored 9 when 11 will not fit, and nothing when 9
   // will not either: the same "drop the label too wide for its note" the stage does.
-  const capoControl = $("fretboardCapo");
-  if (document.activeElement !== capoControl) capoControl.value = String(Number(lane?.capo) || 0);
   const disabled = !editing || !canEditLane(lane) || transportPlaying();
-  capoControl.disabled = disabled;
-  $("fretboardCapoPrev").disabled = disabled || Number(lane?.capo || 0) <= 0;
-  $("fretboardCapoNext").disabled = disabled || Number(lane?.capo || 0) >= MAX_CAPO;
-  const handControl = $("fretboardHand");
-  if (document.activeElement !== handControl) handControl.value = held ? String(held.fret) : "";
   const shared = selectedPositions(lane).multiple;
-  const auto = $("fretboardHandAuto"), seatNow = impossible ? 0 : anchorFret(lane);
-  auto.hidden = !!held;
-  auto.textContent = `(${seatNow || '\u2013'})`;
-  // Only the hands that can play this note or chord (handChoices).
-  const choices = handColumnHere(lane)?.choices || [], current = Number(held?.fret || seatNow);
-  handControl.disabled = disabled || shared || !choices.length;
-  $("fretboardHandPrev").disabled = disabled || shared || !choices.some((g) => g < current);
-  $("fretboardHandNext").disabled = disabled || shared || !choices.some((g) => g > current);
+  const seatNow = impossible ? 0 : anchorFret(lane);
+  // Capo: every fret it can go on. Hand: Auto, and only the hands that can play this
+  // note or chord (handChoices), so no unreachable hand can be chosen.
+  const capo = Number(lane?.capo) || 0;
+  fillValues($("fretboardCapoList"), Array.from({ length: MAX_CAPO + 1 }, (_, k) => [k, String(k)]), capo, disabled);
+  const choices = handColumnHere(lane)?.choices || [];
+  fillValues($("fretboardHandList"), [["auto", seatNow ? `Auto (${seatNow})` : "Auto"], ...choices.map((g) => [g, String(g)])],
+    held ? Number(held.fret) : "auto", disabled || shared || !choices.length);
   // The fingering of this note or chord, and the ones it could have (fingeringChoices).
   const fingering = fingeringHere(lane);
   $("fretboardFingerLabel").textContent = fingering?.chord ? "Fingering" : "Finger";
@@ -1760,6 +1753,24 @@ function handColumnHere(lane) {
   return { column, after: i > 0 ? found.columns[i - 1].start : -Infinity, choices: handChoicesOf.get(column) };
 }
 
+// A ROW OF CHOOSABLE VALUES ([value, label] pairs), rebuilt only when what it offers
+// changes, since the board asks every frame. The chosen one is checked.
+function fillValues(list, values, chosen, disabled) {
+  const key = JSON.stringify([values, chosen, disabled]);
+  if (list.dataset.key === key) return;
+  list.dataset.key = key;
+  list.replaceChildren(...values.map(([value, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("role", "radio");
+    button.dataset.value = String(value);
+    button.textContent = label;
+    button.disabled = disabled;
+    button.setAttribute("aria-checked", String(String(value) === String(chosen)));
+    return button;
+  }));
+}
+
 // THE FINGERING THE BUTTONS STEP THROUGH: the column's fingers as the board shows
 // them, the valid ones (fingeringChoices), where the current one is among them, and
 // whether it was chosen. A chord reads as its fingers from the low string up.
@@ -1947,46 +1958,22 @@ export function init_fretboard() {
       return;
     }
   });
-  for (const kind of ["Capo", "Hand"]) {
-    const control = $("fretboard" + kind);
-    const apply = (delta = null) => {
-      const lane = currentLane();
-      if (!editing || !canEditLane(lane) || transportPlaying()) return;
-      const hand = kind === "Hand", max = hand ? laneFretCount(lane) : MAX_CAPO;
-      if (hand && selectedPositions(lane).multiple) return;
-      const text = control.value.trim();
-      let value;
-      const choices = hand ? handColumnHere(lane)?.choices || [] : null;
-      if (hand && !choices.length) { control.blur(); drawFretboard(); return; }
-      if (delta !== null && hand) {
-        // The next hand that can play this note or chord, not the next fret.
-        const current = Number(holdHere(lane)?.fret ?? anchorFret(lane));
-        value = delta < 0 ? choices.filter((g) => g < current).pop() : choices.find((g) => g > current);
-        if (value === undefined) { drawFretboard(); return; }
-      } else if (delta !== null) {
-        value = Math.min(max, Math.max(0, (Number(lane.capo) || 0) + delta));
-      } else if (hand && (text === "" || text.toLowerCase() === "auto")) value = null;
-      else if (!/^\d+$/.test(text)) { control.blur(); drawFretboard(); return; }
-      else value = Number(text);
-      if (value !== null && (!Number.isInteger(value) || value < (hand ? 1 : 0) || value > max
-        || (hand && !choices.includes(value)))) {
-        control.blur(); drawFretboard(); return;
-      }
-      control.blur();
-      if (hand) setHandAnchor(lane, handTimeHere(lane), value);
-      else moveLaneCapo(lane, value);
-      drawFretboard();
-    };
-    control.addEventListener("change", () => apply());
-    control.addEventListener("keydown", event => {
-      if (event.key === "Enter") { event.preventDefault(); control.blur(); }
-      else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        event.preventDefault(); apply(event.key === "ArrowUp" ? 1 : -1);
-      }
-    });
-    for (const [side, delta] of [["Prev", -1], ["Next", 1]])
-      $("fretboard" + kind + side).addEventListener("click", event => { event.currentTarget.blur(); apply(delta); });
-  }
+  $("fretboardCapoList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-value]"), lane = currentLane();
+    if (!button || button.disabled || !editing || !canEditLane(lane) || transportPlaying()) return;
+    button.blur();
+    moveLaneCapo(lane, Number(button.dataset.value));
+    drawFretboard();
+  });
+  $("fretboardHandList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-value]"), lane = currentLane();
+    if (!button || button.disabled || !editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;
+    button.blur();
+    const value = button.dataset.value === "auto" ? null : Number(button.dataset.value);
+    if (value !== null && !(handColumnHere(lane)?.choices || []).includes(value)) return;
+    setHandAnchor(lane, handTimeHere(lane), value);
+    drawFretboard();
+  });
   window.addEventListener("cw-transport", event => {
     if (event.detail === "play" || event.detail === "pause") setFretboardEdit(!transportPlaying());
     if (event.detail === "seek" || event.detail === "pause") selectPlayheadNotes();
