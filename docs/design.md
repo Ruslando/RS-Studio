@@ -889,10 +889,12 @@ owning layer for layer-specific markers. Marker rows resolve live data on every
 paint and action; they store no copies. Popover edits remain bound to their
 original timing/layer, including song markers when all layers use own timings.
 
-### Rocksmith issues
+### Errors and warnings
 
-The pane's first list, Rocksmith, is what the Rocksmith export would report for
-the active layer: DLC Builder's arrangement checks (`rocksmith/checker.py`) and
+The pane's first lists, Errors and Warnings, hold every problem of the active
+layer, sorted by kind rather than by source: what the Rocksmith export would report,
+and the flags' own (a hand anchor that cannot reach its note is an error, a tone
+switch whose preset is missing a warning). The Rocksmith part is DLC Builder's arrangement checks (`rocksmith/checker.py`) and
 the export's own warnings. The server runs the export's compile about 700 ms
 after edits settle, with the leading silence the export window last used; a
 newer check cancels one in flight. A row leads with a warning triangle
@@ -931,7 +933,9 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
   note or chord, `handChoices`) and the anchor's editor offer nothing else, and a
   dragged anchor only lands where its hand reaches. One whose note later changes so
   it no longer reaches is ignored and its flag says so in `--error` ("can't reach").
-  The capo is the same kind of row, 0–12.
+  The capo is the same kind of row, 0–12. On the fretboard both rows are shut to
+  their value with a chevron beside; the chevron or a click on the value opens the
+  row, and a choice, the chevron or a click elsewhere shuts it.
 - Notes of a layer that is not being edited (or is locked) are gray and half
   transparent, labels included.
 - A note moved along its string keeps its finger and stretch: the hand moves with it

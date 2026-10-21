@@ -380,11 +380,13 @@
               <div id="fretboardSetup" role="group" aria-label="Hand and capo">
               <div id="fretboardCapoField">
                 <span class="label" id="fretboardCapoLabel">Capo</span>
-                <div id="fretboardCapoList" class="pill fretboard-values" role="radiogroup" aria-labelledby="fretboardCapoLabel"></div>
+                <div id="fretboardCapoList" class="pill fretboard-values" data-collapsible role="radiogroup" aria-labelledby="fretboardCapoLabel"></div>
+                <button type="button" id="fretboardCapoToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardCapoList" aria-expanded="false" aria-label="Show every capo fret" title="Show every capo fret"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
               </div>
               <div id="fretboardHandField">
                 <span class="label" id="fretboardHandLabel">Hand</span>
-                <div id="fretboardHandList" class="pill fretboard-values" role="radiogroup" aria-labelledby="fretboardHandLabel"></div>
+                <div id="fretboardHandList" class="pill fretboard-values" data-collapsible role="radiogroup" aria-labelledby="fretboardHandLabel"></div>
+                <button type="button" id="fretboardHandToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardHandList" aria-expanded="false" aria-label="Show every hand position" title="Show every hand position"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
               </div>
               <div id="fretboardFingerField">
                 <span class="label" id="fretboardFingerLabel">Finger</span>

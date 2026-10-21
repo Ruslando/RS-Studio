@@ -1511,6 +1511,10 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .fretboard-values { gap: 2px; }
 .fretboard-values > * { min-width: 26px; padding: 0 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .fretboard-values > [data-value="auto"] { font-family: var(--font-ui); }
+/* Capo and Hand show their value until opened (chevron or a click on the value). */
+.fretboard-values[data-collapsible]:not([data-open]) > :not([aria-checked="true"]) { display: none; }
+.fretboard-values-toggle svg { transition: transform var(--dur-state) var(--ease); }
+.fretboard-values-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 #fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField, #fretboardFingerField) { display: none; }
 #fretboardFinger { min-width: 4ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
 #fretboardFinger[data-auto] { color: var(--stage-label); }

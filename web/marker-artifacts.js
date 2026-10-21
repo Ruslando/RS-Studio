@@ -51,19 +51,28 @@ export function markerArtifacts() {
     (lane.handHolds || []).forEach((marker, index) => {
       const column = handColumnAt(reach, marker.t);
       const lost = !!column && !column.choices.includes(Number(marker.fret));
+      const fret = Math.round(marker.fret);
       entries.push({
         key: `anchor:${lane.id}:${index}`, kind: 'anchor', lane, owner: lane.name,
-        marker, t: marker.t, name: `${lost ? '⚠ ' : ''}Fret ${Math.round(marker.fret)}${lost ? " · can't reach" : ''}`,
+        marker, t: marker.t, name: `${lost ? '⚠ ' : ''}Fret ${fret}${lost ? " · can't reach" : ''}`,
+        // Listed again under Errors (rocksmith-check.js), where every problem goes.
+        issue: lost ? { tone: 'error', title: `Hand anchor on fret ${fret} can't reach its note`,
+          help: 'The hand cannot play the note there, so the anchor is ignored. Move it or choose another fret.' } : null,
       });
     });
     [...lane.phraseBoundaries || []].sort((a, b) => a.t - b.t).forEach((marker, index) => entries.push({
       key: `phrase:${lane.id}:${marker.id}`, kind: 'phrase', lane, owner: lane.name,
       marker, t: marker.t, name: `Phrase ${index + 1}`,
     }));
-    for (const marker of lane.toneMarkers || []) entries.push({
-      key: `tone:${lane.id}:${marker.id}`, kind: 'tone', lane, owner: lane.name,
-      marker, t: marker.t, name: `${tonePresetMissing(marker.tone, undefined, marker.toneData) ? '⚠ ' : ''}${tonePresetLabel(marker.tone, marker.toneData)}`,
-    });
+    for (const marker of lane.toneMarkers || []) {
+      const missing = tonePresetMissing(marker.tone, undefined, marker.toneData), label = tonePresetLabel(marker.tone, marker.toneData);
+      entries.push({
+        key: `tone:${lane.id}:${marker.id}`, kind: 'tone', lane, owner: lane.name,
+        marker, t: marker.t, name: `${missing ? '⚠ ' : ''}${label}`,
+        issue: missing ? { tone: 'warning', title: `Tone preset missing: ${label}`,
+          help: "The preset this tone switch names isn't in your sound library. Choose another one or import it." } : null,
+      });
+    }
   }
   return entries.sort((a, b) => a.t - b.t || a.key.localeCompare(b.key));
 }

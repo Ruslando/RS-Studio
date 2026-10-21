@@ -403,7 +403,7 @@ class EndToEndTests(unittest.TestCase):
         hands = page.locator("#fretboardHandList [data-value]")
         expect(hands).to_have_text([re.compile(r"Auto"), "7", "8", "9", "10", "11", "12"])
         expect(page.locator('#fretboardHandList [data-value="8"]')).to_have_attribute("aria-checked", "true")
-        page.click('#fretboardHandList [data-value="12"]')
+        self.pick_value('fretboardHandList', 12)
         expect(page.locator('#fretboardHandList [data-value="12"]')).to_have_attribute("aria-checked", "true")
         holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
         self.assertEqual(holds, [{"t": 2, "fret": 12}], "only reachable hands are on offer")
@@ -569,7 +569,7 @@ class EndToEndTests(unittest.TestCase):
             page.click("#welcomeOpen")
         chooser.value.set_files(bundle)
         # The export's own checker reports the harmonic bend once edits settle.
-        row = page.locator("#rocksmithIssues .artifact-issue-row", has_text="Natural harmonic with bend")
+        row = page.locator("#artifactWarnings .artifact-issue-row", has_text="Natural harmonic with bend")
         expect(row).to_be_visible()
         self.assertEqual(row.get_attribute("data-tip-tone"), "warning")
         self.assertNotIn("I35", row.get_attribute("data-tip"), "DLC Builder's codes stay internal")
@@ -584,8 +584,8 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press("ArrowRight")
         page.keyboard.press("ArrowLeft")
         page.keyboard.press("Delete")
-        expect(page.locator("#rocksmithIssues .artifact-issue-row")).to_have_count(0)
-        expect(page.locator("#artifactRocksmithBody")).to_be_hidden()
+        expect(page.locator("#artifactWarnings .artifact-issue-row")).to_have_count(0)
+        expect(page.locator("#artifactWarningsBody")).to_be_hidden()
 
     def test_arrow_navigation_steps_back_from_the_focused_chord(self):
         self.open_reference_project()
@@ -1797,6 +1797,13 @@ class EndToEndTests(unittest.TestCase):
         for note in result['changing']:
             self.assertAlmostEqual(note['end'] - note['start'], result['step'])
 
+    def pick_value(self, list_id, value):
+        """Choose a value in the fretboard's Capo or Hand list, opening it first."""
+        page = self.page
+        if page.locator(f'#{list_id}').get_attribute('data-open') is None:
+            page.click(f'[aria-controls="{list_id}"]')
+        page.click(f'#{list_id} [data-value="{value}"]')
+
     def fretboard_hover_points(self, time=2):
         page = self.page
         page.emulate_media(reduced_motion="reduce")
@@ -1895,7 +1902,7 @@ class EndToEndTests(unittest.TestCase):
         pitches = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.pitch)")
         capo = lambda value: page.locator(f'#fretboardCapoList [data-value="{value}"]')
         expect(page.locator('#fretboardCapoList [data-value]')).to_have_count(13)
-        capo(2).click()
+        self.pick_value('fretboardCapoList', 2)
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].capo"), 2)
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.pitch)"), pitches)
         page.keyboard.press('Control+z')
@@ -2477,18 +2484,27 @@ class EndToEndTests(unittest.TestCase):
         capo = lambda value: page.locator(f'#fretboardCapoList [data-value="{value}"]')
         hand = lambda value: page.locator(f'#fretboardHandList [data-value="{value}"]')
         expect(capo(0)).to_have_attribute('aria-checked', 'true')
+        # Shut, a list shows only its value; the chevron or the value opens it, a choice shuts it.
+        expect(page.locator('#fretboardCapoList [data-value]:visible')).to_have_count(1)
+        capo(0).click()
+        expect(page.locator('#fretboardCapoList [data-value]:visible')).to_have_count(13)
         capo(1).click()
         expect(capo(1)).to_have_attribute('aria-checked', 'true')
-        capo(0).click()
+        expect(page.locator('#fretboardCapoList [data-value]:visible')).to_have_count(1)
+        page.click('[aria-controls="fretboardCapoList"]')
+        expect(page.locator('[aria-controls="fretboardCapoList"]')).to_have_attribute('aria-expanded', 'true')
+        page.click('[aria-controls="fretboardCapoList"]')
+        expect(page.locator('#fretboardCapoList [data-value]:visible')).to_have_count(1)
+        self.pick_value('fretboardCapoList', 0)
         expect(capo(0)).to_have_attribute('aria-checked', 'true')
         # The note here is on fret 7: the hands that reach it are 2 to 7, and only those.
         expect(page.locator('#fretboardHandList [data-value]')).to_have_text(
             [re.compile(r'Auto \([1-9][0-9]*\)'), '2', '3', '4', '5', '6', '7'])
         expect(hand('auto')).to_have_attribute('aria-checked', 'true')
-        hand(7).click()
+        self.pick_value('fretboardHandList', 7)
         expect(hand(7)).to_have_attribute('aria-checked', 'true')
         expect(hand(8)).to_have_count(0)
-        hand('auto').click()
+        self.pick_value('fretboardHandList', 'auto')
         expect(hand('auto')).to_have_attribute('aria-checked', 'true')
         defaults = page.evaluate("async () => (await import('/voicing-core.js')).defaultPinFlags()")
         self.assertEqual(defaults, {"follow": "here"}, "an override is only here unless chosen otherwise")
@@ -2499,10 +2515,10 @@ class EndToEndTests(unittest.TestCase):
         self.fretboard_hover_points()
         hand = lambda value: page.locator(f'#fretboardHandList [data-value="{value}"]')
         expect(hand(7)).to_be_enabled()
-        hand(7).click()
+        self.pick_value('fretboardHandList', 7)
         holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
         self.assertEqual(holds, [{'t': 2, 'fret': 7}])
-        hand('auto').click()
+        self.pick_value('fretboardHandList', 'auto')
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds"), [])
         page.keyboard.press('Control+z')
         expect(hand(7)).to_have_attribute('aria-checked', 'true')
