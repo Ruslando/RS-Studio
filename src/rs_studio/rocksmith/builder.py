@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import re
 import tempfile
 import unicodedata
@@ -49,6 +50,7 @@ class SongContext:
     tone_slots: list[dict]
     compiled: chart.Compiled
     cent_offset: float = 0.0
+    scroll_speed: float = 1.3  # lower is faster, as DLC Builder sets it
 
 
 # "type" is the RS ArrangementType ordinal (Rocksmith2014.XML ArrangementName
@@ -459,10 +461,21 @@ def _arrangement_specs(spec: dict, tracks: list[dict], warnings: list[str]) -> l
         if arr["tag"] in used_tags:
             raise ValueError("Rocksmith arrangement types must be unique in one package")
         used_tags.add(arr["tag"])
-        out.append({"track": idx, "kind": kind, "tuning": item.get("tuning"), "capo": item.get("capo")})
+        out.append({"track": idx, "kind": kind, "tuning": item.get("tuning"), "capo": item.get("capo"),
+                    "scrollSpeed": item.get("scrollSpeed")})
     if not out:
         raise ValueError("No Rocksmith arrangements selected")
     return out
+
+
+
+def _scroll_speed(value) -> float:
+    """DLC Builder's range: 0.5 (fastest) to 5.0, in tenths; 1.3 when unset."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 1.3
+    return round(min(5.0, max(0.5, v)), 1) if math.isfinite(v) else 1.3
 
 
 _TONE_PRESETS = {"lead", "clean", "crunch", "bass"}
@@ -705,6 +718,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
                 tone_slots=built.tone_slots,
                 compiled=built.compiled,
                 cent_offset=built.cent_offset,
+                scroll_speed=_scroll_speed(req.get("scrollSpeed")),
             )
             contexts.append(ctx)
             arrangement_entries.extend([

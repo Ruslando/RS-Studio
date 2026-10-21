@@ -4,7 +4,7 @@
 
 import { $ } from "./dom.js";
 import { MAX_CAPO, editLanes } from "./lanes.js";
-import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane } from "./layer-role.js";
+import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane, laneScrollSpeed } from "./layer-role.js";
 import { applyCoverChange, clearProjectCover, coverStatus, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { icon } from "./icons.js";
 import { downloadProjectBlob, toast } from "./notify.js";
@@ -515,7 +515,7 @@ async function submitRocksmithExport() {
       const spec = await buildSpecForLanesAsync(picks.map((p) => p.lane));
       spec.name = songName;
       spec.metadata = metadataPayload(state.metadata);
-      spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo })), leadingSilence, version,
+      spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane) })), leadingSilence, version,
         preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {

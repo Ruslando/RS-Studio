@@ -67,9 +67,6 @@ def load_internal_tone(preset: str, key: str) -> dict:
     return tone
 
 
-# One entry per difficulty level the game may show. We emit a single level, so
-# every entry is the same and the note scroll speed never changes.
-_VISUAL_DENSITY = [2.0] * 20
 
 
 def _round9(v: float) -> float:
@@ -200,7 +197,9 @@ def build_attributes(ctx, header: bool) -> dict:
              "Fingers": list(c.fingers), "Frets": list(c.frets)}
             for i, c in enumerate(sng.chords) if c.name and not (c.mask & S.CHORD_MASK_ARPEGGIO)
         ],
-        "DynamicVisualDensity": _VISUAL_DENSITY,
+        # One entry per difficulty level the game may show. We emit a single level, so
+        # every entry is the arrangement's scroll speed (DLC Builder does the same).
+        "DynamicVisualDensity": [ctx.scroll_speed] * 20,
         "FullName": f"{key}_{arr['full_name']}",
         "LastConversionDateTime": sng.metadata.last_conversion_date_time,
         "MasterID_PS3": -1,
