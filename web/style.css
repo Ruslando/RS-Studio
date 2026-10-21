@@ -1521,9 +1521,9 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardPanel:not([data-editing]) #fretboardControls { border-top-color: transparent; background: transparent; }
 #fretboardSetup { display: flex; align-items: center; gap: 8px; flex: none; }
 #fretboardSetup > * { flex: none; }
-#fretboardCapoField, #fretboardHandField, #fretboardFingerField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
+#fretboardCapoField, #fretboardHandField, #fretboardFingerField, #fretboardChordField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
 #fretboardSetup > :first-child { border-left: 0; padding-left: 0; }
-#fretboardCapoField .label, #fretboardHandField .label, #fretboardFingerLabel { color: var(--stage-label); font-size: var(--text-caption); }
+#fretboardCapoField .label, #fretboardHandField .label, #fretboardFingerLabel, #fretboardChordLabel { color: var(--stage-label); font-size: var(--text-caption); }
 /* A row of the values that can be chosen (the hand: only those that play the note). */
 .fretboard-values { gap: 2px; }
 .fretboard-values > * { min-width: 26px; padding: 0 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -1532,9 +1532,33 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .fretboard-values[data-collapsible]:not([data-open]) > :not([aria-checked="true"]) { display: none; }
 .fretboard-values-toggle svg { transition: transform var(--dur-state) var(--ease); }
 .fretboard-values-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
-#fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField, #fretboardFingerField) { display: none; }
-#fretboardFinger { min-width: 4ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
-#fretboardFinger[data-auto] { color: var(--stage-label); }
+#fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField, #fretboardFingerField, #fretboardChordField) { display: none; }
+/* Shut, the value keeps a width, so a dash becoming "2 1" or "Am7" while the board
+   works does not shift everything right of it (Reset among them, under the pointer). */
+#fretboardFingerList:not([data-open]) > [aria-checked="true"] { min-width: 6ch; }
+#fretboardChordList:not([data-open]) > [aria-checked="true"] { min-width: 7ch; }
+/* An automatic fingering reads quieter than one that was chosen. */
+#fretboardFingerList[data-auto] > [aria-checked="true"] { color: var(--stage-label); }
+/* Custom opens the name field and Auto clears the choice; they are words, not values. */
+.fretboard-values > :is([data-value="__custom"], [data-value="auto"]) { font-family: var(--font-ui); }
+/* Fingering and Chord open upward, over the board: a column of choices, the way a
+   menu opens, rather than a row that pushes the rest of the bar aside. Fixed, so the
+   bar's horizontal scroll does not clip it; the panel (a size container) is its
+   containing block, and fretboard.js places it there. While it is open the bar
+   keeps showing the value it had. */
+.fretboard-values-up { position: relative; display: inline-flex; }
+.fretboard-values--up[data-open] {
+  position: fixed; z-index: var(--z-popover); height: auto; flex-direction: column; align-items: stretch;
+  overflow-y: auto; box-shadow: var(--e1);
+}
+.fretboard-values--up[data-open] > * { flex: none; justify-content: flex-start; }
+.fretboard-values-up + .fretboard-values-toggle[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.fretboard-values-up:has(> [data-open])::before {
+  content: attr(data-current); display: inline-flex; align-items: center;
+  height: var(--h-control); padding: 0 var(--s-sibling); box-sizing: border-box;
+  background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-control);
+  color: var(--stage-text); font: 400 var(--text-control)/1 var(--font-mono);
+}
 #fretboardControls #fretboardPin {
   position: static; flex: 1 0 auto; min-width: max-content; max-width: none; flex-wrap: nowrap;
   padding: 0; border: 0; border-radius: 0; background: transparent; gap: 12px;

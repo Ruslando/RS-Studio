@@ -5,6 +5,7 @@
 import { $ } from "./dom.js";
 import { MAX_CAPO, editLanes } from "./lanes.js";
 import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane, laneScrollSpeed } from "./layer-role.js";
+import { nameExportChords } from "./chord-names.js";
 import { applyCoverChange, clearProjectCover, coverStatus, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { icon } from "./icons.js";
 import { downloadProjectBlob, toast } from "./notify.js";
@@ -513,6 +514,8 @@ async function submitRocksmithExport() {
       // decides what to voice, including layers with tablature switched off if
       // the user ticked them.
       const spec = await buildSpecForLanesAsync(picks.map((p) => p.lane));
+      // The chord names the editor shows, the user's own included, are the ones the game shows.
+      spec.tracks.forEach((track, i) => nameExportChords(picks[i].lane, track.notes));
       spec.name = songName;
       spec.metadata = metadataPayload(state.metadata);
       spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane) })), leadingSilence, version,

@@ -129,17 +129,59 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
 }
 
 {
+  // Real grips, written as a chord book writes them (low E string first, x = not
+  // played), and the name each one is known by. Policy: docs/chord-engine.md.
+  const STANDARD = [40, 45, 50, 55, 59, 64], DROP_D = [38, 45, 50, 55, 59, 64];
+  const grip = (frets, tuning = STANDARD) => [...frets].flatMap((f, s) => (f === "x" ? [] : [tuning[s] + parseInt(f, 36)]));
+  const named = (frets, tuning) => detectChord(grip(frets, tuning));
+  const book = {
+    // open and barre triads, flats where charts use them
+    x32010: "C", x02220: "A", "320003": "G", "022100": "E", xx0232: "D", "133211": "F",
+    x02210: "Am", "022000": "Em", xx0231: "Dm", x24432: "Bm", "244222": "F#m", x46654: "C#m",
+    x13331: "Bb", "466544": "Ab", "244322": "F#", x68886: "Eb",
+    // sevenths
+    x02020: "A7", xx0212: "D7", "020100": "E7", "320001": "G7", x32310: "C7", x21202: "B7",
+    x02010: "Am7", "022030": "Em7", xx0211: "Dm7", x35343: "Cm7",
+    x32000: "Cmaj7", xx3210: "Fmaj7", x02120: "Amaj7", xx0222: "Dmaj7",
+    x2323x: "Bm7b5", x3424x: "Cdim7", x2343x: "Bdim", x3211x: "Caug",
+    // suspended and added
+    xx0233: "Dsus4", xx0230: "Dsus2", x02200: "Asus2", x02230: "Asus4", "022200": "Esus4", x32030: "Cadd9",
+    // power chords
+    "022xxx": "E5", x022xx: "A5", "355xxx": "G5", x355xx: "C5",
+    // extended and altered
+    x3233x: "C9", "020102": "E9", x7678x: "E7#9", "3x3455": "G13",
+    // inversions: the lowest note after the slash
+    "332010": "C/G", "200232": "D/F#", x20003: "G/B",
+  };
+  for (const [frets, symbol] of Object.entries(book)) assert.equal(named(frets), symbol, frets);
+  assert.equal(named("000xxx", DROP_D), "D5", "drop D power chord");
+
+  // Spelled-out cases the old formula list got wrong or could not name.
   const name = (...pitches) => detectChord(pitches);
-  assert.equal(name(48), "C");
-  assert.equal(name(40, 47), "E5");
-  assert.equal(name(48, 52, 55), "C");
-  assert.equal(name(45, 52, 57, 60, 64), "Am");
-  assert.equal(name(52, 55, 60), "C/E", "the lowest note names the bass");
-  assert.equal(name(48, 52, 55, 58), "C7");
-  assert.equal(name(48, 52, 58), "C7(no5)");
-  assert.equal(name(50, 57, 62, 67), "Dsus4");
-  assert.equal(name(48, 49, 50), "");
+  assert.equal(name(48), "C", "one note names itself");
+  assert.equal(name(48, 60), "C", "and so does its octave");
+  assert.equal(name(43, 48), "C5/G", "an inverted power chord");
+  assert.equal(name(48, 52), "", "a third alone is an interval, not a chord");
+  assert.equal(name(48, 49, 50), "", "a cluster no reading explains");
+  assert.equal(name(48, 52, 58), "C7", "a missing fifth is not written");
+  assert.equal(name(48, 55, 58), "C7(no3)", "a missing third is");
+  assert.equal(name(48, 52, 55, 58, 62, 65), "C11");
+  assert.equal(name(48, 53, 55, 58, 62), "C9sus4");
+  assert.equal(name(48, 50, 55, 58), "C7sus2");
+  assert.equal(name(48, 52, 55, 58, 66), "C7#11");
+  assert.equal(name(48, 52, 56, 59), "Cmaj7#5");
+  assert.equal(name(48, 51, 55, 57, 62), "Cm6/9");
+  assert.equal(name(48, 51, 54, 59), "Cdim(maj7)");
+  assert.equal(name(48, 52, 56, 58, 61), "C7#5b9");
+  assert.equal(name(48, 52, 58, 63, 69), "C13#9", "a 13 chord may have an altered ninth");
+  assert.equal(name(48, 52, 55, 57, 62, 66), "C6/9#11", "not D11/C: a natural 11 clashes with a major third");
+  assert.equal(name(48, 52, 62), "Cadd9");
+
+  // Two names for the same tones: the root in the bass wins, the other is offered.
+  const sixth = analyzeChord([48, 52, 55, 57]);
+  assert.equal(sixth.symbol, "C6");
+  assert.ok(sixth.alternatives.includes("Am7/C"));
+  assert.equal(analyzeChord([45, 52, 55, 60, 64]).symbol, "Am7");
   assert.equal(analyzeChord([]), null);
-  assert.deepEqual(analyzeChord([48, 52, 58]).missing.map((m) => m.pc), [7], "the fifth it left out is G");
 }
 console.log("note-tools: ok");

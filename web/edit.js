@@ -26,6 +26,8 @@ import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem 
 import { boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { beginArtifactRename } from "./artifact-names.js";
+import { beginChordRename } from "./chord-rename.js";
+import { chordOfNote } from "./chord-names.js";
 import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
@@ -804,12 +806,31 @@ export function setColumnFingers(lane, placed, fingers) {
   const { follow } = overrideFlow(placed.map(({ note }) => note));
   for (const { note, string, fret } of placed) {
     const finger = fret > 0 ? fingers.get(note) : null;
-    note.pos = { string, fret, scope: "local", follow, ...(finger >= 0 ? { finger } : {}) };
+    // A note the engine placed keeps knowing it: Auto (clearColumnFingers) then
+    // returns it to the engine entirely, not to a pinned position nobody chose.
+    const fingerOnly = !note.pos || note.pos.fingerOnly;
+    // Number.isInteger: an open string's finger is null, and null >= 0 is true.
+    note.pos = { string, fret, scope: "local", follow, ...(Number.isInteger(finger) && finger >= 0 ? { finger } : {}),
+      ...(fingerOnly ? { fingerOnly: true } : {}) };
   }
   const columns = chordColumns(lane.notes), t0 = Math.min(...placed.map(({ note }) => note.start));
   const i = columns.findIndex((c) => Math.abs(c.t0 - t0) < 1e-6);
   const from = i > 0 ? columns[i - 1].t0 : -Infinity;
   lane.handHolds = (lane.handHolds || []).filter((h) => !(Number(h.t) > from + 1e-6 && Number(h.t) <= t0 + 1e-6));
+  commit(prev); draw(); refreshTabIfOpen();
+}
+
+// The fingering back to the engine's: a chosen finger is dropped, and a note that
+// was only pinned to carry it is unpinned. One undo step.
+export function clearColumnFingers(lane, notes) {
+  const chosen = (n) => n.pos && (n.pos.fingerOnly || "finger" in n.pos);
+  if (!canEditLane(lane) || !notes.some(chosen)) return;
+  const prev = snapshotEdit();
+  for (const n of notes) {
+    if (!chosen(n)) continue;
+    if (n.pos.fingerOnly) delete n.pos;
+    else { const { finger, ...pos } = n.pos; n.pos = pos; }
+  }
   commit(prev); draw(); refreshTabIfOpen();
 }
 
@@ -1254,6 +1275,12 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     ...(selectedMotifIds.length === 1 ? [{ label: "Select entire motif", fn: selectEntireMotif }] : []),
     ...(selectedMotifIds.length ? [{ label: "Unmark motif", fn: unmarkSelectedMotifs }] : []),
   ];
+  // The selection is (part of) one chord: it can be renamed from here too, which
+  // is the way to name one the stage shows no name for.
+  const selChord = oneLane ? chordOfNote(laneOf(sel[0]), sel[0]) : null;
+  const chordEntry = selChord && sel.every((n) => selChord.notes.includes(n)) && canEditLane(laneOf(sel[0]))
+    ? [{ label: "Rename chord…", kw: "chord name symbol", fn: () => beginChordRename(selChord, { left: clientX, top: clientY, width: 0, height: 0 }) }]
+    : [];
   // "Return to automatic" is the one thing the deleted Tab preview sidebar owned
   // that the neck does not: a way back off an override. It shows only on a column
   // that has one, so the menu on plain notes is unchanged — and it names the state
@@ -1270,6 +1297,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // where "return this column to automatic" is about one column and is wanted
   // wherever you are.
   const columnActions = [
+    ...chordEntry,
     ...(pinnedCol
       ? [{ label: "Return to automatic", kw: "reset unpin fingering position voicing",
         fn: () => applyColumnAlternative(pinnedCol.notes, null) }]

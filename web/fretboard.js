@@ -30,6 +30,8 @@ import { panelMotion } from "./panel-motion.js";
 import { splitter } from "./splitters.js";
 import { draw } from "./repaint.js";
 import { MAX_CAPO, canEditLane, editLanes } from "./lanes.js";
+import { laneChords } from "./chord-names.js";
+import { beginChordRename, renameChord } from "./chord-rename.js";
 import { songBarStarts } from "./song-bars.js";
 import { gridAt, gridBpm, gridSegments, segBeatSec } from "./grid.js";
 import { playbackTime, transportPlaying } from "./playback.js";
@@ -43,7 +45,7 @@ import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
 import { assignFingers, chordColumns, fingeringChoices, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits } from "./voicing-core.js";
 import { columnAlternatives } from "./voicing.js";
-import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnFingers, setColumnFollow, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
+import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, clearColumnFingers, setColumnFingers, setColumnFollow, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { toast } from "./notify.js";
@@ -990,12 +992,25 @@ export function drawFretboard() {
   // The fingering of this note or chord, and the ones it could have (fingeringChoices).
   const fingering = fingeringHere(lane);
   $("fretboardFingerLabel").textContent = fingering?.chord ? "Fingering" : "Finger";
-  const fingerText = $("fretboardFinger");
-  fingerText.textContent = fingering?.text || "\u2013";
-  fingerText.toggleAttribute("data-auto", !fingering?.chosen);
-  fingerText.title = fingering ? (fingering.chosen ? "Chosen" : "Automatic") : "";
-  $("fretboardFingerPrev").disabled = disabled || shared || !fingering || fingering.index <= 0;
-  $("fretboardFingerNext").disabled = disabled || shared || !fingering || fingering.index >= fingering.choices.length - 1;
+  // Every fingering it could have, like the hands; one it has that is none of them leads.
+  const fingerList = $("fretboardFingerList");
+  // Auto, like the hand's: the engine's fingering, so trying the others is never a dead end.
+  const fingerValues = fingering
+    ? [["auto", fingering.chosen ? "Auto" : `Auto (${fingering.text})`], ...fingering.choices.map((c, i) => [i, fingering.label(c)])]
+    : [["none", "\u2013"]];
+  if (fingering?.chosen && fingering.index < 0) fingerValues.splice(1, 0, [-1, fingering.text]);
+  const fingerChosen = !fingering ? "none" : fingering.chosen ? fingering.index : "auto";
+  fillValues(fingerList, fingerValues, fingerChosen, disabled || shared || !fingering);
+  fingerList.parentElement.dataset.current = fingerValues.find(([v]) => String(v) === String(fingerChosen))?.[1] || "";
+  fingerList.toggleAttribute("data-auto", !fingering?.chosen);
+  fingerList.title = fingering ? (fingering.chosen ? "Chosen" : "Automatic") : "";
+  // The chord's name and its other readings, and Custom for any text (chord-rename.js).
+  const chordHere = chordAtBoard(lane), chordList = $("fretboardChordList");
+  const chordNames = chordHere ? [...new Set([chordHere.auto, ...chordHere.alternatives, chordHere.name].filter(Boolean))] : [];
+  fillValues(chordList, chordHere ? [...chordNames.map((n) => [n, n]), ["__custom", "Custom"]] : [["none", "\u2013"]],
+    chordHere ? chordHere.name : "none", disabled || !chordHere);
+  chordList.parentElement.dataset.current = chordHere?.name || "\u2013";
+  chordList.title = !chordHere ? "Not a chord" : chordHere.own ? "Your name" : "";
   const projection = boardProjection(ctx, s, w, h, tuning);
   if (!projection) return;
   const { scale, X, Y, strung, tunePx } = projection;
@@ -1762,11 +1777,12 @@ function fillValues(list, values, chosen, disabled) {
   list.replaceChildren(...values.map(([value, label]) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.setAttribute("role", "radio");
+    const action = String(value).startsWith("__");   // Custom: opens something, chooses nothing
+    button.setAttribute("role", action ? "button" : "radio");
     button.dataset.value = String(value);
     button.textContent = label;
     button.disabled = disabled;
-    button.setAttribute("aria-checked", String(String(value) === String(chosen)));
+    if (!action) button.setAttribute("aria-checked", String(String(value) === String(chosen)));
     return button;
   }));
 }
@@ -1789,9 +1805,17 @@ function fingeringHere(lane) {
   const choices = fingeringChoicesOf.get(at.column);
   const index = choices.findIndex((c) => fretted.every((f) => c.get(f.note) === f.finger));
   const ordered = [...fretted].sort((a, b) => b.string - a.string);
+  const sep = fretted.length > 1 ? " " : "";
   return { placed, choices, index, chord: fretted.length > 1,
     chosen: fretted.some((f) => f.note.pos?.finger != null),
-    text: ordered.map((f) => fingerLabel(f.finger, "?")).join(fretted.length > 1 ? " " : "") };
+    text: ordered.map((f) => fingerLabel(f.finger, "?")).join(sep),
+    label: (choice) => ordered.map((f) => fingerLabel(choice.get(f.note), "?")).join(sep) };
+}
+
+// The layer's chord at the column the board shows, if that column is a chord.
+function chordAtBoard(lane) {
+  const at = handColumnHere(lane);
+  return at ? laneChords(lane).find((c) => Math.abs(c.t0 - at.column.start) < 1e-6) || null : null;
 }
 
 // The hand the player put on this note or chord, if any, so the band can say so.
@@ -1858,17 +1882,6 @@ export function init_fretboard() {
   for (const button of panelControls("fretboard")) button.addEventListener("click", () => setFretboardVisible(!visible));
   // Both reach toggles act on the column the strip is already naming, and both leave
   // the shape exactly as it is — only the blast radius moves.
-  for (const [side, step] of [["Prev", -1], ["Next", 1]])
-    $("fretboardFinger" + side).addEventListener("click", (event) => {
-      event.currentTarget.blur();
-      const lane = currentLane();
-      if (!editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;
-      const fingering = fingeringHere(lane);
-      const next = fingering?.choices[fingering.index < 0 ? 0 : fingering.index + step];
-      if (!next) return;
-      setColumnFingers(lane, fingering.placed.map(({ note, string, fret }) => ({ note, string, fret })), next);
-      drawFretboard();
-    });
   for (const button of fretboardFollow.children) {
     button.addEventListener("click", () => {
       if (selectedPositions(currentLane()).multiple) return;
@@ -1958,13 +1971,28 @@ export function init_fretboard() {
       return;
     }
   });
-  // Capo and Hand: shut, a list shows its value; a click there or on the chevron opens it,
+  // Capo, Hand, Fingering and Chord: shut, a list shows its value; a click there or on the chevron opens it,
   // choosing a value, the chevron again or a click elsewhere shuts it.
-  const toggles = [$("fretboardCapoToggle"), $("fretboardHandToggle")];
+  const toggles = ["Capo", "Hand", "Finger", "Chord"].map((name) => $(`fretboard${name}Toggle`));
   const listOf = (toggle) => $(toggle.getAttribute("aria-controls"));
   const setOpen = (toggle, open) => {
-    listOf(toggle).toggleAttribute("data-open", open);
+    const list = listOf(toggle), up = list.classList.contains("fretboard-values--up");
+    const was = list.hasAttribute("data-open"), at = up && open && !was ? list.parentElement.getBoundingClientRect() : null;
+    list.toggleAttribute("data-open", open);
     toggle.setAttribute("aria-expanded", String(open));
+    if (up && !open) list.style.left = list.style.top = list.style.maxHeight = list.parentElement.style.minWidth = "";
+    if (at) placeUp(list, at);
+  };
+  // An upward list sits over the board, its bottom 4 above the value it was opened
+  // from. Placed, then measured and moved by what is left over, so it lands there
+  // whichever box its fixed position turns out to be relative to.
+  const placeUp = (list, at) => {
+    list.parentElement.style.minWidth = `${at.width}px`;   // the bar keeps its layout
+    list.style.maxHeight = `${Math.max(80, at.top - fretboardPanel.getBoundingClientRect().top - 8)}px`;
+    list.style.left = "0px"; list.style.top = "0px";
+    const origin = list.getBoundingClientRect(), height = origin.height;
+    list.style.left = `${at.left - origin.left}px`;
+    list.style.top = `${at.top - 4 - height - origin.top}px`;
   };
   for (const toggle of toggles) toggle.addEventListener("click", () => setOpen(toggle, !listOf(toggle).hasAttribute("data-open")));
   window.addEventListener("pointerdown", (event) => {
@@ -1991,6 +2019,27 @@ export function init_fretboard() {
     if (value !== null && !(handColumnHere(lane)?.choices || []).includes(value)) return;
     setHandAnchor(lane, handTimeHere(lane), value);
     drawFretboard();
+  });
+  $("fretboardFingerList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-value]"), lane = currentLane();
+    if (!button || button.disabled || opened(event.currentTarget) || !editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;
+    button.blur();
+    const fingering = fingeringHere(lane);
+    if (!fingering) return;
+    if (button.dataset.value === "auto") clearColumnFingers(lane, fingering.placed.map(({ note }) => note));
+    else {
+      const next = fingering.choices[Number(button.dataset.value)];
+      if (!next) return;
+      setColumnFingers(lane, fingering.placed.map(({ note, string, fret }) => ({ note, string, fret })), next);
+    }
+    drawFretboard();
+  });
+  $("fretboardChordList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-value]"), lane = currentLane(), chord = chordAtBoard(lane);
+    if (!button || button.disabled || opened(event.currentTarget) || !chord || !canEditLane(lane)) return;
+    button.blur();
+    if (button.dataset.value === "__custom") beginChordRename(chord, $("fretboardChordField").getBoundingClientRect());
+    else if (button.dataset.value !== chord.name) { renameChord(chord, button.dataset.value); drawFretboard(); }
   });
   window.addEventListener("cw-transport", event => {
     if (event.detail === "play" || event.detail === "pause") setFretboardEdit(!transportPlaying());

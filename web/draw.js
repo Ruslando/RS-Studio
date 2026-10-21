@@ -24,6 +24,7 @@ import { activeLane, canEditLane } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";
 import { motifGroups, motifName } from "./motifs.js";
+import { laneChords } from "./chord-names.js";
 import { songBarStarts } from "./song-bars.js";
 import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
@@ -292,6 +293,49 @@ function drawMotifs(vx0, vx1) {
       sctx.restore();
     });
   }
+}
+
+// Each chord's name at its top left, in its layer's hue (rule 24), as chord
+// charts write a name above the chord. Drawn after the warning marks and the
+// motif and reference labels that sit in the same corner, and moved right past
+// them. A name that would run into the one before it is left out, as a note label
+// too wide for its note is.
+const CHORD_NAME_PX = 11;
+function drawChordNames(vx0, vx1) {
+  S.chordLabels = [];
+  const active = activeLane();
+  const taken = [
+    ...warningMarks.map((m) => ({ x: m.x0, y: m.y0, w: m.x1 - m.x0, h: m.y1 - m.y0 })),
+    ...S.motifLabels, ...(S.refBadges || []),
+  ];
+  const hits = (r) => taken.find((o) => r.x < o.x + o.w && o.x < r.x + r.w && r.y < o.y + o.h && o.y < r.y + r.h);
+  sctx.save();
+  sctx.font = stageUi(CHORD_NAME_PX, 600); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
+  sctx.lineJoin = "round";
+  for (const lane of S.state.lanes) {
+    if (!lane.visible || !lane.notes?.length) continue;
+    let lastRight = -Infinity;
+    for (const chord of laneChords(lane)) {
+      if (!chord.name) continue;
+      const w = sctx.measureText(chord.name).width;
+      let x = xOf(chord.t0);
+      if (x > vx1) break;
+      if (x + w < vx0) continue;
+      // Clear of the selection's outline, which sits 3 px around the notes.
+      const y = yOf(Math.max(...chord.notes.map((n) => n.pitch))) - 6;
+      const box = { x: x - 2, y: y - CHORD_NAME_PX - 2, w: w + 4, h: CHORD_NAME_PX + 3 };
+      for (let o = hits(box), n = 0; o && n < 4; o = hits(box), n++) box.x = o.x + o.w + 2;
+      x = box.x + 2;
+      if (x < lastRight + 6) continue;
+      sctx.globalAlpha = lane === active ? 1 : 0.55;
+      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(chord.name, x, y);
+      sctx.fillStyle = lane.color; sctx.fillText(chord.name, x, y);
+      S.chordLabels.push({ lane, chord, ...box });
+      taken.push(box);
+      lastRight = x + w;
+    }
+  }
+  sctx.restore();
 }
 
 // A reference or motif being dragged in from the artifact pane: its notes as
@@ -626,6 +670,7 @@ function paintFrame() {
   sctx.restore();
   drawGhostNotes(ghostNotes);
   drawReferences();
+  drawChordNames(vx0, vx1);
   drawMatches();
 
   if (S.drag && S.drag.mode === "trace") drawTracePath(S.drag.points);

@@ -21,6 +21,7 @@ import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes,
 import { auditionNote, previewNotes, seekPlayback } from "./playback.js";
 import { toast } from "./notify.js";
 import { beginArtifactRename } from "./artifact-names.js";
+import { beginChordRename } from "./chord-rename.js";
 import { boxOfNote, toggleRefEditLock, moveRefOccurrence, notesInBox, refBadgeAt, refBoxEdgeAt, refLockAt, resizeRefBox, shiftOf, toggleRefPitchLock } from "./references.js";
 import { lineXAtRow } from "./slice.js";
 import { beginNoteGesture, finishNoteGesture, updateNoteGesture } from "./note-motion.js";
@@ -508,6 +509,14 @@ export function init_interaction() {
       e.preventDefault(); S.drag = null;
       beginArtifactRename(label.id ? "motif" : "reference", label.lane, label.id || label.ref,
         { left: e.clientX - (x - label.x), top: e.clientY - (y - label.y), width: label.w, height: label.h });
+      return;
+    }
+    // Double-click a chord's name to rename it.
+    const chordLabel = S.chordLabels?.find((m) => x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h);
+    if (chordLabel && canEditLane(chordLabel.lane)) {
+      e.preventDefault(); S.drag = null;
+      beginChordRename(chordLabel.chord,
+        { left: e.clientX - (x - chordLabel.x), top: e.clientY - (y - chordLabel.y), width: chordLabel.w, height: chordLabel.h });
       return;
     }
     if (bendHandleAt(x, y)) return;              // already a point here

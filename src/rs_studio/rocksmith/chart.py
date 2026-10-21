@@ -259,65 +259,9 @@ def _bend_curve(n: dict, time: float, sustain: float) -> tuple[list, float]:
     return values[:32], max((v for _, v in pts), default=0.0) / 2.0
 
 
-# ---- chord naming / fingering ----------------------------------------------
-# Ports of web/chords.js's analyzer and web/voicing-core.js's fingering rules so exported chords carry
-# the same name + playable fingering as the editor's chord-preview picker
-# (in-game chord boxes and finger diagrams read straight from these). Keep the
-# two implementations in sync if either changes.
-
-_PC_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-_CHORD_FORMULAS = [
-    ("maj9", (0, 2, 4, 7, 11), (7,)), ("9", (0, 2, 4, 7, 10), (7,)),
-    ("m9", (0, 2, 3, 7, 10), (7,)), ("6/9", (0, 2, 4, 7, 9), (7,)),
-    ("7b9", (0, 1, 4, 7, 10), (7,)), ("7#9", (0, 3, 4, 7, 10), (7,)),
-    ("maj7#11", (0, 4, 6, 7, 11), (7,)), ("m11", (0, 3, 5, 7, 10), (7,)),
-    ("maj7", (0, 4, 7, 11), (7,)), ("7", (0, 4, 7, 10), (7,)),
-    ("6", (0, 4, 7, 9), (7,)), ("mMaj7", (0, 3, 7, 11), (7,)),
-    ("m7", (0, 3, 7, 10), (7,)), ("m6", (0, 3, 7, 9), (7,)),
-    ("m7b5", (0, 3, 6, 10), ()), ("dim7", (0, 3, 6, 9), ()),
-    ("7sus4", (0, 5, 7, 10), (7,)), ("add9", (0, 2, 4, 7), (7,)),
-    ("madd9", (0, 2, 3, 7), (7,)), ("add11", (0, 4, 5, 7), (7,)),
-    ("madd11", (0, 3, 5, 7), (7,)), ("7b5", (0, 4, 6, 10), ()),
-    ("7#5", (0, 4, 8, 10), ()), ("", (0, 4, 7), ()),
-    ("m", (0, 3, 7), ()), ("dim", (0, 3, 6), ()), ("aug", (0, 4, 8), ()),
-    ("sus2", (0, 2, 7), ()), ("sus4", (0, 5, 7), ()), ("5", (0, 7), ()),
-]
-
-
-def _chord_name(midi: list) -> str:
-    """Interpret the chord spelled by MIDI pitches (-1 = unused string).
-
-    Mirrors web/chords.js: exact formulas win, while a natural fifth may be
-    omitted from a 4+-tone formula when at least three identity tones remain.
-    See docs/chord-engine.md for the musical policy.
-    """
-    pitches = [m for m in midi if m >= 0]
-    if not pitches:
-        return ""
-    bass_pc = min(pitches) % 12
-    pcs = sorted({p % 12 for p in pitches})
-    if len(pcs) == 1:
-        return _PC_NAMES[pcs[0]]
-    pc_set = set(pcs)
-    matches = []
-    for formula_idx, (suffix, intervals, optional) in enumerate(_CHORD_FORMULAS):
-        for root in range(12):
-            full = {(root + iv) % 12 for iv in intervals}
-            if not pc_set <= full:
-                continue
-            missing = [iv for iv in intervals if (root + iv) % 12 not in pc_set]
-            if any(iv not in optional for iv in missing) or (missing and len(pcs) < 3):
-                continue
-            omission = "" if not missing else "(" + ",".join(
-                "no5" if iv == 7 else f"no{iv}" for iv in missing) + ")"
-            base = _PC_NAMES[root] + suffix + omission
-            symbol = base if root == bass_pc else f"{base}/{_PC_NAMES[bass_pc]}"
-            score = len(missing) + (0 if root == bass_pc else 0.35) + formula_idx * 1e-4
-            matches.append((score, symbol))
-    if not matches:
-        return ""
-    return min(matches)[1]
+def _chord_name(notes) -> str:
+    """The name the editor gave these notes' chord, or "" when it gave none."""
+    return next((str(n["chordName"]) for n in notes if n.get("chordName")), "")
 
 
 def _finger(n: dict, fret: int) -> int:
@@ -426,17 +370,20 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
 
     unfingered = 0
 
-    def ensure_chord_template(frets: list, midi: list, fingers: list, *, arpeggio: bool = False) -> int:
-        """One template per grip and fingering: the same grip fingered two ways is two."""
+    def ensure_chord_template(frets: list, midi: list, fingers: list, name: str, *, arpeggio: bool = False) -> int:
+        """One template per grip, fingering and name: the same grip fingered or named two ways is two.
+
+        The name is the editor's (web/chords.js, or the user's own), sent on the notes.
+        """
         nonlocal unfingered
         mask = S.CHORD_MASK_ARPEGGIO if arpeggio else 0
-        key = (tuple(frets), tuple(fingers), mask)
+        key = (tuple(frets), tuple(fingers), name, mask)
         if key not in chord_ids:
             chord_ids[key] = len(chord_templates)
             unfingered += sum(1 for f, g in zip(frets, fingers) if f > 0 and g == -1)
             chord_templates.append(S.ChordTemplate(
                 frets=frets, fingers=fingers, notes=midi,
-                name=_chord_name(midi), mask=mask))
+                name=name, mask=mask))
         return chord_ids[key]
 
     # Explicit editor Shapes become Rocksmith arpeggio fingerprints. They keep
@@ -484,7 +431,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         start = min(item[0] for item in members)
         end = max(max(_f(item[3].get("end"), item[0]), item[0] + 0.02) for item in members)
         shape_info[shape_id] = {
-            "chord_id": ensure_chord_template(frets, midi, fingers, arpeggio=True),
+            "chord_id": ensure_chord_template(frets, midi, fingers, _chord_name(m[3] for m in members), arpeggio=True),
             "start": start, "end": end, "frets": list(by_string.values()),
         }
 
@@ -523,7 +470,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
                 frets[s] = fret
                 midi[s] = tuning_low[s] + (fret or capo)
                 fingers[s] = _finger(n, fret)
-            ent.chord_id = ensure_chord_template(frets, midi, fingers)
+            ent.chord_id = ensure_chord_template(frets, midi, fingers, _chord_name(n for _, _, n in notes))
         entities.append(ent)
         i = j
 

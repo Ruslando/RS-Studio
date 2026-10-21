@@ -390,9 +390,14 @@
               </div>
               <div id="fretboardFingerField">
                 <span class="label" id="fretboardFingerLabel">Finger</span>
-                <button type="button" id="fretboardFingerPrev" class="icon-btn icon-btn--compact" aria-label="Previous fingering">−</button>
-                <span id="fretboardFinger" aria-live="polite" aria-labelledby="fretboardFingerLabel"></span>
-                <button type="button" id="fretboardFingerNext" class="icon-btn icon-btn--compact" aria-label="Next fingering">+</button>
+                <span class="fretboard-values-up"><div id="fretboardFingerList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardFingerLabel"></div></span>
+                <button type="button" id="fretboardFingerToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardFingerList" aria-expanded="false" aria-label="Show every fingering" title="Show every fingering"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+              </div>
+              <!-- The chord's name, as the stage writes it; open, its other readings and Custom for any text. -->
+              <div id="fretboardChordField">
+                <span class="label" id="fretboardChordLabel">Chord</span>
+                <span class="fretboard-values-up"><div id="fretboardChordList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardChordLabel"></div></span>
+                <button type="button" id="fretboardChordToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardChordList" aria-expanded="false" aria-label="Show every name for this chord" title="Show every name for this chord"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
               </div>
               </div>
               <button type="button" id="fretboardShowAnyway" class="btn btn--compact" hidden

@@ -227,7 +227,8 @@ class SNG:
 
 
 def _name32(s: str, length: int = 32) -> bytes:
-    raw = s.encode("utf-8")[: length - 1]
+    # Cut on a character, not inside one: a name may be typed in any script.
+    raw = s.encode("utf-8")[: length - 1].decode("utf-8", "ignore").encode("utf-8")
     return raw + bytes(length - len(raw))
 
 
