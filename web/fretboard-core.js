@@ -1,9 +1,8 @@
 // The fretboard's geometry, in millimetres, and what the hand on it is playing.
 // Nothing here touches the DOM, so tests/fretboard.test.mjs can run it under node —
-// same reason marker-rails.js is split this way. The imports are util.js's
-// noteName, which is pure: a second copy of the twelve note names is exactly the
-// drift the design contract exists to prevent — and bend.js's curve, for the same
-// reason: the board bends the string the stage draws, not a second idea of it.
+// same reason marker-rails.js is split this way. It imports bend.js's curve: the
+// board bends the string the stage draws, not a second idea of it. Chord names
+// come from chords.js, like everywhere else.
 //
 // Fret placement is 12-TET in closed form: d(n) = L * (1 - 2^(-n/12)). The
 // luthier's constant 17.817152 is that same rule iterated (each fret sits
@@ -34,7 +33,6 @@
 import { bendSnapAt } from "./string-techniques.js";
 import { hammerLink } from "./articulations.js";
 import { graceBefore } from "./grace.js";
-import { noteName } from "./util.js";
 import { SLIDES_TO_NEXT, bendCurve, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
 
 // Finger numbers as Rocksmith has them: 1 index … 4 pinky, 0 the thumb (only ever
@@ -622,49 +620,4 @@ export function barreGroups(marks, filled = true) {
     groups.push(connected);
   }
   return groups;
-}
-
-// ---- what the hand is holding ----
-// The board says where the hand is; it cannot say what that is, and a player reads
-// "D#sus4" faster than six fret numbers.
-//
-// Root and quality by table: for each candidate root the intervals above it are a
-// key, and a match names the grip. The bass is tried first, so a shape sitting on
-// its root keeps it, and a match on any other root prints as a slash chord —
-// guitar voicings are inverted more often than not, and calling an E-bass C shape
-// "C" would be a small lie in most bars of most songs.
-//
-// Shells with no fifth are in the table because a guitar plays them constantly; a
-// dyad that is not a fifth, and anything past the ninths, is not. No match is not a
-// failure — the notes are then the answer, in the notation the editor already
-// writes (rule 25), which is also all a single note ever needed.
-const SHAPES = {
-  "0,7": "5",
-  "0,4,7": "", "0,3,7": "m", "0,3,6": "dim", "0,4,8": "aug",
-  "0,2,7": "sus2", "0,5,7": "sus4",
-  "0,4,10": "7", "0,3,10": "m7", "0,4,11": "maj7",
-  "0,4,7,10": "7", "0,4,7,11": "maj7", "0,3,7,10": "m7", "0,3,7,11": "mMaj7",
-  "0,3,6,10": "m7b5", "0,3,6,9": "dim7", "0,4,7,9": "6", "0,3,7,9": "m6",
-  "0,2,4,7": "add9", "0,5,7,10": "7sus4",
-  "0,2,4,7,10": "9", "0,2,3,7,10": "m9", "0,2,4,7,11": "maj9",
-};
-
-const pcOf = (p) => ((p % 12) + 12) % 12;
-const pcName = (p) => noteName(pcOf(p)).replace(/-?\d+$/, "");
-
-// Pitches (a grip's, dead strings left out — a mute has no pitch) → its name, or "".
-export function chordLabel(pitches) {
-  const live = (pitches || []).filter((p) => Number.isFinite(p));
-  if (!live.length) return "";
-  if (live.length === 1) return noteName(live[0]);
-  const bass = Math.min(...live);
-  const pcs = [...new Set(live.map(pcOf))].sort((a, b) => a - b);
-  if (pcs.length === 1) return pcName(bass);
-  for (const root of [pcOf(bass), ...pcs]) {
-    const quality = SHAPES[pcs.map((p) => pcOf(p - root)).sort((a, b) => a - b).join(",")];
-    if (quality === undefined) continue;
-    const name = pcName(root) + quality;
-    return root === pcOf(bass) ? name : `${name}/${pcName(bass)}`;
-  }
-  return [...new Set(live.slice().sort((a, b) => a - b).map(pcName))].join(" ");
 }

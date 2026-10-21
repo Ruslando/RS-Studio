@@ -967,3 +967,21 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
   `1x3211`. It comes after the other fingerings and the board marks it "T".
 - In the package: anchors where the hand changes, plus one at every phrase start,
   four frets wide or as far as a note reaches, counted from the nut (capo added).
+
+## 12. Chord names
+
+Every chord of two or more sounding pitches is named by `chords.js`
+(docs/chord-engine.md). The stage writes the name at the chord's top left, as
+chord charts do, in the layer's hue, 11/600 UI type, haloed. It is moved right
+past a warning mark or a motif or reference label in that corner, and left out
+where it would run into the name before it. The fretboard's bar shows it as
+"Chord", a value list like Capo and Hand: shut, the name; open, the engine's
+name, its other readings and Custom, which opens the 24-high rename field (as
+for motifs). Chord and Fingering open upward over the board as a column, the way
+a menu opens; Capo and Hand open sideways. Fingering starts with Auto, as Hand
+does: the engine's fingering, which drops a chosen finger and unpins a note that
+was pinned only to carry one. Double-clicking the name on the stage or "Rename chord…"
+in the note menu opens that field too; its list offers the same names, and any
+text is a name. Picking the engine's name returns the chord to it. One undo
+step. A given name holds only while the chord's tones stay the same; the export
+sends the shown name.

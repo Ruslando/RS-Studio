@@ -52,6 +52,7 @@ export const S = {
   refLockFlash: null,  // { lane, ref, until }: a just-flipped lock says its state for a moment  // pitch padlocks after reference labels: [{ x, y, w, h, lane, ref }] (world px)  // the reference box whose edge is under the pointer: lights up
   dropPreview: null,  // a reference or motif dragged over the stage: { kind, color, notes } where it would land
   motifLabels: [],  // motif name labels on the stage: [{ lane, id, x, y, w, h }] (world px)
+  chordLabels: [],  // chord names on the stage: [{ lane, chord, x, y, w, h }] (world px)
   refBoxRects: [],  // reference capture boxes for edge-resize: [{ ref, notes, x0, y0, x1, y1 }] (world px)
   hoverPreviewTimer: 0,  // delayed hover audition so pointer jitter doesn't restart audio
   lastPointerX: 0,

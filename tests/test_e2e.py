@@ -415,6 +415,65 @@ class EndToEndTests(unittest.TestCase):
         pos = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[1].pos")
         self.assertEqual((pos["string"], pos["fret"]), (5, 12), "changing the hand moves no note")
 
+    def test_chord_names_show_on_stage_and_board_and_can_be_renamed(self):
+        self.open_reference_project()
+        page = self.page
+        # C E G A: C6, or Am7/C. The engine says C6 and offers the other.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.refBoxes = {}; lane.handHolds = [];
+            lane.notes = [48, 52, 55, 57].map((pitch, i) => ({ id: 'c' + i, start: 2, end: 3, pitch }));
+            S.voicingRevision++;
+            (await import('/repaint.js')).draw();
+            await new Promise(requestAnimationFrame);
+        }""")
+        label = """async () => {
+            const { S } = await import('/store.js');
+            const r = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            const l = S.chordLabels[0];
+            return l && { name: l.chord.name, at: [l.x + l.w / 2 - sc.scrollLeft + r.left, l.y + l.h / 2 - sc.scrollTop + r.top] };
+        }"""
+        page.wait_for_function("async () => (await import('/store.js')).S.chordLabels.length === 1")
+        found = page.evaluate(label)
+        self.assertEqual(found["name"], "C6")
+        # The fretboard's bar names it too.
+        self.fretboard_hover_points(2.1)
+        board = page.locator('#fretboardChordList [aria-checked="true"]')
+        expect(board).to_have_text("C6")
+        # Double-click the name: the readings are offered, and the one picked is kept.
+        # (Read again: opening the board moved the stage.)
+        page.evaluate("async () => { (await import('/repaint.js')).draw(); await new Promise(requestAnimationFrame); }")
+        page.mouse.dblclick(*page.evaluate(label)["at"])
+        field = page.locator(".chord-rename")
+        expect(field).to_be_focused()
+        expect(page.locator("#chordRenameNames option")).to_have_count(2)
+        self.assertEqual(page.locator("#chordRenameNames option").evaluate_all("o => o.map(x => x.value)"), ["C6", "Am7/C"])
+        field.fill("Am7/C"); field.press("Enter")
+        expect(board).to_have_text("Am7/C")
+        names = "async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.chordName || '')"
+        self.assertEqual(page.evaluate(names), ["Am7/C"] * 4)
+        # Any text is a name: from the board's Custom this time.
+        self.pick_value("fretboardChordList", "__custom")
+        page.locator(".chord-rename").fill("Intro chord")
+        page.keyboard.press("Enter")
+        expect(board).to_have_text("Intro chord")
+        page.keyboard.press("Control+z")
+        expect(board).to_have_text("Am7/C")
+        # The board lists the readings; picking the engine's returns the chord to it.
+        expect(page.locator("#fretboardChordList [role=radio]")).to_have_text(["C6", "Am7/C"])
+        self.pick_value("fretboardChordList", "C6")
+        expect(board).to_have_text("C6")
+        self.assertEqual(page.evaluate(names), [""] * 4)
+        # A given name belongs to its tones: change one and the engine names it again.
+        self.pick_value("fretboardChordList", "__custom"); page.locator(".chord-rename").fill("Mine"); page.keyboard.press("Enter")
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            S.state.editLanes[0].notes[3].pitch = 58;
+            S.voicingRevision++; (await import('/repaint.js')).draw();
+        }""")
+        expect(board).to_have_text("C7")
+
     def test_an_override_is_only_here_guided_or_locked(self):
         self.open_reference_project()
         page = self.page
@@ -472,21 +531,29 @@ class EndToEndTests(unittest.TestCase):
         }"""
         self.fretboard_hover_points(1.1)
         expect(page.locator("#fretboardFingerLabel")).to_have_text("Finger")
-        expect(page.locator("#fretboardFinger")).to_have_text("1")
-        page.click("#fretboardFingerNext")
-        expect(page.locator("#fretboardFinger")).to_have_text("2")
+        checked = page.locator('#fretboardFingerList [aria-checked="true"]')
+        expect(checked).to_have_text("Auto (1)")
+        page.click('#fretboardFingerList [aria-checked="true"]')            # a shut list opens on a click
+        page.locator("#fretboardFingerList [data-value]", has_text=re.compile(r"^2$")).click()
+        expect(checked).to_have_text("2")
+        expect(page.locator("#fretboardFingerList")).not_to_have_attribute("data-open", "")
         got = page.evaluate(state)
         self.assertEqual((got["chosen"][0], got["fingers"][0], got["seats"][0]), (2, 2, 6), "finger 2 puts the hand on 6")
         self.assertEqual(got["holds"], [], "the chosen finger replaces the hand anchor")
+        # Auto gives the finger back to the engine; the position this note was pinned to stays.
+        self.pick_value("fretboardFingerList", "auto")
+        expect(checked).to_have_text(re.compile(r"^Auto \(\d\)$"))
+        pos = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[0].pos")
+        self.assertEqual((pos["string"], pos["fret"], "finger" in pos), (4, 7, False))
         # The chord: its fingerings in turn, chosen on every fretted string.
         self.fretboard_hover_points(3.1)
         expect(page.locator("#fretboardFingerLabel")).to_have_text("Fingering")
         shot = Path(__file__).resolve().parents[1] / ".runs" / "fretboard-fingering.png"
         shot.parent.mkdir(exist_ok=True)
         page.locator("#fretboardPanel").screenshot(path=str(shot))
-        before = page.locator("#fretboardFinger").inner_text()
-        page.click("#fretboardFingerNext")
-        expect(page.locator("#fretboardFinger")).not_to_have_text(before)
+        before = checked.inner_text()
+        self.pick_value("fretboardFingerList", 1)
+        expect(checked).not_to_have_text(before)
         got = page.evaluate(state)
         self.assertEqual([c is not None for c in got["chosen"][1:]], [False, True, True, True, False],
                          "open strings get no finger")
@@ -2468,6 +2535,10 @@ class EndToEndTests(unittest.TestCase):
         self.test_fretboard_previews_only_one_chord_alternative()
         page = self.page
         page.mouse.move(5, 5)
+        # Using the position refingers the lane in the background; until the bar has its
+        # values again, the controls move and Reset would slide out from under the pointer.
+        expect(page.locator('#fretboardFingerList [aria-checked="true"]')).not_to_have_text('\u2013')
+        expect(page.locator('#fretboardBusy')).to_be_hidden()
         page.locator('#fretboardAuto').hover()
         expect(page.locator('#fretboardResetStatus')).to_have_text('Reset preview')
         self.assertFalse(self.faults, self.faults)

@@ -83,6 +83,16 @@ class RocksmithPackageTests(unittest.TestCase):
         self.assertEqual(builder._scroll_speed(0.1), 0.5)
         self.assertEqual(builder._scroll_speed(9), 5.0)
 
+    def test_chords_carry_the_names_the_editor_sent(self):
+        # E5 on the two low strings, then the same grip with no name sent.
+        def chord(start, **name):
+            return [{"start": start, "end": start + 0.4, "pitch": p, "string": s, "fret": f, "hand": 1, "finger": g, **name}
+                    for p, s, f, g in ((40, 6, 0, -1), (47, 5, 2, 1))]
+        track = {"name": "Gtr", "tuning": GUITAR, "notes": chord(1.0, chordName="E5") + chord(2.0) + chord(3.0, chordName="Power ✓")}
+        lead = _build(_spec([track], [{"track": 0, "kind": "lead", "tuning": GUITAR}]))[1]["Lead"]
+        # One template per name; the unnamed one is in the SNG but, nameless, not listed.
+        self.assertEqual(sorted(t["ChordName"] for t in lead["ChordTemplates"]), ["E5", "Power ✓"])
+
     def test_tone_switches_become_tone_slots(self):
         markers = [{"t": 0, "tone": "clean"}, {"t": 2.0, "tone": "lead"}, {"t": 3.0, "tone": "clean"}]
         tracks = [_track("Gtr", GUITAR, [0, 3], toneMarkers=markers)]
