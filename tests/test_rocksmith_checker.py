@@ -211,7 +211,8 @@ class ExporterFixes(unittest.TestCase):
     def test_slide_out_ends_before_the_next_position(self):
         notes = [_note(2.0, 2.5, 1, 3, slide="outUp"), _note(2.5, 3.0, 1, 12)]
         self.assertNotIn("I23", [c for c, _ in _codes(_spec(notes, lead=5))])
-        self.assertAlmostEqual(_compiled(notes).levels[0].notes[0].sustain, 0.49)
+        # 1/32 of a 2 s measure before the next note, like every tail (chart._leave_note_gaps).
+        self.assertAlmostEqual(_compiled(notes).levels[0].notes[0].sustain, 0.4375)
 
     def test_low_tunings_stay_low(self):
         """A standard is seven steps down, not five up."""

@@ -136,6 +136,37 @@ def _sustain_rule(grid: dict, song_length: float):
     return sustained
 
 
+def _leave_note_gaps(entities: list, grid: dict) -> None:
+    """End each tail 1/32 of a measure before the next note, as EOF does.
+
+    Export only: the editor keeps the lengths as played. A tail is cut when it
+    runs into the next note on one of its strings, or ends within the gap of the
+    next note anywhere (legato played up to the next onset). A tail that clearly
+    rings over notes on other strings is let ring. Short notes have no tail, so
+    trills and fast runs are untouched.
+    """
+    segments = _tempo_segments(grid)
+
+    def gap_at(t: float) -> float:
+        _, bpm, ts = next((s for s in reversed(segments) if s[0] <= t + 1e-4), segments[0])
+        return ts * 60.0 / bpm / 32
+
+    for i, e in enumerate(entities):
+        if e.sustain <= 0 or i + 1 == len(entities):
+            continue
+        end, nxt = e.time + e.sustain, entities[i + 1].time
+        strings = {s for s, _, _ in e.notes}
+        same = next((x.time for x in entities[i + 1:] if strings & {s for s, _, _ in x.notes}), None)
+        limits = [same - gap_at(same)] if same is not None and end > same - gap_at(same) else []
+        if abs(end - nxt) <= gap_at(nxt):
+            limits.append(nxt - gap_at(nxt))
+        if limits:
+            e.sustain = max(0.0, min(limits) - e.time)
+            if e.sustain < 1e-3:
+                vibrato = any((n.get("fx") or {}).get("vibrato") or n.get("tremPick") for _, _, n in e.notes)
+                e.sustain = TECHNIQUE_SUSTAIN_MIN if vibrato else 0.0
+
+
 def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
     segments = _tempo_segments(grid)
     beats = []  # (time, measure, beat_in_measure)
@@ -1091,6 +1122,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
     voicing = _voiced_entities(track, n_str, tuning_low, warnings,
                                _sustain_rule(grid, song_length), capo)
     entities = voicing.entities
+    _leave_note_gaps(entities, grid)
     song_length = max(song_length, voicing.last_end + 0.5)
 
     arr = _beats_phrases_sections(grid, song_length, section_markers, phrase_boundaries,
