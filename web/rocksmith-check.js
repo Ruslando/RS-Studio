@@ -4,8 +4,9 @@
 // checker (rocksmith/checker.py) on the spec the export would send, so the
 // list here is the list DLC Builder shows for the finished package. A check
 // starts once edits have settled; a newer one cancels the one in flight.
-// Results are listed for the active layer in the artifact pane (design.md 10)
-// and framed on the stage around the notes they concern.
+// Results are listed for the active layer in the artifact pane under Errors and
+// Warnings, with the flags' own problems (design.md 10), and framed on the stage
+// around the notes they concern.
 import { $, scroll } from './dom.js';
 import { S } from './store.js';
 import { buildSpecForLanesAsync, laneTuning } from './tablature.js';
@@ -17,6 +18,7 @@ import { moveViewportTo, stopViewportMotion } from './viewport-motion.js';
 import { stopArtifactPreview } from './artifact-preview.js';
 import { draw } from './repaint.js';
 import { icon } from './icons.js';
+import { markerArtifacts } from './marker-artifacts.js';
 
 const SETTLE_MS = 700;
 const SAME_ONSET = 0.003;   // the check reports whole milliseconds of a float32 time
@@ -25,8 +27,8 @@ const chevron = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 2
 const clock = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, '0')}`;
 
 let results = new Map();          // lane id -> { issues, warnings, error }
-let lastKey = null, timer = 0, inFlight = null, shownKey = null;
-let list = null, count = null, head = null, body = null;
+let lastKey = null, timer = 0, inFlight = null;
+const lists = new Map();         // 'error' | 'warning' -> { list, count, head, body, shown }
 
 // Layers the export would offer with their own arrangement.
 const checkedLanes = () => (S.state?.editLanes || []).filter(lane =>
@@ -95,14 +97,16 @@ export function rocksmithIssueNotes(lane) {
   return out;
 }
 
+// Every problem of the active layer: the export's (Rocksmith) and its flags'.
 function rowsFor(lane) {
   const found = results.get(lane?.id);
-  if (!found) return [];
   const rows = [];
-  if (found.error) rows.push({ title: `Not exported: ${found.error}`, help: '', important: true, time: null });
-  for (const text of found.warnings || []) rows.push({ title: text, help: '', important: false, time: null });
-  for (const issue of found.issues || []) rows.push(issue);
-  return rows;
+  if (found?.error) rows.push({ title: `Not exported: ${found.error}`, help: '', important: true, time: null });
+  for (const text of found?.warnings || []) rows.push({ title: text, help: '', important: false, time: null });
+  for (const issue of found?.issues || []) rows.push(issue);
+  for (const entry of markerArtifacts()) if (entry.issue)
+    rows.push({ title: entry.issue.title, help: entry.issue.help, important: entry.issue.tone === 'error', time: entry.t });
+  return rows.sort((a, b) => (a.time ?? -1) - (b.time ?? -1));
 }
 
 function moveTo(t) {
@@ -138,41 +142,52 @@ function issueRow(entry) {
   return row;
 }
 
-// The artifact pane's list for the active layer; rebuilt only when it changes.
+// The artifact pane's Errors and Warnings for the active layer; rebuilt only when they change.
 export function renderRocksmithIssues() {
   scheduleCheck();
-  if (!list) return;
+  if (!lists.size) return;
   const lane = S.state?.editLanes.find(item => item.active);
   const rows = S.state ? rowsFor(lane) : [];
-  const key = JSON.stringify([lane?.id, rows]);
-  if (key === shownKey) return;
-  shownKey = key;
-  list.replaceChildren(...rows.map(issueRow));
-  count.textContent = String(rows.length);
-  head.classList.toggle('is-empty', !rows.length); body.classList.toggle('is-empty', !rows.length);
+  for (const [tone, section] of lists) {
+    const mine = rows.filter(row => !!row.important === (tone === 'error'));
+    const key = JSON.stringify([lane?.id, mine]);
+    if (key === section.shown) continue;
+    section.shown = key;
+    section.list.replaceChildren(...mine.map(issueRow));
+    section.count.textContent = String(mine.length);
+    section.head.classList.toggle('is-empty', !mine.length); section.body.classList.toggle('is-empty', !mine.length);
+  }
 }
 
-export function initRocksmithIssues() {
-  head = document.createElement('div'); head.className = 'side-header';
+function issueSection(tone, label) {
+  const head = document.createElement('div'); head.className = 'side-header';
   const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'side-label';
   toggle.innerHTML = chevron;
-  const title = document.createElement('span'); title.textContent = 'Rocksmith';
-  count = document.createElement('span'); count.className = 'artifact-count'; count.setAttribute('aria-live', 'polite');
+  const title = document.createElement('span'); title.textContent = label;
+  const count = document.createElement('span'); count.className = 'artifact-count'; count.setAttribute('aria-live', 'polite');
   toggle.append(title, count); head.append(toggle);
-  body = document.createElement('div'); body.className = 'artifact-panel-body'; body.id = 'artifactRocksmithBody';
-  list = document.createElement('ul'); list.className = 'artifact-list'; list.id = 'rocksmithIssues';
+  const body = document.createElement('div'); body.className = 'artifact-panel-body'; body.id = `artifact${label}Body`;
+  const list = document.createElement('ul'); list.className = 'artifact-list artifact-issue-list'; list.id = `artifact${label}`;
+  list.dataset.tone = tone;
   body.append(list);
   const sync = () => {
     toggle.setAttribute('aria-controls', body.id); toggle.setAttribute('aria-expanded', String(!body.hidden));
-    toggle.title = `${body.hidden ? 'Expand' : 'Collapse'} Rocksmith issues`;
+    toggle.title = `${body.hidden ? 'Expand' : 'Collapse'} ${label.toLowerCase()}`;
     toggle.setAttribute('aria-label', toggle.title);
   };
   toggle.addEventListener('click', () => { body.hidden = !body.hidden; sync(); }); sync();
+  lists.set(tone, { list, count, head, body, shown: null });
+  return [head, body];
+}
+
+export function initRocksmithIssues() {
   // First in the pane: what stops a clean export matters before what indexes the song.
-  $('artifactsContent').querySelector('.artifact-sections').prepend(head, body);
+  $('artifactsContent').querySelector('.artifact-sections').prepend(
+    ...issueSection('error', 'Errors'), ...issueSection('warning', 'Warnings'));
   const reset = () => {
     inFlight?.abort(); clearTimeout(timer);
-    results = new Map(); lastKey = null; shownKey = null;
+    results = new Map(); lastKey = null;
+    for (const section of lists.values()) section.shown = null;
   };
   window.addEventListener('cw-project-opened', reset);
   window.addEventListener('cw-project-closed', () => { reset(); renderRocksmithIssues(); });

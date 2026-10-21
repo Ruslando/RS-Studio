@@ -1958,16 +1958,34 @@ export function init_fretboard() {
       return;
     }
   });
+  // Capo and Hand: shut, a list shows its value; a click there or on the chevron opens it,
+  // choosing a value, the chevron again or a click elsewhere shuts it.
+  const toggles = [$("fretboardCapoToggle"), $("fretboardHandToggle")];
+  const listOf = (toggle) => $(toggle.getAttribute("aria-controls"));
+  const setOpen = (toggle, open) => {
+    listOf(toggle).toggleAttribute("data-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+  for (const toggle of toggles) toggle.addEventListener("click", () => setOpen(toggle, !listOf(toggle).hasAttribute("data-open")));
+  window.addEventListener("pointerdown", (event) => {
+    for (const toggle of toggles) if (!toggle.parentElement?.contains(event.target)) setOpen(toggle, false);
+  }, true);
+  // A click on a shut list opens it instead of choosing; returns whether it did.
+  const opened = (list) => {
+    if (list.hasAttribute("data-open")) { setOpen(toggles.find((t) => listOf(t) === list), false); return false; }
+    setOpen(toggles.find((t) => listOf(t) === list), true);
+    return true;
+  };
   $("fretboardCapoList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-value]"), lane = currentLane();
-    if (!button || button.disabled || !editing || !canEditLane(lane) || transportPlaying()) return;
+    if (!button || button.disabled || opened(event.currentTarget) || !editing || !canEditLane(lane) || transportPlaying()) return;
     button.blur();
     moveLaneCapo(lane, Number(button.dataset.value));
     drawFretboard();
   });
   $("fretboardHandList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-value]"), lane = currentLane();
-    if (!button || button.disabled || !editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;
+    if (!button || button.disabled || opened(event.currentTarget) || !editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;
     button.blur();
     const value = button.dataset.value === "auto" ? null : Number(button.dataset.value);
     if (value !== null && !(handColumnHere(lane)?.choices || []).includes(value)) return;

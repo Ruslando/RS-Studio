@@ -561,7 +561,7 @@ export const TOURS = {
       {
         target: "fretboardStage",
         title: "Hand anchors",
-        body: "The Hand list shows every hand position that can play this note or chord. Pick one to set a hand anchor; it fingers this note or chord and moves no note. Hand anchors appear as small framed markers in the timeline and in Artifacts.",
+        body: "The Hand list shows every hand position that can play this note or chord. Open it with its arrow and pick one to set a hand anchor; it fingers this note or chord and moves no note. Hand anchors appear as small framed markers in the timeline and in Artifacts.",
         until: UNTIL.fretboardHandHold,
         task: "Pick a hand position in the Hand list",
         optional: true,
