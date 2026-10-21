@@ -41,9 +41,9 @@ import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulation
 import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
-import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits } from "./voicing-core.js";
+import { assignFingers, chordColumns, fingeringChoices, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits } from "./voicing-core.js";
 import { columnAlternatives } from "./voicing.js";
-import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnFollow, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
+import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnFingers, setColumnFollow, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { toast } from "./notify.js";
@@ -994,6 +994,15 @@ export function drawFretboard() {
   handControl.disabled = disabled || shared || !choices.length;
   $("fretboardHandPrev").disabled = disabled || shared || !choices.some((g) => g < current);
   $("fretboardHandNext").disabled = disabled || shared || !choices.some((g) => g > current);
+  // The fingering of this note or chord, and the ones it could have (fingeringChoices).
+  const fingering = fingeringHere(lane);
+  $("fretboardFingerLabel").textContent = fingering?.chord ? "Fingering" : "Finger";
+  const fingerText = $("fretboardFinger");
+  fingerText.textContent = fingering?.text || "\u2013";
+  fingerText.toggleAttribute("data-auto", !fingering?.chosen);
+  fingerText.title = fingering ? (fingering.chosen ? "Chosen" : "Automatic") : "";
+  $("fretboardFingerPrev").disabled = disabled || shared || !fingering || fingering.index <= 0;
+  $("fretboardFingerNext").disabled = disabled || shared || !fingering || fingering.index >= fingering.choices.length - 1;
   const projection = boardProjection(ctx, s, w, h, tuning);
   if (!projection) return;
   const { scale, X, Y, strung, tunePx } = projection;
@@ -1751,6 +1760,29 @@ function handColumnHere(lane) {
   return { column, after: i > 0 ? found.columns[i - 1].start : -Infinity, choices: handChoicesOf.get(column) };
 }
 
+// THE FINGERING THE BUTTONS STEP THROUGH: the column's fingers as the board shows
+// them, the valid ones (fingeringChoices), where the current one is among them, and
+// whether it was chosen. A chord reads as its fingers from the low string up.
+const fingeringChoicesOf = new WeakMap();
+function fingeringHere(lane) {
+  const at = handColumnHere(lane);
+  if (!at) return null;
+  const placed = at.column.fingers.filter((f) => !f.dead);
+  const fretted = placed.filter((f) => f.fret > 0);
+  if (!fretted.length) return null;
+  if (!fingeringChoicesOf.has(at.column)) {
+    const shape = new Map(placed.map((f) => [f.note, { string: f.string, fret: f.fret }]));
+    fingeringChoicesOf.set(at.column, fingeringChoices(shape, handProfileForTuning(laneFretTuning(lane)),
+      Math.max(1, laneFretCount(lane) - 3)));
+  }
+  const choices = fingeringChoicesOf.get(at.column);
+  const index = choices.findIndex((c) => fretted.every((f) => c.get(f.note) === f.finger));
+  const ordered = [...fretted].sort((a, b) => b.string - a.string);
+  return { placed, choices, index, chord: fretted.length > 1,
+    chosen: fretted.some((f) => f.note.pos?.finger != null),
+    text: ordered.map((f) => f.finger || "?").join(fretted.length > 1 ? " " : "") };
+}
+
 // The hand the player put on this note or chord, if any, so the band can say so.
 function holdHere(lane) {
   const at = handColumnHere(lane);
@@ -1815,6 +1847,17 @@ export function init_fretboard() {
   for (const button of panelControls("fretboard")) button.addEventListener("click", () => setFretboardVisible(!visible));
   // Both reach toggles act on the column the strip is already naming, and both leave
   // the shape exactly as it is — only the blast radius moves.
+  for (const [side, step] of [["Prev", -1], ["Next", 1]])
+    $("fretboardFinger" + side).addEventListener("click", (event) => {
+      event.currentTarget.blur();
+      const lane = currentLane();
+      if (!editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;
+      const fingering = fingeringHere(lane);
+      const next = fingering?.choices[fingering.index < 0 ? 0 : fingering.index + step];
+      if (!next) return;
+      setColumnFingers(lane, fingering.placed.map(({ note, string, fret }) => ({ note, string, fret })), next);
+      drawFretboard();
+    });
   for (const button of fretboardFollow.children) {
     button.addEventListener("click", () => {
       if (selectedPositions(currentLane()).multiple) return;

@@ -92,12 +92,23 @@ def _compiled(notes, lead=5, **track):
 class ExporterFixes(unittest.TestCase):
     """Problems DLC Builder found in our packages, fixed at the source."""
 
-    def test_open_strings_carry_no_finger(self):
-        song = _compiled(_chord(2.0, 3.0, "022000"))
-        fingers = song.chords[0].fingers
-        self.assertEqual([fingers[s] for s in (0, 3, 4, 5)], [-1] * 4, "open strings")
-        self.assertTrue(all(fingers[s] > 0 for s in (1, 2)), "fretted strings")
-        self.assertNotIn("I28", [c for c, _ in _codes(_spec(_chord(2.0, 3.0, "022000"), lead=5))])
+    def test_chord_fingers_are_the_editors(self):
+        """Em as the editor fingers it (2 and 3); open strings carry no finger (0 would be the thumb)."""
+        em = _chord(2.0, 3.0, "022000", s5={"finger": 2}, s4={"finger": 3})
+        song = _compiled(em)
+        self.assertEqual(song.chords[0].fingers, [-1, 2, 3, -1, -1, -1])
+        self.assertNotIn("I28", [c for c, _ in _codes(_spec(em, lead=5))])
+        # The same grip fingered another way is another chord template.
+        other = _chord(4.0, 5.0, "022000", s5={"finger": 1}, s4={"finger": 2})
+        song = _compiled(em + other)
+        self.assertEqual([c.fingers[1:3] for c in song.chords], [[2, 3], [1, 2]])
+
+    def test_a_chord_without_fingers_is_reported(self):
+        warnings = []
+        spec = builder._with_lead_in(_spec(_chord(2.0, 3.0, "022000")), 5)
+        built = builder._compile_arrangement(spec, spec["tracks"][0], {"kind": "lead"}, 25.0, "KEY", warnings)
+        self.assertEqual(built.compiled.sng.chords[0].fingers, [-1] * 6)
+        self.assertIn("2 fretted chord note(s) had no finger from the editor; Rocksmith shows them without one", warnings)
 
     def test_every_phrase_starts_with_an_anchor(self):
         # One hand position across two phrases (120 BPM: a phrase every 8 measures = 16 s).

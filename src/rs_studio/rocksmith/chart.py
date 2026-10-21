@@ -289,122 +289,14 @@ def _chord_name(midi: list) -> str:
     return min(matches)[1]
 
 
-def _finger_groupings(frets: list) -> list[list[list[int]]]:
-    """Every physical fingertip/barre grouping using at most four fingers."""
-    per_fret: list[list[list[list[int]]]] = []
-    for fret in sorted({f for f in frets if f > 0}):
-        same = [s for s, f in enumerate(frets) if f == fret]
-        full = (1 << len(same)) - 1
-        valid: list[tuple[int, list[int]]] = []
-        for mask in range(1, full + 1):
-            members = [same[i] for i in range(len(same)) if mask & (1 << i)]
-            lo_s, hi_s = min(members), max(members)
-            blocked = any(lo_s <= s <= hi_s and 0 <= f < fret
-                          for s, f in enumerate(frets))
-            if not blocked:
-                valid.append((mask, members))
+def _finger(n: dict, fret: int) -> int:
+    """The editor's finger on a fretted note (1 index .. 4 pinky), else -1.
 
-        partitions: list[list[list[int]]] = []
-
-        def solve(mask: int, out: list[list[int]]) -> None:
-            if not mask:
-                partitions.append(out)
-                return
-            first = mask & -mask
-            for group_mask, members in valid:
-                if not group_mask & first or group_mask & mask != group_mask:
-                    continue
-                solve(mask ^ group_mask, [*out, members])
-
-        solve(full, [])
-        per_fret.append(partitions)
-
-    combined: list[list[list[int]]] = [[]]
-    for choices in per_fret:
-        combined = [[*prefix, *suffix] for prefix in combined for suffix in choices
-                    if len(prefix) + len(suffix) <= 4]
-    return combined if per_fret else [[]]
-
-
-def _finger_groups(frets: list) -> list[list[int]]:
-    """Minimum physical finger/barre groups, ordered by fret.
-
-    Equal-fret notes may share a finger only when the barre between their
-    strings crosses no sounding open string or lower-fretted note. Higher notes
-    may sit in front of a lower barre; unused/muted strings do not block it.
-    Six strings make an exact bitmask partition tiny.
+    -1 is also Rocksmith's "no finger", which an open string must have: its 0 is
+    the thumb, and a 0 there draws a T on the string (DLC Builder's I28).
     """
-    choices = _finger_groupings(frets)
-    if choices:
-        return min(choices, key=len)
-    # Preserve diagnostic behaviour for externally supplied impossible chords.
-    return [[s] for s, fret in enumerate(frets) if fret > 0]
-
-
-_FINGER_RANGES_MM = {
-    (1, 2): (5, 80), (1, 3): (15, 95), (1, 4): (25, 110),
-    (2, 3): (6, 52), (2, 4): (12, 69), (3, 4): (8.5, 47),
-}
-
-
-def _fingering_cost(frets: list, grouping: list[list[int]], assignment: tuple[int, ...]) -> float:
-    scale = 864 if len(frets) <= 5 else 648
-    spacing = 9 if len(frets) <= 5 else 7
-    x_at = lambda fret: scale * (1 - 2 ** (-(fret - 0.5) / 12))
-    cost = len(grouping) * 0.26 + (0.08 if 4 in assignment else 0)
-    groups = []
-    for strings, finger in zip(grouping, assignment):
-        fret = frets[strings[0]]
-        center = sum(strings) / len(strings)
-        span = max(strings) - min(strings) + 1 if len(strings) > 1 else 1
-        if len(strings) > 1:
-            cost += 0.22 + max(0, span - 1) * 0.05 + max(0, finger - 1) * 0.18
-        groups.append((finger, fret, center))
-    for i, (finger_a, fret_a, string_a) in enumerate(groups):
-        for finger_b, fret_b, string_b in groups[i + 1:]:
-            pair = tuple(sorted((finger_a, finger_b)))
-            min_comfort, max_comfort = _FINGER_RANGES_MM[pair]
-            distance = math.hypot(x_at(fret_a) - x_at(fret_b), (string_a - string_b) * spacing)
-            if distance > max_comfort * 1.12:
-                return math.inf
-            soft_reach = max_comfort * 0.72
-            if distance > soft_reach:
-                cost += 2.4 * ((distance - soft_reach) / (max_comfort - soft_reach)) ** 2
-            if distance < min_comfort:
-                cost += 0.65 * ((min_comfort - distance) / min_comfort) ** 2
-            if (fret_a - fret_b) * (finger_a - finger_b) < 0:
-                cost += 2.25
-            if pair == (3, 4) and (abs(fret_a - fret_b) > 1 or abs(string_a - string_b) > 2):
-                cost += 0.35
-    return cost
-
-
-def _chord_fingers(frets: list) -> list:
-    """Physical fingers for a Rocksmith chord (1-4; -1 for open and unused strings).
-
-    Rocksmith's 0 is the thumb, so an open string must stay -1: marked 0 the
-    game draws a "T" on it, and DLC Builder reads two of them as a thumb barre
-    over open strings (I28).
-
-    Automatic editor voicings already reject shapes needing more than four
-    groups. If an external/manual spec still supplies one, excess groups stay
-    unlabeled instead of falsely reusing finger 4 on another position.
-    """
-    fingers = [-1] * len(frets)
-    best = None
-    for grouping in _finger_groupings(frets):
-        for assignment in itertools.permutations(range(1, 5), len(grouping)):
-            candidate = (_fingering_cost(frets, grouping, assignment), grouping, assignment)
-            if best is None or candidate[0] < best[0]:
-                best = candidate
-    if best is None or not math.isfinite(best[0]):
-        grouping, assignment = _finger_groups(frets), tuple(range(1, min(4, len(_finger_groups(frets))) + 1))
-    else:
-        _, grouping, assignment = best
-    for strings, finger in zip(grouping, assignment):
-        for s in strings:
-            fingers[s] = finger
-    return fingers
+    finger = n.get("finger")
+    return finger if fret > 0 and isinstance(finger, int) and 1 <= finger <= 4 else -1
 
 
 @dataclass
@@ -501,13 +393,18 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
     chord_templates: list[S.ChordTemplate] = []
     chord_ids: dict[tuple, int] = {}
 
-    def ensure_chord_template(frets: list, midi: list, *, arpeggio: bool = False) -> int:
+    unfingered = 0
+
+    def ensure_chord_template(frets: list, midi: list, fingers: list, *, arpeggio: bool = False) -> int:
+        """One template per grip and fingering: the same grip fingered two ways is two."""
+        nonlocal unfingered
         mask = S.CHORD_MASK_ARPEGGIO if arpeggio else 0
-        key = (tuple(frets), mask)
+        key = (tuple(frets), tuple(fingers), mask)
         if key not in chord_ids:
             chord_ids[key] = len(chord_templates)
+            unfingered += sum(1 for f, g in zip(frets, fingers) if f > 0 and g == -1)
             chord_templates.append(S.ChordTemplate(
-                frets=frets, fingers=_chord_fingers(frets), notes=midi,
+                frets=frets, fingers=fingers, notes=midi,
                 name=_chord_name(midi), mask=mask))
         return chord_ids[key]
 
@@ -536,23 +433,27 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             warnings.append(f"Shape {shape_id} shares an onset with notes outside the Shape and was exported as ordinary notes")
             continue
         by_string = {}
+        finger_on = {}
         conflict = False
-        for _, string, fret, _ in members:
+        for _, string, fret, n in members:
             if string in by_string and by_string[string] != fret:
                 conflict = True
             by_string[string] = fret
+            finger_on.setdefault(string, _finger(n, fret))
         if conflict or len(by_string) < 2:
             warnings.append(f"Shape {shape_id} cannot be held on one fixed multi-string grip and was exported as ordinary notes")
             continue
         frets = [-1] * 6
         midi = [-1] * 6
+        fingers = [-1] * 6
         for string, fret in by_string.items():
             frets[string] = fret
             midi[string] = tuning_low[string] + (fret or capo)
+            fingers[string] = finger_on[string]
         start = min(item[0] for item in members)
         end = max(max(_f(item[3].get("end"), item[0]), item[0] + 0.02) for item in members)
         shape_info[shape_id] = {
-            "chord_id": ensure_chord_template(frets, midi, arpeggio=True),
+            "chord_id": ensure_chord_template(frets, midi, fingers, arpeggio=True),
             "start": start, "end": end, "frets": list(by_string.values()),
         }
 
@@ -586,13 +487,18 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         if len(notes) >= 2:
             frets = [-1] * 6
             midi = [-1] * 6
-            for s, fret, _ in notes:
+            fingers = [-1] * 6
+            for s, fret, n in notes:
                 frets[s] = fret
                 midi[s] = tuning_low[s] + (fret or capo)
-            ent.chord_id = ensure_chord_template(frets, midi)
+                fingers[s] = _finger(n, fret)
+            ent.chord_id = ensure_chord_template(frets, midi, fingers)
         entities.append(ent)
         i = j
 
+    if unfingered:
+        warnings.append(f"{unfingered} fretted chord note(s) had no finger from the editor; "
+                        "Rocksmith shows them without one")
     return _Voicing(
         entities=entities,
         chord_templates=chord_templates,

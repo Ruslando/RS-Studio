@@ -937,5 +937,13 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
   override (weight 3), so the same notes after it prefer it where the hand allows.
   Locked: the same notes after it are played so until another override of them.
   Nothing reaches back before an override, and no other note's memory changes.
+- Fingers: a single note's finger is `fret − hand + 1`; a chord takes the cheapest
+  valid fingering for its hand, and the same grip later keeps the fingering it had
+  (the memory, a preference the hand may decline). The fretboard's Finger buttons
+  step through the valid choices (`fingeringChoices`): a note's finger 1–4 (which
+  sets its hand), a chord's fingerings. The choice is stored as `finger` on each
+  fretted note's position override and carries on like the position (only here,
+  guided, locked); choosing a hand for those notes drops it. Rocksmith's chord boxes
+  show exactly these fingers (open strings none), one template per grip and fingering.
 - In the package: anchors where the hand changes, plus one at every phrase start,
   four frets wide or as far as a note reaches, counted from the nut (capo added).

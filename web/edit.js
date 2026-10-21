@@ -779,6 +779,36 @@ export function setHandAnchor(lane, t, fret) {
   if ((!had && fret === null) || (had && Number(had.fret) === fret)) return;
   const prev = snapshotEdit();
   lane.handHolds = (fret === null ? rest : [...rest, { t, fret }]).sort((a, b) => a.t - b.t);
+  // A hand chosen by hand replaces a fingering chosen for the same notes: the engine
+  // fingers them for the new hand.
+  if (fret !== null) dropChosenFingers(chordColumns(lane.notes).find((c) => c.t0 >= t - 1e-6)?.notes || []);
+  commit(prev); draw(); refreshTabIfOpen();
+}
+
+function dropChosenFingers(notes) {
+  for (const n of notes) if (n.pos?.finger != null) {
+    const { finger, ...pos } = n.pos;
+    n.pos = pos;
+  }
+}
+
+// A FINGERING CHOSEN FOR ONE NOTE OR CHORD: `placed` is the column as the fretboard
+// shows it ({ note, string, fret } each), `fingers` the choice (fingeringChoices).
+// Written onto each note's position override, so it carries on like the position
+// does (only here, guided or locked), and the hand follows from it: a hand anchor on
+// these notes would contradict it and goes.
+export function setColumnFingers(lane, placed, fingers) {
+  if (!canEditLane(lane) || !placed.length || placed.some(({ note }) => !lane.notes.includes(note))) return;
+  const prev = snapshotEdit();
+  const { follow } = overrideFlow(placed.map(({ note }) => note));
+  for (const { note, string, fret } of placed) {
+    const finger = fret > 0 ? fingers.get(note) : null;
+    note.pos = { string, fret, scope: "local", follow, ...(finger ? { finger } : {}) };
+  }
+  const columns = chordColumns(lane.notes), t0 = Math.min(...placed.map(({ note }) => note.start));
+  const i = columns.findIndex((c) => Math.abs(c.t0 - t0) < 1e-6);
+  const from = i > 0 ? columns[i - 1].t0 : -Infinity;
+  lane.handHolds = (lane.handHolds || []).filter((h) => !(Number(h.t) > from + 1e-6 && Number(h.t) <= t0 + 1e-6));
   commit(prev); draw(); refreshTabIfOpen();
 }
 
