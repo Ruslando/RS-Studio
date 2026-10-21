@@ -45,8 +45,9 @@ export const GUITAR_HAND_PROFILE = Object.freeze({
   id: "guitar6", stringCount: 6, scaleLengthMm: 648, stringSpacingMm: 7,
 });
 
+// A bass fret is a third wider, so its stretch stops a fret sooner (handReach).
 export const BASS_HAND_PROFILE = Object.freeze({
-  id: "bass4", stringCount: 4, scaleLengthMm: 864, stringSpacingMm: 9,
+  id: "bass4", stringCount: 4, scaleLengthMm: 864, stringSpacingMm: 9, maxReach: 5,
 });
 
 const PROFILE_CACHE = new Map();
@@ -464,7 +465,7 @@ export function handForShape(shape, seat, profile = GUITAR_HAND_PROFILE, require
   // when the hand is on its fret. Out of reach, the hand comes to the note.
   if (contacts.length === 1) {
     const [note, pos] = contacts[0];
-    const at = Number.isFinite(seat) && seat >= 1 && pos.fret - seat >= 0 && pos.fret - seat < MAX_REACH ? seat : pos.fret;
+    const at = Number.isFinite(seat) && seat >= 1 && pos.fret - seat >= 0 && pos.fret - seat < handReach(profile) ? seat : pos.fret;
     const fingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([n]) => [n, 0]));
     fingers.set(note, Math.min(4, pos.fret - at + 1));
     return { fingers, seat: at, playable: true };
@@ -499,7 +500,7 @@ export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infi
   let seats;
   if (contacts.length === 1) {
     const fret = contacts[0][1].fret;
-    seats = Array.from({ length: Math.min(fret, MAX_REACH) }, (_, k) => fret - k);
+    seats = Array.from({ length: Math.min(fret, handReach(profile)) }, (_, k) => fret - k);
   } else {
     let poses = fingeringOptions(shape, profile);
     if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
@@ -1968,6 +1969,7 @@ export function overrideEffectKinds(notes, tuning, options = {}) {
 
 const SPAN = 4;          // the hand covers four frets. Corpus: 99.9% of chords fit three.
 export const MAX_REACH = 6;   // with a stretch: the pinky reaches two frets past the four
+export const handReach = (profile) => profile?.maxReach ?? MAX_REACH;
 
 // HOW MANY FRETS THERE ARE IS A FACT ABOUT THE INSTRUMENT, so the caller states
 // it and this is only the default for a caller that cannot. `web/fretboard-core.js`
@@ -2781,12 +2783,13 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       }
       return Number.isFinite(lo) ? { lo, hi } : null;
     });
+    const maxReach = handReach(handProfileForTuning(tuning));
     // The player's hand, where it can play what is there; otherwise it has lapsed.
     sorted.forEach((c, i) => {
       const g = c.handAt, r = reach[i];
-      if (g != null && r && g >= 1 && g <= r.lo && r.hi - g < MAX_REACH) named[i] = g;
+      if (g != null && r && g >= 1 && g <= r.lo && r.hi - g < maxReach) named[i] = g;
     });
-    const planned = planHand(reach, named, span);
+    const planned = planHand(reach, named, span, maxReach);
     for (let i = 0; i < n; i++) seats[i] = planned[i] ?? Math.max(1, registers[blocks.findIndex((idx) => idx.includes(i))] || 1);
   }
 
@@ -2825,11 +2828,11 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
 // with nothing fretted take the hand that is already there. This reads the hand off
 // the notes; it does not move them — where each note goes is still the register's.
 const HAND_SHIFT = 4;
-// Past MAX_REACH no hand reaches: priced out, but still finite, so a column that
-// cannot be held any other way (a chord wider than six frets) keeps a hand.
-const stretchCost = (frets, span) => (frets <= span ? 0 : frets > MAX_REACH ? 1e6 : 3 ** (frets - span - 1));
+// Past the reach no hand gets there: priced out, but still finite, so a column that
+// cannot be held any other way (a chord wider than the reach) keeps a hand.
+const stretchCost = (frets, span, reach = MAX_REACH) => (frets <= span ? 0 : frets > reach ? 1e6 : 3 ** (frets - span - 1));
 
-function planHand(reach, named, span = SPAN) {
+function planHand(reach, named, span = SPAN, maxReach = MAX_REACH) {
   const n = reach.length, out = new Array(n).fill(null);
   let prev = null;                         // [{ g, cost, from }] of the last fretted column
   const trail = [];
@@ -2840,9 +2843,9 @@ function planHand(reach, named, span = SPAN) {
     // wider than any reach (fret 2 and fret 14 at once) still has the first: the
     // index on its lowest note. With none, the walk below had no state to read.
     const frets = named[i] != null ? [named[i]]
-      : Array.from({ length: r.lo - Math.min(r.lo, Math.max(1, r.hi - MAX_REACH + 1)) + 1 }, (_, k) => r.lo - k);
+      : Array.from({ length: r.lo - Math.min(r.lo, Math.max(1, r.hi - maxReach + 1)) + 1 }, (_, k) => r.lo - k);
     const states = frets.map((g) => {
-      const own = named[i] != null ? 0 : stretchCost(r.hi - g + 1, span) + 0.01 * (r.lo - g);
+      const own = named[i] != null ? 0 : stretchCost(r.hi - g + 1, span, maxReach) + 0.01 * (r.lo - g);
       let best = 0, from = -1;
       if (prev) {
         best = Infinity;
