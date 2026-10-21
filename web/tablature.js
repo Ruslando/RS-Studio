@@ -250,7 +250,7 @@ function buildSpecFromPrepared(prepared) {
     // Resolution is the finest grid required by the marker map, so on-grid notes
     // in denser later segments never merge into the coarser start segment.
     resolution: exportResolution(),
-    tracks: prepared.map(({ lane: l, exportNotes, voiced }) => {
+    tracks: prepared.map(({ lane: l, exportNotes, voiced, seats }) => {
       // The front-end is the source of truth for fingering: voice the lane here
       // and ship string+fret per note so the export matches the preview exactly.
       // string is 1-based GP order (string 1 = highest open), as the backend wants.
@@ -266,10 +266,13 @@ function buildSpecFromPrepared(prepared) {
         // Frets below count from it; the .gp5 writer and Rocksmith both need it.
         capo: Number(l.capo) || 0,
         notes: representPickedOpenSlides(exportNotes.map((n) => {
-          const pos = voiced.get(n);
+          const pos = voiced.get(n), hand = seats?.get(n);
           return copyEffects(n, {
             start: n.start, end: n.end, pitch: n.pitch,
             string: pos ? pos.string + 1 : null, fret: pos ? pos.fret : null,
+            // The fret the index stands on, as the fretboard shows it (counted from the
+            // capo, like `fret`). Rocksmith's hand positions are exactly these.
+            ...(Number.isFinite(hand) ? { hand } : {}),
           });
         }), (note) => note),
       };
@@ -349,8 +352,8 @@ function alignReferences(lane, notes, found) {
 // and voicing pass the built-in Guitar Pro export uses.
 export async function buildSpecForLanesAsync(lanes, signal) {
   const prepared = await Promise.all(lanes.map(async (lane) => {
-    const { notes: exportNotes, voiced } = await laneFingering(lane, signal);
-    return { lane, exportNotes, voiced };
+    const { notes: exportNotes, voiced, seats } = await laneFingering(lane, signal);
+    return { lane, exportNotes, voiced, seats };
   }));
   if (signal?.aborted) throw aborted();
   return buildSpecFromPrepared(prepared);

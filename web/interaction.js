@@ -10,7 +10,7 @@ import { updateDetectStatus } from "./detect.js";
 import { bendHandles, regionEdgeAt } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
-import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
+import { addBendPoint, commit, followHand, handsBefore, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { pitchAt, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, minDur, snap, snapNote } from "./grid.js";
 import { markerCursorAt, markerMouseDown } from "./markers.js";
@@ -739,6 +739,13 @@ export function init_interaction() {
         S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig, S.drag.edge, minDur(),
         note => !!boxOfNote(note)?.group.locked);
       updateNoteGesture(S.state, S.drag.lane || laneOf(S.drag.note), S.drag.notes);
+      // One note moved up or down its string: the hand goes with it (followHand).
+      const [moved] = S.drag.notes, was = moved && S.drag.orig.get(moved);
+      if (S.drag.mode === "move" && S.drag.notes.length === 1 && S.drag.lane && was && was.pitch !== moved.pitch) {
+        const lane = S.drag.lane;
+        const before = handsBefore({ ...lane, notes: lane.notes.map((n) => n === moved ? { ...n, ...was } : n) });
+        followHand(lane, before, moved.start, moved.id);
+      }
       commitIfChanged();
     } else if (S.drag.mode === "bendPoint") {
       commitIfChanged();

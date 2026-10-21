@@ -3,8 +3,8 @@
 The editor gives notes in seconds with voiced string/fret (see tab.py's spec
 docstring) — already audio-synced, so unlike the usual GP->EOF CDLC route no
 manual re-sync is needed. This builds a single difficulty level (no dynamic
-difficulty), phrases/sections every 8 measures, greedy 4-fret anchors, and
-maps the editor's effect fields onto SNG note masks.
+difficulty), phrases/sections every 8 measures, the editor's hand positions as
+anchors, and maps the editor's effect fields onto SNG note masks.
 
 Conversion rules follow Rocksmith2014.NET's XmlToSng* modules.
 """
@@ -740,86 +740,61 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
                         sections=sections, end_t=end_t)
 
 
-def _plan_anchors(entities: list, shape_info: dict, capo: int = 0) -> list:
-    """Greedy fret window at entity onsets, widened to fit whatever chord it is
-    drawn around (a fixed 4-fret box clips a wide voicing's top notes outside the
-    in-game chord box). Returns (time, fret, width); also stamps each entity.
-    Never behind a capo: the lowest anchor is the first fret above it.
+def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, warnings: list) -> list:
+    """Rocksmith hand positions from the editor's: (time, fret, width), stamped on each entity.
+
+    Every note arrives with the fret the fretboard's index finger stands on
+    (`hand`, counted from the capo like `fret`). A position starts wherever that
+    changes, and every phrase starts with one (EOFFixes.fixPhraseStartAnchors).
+    Its width is four frets, or more when a note it covers reaches further, as EOF
+    writes it. Two identical positions in a row are one, except at a phrase start
+    (BasicFixes.removeRedundantAnchors). Notes with nothing fretted keep the hand
+    where it is.
+
+    A note without a hand (a spec not built by the editor) keeps the current one
+    when it reaches, else puts the index on its lowest fret, and is counted in a
+    warning: the export does not plan hands of its own.
     """
     floor = capo + 1
-    anchors_raw = []
-    cur = cur_w = None
-    for k, e in enumerate(entities):
-        held_frets = shape_info[e.shape_id]["frets"] if e.shape_id in shape_info else [f for _, f, _ in e.notes]
-        fretted = [f for f in held_frets if f > 0]
-        lo = min(fretted) if fretted else None
-        hi = max(fretted) if fretted else None
-        if cur is None:
-            cur_w = max(ANCHOR_WIDTH, hi - lo + 1) if lo is not None else ANCHOR_WIDTH
-            cur = max(floor, min(lo or floor, MAX_FRET - cur_w + 1))
-            anchors_raw.append((e.time, cur, cur_w))
-        elif lo is not None:
-            span = hi - lo + 1
-            fits = cur <= lo and hi <= cur + cur_w - 1
-            # a window widened for one stretchy chord must not linger for later
-            # notes that don't themselves need the extra reach -- otherwise a
-            # single note far outside a normal hand-span still numerically
-            # "fits" the old wide window and the anchor never catches up to it
-            stale_wide = cur_w > ANCHOR_WIDTH and span <= ANCHOR_WIDTH and not (
-                cur <= lo and hi <= cur + ANCHOR_WIDTH - 1)
-            if not fits or stale_wide:
-                previous = entities[k - 1]
-                slid = _slide_window(previous, e, cur, cur_w, lo, hi, floor)
-                legato = None if slid else _legato_window(previous, e, shape_info, floor)
-                if slid:
-                    cur, cur_w = slid
-                    anchors_raw.append((e.time, cur, cur_w))
-                elif legato:
-                    # Shift on the note the hammer-on/pull-off starts from (I33).
-                    cur, cur_w = legato
-                    if anchors_raw[-1][0] == previous.time:
-                        anchors_raw[-1] = (previous.time, cur, cur_w)
-                    else:
-                        anchors_raw.append((previous.time, cur, cur_w))
-                    previous.anchor_fret, previous.anchor_width = cur, cur_w
-                else:
-                    cur_w = max(ANCHOR_WIDTH, span)
-                    cur = max(floor, min(lo, MAX_FRET - cur_w + 1))
-                    anchors_raw.append((e.time, cur, cur_w))
-        e.anchor_fret = cur
-        e.anchor_width = cur_w
-    return anchors_raw
+    changes: list[tuple[float, int]] = []
+    cur = None
+    guessed = 0
+    for e in entities:
+        held = shape_info[e.shape_id]["frets"] if e.shape_id in shape_info else [f for _, f, _ in e.notes]
+        fretted = [f for f in held if f > 0]
+        hands = [int(n["hand"]) for _, f, n in e.notes if f > 0 and isinstance(n.get("hand"), (int, float))]
+        if hands:
+            fret = max(floor, min(hands) + capo)
+        elif fretted:
+            lo, hi = min(fretted), max(fretted)
+            fret = cur if cur is not None and cur <= lo and hi - cur < 6 else max(floor, lo)
+            guessed += 1
+        else:
+            fret = cur if cur is not None else floor
+        fret = min(fret, MAX_FRET - ANCHOR_WIDTH + 1)
+        if fret != cur:
+            changes.append((e.time, fret))
+            cur = fret
+    if guessed:
+        warnings.append(f"{guessed} note(s) had no hand position from the editor; the export placed the hand on them")
 
-
-def _slide_window(previous: _Entity, e: _Entity, cur: int, cur_w: int, lo: int, hi: int,
-                  floor: int) -> tuple[int, int] | None:
-    """The window at a legato slide's target that keeps the sliding finger.
-
-    A plain window would put the target under the first finger; DLC Builder
-    reads a finger change from the two anchors (I32). Only a single note is a
-    slide target that stays linked.
-    """
-    if len(e.notes) != 1:
-        return None
-    string, target, _ = e.notes[0]
-    source = next((fret for s, fret, n in previous.notes if s == string and n.get("slide") == "legato"), None)
-    if source is None or source <= 0:
-        return None
-    finger = min(4, max(1, 1 + source - cur - (cur_w - ANCHOR_WIDTH)))
-    start = target - (finger - 1)
-    if floor <= start <= MAX_FRET - ANCHOR_WIDTH + 1 and start <= lo and hi <= start + ANCHOR_WIDTH - 1:
-        return start, ANCHOR_WIDTH
-    return None
-
-
-def _legato_window(previous: _Entity, e: _Entity, shape_info: dict, floor: int) -> tuple[int, int] | None:
-    """One window for a hammer-on/pull-off and the note it starts from, if one fits."""
-    if previous.shape_id or not any((n.get("fx") or {}).get("hammer") for _, _, n in e.notes):
-        return None
-    fretted = [f for _, f, _ in [*previous.notes, *e.notes] if f > 0]
-    if not fretted or max(fretted) - min(fretted) + 1 > ANCHOR_WIDTH:
-        return None
-    return max(floor, min(min(fretted), MAX_FRET - ANCHOR_WIDTH + 1)), ANCHOR_WIDTH
+    anchors = _phrase_start_anchors([(t, fret, ANCHOR_WIDTH) for t, fret in changes], pi_times)
+    phrase_times = set(pi_times)
+    out: list[tuple[float, int, int]] = []
+    for k, (t, fret, _) in enumerate(anchors):
+        end = anchors[k + 1][0] if k + 1 < len(anchors) else math.inf
+        reach = [f for e in entities if t - 1e-6 <= e.time < end - 1e-6
+                 for f in (shape_info[e.shape_id]["frets"] if e.shape_id in shape_info else [f for _, f, _ in e.notes])
+                 if f > 0]
+        width = max(ANCHOR_WIDTH, max(reach, default=0) - fret + 1)
+        if out and out[-1][1:] == (fret, width) and t not in phrase_times:
+            continue
+        out.append((t, fret, width))
+    for e in entities:
+        active = next((a for a in reversed(out) if a[0] <= e.time + 1e-6), out[0] if out else None)
+        if active:
+            e.anchor_fret, e.anchor_width = active[1], active[2]
+    return out
 
 
 def _phrase_start_anchors(anchors: list, pi_times: list) -> list:
@@ -1215,7 +1190,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
     arr = _beats_phrases_sections(grid, song_length, section_markers, phrase_boundaries,
                                   voicing.first_t, voicing.last_end, warnings)
 
-    anchors_raw = _phrase_start_anchors(_plan_anchors(entities, voicing.shape_info, capo), arr.pi_times)
+    anchors_raw = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, warnings)
     fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)
     emitted = _emit_notes(entities, voicing.chord_templates, arr)
     notes = emitted.notes

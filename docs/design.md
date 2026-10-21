@@ -916,3 +916,20 @@ existing `handHolds` field. The active visible layer's anchors occupy a compact
 label. Click/right-click opens their editor; dragging snaps to beats. Fret and
 time edits, moves and deletion support undo. A separate collapsible Hand anchors
 artifact list indexes the active layer and shares that editor and smooth Move to action.
+
+The hand follows fixed rules (`web/voicing-core.js`), and Rocksmith gets exactly
+the hand the fretboard shows (each note carries it as `hand` in the export spec;
+`chart.py` turns the changes into anchors):
+
+- The hand position is the fret under the index finger. It covers four frets and
+  reaches six with a stretch; a note's finger is `fret − hand + 1`, the pinky past four.
+- A chord fingered with the index has its hand on that fret and nowhere else.
+- Planned automatically: index on the lowest note to start, stay while the notes
+  are in reach, otherwise move.
+- A hand anchor fixes the hand of its own note or chord only. It moves no note; the
+  fretboard's Hand buttons offer only hands that can play that note or chord
+  (`handChoices`), and one that can no longer play it lapses.
+- A note moved along its string keeps its finger and stretch: the hand moves with it
+  as an anchor on that note (`followHand`), undone with the move.
+- In the package: anchors where the hand changes, plus one at every phrase start,
+  four frets wide or as far as a note reaches, counted from the nut (capo added).

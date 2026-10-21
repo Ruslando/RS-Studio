@@ -41,7 +41,7 @@ import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulation
 import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
-import { assignFingers, chordColumns, handProfileForTuning, needsFret, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
+import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
 import { columnAlternatives } from "./voicing.js";
 import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnInfluence, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
@@ -984,15 +984,16 @@ export function drawFretboard() {
   $("fretboardCapoPrev").disabled = disabled || Number(lane?.capo || 0) <= 0;
   $("fretboardCapoNext").disabled = disabled || Number(lane?.capo || 0) >= MAX_CAPO;
   const handControl = $("fretboardHand");
-  const maxHand = Math.max(1, lane ? laneFretCount(lane) : s.frets);
   if (document.activeElement !== handControl) handControl.value = held ? String(held.fret) : "";
   const shared = selectedPositions(lane).multiple;
-  handControl.disabled = disabled || shared;
   const auto = $("fretboardHandAuto"), seatNow = impossible ? 0 : anchorFret(lane);
   auto.hidden = !!held;
   auto.textContent = `(${seatNow || '\u2013'})`;
-  $("fretboardHandPrev").disabled = disabled || shared;
-  $("fretboardHandNext").disabled = disabled || shared || Number(held?.fret || seatNow) >= maxHand;
+  // Only the hands that can play this note or chord (handChoices).
+  const choices = handColumnHere(lane)?.choices || [], current = Number(held?.fret || seatNow);
+  handControl.disabled = disabled || shared || !choices.length;
+  $("fretboardHandPrev").disabled = disabled || shared || !choices.some((g) => g < current);
+  $("fretboardHandNext").disabled = disabled || shared || !choices.some((g) => g > current);
   const projection = boardProjection(ctx, s, w, h, tuning);
   if (!projection) return;
   const { scale, X, Y, strung, tunePx } = projection;
@@ -1144,7 +1145,7 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   const grip = playing ? null : focusGrip(lane, s);
   if (!resetPeeking || !overridden) return;
 
-  const time = beatUnderBoard();
+  const time = handTimeHere(lane);
   const key = `${handKey(lane)}:${column?.t0 ?? focus?.start}:${time}:${songBarStarts().join(',')}:${sharedSelection.key}`;
   if (resetPreview?.key !== key) {
     resetPreview?.controller.abort();
@@ -1734,11 +1735,35 @@ function beatUnderBoard() {
 }
 
 
-// Whether the beat under the board has been put there by hand, so the band can say
-// so and a second click on the same fret can take it back.
+// THE NOTE OR CHORD THE HAND BUTTONS ACT ON: the column the board shows, the onset
+// of the one before it (a hand placed between the two belongs to this one, as
+// holdsByColumn reads it), and the hands that can play it. Remembered per column
+// object, because the board asks every frame and a new answer comes with a new walk.
+const handChoicesOf = new WeakMap();
+function handColumnHere(lane) {
+  const found = lane?.notes?.length ? gripsFor(lane) : null;
+  if (!found) return null;
+  const i = gripIndex(found.columns, frozenAt(lane) ?? boardTime());
+  if (i < 0) return null;
+  const column = found.columns[i];
+  if (!handChoicesOf.has(column)) {
+    const shape = new Map(column.fingers.map((f) => [f.note, { string: f.string, fret: f.fret }]));
+    handChoicesOf.set(column, handChoices(shape, handProfileForTuning(laneFretTuning(lane)),
+      Math.max(1, laneFretCount(lane) - 3)));
+  }
+  return { column, after: i > 0 ? found.columns[i - 1].start : -Infinity, choices: handChoicesOf.get(column) };
+}
+
+// The hand the player put on this note or chord, if any, so the band can say so.
 function holdHere(lane) {
-  const t = beatUnderBoard();
-  return (lane?.handHolds || []).find((h) => Math.abs(Number(h.t) - t) <= 1e-6) || null;
+  const at = handColumnHere(lane);
+  if (!at) return null;
+  return (lane?.handHolds || []).find((h) => Number(h.t) > at.after + 1e-6 && Number(h.t) <= at.column.start + 1e-6) || null;
+}
+
+// Where a hand for this note or chord is stored: on the one already there, else on its onset.
+function handTimeHere(lane) {
+  return holdHere(lane)?.t ?? handColumnHere(lane)?.column.start ?? beatUnderBoard();
 }
 
 // Which box the pointer is in, or -1. The boxes are the ones the last frame drew, so
@@ -1811,7 +1836,7 @@ export function init_fretboard() {
     if (!lane) return;
     endResetPreview();
     previewAlternative = false;
-    clearOverrideAt(lane, pinnedColumn(lane)?.notes || null, beatUnderBoard());
+    clearOverrideAt(lane, pinnedColumn(lane)?.notes || null, handTimeHere(lane));
     fretboardAuto.blur();
     drawFretboard();
   });
@@ -1891,18 +1916,24 @@ export function init_fretboard() {
       if (hand && selectedPositions(lane).multiple) return;
       const text = control.value.trim();
       let value;
-      if (delta !== null) {
-        const current = hand ? holdHere(lane)?.fret ?? anchorFret(lane) ?? 1 : Number(lane.capo) || 0;
-        value = Math.min(max, Math.max(hand ? 1 : 0, (hand ? Number(current || 1) : Number(current)) + delta));
-        if (hand && delta < 0 && Number(current) <= 1) value = null;
+      const choices = hand ? handColumnHere(lane)?.choices || [] : null;
+      if (hand && !choices.length) { control.blur(); drawFretboard(); return; }
+      if (delta !== null && hand) {
+        // The next hand that can play this note or chord, not the next fret.
+        const current = Number(holdHere(lane)?.fret ?? anchorFret(lane));
+        value = delta < 0 ? choices.filter((g) => g < current).pop() : choices.find((g) => g > current);
+        if (value === undefined) { drawFretboard(); return; }
+      } else if (delta !== null) {
+        value = Math.min(max, Math.max(0, (Number(lane.capo) || 0) + delta));
       } else if (hand && (text === "" || text.toLowerCase() === "auto")) value = null;
       else if (!/^\d+$/.test(text)) { control.blur(); drawFretboard(); return; }
       else value = Number(text);
-      if (value !== null && (!Number.isInteger(value) || value < (hand ? 1 : 0) || value > max)) {
+      if (value !== null && (!Number.isInteger(value) || value < (hand ? 1 : 0) || value > max
+        || (hand && !choices.includes(value)))) {
         control.blur(); drawFretboard(); return;
       }
       control.blur();
-      if (hand) setHandAnchor(lane, beatUnderBoard(), value);
+      if (hand) setHandAnchor(lane, handTimeHere(lane), value);
       else moveLaneCapo(lane, value);
       drawFretboard();
     };

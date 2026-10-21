@@ -369,6 +369,95 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate('window.__midNoteAttacks.slice(-2)'), ['C4','E4'])
         page.locator('#play').click()
 
+    def test_the_hand_follows_a_moved_note_and_offers_only_hands_that_play_it(self):
+        self.open_reference_project()
+        page = self.page
+        got = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const edit = await import('/edit.js');
+            const tab = await import('/tablature.js');
+            const lane = S.state.editLanes[0];
+            const pin = (string, fret) => ({ string, fret, scope: 'local' });
+            // Low E: fret 1 with the index, fret 5 with the pinky (a one-fret stretch).
+            lane.notes = [{ id: 'h1', start: 1, end: 1.4, pitch: 41, pos: pin(5, 1) },
+                          { id: 'h2', start: 2, end: 2.4, pitch: 45, pos: pin(5, 5) }];
+            lane.handHolds = [];
+            S.voicingRevision++;
+            const before = await tab.laneFingering(lane);
+            const hands = f => f.notes.map(n => f.seats.get(n));
+            // The pinky's note goes up to fret 12 on the same string, as a drag up the
+            // stage does it (interaction.js): pitch first, then the hand follows.
+            const was = edit.handsBefore(lane);
+            lane.notes[1].pitch = 52; lane.notes[1].pos = pin(5, 12);
+            edit.followHand(lane, was, 2, 'h2');
+            S.voicingRevision++;
+            const after = await tab.laneFingering(lane);
+            return { before: hands(before), after: hands(after), holds: lane.handHolds,
+                     pos: lane.notes[1].pos };
+        }""")
+        self.assertEqual(got["before"], [1, 1])
+        self.assertEqual(got["holds"], [{"t": 2, "fret": 8}], "the hand moved with the note, keeping the stretch")
+        self.assertEqual(got["after"], [1, 8])
+        # The hand buttons step only through hands that can play the note at fret 12.
+        self.fretboard_hover_points(2.1)
+        hand = page.locator("#fretboardHand")
+        expect(hand).to_have_value("8")
+        page.click("#fretboardHandNext")
+        expect(hand).to_have_value("9")
+        for _ in range(3):
+            page.click("#fretboardHandNext")
+        expect(hand).to_have_value("12")
+        expect(page.locator("#fretboardHandNext")).to_be_disabled()
+        hand.fill("3")
+        hand.press("Enter")
+        expect(hand).to_have_value("12")
+        holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
+        self.assertEqual(holds, [{"t": 2, "fret": 12}], "a hand that cannot reach the note is refused")
+        pos = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[1].pos")
+        self.assertEqual((pos["string"], pos["fret"]), (5, 12), "changing the hand moves no note")
+
+    def test_rocksmith_hand_positions_are_the_fretboards(self):
+        """What the fretboard shows is what Rocksmith gets: every note's hand position."""
+        from rs_studio.rocksmith import builder
+        page = self.page
+        for example, capo in (("override-showcase", 0), ("chord-showcase", 0), ("override-showcase", 3)):
+            bundle = self.data / f"{example}-{capo}.chart"
+            with zipfile.ZipFile(bundle, "w") as archive:
+                archive.write(Path(__file__).resolve().parents[1] / f"examples/{example}/project.json", "project.json")
+            page.goto(self.url)
+            with page.expect_file_chooser() as chooser:
+                page.click("#welcomeOpen")
+            chooser.value.set_files(bundle)
+            expect(page.locator("#lanes .lane-row").first).to_be_visible()
+            got = page.evaluate("""async capo => {
+                const { S } = await import('/store.js');
+                const tab = await import('/tablature.js');
+                const lane = S.state.editLanes[0];
+                lane.capo = capo;
+                const spec = await tab.buildSpecForLanesAsync([lane]);
+                const fingering = await tab.laneFingering(lane);
+                return { spec, shown: fingering.notes.map(n => fingering.seats.get(n) ?? null), duration: S.state.duration };
+            }""", capo)
+            spec, shown = got["spec"], got["shown"]
+            notes = spec["tracks"][0]["notes"]
+            self.assertEqual([n.get("hand") for n in notes], shown, f"{example}: the spec carries the fretboard's hands")
+            warnings = []
+            built = builder._compile_arrangement(spec, spec["tracks"][0], {"kind": "lead"},
+                                                 float(got["duration"]) + 1, "KEY", warnings)
+            hands = {}
+            for n in notes:
+                if n.get("hand") is not None and n["fret"] and n["fret"] > 0:
+                    hands.setdefault(round(n["start"], 3), n["hand"])
+            checked = 0
+            for sng_note in built.compiled.sng.levels[0].notes:
+                hand = hands.get(round(sng_note.time, 3))
+                if hand is None:
+                    continue
+                self.assertEqual(sng_note.anchor_fret, hand + capo,
+                                 f"{example} capo {capo}: note at {sng_note.time:.3f}s")
+                checked += 1
+            self.assertGreater(checked, 10, example)
+
     def test_rocksmith_issues_follow_the_chart_while_it_is_edited(self):
         page = self.page
         note = lambda i, start, fret, **fx: {"id": f"n{i}", "start": start, "end": start + 1, "pitch": 55 + fret,
@@ -2306,9 +2395,11 @@ class EndToEndTests(unittest.TestCase):
             expect(page.locator('#fretboardCapo')).to_have_value('0')
         page.locator('#fretboardHand').fill('7')
         page.locator('#fretboardHand').press('Enter')
-        page.locator('#fretboardHandNext').click()
-        expect(page.locator('#fretboardHand')).to_have_value('8')
+        # The note here is on fret 7: a hand on 8 cannot reach it, so + stops at 7.
+        expect(page.locator('#fretboardHandNext')).to_be_disabled()
         page.locator('#fretboardHandPrev').click()
+        expect(page.locator('#fretboardHand')).to_have_value('6')
+        page.locator('#fretboardHandNext').click()
         expect(page.locator('#fretboardHand')).to_have_value('7')
         expect(page.locator('#fretboardHandAuto')).to_be_hidden()
         for invalid in ['0','-1','1.5']:

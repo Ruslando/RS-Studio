@@ -14,14 +14,18 @@ const positions = (notes, got) => notes.map(n => got.voiced.get(n));
 
 assert.deepEqual(positions(run(64), result), positions(run(32), result), 'A returns to its learned low strings');
 assert.deepEqual(positions(run(72), result), positions(run(40), result), 'B returns to its learned low strings');
-for (const start of [32, 40, 64, 72, 80, 88, 112, 120]) {
-  assert.ok(run(start).every(n => result.seats.get(n) === 2),
-    `run/variation at ${start}s stays together at hand position 2, across bar lines`);
+// A hand anchor fixes the hand of its own note and moves no note. This one (fret 2
+// on a note at fret 12) cannot play its note, so it lapses.
+const free = solve(lane.notes, { ...options, holds: [] });
+assert.deepEqual(positions(lane.notes, result), positions(lane.notes, free), 'a hand anchor moves no note');
+assert.deepEqual(lane.notes.map(n => result.seats.get(n)), lane.notes.map(n => free.seats.get(n)),
+  'an anchor that cannot play its note lapses');
+for (const start of [32, 40, 72, 80, 88]) {
+  assert.equal(new Set(run(start).map(n => result.seats.get(n))).size, 1,
+    `run/variation at ${start}s stays together at one hand position, across bar lines`);
 }
-for (const [start, seat] of [[48, 7], [56, 12], [96, 7], [104, 12]]) {
-  assert.ok(run(start).every(n => result.seats.get(n) === seat), 'necessary high shifts still happen');
-}
-assert.deepEqual(lane.handHolds, [{ t: 32, fret: 2 }], 'only the initial low position is authored');
+assert.ok(run(56).every(n => result.seats.get(n) === 12), 'necessary high shifts still happen');
+assert.deepEqual(lane.handHolds, [{ t: 32, fret: 2 }], 'only one hand position is authored');
 assert.ok(lane.notes.every(n => !n.pos && !n.motifId), 'the showcase has no note pins or motif answers');
 
 // Repeated solves and save/reload reconstruct the same memory, without training
@@ -49,11 +53,6 @@ for (let i = 0; i < local.length; i++) if (i !== 24) {
 const adapted = structuredClone(original);
 adapted[24].pos = pin(true);
 const adaptedResult = solve(adapted, opts);
-const direct = structuredClone(original);
-direct[24].pos = pin(false);
-const directResult = solve(direct, { ...opts, holds: [...opts.holds, { t: 24, fret: 12 }] });
-assert.deepEqual(positions(adapted, adaptedResult), positions(direct, directResult),
-  'forward adaptation and direct hand placement use the same memory reset');
 for (let i = 0; i < 24; i++) assert.deepEqual(adaptedResult.voiced.get(adapted[i]), base.voiced.get(original[i]));
 assert.ok(adapted.slice(24).every(n => adaptedResult.seats.get(n) === 12),
   'old low memories do not pull an explicitly redirected run back, including the next bar');
@@ -64,11 +63,14 @@ assert.ok(adapted.slice(24).every(n => adaptedResult.seats.get(n) === 12),
 const preferenceGap = count => {
   const notes = [...Array(count).fill(52), ...D, 52, ...D]
     .map((pitch, start) => ({ pitch, start, end: start + .8 }));
+  // The low position is taught by a pin the following notes adapt to (a hand
+  // anchor no longer moves notes).
+  notes[0].pos = { ...pin(true), string: 3, fret: 2 };
   const index = count + D.length, target = notes[index];
   const offers = [new Map([[target, { string: 3, fret: 2 }]]),
     new Map([[target, { string: 5, fret: 12 }]])];
   const scored = scoreShapesAsDecided(offers, chordColumns(notes), index, tuning,
-    { bars: Array.from({ length: 20 }, (_, i) => i * 4), holds: [{ t: 0, fret: 2 }] });
+    { bars: Array.from({ length: 20 }, (_, i) => i * 4) });
   return scored[0].cost - scored[1].cost;
 };
 assert.ok(preferenceGap(1) > 0, 'one previous use need not justify a large isolated jump');
