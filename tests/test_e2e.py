@@ -4320,6 +4320,77 @@ class EndToEndTests(unittest.TestCase):
         page.click("#rsExportClose")
         expect(page.locator("#rocksmithExportModal")).to_be_hidden()
 
+    def test_rocksmith_preview_clip_is_chosen_on_the_song(self):
+        page = self.page
+        self.new_audio_project()
+        # Two section markers to jump between.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            S.state.sectionMarkers = [{ id: 'a', t: 2, text: 'Verse', sectionType: 'verse' },
+                                      { id: 'b', t: 6, text: 'Chorus', sectionType: 'chorus' }];
+        }""")
+        self.file_menu("#menuExportRocksmith")
+        expect(page.locator("#rsPreviewStrip")).to_be_visible()
+        expect(page.locator("#rsVolume")).to_have_count(0)       # volume is leveled, not asked
+        expect(page.locator(".rs-preview-tick")).to_have_count(2)
+        expect(page.locator("#rsPreviewLength")).to_have_value("28")
+        # The playhead waits at the clip's start, and Space plays at once: the
+        # window has the focus, not the title field.
+        head = page.locator("#rsPreviewHead").bounding_box()
+        frame = page.locator("#rsPreviewWindow").bounding_box()
+        self.assertAlmostEqual(head["x"] + head["width"] / 2, frame["x"], delta=2)
+        page.keyboard.press("Space")
+        expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "true")
+        page.keyboard.press("Space")
+        expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "false")
+        # A field typed in and then left by a click on a blank spot keeps its text,
+        # and focus does not jump back into the title.
+        page.click("#rsAlbum")
+        page.mouse.click(frame["x"] + 2, page.locator(".section-head:has-text('Preview clip')").bounding_box()["y"] + 2)
+        self.assertNotEqual(page.evaluate("document.activeElement.id"), "rsTitle")
+        page.keyboard.press("Space")
+        expect(page.locator("#rsTitle")).to_have_value("E2E Audio")
+        expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "true")
+        page.keyboard.press("Space")
+        song = float(page.locator("#rsPreviewStart").get_attribute("max"))
+        # A short clip, so it can sit anywhere in this short song; the first chorus starts it.
+        page.fill("#rsPreviewLength", "5")
+        page.locator("#rsPreviewLength").dispatch_event("change")
+        page.fill("#rsPreviewStart", "6")
+        page.locator("#rsPreviewStart").dispatch_event("change")
+        page.click("#rsPreviewPrev")
+        expect(page.locator("#rsPreviewStart")).to_have_value("2.0")
+        page.click("#rsPreviewNext")
+        expect(page.locator("#rsPreviewStart")).to_have_value("6.0")
+        # Lengths are clamped to 5..30 s and the clip stays inside the song.
+        page.fill("#rsPreviewLength", "60")
+        page.locator("#rsPreviewLength").dispatch_event("change")
+        expect(page.locator("#rsPreviewLength")).to_have_value("30")
+        self.assertLessEqual(float(page.locator("#rsPreviewStart").input_value()), max(0.0, song - 30) + 0.05)
+        # A click on the strip moves the playhead; "Start here" puts the clip there.
+        page.fill("#rsPreviewLength", "5")
+        page.locator("#rsPreviewLength").dispatch_event("change")
+        strip = page.locator("#rsPreviewStrip").bounding_box()
+        page.mouse.click(strip["x"] + strip["width"] * 0.25, strip["y"] + 4)
+        page.click("#rsPreviewHere")
+        self.assertAlmostEqual(float(page.locator("#rsPreviewStart").input_value()), song * 0.25, delta=0.3)
+        # Changing the clip puts the playhead back at its start.
+        page.mouse.click(strip["x"] + strip["width"] * 0.9, strip["y"] + 4)
+        page.click("#rsPreviewNext")
+        head = page.locator("#rsPreviewHead").bounding_box()
+        self.assertAlmostEqual(head["x"] + head["width"] / 2, page.locator("#rsPreviewWindow").bounding_box()["x"], delta=2)
+        # Space is this window's: it plays the clip, and the editor stays stopped.
+        page.focus("#rsPreviewStart")
+        page.keyboard.press("Space")
+        expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "true")
+        self.assertFalse(page.evaluate("async () => (await import('/playback.js')).transportPlaying()"))
+        page.keyboard.press("Space")
+        expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "false")
+        page.click("#rsPreviewPlay")
+        expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "true")
+        page.click("#rsExportClose")
+        expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "false")
+
     def test_guitar_pro_file_comes_back_out_as_it_went_in(self):
         self.open_guitar_pro_project()
         song = gp.parse(io.BytesIO(self.download("#menuExportTab").read_bytes()))

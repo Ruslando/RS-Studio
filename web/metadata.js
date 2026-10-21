@@ -16,6 +16,8 @@ export function normalizeMetadata(raw = {}) {
     coverArtName: raw.coverArtName || "",
     coverArtUpdatedAt: raw.coverArtUpdatedAt || null,
     coverArtUrl: raw.coverArtUrl || "",
+    // Rocksmith export settings of this song: previewStart and previewLength, in seconds.
+    rocksmith: { ...(raw.rocksmith || {}) },
   };
 }
 
@@ -40,6 +42,7 @@ export function metadataPayload(meta) {
     coverArt: m.coverArt || null,
     coverArtName: m.coverArtName || "",
     coverArtUpdatedAt: m.coverArtUpdatedAt || null,
+    rocksmith: m.rocksmith,
   };
 }
 

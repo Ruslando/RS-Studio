@@ -10,6 +10,10 @@ import { icon } from "./icons.js";
 import { downloadProjectBlob, toast } from "./notify.js";
 import { jobRequest } from "./operation-progress.js";
 import { S } from "./store.js";
+import { markerArtifacts } from "./marker-artifacts.js";
+import { adjacentMarkerTime } from "./marker-navigation-core.js";
+import { matchKey } from "./keymap.js";
+import { togglePlay, transportPlaying } from "./playback.js";
 import { rememberPref } from "./util.js";
 import { TUNINGS, buildSpecForLanesAsync, customTunings, laneTuning, parseTuning, tuningToNames } from "./tablature.js";
 
@@ -173,6 +177,179 @@ function renderRsArrangements(lanes) {
   });
 }
 
+// ---- Preview clip ----
+// A start in the song's audio and a length, like DLC Builder's preview (28 s,
+// 2.5 s fade-in, 3 s fade-out). The server clamps the same way.
+//
+// The strip is a small transport of its own: a playhead you click or drag to,
+// Play from there (Space too, while this window is open), and "Start here" to
+// put the clip at it.
+const PREVIEW_DEFAULT = 28, PREVIEW_MIN = 5, PREVIEW_MAX = 30, FADE_IN = 2.5, FADE_OUT = 3;
+let clip = { start: 0, length: PREVIEW_DEFAULT }, songLength = 0, playT = 0;
+let previewAudio = null, previewFrame = 0;
+
+const mixStem = () => S.state?.stems?.find((s) => s.id === "mix") || S.state?.stems?.[0] || null;
+const previewEnd = () => Math.min(songLength, clip.start + clip.length);
+const pct = (t) => `${(t / songLength) * 100}%`;
+const previewPlaying = () => !!previewAudio && !previewAudio.paused;
+
+// The playhead goes back to the clip's start with every change; playing, the
+// clip plays again from there. `live` (while dragging) only moves the playhead.
+function setClip(start, length = clip.length, live = false) {
+  length = Math.min(PREVIEW_MAX, Math.max(PREVIEW_MIN, Math.round(length * 10) / 10));
+  start = Math.max(0, Math.min(Math.max(0, songLength - length), start));
+  clip = { start: Math.round(start * 10) / 10, length };
+  $("rsPreviewStart").value = clip.start.toFixed(1);
+  $("rsPreviewLength").value = String(clip.length);
+  const w = $("rsPreviewWindow").style;
+  w.left = pct(clip.start);
+  w.width = pct(previewEnd() - clip.start);
+  if (live) setPlayhead(clip.start);
+  else seekPreview(clip.start);
+}
+
+function setPlayhead(t) {
+  playT = Math.max(0, Math.min(songLength, t));
+  $("rsPreviewHead").style.left = pct(playT);
+}
+
+// Song sections, phrases, tone switches and tempo flags: places a preview tends
+// to start well. Hand anchors are left out; they mark the hand, not the music.
+const previewMarkers = () => markerArtifacts().filter((m) => m.kind !== "anchor" && m.t < songLength);
+
+// Only sections are drawn: they are what a preview is chosen by, and the song's
+// start needs no mark. The jumps still visit every marker.
+function renderPreviewMarkers() {
+  const strip = $("rsPreviewStrip");
+  strip.querySelectorAll(".rs-preview-tick").forEach((tick) => tick.remove());
+  for (const m of previewMarkers()) {
+    if (m.kind !== "section" || m.t < 0.5) continue;
+    const tick = document.createElement("span");
+    tick.className = "rs-preview-tick";
+    tick.style.left = pct(m.t);
+    tick.title = m.name;
+    strip.append(tick);
+  }
+}
+
+// DLC Builder's default: the first chorus, else the middle of the song.
+function defaultStart() {
+  const chorus = (S.state.sectionMarkers || []).find((m) => String(m.sectionType || "").startsWith("chorus"));
+  return chorus ? Number(chorus.t) : songLength / 2 - PREVIEW_DEFAULT / 2;
+}
+
+function stopPreview() {
+  cancelAnimationFrame(previewFrame);
+  if (previewAudio) previewAudio.pause();
+  $("rsPreviewPlay").setAttribute("aria-pressed", "false");
+}
+
+// From the playhead. Started inside the clip, it plays the clip as Rocksmith
+// will, fades included, and returns to the clip's start; outside, it plays on.
+function playPreview() {
+  if (previewPlaying()) { stopPreview(); return; }
+  const stem = mixStem();
+  if (!stem?.audioUrl) return;
+  if (!previewAudio || previewAudio.dataset.src !== stem.audioUrl) {
+    previewAudio = new Audio(stem.audioUrl);
+    previewAudio.dataset.src = stem.audioUrl;
+  }
+  const start = clip.start, end = previewEnd(), len = end - start;
+  const inClip = playT >= start && playT < end - 0.05;
+  const short = len < FADE_IN + FADE_OUT, fadeIn = short ? len / 2 : FADE_IN, fadeOut = short ? len / 2 : FADE_OUT;
+  const gain = (t) => inClip ? Math.max(0, Math.min(1, (t - start) / fadeIn, (end - t) / fadeOut)) : 1;
+  previewAudio.currentTime = playT;
+  previewAudio.volume = gain(playT);
+  previewAudio.play().catch(stopPreview);
+  $("rsPreviewPlay").setAttribute("aria-pressed", "true");
+  const tick = () => {
+    const t = previewAudio.currentTime;
+    if (previewAudio.paused || previewAudio.ended) { stopPreview(); return; }
+    if (inClip && t >= end) { stopPreview(); setPlayhead(start); return; }
+    previewAudio.volume = gain(t);
+    setPlayhead(t);
+    previewFrame = requestAnimationFrame(tick);
+  };
+  previewFrame = requestAnimationFrame(tick);
+}
+
+// Seeking while playing keeps playing, from the new place.
+function seekPreview(t) {
+  const playing = previewPlaying();
+  stopPreview();
+  setPlayhead(t);
+  if (playing) playPreview();
+}
+
+function jumpPreview(direction) {
+  const t = adjacentMarkerTime(previewMarkers(), clip.start, direction, songLength);
+  if (t === null) return;
+  setClip(t);
+}
+
+function renderPreviewClip() {
+  const stem = mixStem();
+  songLength = Number(stem?.spec?.duration) || Number(S.state.duration) || 0;
+  // A score without audio has no clip to choose; the export refuses it anyway.
+  $("rsPreviewStrip").closest(".section").hidden = !stem || songLength < PREVIEW_MIN;
+  if (!stem || songLength < PREVIEW_MIN) return;
+  if (transportPlaying()) togglePlay();     // one song playing at a time
+  $("rsPreviewStrip").style.backgroundImage = stem.spec?.url ? `url("${stem.spec.url}")` : "";
+  $("rsPreviewStart").max = songLength.toFixed(1);
+  renderPreviewMarkers();
+  const saved = S.state.metadata?.rocksmith || {};
+  setClip(Number.isFinite(saved.previewStart) ? saved.previewStart : defaultStart(),
+    Number.isFinite(saved.previewLength) ? saved.previewLength : PREVIEW_DEFAULT);
+}
+
+function initPreviewClip() {
+  const strip = $("rsPreviewStrip");
+  strip.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || !songLength) return;
+    const rect = strip.getBoundingClientRect();
+    const at = (x) => ((x - rect.left) / rect.width) * songLength;
+    // Dragging the clip moves it; any other press seeks, and dragging scrubs.
+    const onClip = !!e.target.closest(".rs-preview-window");
+    const x0 = e.clientX, base = clip.start;
+    let moved = false, resume = false;
+    // pointerdown's default is cancelled below, so focus would stay in a field.
+    $("rocksmithExportModal").focus({ preventScroll: true });
+    if (!onClip) seekPreview(at(x0));
+    strip.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      moved ||= Math.abs(ev.clientX - x0) > 3;
+      if (!moved) return;
+      if (onClip && previewPlaying()) { resume = true; stopPreview(); }
+      if (onClip) setClip(base + at(ev.clientX) - at(x0), clip.length, true);
+      else setPlayhead(at(ev.clientX));
+    };
+    const up = () => {
+      strip.removeEventListener("pointermove", move); strip.removeEventListener("pointerup", up); strip.removeEventListener("pointercancel", up);
+      if (onClip && !moved) seekPreview(at(x0));
+      else if (onClip && resume) playPreview();
+      else if (!onClip && moved) seekPreview(playT);
+    };
+    strip.addEventListener("pointermove", move);
+    strip.addEventListener("pointerup", up);
+    strip.addEventListener("pointercancel", up);
+    e.preventDefault();
+  });
+  $("rsPreviewStart").addEventListener("change", () => setClip(Number($("rsPreviewStart").value) || 0));
+  $("rsPreviewLength").addEventListener("change", () => setClip(clip.start, Number($("rsPreviewLength").value) || PREVIEW_DEFAULT));
+  $("rsPreviewPrev").addEventListener("click", () => jumpPreview(-1));
+  $("rsPreviewNext").addEventListener("click", () => jumpPreview(1));
+  $("rsPreviewHere").addEventListener("click", () => setClip(playT));
+  $("rsPreviewPlay").addEventListener("click", playPreview);
+  // This window's own Space: the preview, not the song behind it. A focused
+  // button keeps Space as its click, and a text field keeps it as a character.
+  $("rocksmithExportModal").addEventListener("keydown", (e) => {
+    if (!matchKey(e, "playPause") || e.target.closest("button, select, textarea, input[type=text], input:not([type])")) return;
+    e.preventDefault();
+    if ($("rsPreviewStrip").closest(".section").hidden) return;
+    playPreview();
+  });
+}
+
 // Check the audio tools before the user fills in the export form. The backend
 // selects Wwise on Windows and native Vorbis/WEM tools on Linux.
 let converterOk = false;
@@ -217,6 +394,7 @@ function openRocksmithExportModal() {
   rsLatin.fill(meta);
   renderRsCover(meta);
   renderRsArrangements(lanes);
+  renderPreviewClip();
   $("rsLeadIn").value = String(leadIn(localStorage.getItem(LS_LEAD_IN)));
   setRsStatus("");
   converterOk = false;
@@ -224,10 +402,12 @@ function openRocksmithExportModal() {
   $("rsWwiseGet").hidden = false;
   checkAudioConverter();
   $("rocksmithExportBackdrop").hidden = false;
-  $("rsTitle").focus();
+  // The window itself, not the title: Space then plays the preview right away.
+  $("rocksmithExportModal").focus({ preventScroll: true });
 }
 
 function closeRocksmithExportModal() {
+  stopPreview();
   $("rocksmithExportBackdrop").hidden = true;
 }
 
@@ -311,6 +491,7 @@ async function submitRocksmithExport() {
   if (!picks.length) { setRsStatus("Select at least one arrangement.", true); return; }
 
   const meta = rsMetaFromForm();
+  meta.rocksmith = { previewStart: clip.start, previewLength: clip.length };
   S.state.metadata = { ...normalizeMetadata(S.state.metadata || {}), ...meta };
   const leadingSilence = leadIn($("rsLeadIn").value);
   rememberPref(LS_LEAD_IN, leadingSilence);
@@ -334,7 +515,8 @@ async function submitRocksmithExport() {
       const spec = await buildSpecForLanesAsync(picks.map((p) => p.lane));
       spec.name = songName;
       spec.metadata = metadataPayload(state.metadata);
-      spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo })), leadingSilence, version };
+      spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo })), leadingSilence, version,
+        preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec),
@@ -355,6 +537,7 @@ async function submitRocksmithExport() {
 }
 
 export function init_rocksmith_export() {
+  initPreviewClip();
   $("rocksmithExportForm").addEventListener("submit", (e) => { e.preventDefault(); submitRocksmithExport(); });
   $("rsExportClose").addEventListener("click", closeRocksmithExportModal);
   $("rsCoverDrop").addEventListener("click", (e) => { if (!e.target.closest(".cover-clear")) $("rsCoverInput").click(); });

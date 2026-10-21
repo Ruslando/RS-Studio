@@ -297,6 +297,19 @@ def _normalize_metadata(raw: dict | None, current: dict | None = None) -> dict:
         out["coverArtUpdatedAt"] = _clean_text(raw.get("coverArtUpdatedAt"), 40)
     else:
         out.setdefault("coverArtUpdatedAt", None)
+    if "rocksmith" in raw:
+        # Export settings that belong to the song: the preview clip, in seconds.
+        rs = raw.get("rocksmith") if isinstance(raw.get("rocksmith"), dict) else {}
+        out["rocksmith"] = {}
+        for key in ("previewStart", "previewLength"):
+            try:
+                value = float(rs.get(key))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                out["rocksmith"][key] = value
+    else:
+        out.setdefault("rocksmith", {})
     return out
 
 

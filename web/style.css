@@ -1085,6 +1085,23 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 
 .rs-arrangements { display: flex; flex-direction: column; gap: var(--s-sibling); }
 
+/* Preview clip: the whole song as a spectrogram strip, the clip as a window on it. */
+.rs-preview-strip {
+  position: relative; height: 48px; border-radius: var(--r-control); overflow: hidden;
+  background: var(--control) center / 100% 100% no-repeat; cursor: pointer; touch-action: none;
+}
+.rs-preview-window {
+  position: absolute; top: 0; bottom: 0; cursor: grab;
+  border: 2px solid var(--accent); border-radius: var(--r-compact);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--page) 55%, transparent);
+}
+.rs-preview-window:active { cursor: grabbing; }
+/* Section starts, as thin lines the clip can be lined up with. */
+.rs-preview-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--warn); opacity: .8; pointer-events: none; }
+.rs-preview-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 1; }
+.rs-preview-fields { display: flex; align-items: flex-end; gap: var(--s-row); margin-top: var(--s-sibling); flex-wrap: wrap; }
+
 .rs-arr-row {
   display: grid; align-items: center;
   grid-template-columns: auto minmax(80px, 1fr) 16px 48px minmax(104px, 132px) minmax(180px, 1.4fr) minmax(84px, 96px);
