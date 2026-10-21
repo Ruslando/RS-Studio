@@ -129,6 +129,11 @@ class EndToEndTests(unittest.TestCase):
         self.page.get_by_role("button", name=f"Add {bank} effects", exact=True).click()
         self.page.click("#soundGearApply")
 
+    def open_tone_presets(self):
+        # The pane is inert while it reads the preset folder; typing before that is lost.
+        self.page.click('[data-settings-pane="sounds"]')
+        expect(self.page.locator("#soundPreset")).to_be_enabled()
+
     def apply_settings_and_close(self):
         self.page.click("#settingsApply")
         expect(self.page.locator("#settingsModalBackdrop")).to_be_visible()
@@ -979,7 +984,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#settingsApply")).to_be_visible()
         page.click('#keymapReset')
         expect(page.locator("#settingsApply")).to_be_hidden()
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         expect(page.locator('[data-settings-pane="sounds"]')).to_have_text('Tone presets')
         expect(page.locator('#soundName')).to_have_value('Guitar Clean')
         expect(page.locator('#settingsApply')).to_be_hidden()
@@ -991,7 +996,7 @@ class EndToEndTests(unittest.TestCase):
         page.click('[data-settings-pane="models"]')
         expect(page.locator('#settingsApply')).to_be_hidden()
         expect(page.locator('#soundFileActions')).to_be_hidden()
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         expect(page.locator('#settingsApply')).to_be_visible()
         self.assertEqual(len(reads), 1, 'Switching panes keeps the active draft without rescanning')
         page.click('#soundDelete'); page.click('#actionConfirmCancel')
@@ -999,7 +1004,7 @@ class EndToEndTests(unittest.TestCase):
         page.click('#soundDelete'); page.click('#actionConfirmAccept')
         expect(page.locator('#settingsApply')).to_be_hidden()
         page.click('#settingsModalClose')
-        page.click('#welcomeSettingsBtn'); page.click('[data-settings-pane="sounds"]')
+        page.click('#welcomeSettingsBtn'); self.open_tone_presets()
         expect(page.locator('#soundName')).to_have_value('Guitar Clean')
         self.assertEqual(len(reads), 2)
         page.fill('#soundName', 'First save'); page.click('#settingsApply')
@@ -1012,7 +1017,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(saved['GearList']['Amp']['KnobValues']['Amp_TW40_Gain'], 40)
         expect(page.locator('#settingsApply')).to_be_hidden()
         page.fill('#soundName', 'Discard this'); page.click('#settingsModalClose')
-        page.click('#welcomeSettingsBtn'); page.click('[data-settings-pane="sounds"]')
+        page.click('#welcomeSettingsBtn'); self.open_tone_presets()
         expect(page.locator('#soundName')).to_have_value('Saved preset')
         expect(page.locator('#settingsApply')).to_be_hidden()
         page.fill('#soundName', 'Changed')
@@ -1077,7 +1082,7 @@ class EndToEndTests(unittest.TestCase):
 
     def test_sound_json_import_export_and_folder_reload(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#soundName")).to_have_value("Guitar Clean")
         expect(page.locator("#soundPreset option")).to_have_count(6)
         expect(page.locator("#soundPresetFolder")).to_have_count(0)
@@ -1104,12 +1109,12 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#soundFileStatus")).to_contain_text("duplicate preset skipped")
         expect(page.locator("#soundPreset option")).to_have_count(7)
         page.click("#settingsModalClose")
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#soundPreset option")).to_have_count(6)
         page.locator("#soundImportFiles").set_input_files(upload)
         expect(page.locator("#soundName")).to_have_value("Imported JSON")
         self.apply_settings_and_close()
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#soundName")).to_have_value("Imported JSON")
         expect(page.locator("#soundExportLibrary")).to_have_count(0)
         expect(page.locator("#soundReloadFolder")).to_have_count(0)
@@ -1121,7 +1126,7 @@ class EndToEndTests(unittest.TestCase):
             extra.write_text(json.dumps(exported), encoding="utf-8")
             invalid.write_text("{}", encoding="utf-8")
             page.click("#settingsModalClose")
-            page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+            page.click("#welcomeSettingsBtn"); self.open_tone_presets()
             expect(page.locator("#soundPreset option")).to_have_count(8)
             expect(page.locator("#soundFileStatus")).to_contain_text("invalid.json")
             expect(page.locator("#soundName")).to_have_value("Imported JSON")
@@ -1129,7 +1134,7 @@ class EndToEndTests(unittest.TestCase):
             expect(page.locator("#soundName")).to_have_value("From folder")
             extra.unlink(); invalid.unlink()
             page.click("#settingsModalClose")
-            page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+            page.click("#welcomeSettingsBtn"); self.open_tone_presets()
             expect(page.locator("#soundName")).to_have_value("Imported JSON")
             page.locator("#soundImportFiles").set_input_files({"name":"bad.json", "mimeType":"application/json", "buffer":b"{}"})
             expect(page.locator("#soundFileStatus")).to_contain_text("invalid values")
@@ -1152,7 +1157,7 @@ class EndToEndTests(unittest.TestCase):
 
     def test_sound_designer_drag_cards_remove_and_slider_scale(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         page.locator("#soundPreset").select_option("lead")
         # Amp parameters are dials over the native range, labelled with their default.
         slider = page.locator('input[aria-label="Amp Loudness 1"]')
@@ -1222,7 +1227,7 @@ class EndToEndTests(unittest.TestCase):
 
     def test_sound_designer_device_shaped_controls(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         page.locator("#soundPreset").select_option("lead")
         # A control offers a way back to the preset's value only once it differs.
         revert = page.get_by_role("button", name="Amp Treble back to preset value", exact=True)
@@ -1262,7 +1267,7 @@ class EndToEndTests(unittest.TestCase):
 
     def test_sound_designer_large_device_view_preserves_edits_and_focus(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         page.locator("#soundPreset").select_option("lead")
         page.locator('#soundChain [data-slot="Rack1"]').click()
         # The band grid hugs its controls, rather than adding hundreds of empty pixels.
@@ -1303,19 +1308,19 @@ class EndToEndTests(unittest.TestCase):
         self.apply_settings_and_close()
         saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()[0].tone")
         self.assertEqual(saved["GearList"]["Rack1"]["KnobValues"]["Rack_StudioEQ_HiMid"], 3.5)
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         # With other sections collapsed the amp fits, so no expansion is needed.
         page.click('[aria-controls="soundSectionPreset"]'); page.click('[aria-controls="soundSectionChain"]')
         expect(page.locator("#soundExpandDevice")).to_be_hidden()
 
     def test_sound_designer_picker_cancel_and_controls_space(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#soundGearDialog")).not_to_be_visible()
         # Collapsing preset and chain leaves room for every amp control without
         # scrolling, and the layout is remembered when Settings reopens.
         page.click('[aria-controls="soundSectionPreset"]'); page.click('[aria-controls="soundSectionChain"]')
-        page.click("#settingsModalClose"); page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#settingsModalClose"); page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator('[aria-controls="soundSectionChain"]')).to_have_attribute("aria-expanded", "false")
         expect(page.locator("#soundPresetSummary")).to_have_text("Clean")
         page.wait_for_function("() => !document.getAnimations().length")
@@ -1354,7 +1359,7 @@ class EndToEndTests(unittest.TestCase):
 
     def test_sound_designer_visual_chain_and_new_preset_workflow(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#settingsApply")).to_have_text("Apply")
         expect(page.get_by_role("button", name="Listen", exact=True)).to_have_count(0)
         expect(page.locator("#soundDraftStatus")).to_have_text("")
@@ -1374,14 +1379,14 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#soundName")).to_have_value("New visual rig copy")
         self.assertNotEqual(page.locator("#soundPreset").input_value(), first)
         self.apply_settings_and_close()
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#soundDraftStatus")).to_have_text("")
         page.click("#soundNew")
         page.click("#settingsModalClose")
         saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()")
         self.assertEqual([entry["tone"]["Name"] for entry in saved], ["New visual rig", "New visual rig copy"])
 
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         page.locator("#soundPreset").select_option("lead")
         shots = Path(__file__).resolve().parents[1] / "design-shots"
         shots.mkdir(exist_ok=True)
@@ -1405,7 +1410,7 @@ class EndToEndTests(unittest.TestCase):
     def test_sound_designer_device_scroll_keyboard_focus_and_cross_pane_validation(self):
         page = self.page
         page.set_viewport_size({"width": 720, "height": 800})
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         # Switching devices starts at the top of their editor, even when the
         # previous device's last control was being edited.
         expect(page.locator('#soundChain [data-slot="Amp"]')).to_have_attribute("aria-pressed", "true")
@@ -1443,7 +1448,7 @@ class EndToEndTests(unittest.TestCase):
         self.apply_settings_and_close()
         expect(page.locator("#settingsModalBackdrop")).to_be_hidden()
         # Validation of a knob on a non-active device must reveal and focus it.
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         value = page.get_by_role("spinbutton", name="Amp Loudness 1 value", exact=True)
         value.fill("101")
         page.locator('#soundChain [data-slot="Cabinet"]').click()
@@ -1457,7 +1462,7 @@ class EndToEndTests(unittest.TestCase):
 
     def test_sound_designer_empty_volume_repair_and_duplicate(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         page.fill("#soundVolumeNumber", "")
         key = page.locator("#soundPreset").input_value()
         expect(page.locator("#soundValidation")).to_contain_text("Volume")
@@ -1487,14 +1492,14 @@ class EndToEndTests(unittest.TestCase):
                 {id:'sound_future', tone:{Name:'Unsupported future gear', GearList:{}}}
             ]));
         }""")
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#soundLibraryWarning")).to_be_visible()
         page.fill("#soundName", "Renamed")
         self.apply_settings_and_close()
         saved = page.evaluate("JSON.parse(localStorage.getItem('cw.soundPresets.v1'))")
         self.assertEqual(saved[0]["tone"]["Name"], "Renamed")
         self.assertEqual(saved[1], {"id": "sound_future", "tone": {"Name": "Unsupported future gear", "GearList": {}}})
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         page.fill("#soundName", "Conflicting draft")
         page.evaluate("""() => {
             const list=JSON.parse(localStorage.getItem('cw.soundPresets.v1'));
@@ -1506,7 +1511,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.soundPresets.v1'))[0].tone.Name"), "Saved elsewhere")
         page.click("#settingsModalClose")
         page.evaluate("localStorage.setItem('cw.soundPresets.v1','broken JSON')")
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         page.fill("#soundName", "New draft")
         page.click("#settingsApply")
         expect(page.locator("#settingsModalBackdrop")).to_be_visible()
@@ -1514,7 +1519,7 @@ class EndToEndTests(unittest.TestCase):
 
     def test_sound_project_references_follow_library_edits_and_warn_after_delete(self):
         page = self.page
-        page.click('#welcomeSettingsBtn'); page.click('[data-settings-pane=sounds]')
+        page.click('#welcomeSettingsBtn'); self.open_tone_presets()
         page.fill('#soundName', 'First version')
         key = page.locator('#soundPreset').input_value()
         self.apply_settings_and_close()
@@ -1526,7 +1531,7 @@ class EndToEndTests(unittest.TestCase):
             }""")
         open_marker(); page.select_option('#toneMarkerPreset', key)
         page.click('#toneMarkerPopClose')
-        page.click('#settingsMenuBtn'); page.click('[data-settings-pane=sounds]')
+        page.click('#settingsMenuBtn'); self.open_tone_presets()
         page.fill('#soundName', 'Latest version')
         self.apply_settings_and_close()
         open_marker()
@@ -1535,7 +1540,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertNotIn('toneData', marker)
         self.assertTrue(all('project copy' not in text for text in page.locator('#toneMarkerPreset option').all_text_contents()))
         page.click('#toneMarkerPopClose')
-        page.click('#settingsMenuBtn'); page.click('[data-settings-pane=sounds]')
+        page.click('#settingsMenuBtn'); self.open_tone_presets()
         page.click('#soundDelete'); page.click('#actionConfirmAccept'); self.apply_settings_and_close()
         open_marker()
         expect(page.locator(f'#toneMarkerPreset option[value="{key}"]')).to_contain_text('Missing preset')
@@ -1587,7 +1592,7 @@ class EndToEndTests(unittest.TestCase):
         ]
         for index, (name, base, action, verify) in enumerate(cases):
             with self.subTest(control=name):
-                page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+                page.click("#welcomeSettingsBtn"); self.open_tone_presets()
                 page.locator("#soundPreset").select_option(base)
                 original = page.evaluate("async (base) => (await import('/sound-presets-core.js')).SOUND_BASES[base]", base)
                 expect(page.locator("#soundName")).to_be_editable()
@@ -1605,12 +1610,12 @@ class EndToEndTests(unittest.TestCase):
 
     def test_sound_designer_automatic_copies_are_discarded_on_cancel(self):
         page = self.page
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         page.fill("#soundName", "Discarded automatic copy")
         page.get_by_role("combobox", name="Tone description 1", exact=True).select_option(label="Crunch")
         page.click("#settingsModalClose")
         page.reload()
-        page.click("#welcomeSettingsBtn"); page.click('[data-settings-pane="sounds"]')
+        page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#soundName")).to_have_value("Clean")
         expect(page.get_by_role("combobox", name="Tone description 1", exact=True)).to_have_value("$[35720]CLEAN")
         self.assertEqual(page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()"), [])
@@ -1618,7 +1623,7 @@ class EndToEndTests(unittest.TestCase):
     def test_sound_designer_presets_are_staged_portable_and_exportable(self):
         page = self.page
         page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         expect(page.locator("#soundName")).to_be_editable()
         page.click("#soundDuplicate")
         page.fill("#soundName", "Test solo")
@@ -1629,12 +1634,12 @@ class EndToEndTests(unittest.TestCase):
         self.apply_settings_and_close()
         page.reload()
         page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         expect(page.locator("#soundName")).to_have_value("Test solo")
         page.fill("#soundName", "Discard this edit")
         page.click("#settingsModalClose")
         page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         expect(page.locator("#soundName")).to_have_value("Test solo")
         page.click("#settingsModalClose")
         self.open_reference_project()
@@ -1674,7 +1679,7 @@ class EndToEndTests(unittest.TestCase):
     def test_sound_designer_effect_banks_and_delete_cancel(self):
         page = self.page
         page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         page.locator("#soundPreset").select_option("lead")
         page.click("#soundDuplicate")
         page.fill("#soundName", "Effect test")
@@ -1687,13 +1692,13 @@ class EndToEndTests(unittest.TestCase):
         self.apply_settings_and_close()
         expect(page.locator("#settingsModalBackdrop")).to_be_hidden()
         page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         page.click("#soundDelete")
         page.click("#actionConfirmAccept")
         expect(page.locator("#soundName")).to_be_editable()
         page.click("#settingsModalClose")
         page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         expect(page.locator("#soundName")).to_have_value("Effect test")
         # Switching to a bass starting point keeps the same editing workflow.
         page.locator("#soundPreset").select_option("bass")
@@ -1702,7 +1707,7 @@ class EndToEndTests(unittest.TestCase):
     def test_sound_designer_full_native_devices_mics_enums_and_chain(self):
         page = self.page
         page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         page.click("#soundDuplicate")
         page.fill("#soundName", "Native rig")
         self.assertEqual(page.locator("#soundGearSelect option").count(), 63)
@@ -1744,7 +1749,7 @@ class EndToEndTests(unittest.TestCase):
         self.apply_settings_and_close()
         page.reload()
         page.click("#welcomeSettingsBtn")
-        page.click('[data-settings-pane="sounds"]')
+        self.open_tone_presets()
         expect(page.locator("#soundName")).to_have_value("Native rig")
         saved = page.evaluate("async () => (await import('/sound-presets-core.js')).readSoundLibrary()[0].tone")
         self.assertEqual(saved["GearList"]["Cabinet"]["Key"], "Cab_Marshall1936_Ribbon_OffAxis")
@@ -2062,7 +2067,7 @@ class EndToEndTests(unittest.TestCase):
                 const chain=[]; for(let p=el;p;p=p.parentElement) chain.push(rgb(getComputedStyle(p).backgroundColor));
                 let bg=[255,255,255]; for(const c of chain.reverse()) bg=over(c,bg);
                 const text=over(rgb(getComputedStyle(el).color),bg), a=lum(text),b=lum(bg);
-                const visibleText = [...el.childNodes].some(n => n.nodeType===3 ? n.textContent.trim() : n.textContent.trim() && Number(getComputedStyle(n).opacity)>0);
+                const visibleText = [...el.childNodes].some(n => n.nodeType===3 ? n.textContent.trim() : n.textContent.trim() && n.getClientRects().length && Number(getComputedStyle(n).opacity)>0);
                 return {id:el.id||el.getAttribute('aria-label'),text:visibleText?el.textContent.trim().slice(0,40):'',ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
             }).filter(x=>x.ratio < (x.text?4.5:3));
         }"""
@@ -3654,6 +3659,7 @@ class EndToEndTests(unittest.TestCase):
             (await import('/motifs.js')).markMotif(notes, (await import('/ids.js')).motifId());
             (await import('/repaint.js')).draw();
         }""")
+        expect(page.locator('#motifList .artifact-row')).to_have_count(1)
         motif = [n for n in page.evaluate(starts, 8) if n[0] < 9.9]   # the marked notes
         page.evaluate("""async () => {
             const { xOf } = await import('/geometry.js');
@@ -3917,7 +3923,7 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate('''async job => { await (await import('/project.js')).loadCached(job); }''', self.reference_job)
         self.assertEqual([tone['Name'] for tone in snapshots()], ['Song bass', 'Song bass', 'Other version'])
         page.click('#settingsMenuBtn')
-        page.click('[data-settings-pane=sounds]')
+        self.open_tone_presets()
         expect(page.locator('#soundPreset')).to_be_enabled()
         project = page.locator('#soundPreset optgroup[label="Project presets"] option').filter(has_text='Song bass')
         page.select_option('#soundPreset', project.get_attribute('value'))
@@ -3938,7 +3944,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#soundPreset')).to_be_enabled()
         page.fill('#soundName', 'Discarded project edit')
         page.click('[data-settings-pane=appearance]')
-        page.click('[data-settings-pane=sounds]')
+        self.open_tone_presets()
         expect(page.locator('#soundName')).to_have_value('Discarded project edit')
         page.click('#settingsModalClose')
         after = page.evaluate('''async () => ({
@@ -4161,7 +4167,9 @@ class EndToEndTests(unittest.TestCase):
 
         def anchor_point(t):
             return page.evaluate("""async t => {
-                (await import('/viewport-motion.js')).stopViewportMotion();
+                // Let a follow scroll finish; stopped midway, the marker may sit off screen.
+                const {viewportMoving} = await import('/viewport-motion.js');
+                while (viewportMoving()) await new Promise(requestAnimationFrame);
                 (await import('/repaint.js')).drawNow();
                 const {xOf} = await import('/geometry.js');
                 const {railBand} = await import('/marker-rails.js');
@@ -4988,7 +4996,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertAlmostEqual(shrunk['end'], grown['initial'], delta=1)
         self.assertTrue(any(shrunk['end'] + 1 < h < shrunk['initial'] - 1 for h in shrunk['heights']))
         page.emulate_media(reduced_motion='reduce')
-        page.click('[data-settings-pane=sounds]')
+        self.open_tone_presets()
         page.wait_for_function('document.querySelector("#settingsModal").getBoundingClientRect().height >= 799')
         self.assertEqual(page.locator('#settingsModal').evaluate('el => getComputedStyle(el).transitionDuration'), '0.001s')
 

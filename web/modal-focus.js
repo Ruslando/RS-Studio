@@ -85,7 +85,21 @@ export function initModalFocus() {
       event.preventDefault(); controls[0].focus();
     }
   }, true);
-  new MutationObserver(sync).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-modal', 'role'] });
+  // A popover that closes with focus inside hands it back to where it came from;
+  // left on a hidden button, focus would swallow the editor's keys (Ctrl+Z).
+  const popOpeners = new Map();
+  function syncPopovers() {
+    for (const pop of document.querySelectorAll('.live-editor')) {
+      if (visible(pop)) { if (!popOpeners.has(pop)) popOpeners.set(pop, document.activeElement); continue; }
+      if (!popOpeners.has(pop)) continue;
+      const opener = popOpeners.get(pop);
+      popOpeners.delete(pop);
+      if (!pop.contains(document.activeElement)) continue;
+      if (opener?.isConnected && !pop.contains(opener) && visible(opener) && opener !== document.body) opener.focus({ preventScroll: true });
+      else document.activeElement.blur();
+    }
+  }
+  new MutationObserver(() => { sync(); syncPopovers(); }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-modal', 'role'] });
   // Walkthroughs may start or end while a dialog remains open.
   new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   sync();

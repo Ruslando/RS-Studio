@@ -19,13 +19,15 @@ function sync() {
   $('quickTraceSnapKey').textContent = keyOf('drawingSnap') || '';
   $('quickTraceSnap').title = shortcutTitle('Snap to pitch', 'drawingSnap');
   $('quickTraceThreshold').setAttribute('aria-valuetext', heat);
-  if (!snap && document.activeElement === $('quickTraceThreshold')) $('quickTraceSnap').focus();
   setQuickHeatPreview(snap && !$('drawingQuickPanel').hidden);
 }
 export function toggleDrawingSnap() {
   const control = $('traceSnap');
+  // Turning snap off disables the heat slider, and the browser drops focus from it; keep it in the panel.
+  const onHeat = document.activeElement === $('quickTraceThreshold');
   control.checked = !control.checked;
   control.dispatchEvent(new Event('change', { bubbles: true }));
+  if (onHeat && !control.checked) $('quickTraceSnap').focus();
 }
 function close(returnFocus = false) {
   const panel = $('drawingQuickPanel');
