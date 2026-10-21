@@ -39,6 +39,7 @@ const MAX_HAND_SPAN_MM = 115;
 // reaches further: a shape that fits only this much more is "not reasonable",
 // one that fails even here is not playable at all.
 const STRETCH_REACH = 2.0;
+const SPREAD_COST = 1;   // per fret a finger pair spreads beyond one finger per fret
 const MAX_BARRE_SPAN_BY_FINGER = { 1: Infinity, 2: 3, 3: 3, 4: 3 };
 
 export const GUITAR_HAND_PROFILE = Object.freeze({
@@ -374,10 +375,10 @@ function gripParts(shape, fingering, profile) {
     const sideways = stringGap(a, b) * profile.stringSpacingMm / (2 * across);
     const reach = Math.hypot(along, sideways);
     if (reach > 1) return null;
-    // Ordinary C/D fingerings sit near 90% of the conservative middle/ring
-    // budget at the nut. Do not replace their ring finger with the pinky just
-    // to save a tiny amount of stretch; charge only the last tenth of reach.
-    parts.stretch = Math.max(parts.stretch, 2 * Math.max(0, (reach - 0.9) / 0.1) ** 2);
+    // Millimetres decide what a hand can reach at all; which finger takes a note
+    // follows one finger per fret, anywhere on the neck (as EOF's chord shapes
+    // do): each fret a pair spreads beyond its finger distance costs.
+    parts.stretch = Math.max(parts.stretch, SPREAD_COST * Math.max(0, Math.abs(a.fret - b.fret) - Math.abs(a.finger - b.finger)));
     // Higher fingers reaching bass-ward of a planted outer finger are awkward.
     const low = a.finger < b.finger ? a : b, high = low === a ? b : a;
     parts.control += Math.max(0, high.string - low.string) * (low.finger - 1) * 0.25;

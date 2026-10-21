@@ -20,7 +20,7 @@ const playedG = voiceNotesFingered(notes, tuning, Infinity, { bars });
 const gChord = notes.filter(note => note.start === 20);
 assert.equal(playedG.fingers.get(gChord.find(note => note.pos.string === 5)), 2,
   'wide G uses the middle finger on low E, avoiding ring/pinky tension');
-assert.equal(playedG.fingers.get(gChord.find(note => note.pos.string === 0)), 4);
+assert.equal(playedG.fingers.get(gChord.find(note => note.pos.string === 0)), 3, 'G is 2-1-0-0-0-3, one finger per fret');
 
 for (const input of [notes, notes.filter(n => n.start === 84), notes.filter(n => n.start === 92)]) {
   const played = voiceNotesFingered(input, tuning, Infinity, { bars });

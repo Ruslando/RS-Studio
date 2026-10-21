@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  BASS_HAND_PROFILE, chordColumns, fingeringOptions, gripCostBreakdown, shapeKey,
+  BASS_HAND_PROFILE, assignFingers, chordColumns, fingeringOptions, gripCostBreakdown, shapeKey,
 } from '../../web/voicing-core.js';
 
 const project = JSON.parse(readFileSync(new URL('../../examples/chord-showcase/project.json', import.meta.url)));
@@ -28,7 +28,8 @@ for (const [start, expected] of [[12, [3, 2, 0, 1, 0]], [16, [0, 1, 3, 2]]]) {
 }
 
 // The same one-fret ring/little split is shorter higher on the neck and longer
-// on a bass. Check the actual assignment, since another finger pair may fit.
+// on a bass: millimetres decide whether a hand reaches it, but which finger
+// takes a note follows one finger per fret, so it costs the same anywhere.
 const pair = (fret, profile) => {
   const grip = shape([null, null, null, null, fret + 1, fret]);
   const poses = fingeringOptions(grip, profile);
@@ -36,7 +37,13 @@ const pair = (fret, profile) => {
 };
 assert.ok(pair(1));
 assert.equal(pair(1, BASS_HAND_PROFILE), undefined, 'bass scale is not treated as guitar geometry');
-assert.ok(pair(10).cost < pair(1).cost, 'a smaller physical stretch costs less');
+assert.equal(pair(10).cost, pair(1).cost, 'finger choice does not depend on where on the neck');
+// One finger per fret: two frets up is the ring finger, three the little one, at the nut and up the neck.
+for (const fret of [1, 7]) {
+  const two = shape([null, null, null, null, fret + 2, fret]), three = shape([null, null, null, null, fret + 3, fret]);
+  assert.deepEqual([...two].map(([n]) => assignFingers(two).get(n)).sort(), [1, 3], `fret ${fret}: 2 frets apart = 1-3`);
+  assert.deepEqual([...three].map(([n]) => assignFingers(three).get(n)).sort(), [1, 4], `fret ${fret}: 3 frets apart = 1-4`);
+}
 
 // The D-major counterexamples are the actual late offers reported by the user.
 const rejected = [

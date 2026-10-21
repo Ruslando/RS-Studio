@@ -950,5 +950,10 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
   fretted note's position override and carries on like the position (only here,
   guided, locked); choosing a hand for those notes drops it. Rocksmith's chord boxes
   show exactly these fingers (open strings none), one template per grip and fingering.
+- Which finger takes a note follows one finger per fret, anywhere on the neck: two
+  frets above the index is the ring finger, three the pinky (EOF's chord shapes
+  agree). Millimetres only decide what a hand can reach at all. Several notes on
+  one fret get separate fingers by default; the barre stays a Finger choice. A
+  barre may lie over a string the chord leaves out (pressed, not picked).
 - In the package: anchors where the hand changes, plus one at every phrase start,
   four frets wide or as far as a note reaches, counted from the nut (capo added).
