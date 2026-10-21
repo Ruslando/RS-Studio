@@ -689,3 +689,6 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
   background: var(--spectral-chrome); color: var(--spectral-text);
   font: 400 var(--text-data)/1.4 var(--font-mono); white-space: nowrap; pointer-events: none;
 }
+
+/* A dialog takes focus itself after a click on a blank spot (modal-focus.js); no ring for that. */
+[aria-modal="true"]:focus { outline: none; }

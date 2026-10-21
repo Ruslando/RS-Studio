@@ -33,6 +33,7 @@ import { S, setSelection } from "./store.js";
 import { laneFretCount, laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
+import { modalOpen } from "./modal-focus.js";
 import { matchKey } from "./keymap.js";
 import { runEditorShortcut } from "./editor-shortcuts.js";
 import { navigateMarker } from "./marker-artifacts.js";
@@ -1452,6 +1453,15 @@ export function init_edit() {
   window.addEventListener("keydown", (e) => {
     if (e.defaultPrevented) return;
     const mod = e.ctrlKey || e.metaKey;
+    // Each dialog handles its own keys (Space in the Rocksmith export plays the
+    // preview clip). Escape still closes the topmost layer, which some dialogs
+    // rely on; save/new/open only lose the browser's own meaning. A full view
+    // marked data-editor-keys (the tablature) keeps playback and navigation.
+    if (modalOpen('[aria-modal="true"]:not([data-editor-keys])')) {
+      if (e.key === "Escape" && closeTopmost()) e.preventDefault();
+      else if (mod && ["s", "n", "o"].includes(e.key.toLowerCase())) e.preventDefault();
+      return;
+    }
     // Space = play/pause from anywhere (suppress button clicks / page scroll),
     // except while typing in a text field where a space is a real character.
     if (matchKey(e, "playPause")) {
@@ -1467,8 +1477,7 @@ export function init_edit() {
     if (mod && (e.key === "o" || e.key === "O")) { e.preventDefault(); openProject(); return; }
     // Overlays register themselves; see escape-stack.js for the depth order.
     if (e.key === "Escape" && closeTopmost()) { e.preventDefault(); return; }
-    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && !e.target.isContentEditable &&
-        ![...document.querySelectorAll('[aria-modal="true"]')].some(el => el.getClientRects().length && !el.closest('[hidden]'))) {
+    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && !e.target.isContentEditable && !modalOpen()) {
       if (mod && !e.altKey && !e.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault(); navigateMarker(e.key === 'ArrowLeft' ? -1 : 1); return;
       }

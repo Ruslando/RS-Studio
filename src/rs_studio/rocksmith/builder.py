@@ -311,38 +311,124 @@ def _package_lead_in(spec: dict, track_indexes) -> float:
     return lead
 
 
+def read_audio(audio_path: Path) -> tuple[np.ndarray, int]:
+    """(frames x channels float array, sample rate)."""
+    try:
+        return sf.read(str(audio_path), always_2d=True)
+    except Exception:
+        import librosa
+        y, sr = librosa.load(str(audio_path), sr=None, mono=False)
+        return np.atleast_2d(y).T, sr
+
+
+# Loudness the way DLC Builder measures it (Rocksmith2014.Audio/Volume, MIT):
+# ITU BS.1770 integrated loudness, and a bank volume that brings it to -16 LUFS.
+# The K-weighting biquads are given at 48 kHz and re-derived for other rates.
+_K_SHELF = (1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, 0.73248077421585)
+_K_HIGHPASS = (1.0, -2.0, 1.0, -1.99004745483398, 0.99007225036621)
+LOUDNESS_REFERENCE = -16.0
+MIN_PREVIEW, MAX_PREVIEW = 5.0, 30.0
+
+
+def _biquad_at(coeffs: tuple, sr: float) -> tuple[list, list]:
+    b0, b1, b2, a1, a2 = coeffs
+    if sr != 48000:
+        k_over_q = (2 - 2 * a2) / (a2 - a1 + 1)
+        k = np.sqrt((a1 + a2 + 1) / (a2 - a1 + 1))
+        q = k / k_over_q
+        vb = (b0 - b2) / (1 - a2)
+        vh = (b0 - b1 + b2) / (a2 - a1 + 1)
+        vl = (b0 + b1 + b2) / (a1 + a2 + 1)
+        k = np.tan(np.arctan(k) * 48000 / sr)
+        c = 1 / (1 + k / q + k * k)
+        b0, b1, b2 = (vh + vb * k / q + vl * k * k) * c, 2 * (vl * k * k - vh) * c, (vh - vb * k / q + vl * k * k) * c
+        a1, a2 = 2 * (k * k - 1) * c, (1 - k / q + k * k) * c
+    return [b0, b1, b2], [1.0, a1, a2]
+
+
+def integrated_loudness(data: np.ndarray, sr: int) -> float:
+    """BS.1770 integrated loudness in LUFS: 400 ms blocks every 100 ms, gated at
+    -70 LUFS and then 10 LU below the level of what is left. -inf for silence."""
+    from scipy.signal import lfilter
+    x = np.asarray(data, dtype=np.float64)
+    for coeffs in (_K_SHELF, _K_HIGHPASS):
+        x = lfilter(*_biquad_at(coeffs, sr), x, axis=0)
+    step, block = int(round(0.1 * sr)), int(round(0.4 * sr))
+    if len(x) < block:
+        return float("-inf")
+    weights = np.array([1.41 if ch in (3, 4) else 1.0 for ch in range(x.shape[1])])
+    sums = np.vstack([np.zeros(x.shape[1]), np.cumsum(x * x, axis=0)])
+    starts = np.arange(0, len(x) - block + 1, step)
+    power = ((sums[starts + block] - sums[starts]) / block) @ weights
+    with np.errstate(divide="ignore"):
+        loud = -0.691 + 10 * np.log10(power)
+    kept = power[loud > -70]
+    if not kept.size:
+        return float("-inf")
+    kept = kept[-0.691 + 10 * np.log10(kept) > -0.691 + 10 * np.log10(kept.mean()) - 10]
+    return float(-0.691 + 10 * np.log10(kept.mean()))
+
+
+def auto_volume(data: np.ndarray, sr: int) -> float:
+    """The bank volume (dB) DLC Builder would pick: -16 LUFS minus the loudness,
+    to one decimal; 0 for silence."""
+    loud = integrated_loudness(data, sr)
+    if not np.isfinite(loud):
+        return 0.0
+    v = LOUDNESS_REFERENCE - loud
+    return float(np.sign(v) * np.floor(abs(v) * 10 + 0.5) / 10)
+
+
+def preview_window(spec: dict, length: float, first_note: float) -> tuple[float, float]:
+    """The preview clip's (start, end) in the audio's own time.
+
+    The export dialog sends a start and a length; without them, 28 s from just
+    before the first note. A clip is 5 to 30 s and stays inside the song.
+    """
+    raw = (spec.get("rocksmith") or {}).get("preview") or {}
+    try:
+        start = float(raw["start"])
+        clip = float(raw.get("length", PREVIEW_SECONDS))
+    except (KeyError, TypeError, ValueError):
+        start, clip = first_note - 1.0, PREVIEW_SECONDS
+    clip = min(MAX_PREVIEW, max(MIN_PREVIEW, clip))
+    start = min(max(0.0, start), max(0.0, length - clip))
+    return start, min(length, start + clip)
+
+
+def preview_clip(data: np.ndarray, sr: int, start: float, end: float) -> np.ndarray:
+    """The preview audio with DLC Builder's 2.5 s fade-in and 3 s fade-out."""
+    seg = data[int(start * sr):int(end * sr)].astype(np.float64)
+    fade_in, fade_out = int(2.5 * sr), int(3.0 * sr)
+    if len(seg) < fade_in + fade_out:
+        fade_in = fade_out = len(seg) // 2
+    seg[:fade_in] *= np.linspace(0, 1, fade_in)[:, None]
+    seg[len(seg) - fade_out:] *= np.linspace(1, 0, fade_out)[:, None]
+    return seg
+
+
 def _prepare_audio(audio_path: Path, first_note: float, workdir: Path,
-                   warnings: list[str], lead: float = 0.0) -> tuple[Path, Path, float, float]:
-    """Returns (main wav, preview wav, song length, bank volume dB).
+                   warnings: list[str], lead: float = 0.0,
+                   spec: dict | None = None) -> tuple[Path, Path, float, float, float]:
+    """Returns (main wav, preview wav, song length, song volume dB, preview volume dB).
 
     `first_note` is in the audio's own time; `lead` seconds of silence go in front
     of the main track only, and the returned length includes them.
     """
-    try:
-        data, sr = sf.read(str(audio_path), always_2d=True)
-    except Exception:
-        import librosa
-        y, sr = librosa.load(str(audio_path), sr=None, mono=False)
-        data = np.atleast_2d(y).T
+    spec = spec or {}
+    data, sr = read_audio(audio_path)
     length = len(data) / sr
-
-    rms = float(np.sqrt(np.mean(np.square(data.mean(axis=1))))) or 1e-6
-    rms_db = 20 * np.log10(rms)
-    volume = float(np.clip(-16.0 - rms_db, -15.0, 3.0))
 
     main = workdir / "main.wav"
     padded = np.concatenate([np.zeros((int(round(lead * sr)), data.shape[1]), dtype=data.dtype), data]) if lead > 0 else data
     sf.write(str(main), padded, sr, subtype="PCM_16")
 
-    start = max(0.0, min(first_note - 1.0, max(0.0, length - PREVIEW_SECONDS)))
-    seg = data[int(start * sr):int((start + PREVIEW_SECONDS) * sr)].copy()
-    fade_in = min(int(1.0 * sr), len(seg))
-    fade_out = min(int(3.0 * sr), len(seg))
-    seg[:fade_in] *= np.linspace(0, 1, fade_in)[:, None]
-    seg[len(seg) - fade_out:] *= np.linspace(1, 0, fade_out)[:, None]
+    seg = preview_clip(data, sr, *preview_window(spec, length, first_note))
     preview = workdir / "preview.wav"
     sf.write(str(preview), seg, sr, subtype="PCM_16")
-    return main, preview, len(padded) / sr, volume
+
+    # Each leveled on its own, as DLC Builder does: the clip is often louder than the song.
+    return main, preview, len(padded) / sr, auto_volume(data, sr), auto_volume(seg, sr)
 
 
 def _arrangement_specs(spec: dict, tracks: list[dict], warnings: list[str]) -> list[dict]:
@@ -592,10 +678,10 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         if _wems is not None:
             main_wem, preview_wem = _wems
             song_length = (_song_length or 60.0) + lead
-            volume = -8.0
+            volume = preview_volume = -8.0
         else:
-            main_wav, preview_wav, song_length, volume = _prepare_audio(
-                Path(audio_path), first_note, workdir, warnings, lead)
+            main_wav, preview_wav, song_length, volume, preview_volume = _prepare_audio(
+                Path(audio_path), first_note, workdir, warnings, lead, spec)
             main_wem = wem.convert_to_wem(main_wav, wwise_console)
             preview_wem = wem.convert_to_wem(preview_wav, wwise_console)
 
@@ -628,7 +714,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             ])
 
         main_bnk, main_file_id = bnk.generate(key, main_wem, volume, is_preview=False)
-        prev_bnk, prev_file_id = bnk.generate(f"{key}_Preview", preview_wem, volume + 2.0,
+        prev_bnk, prev_file_id = bnk.generate(f"{key}_Preview", preview_wem, preview_volume,
                                               is_preview=True)
 
         art = dds.album_art(title, artist, cover_art_path)

@@ -464,7 +464,7 @@
        question about it. The toolbar's Spectrogram/Tablature switch went with
        the swap; File → Tablature view opens this. -->
   <div id="tabViewBackdrop" hidden>
-    <div id="tabView" role="dialog" aria-modal="true" aria-labelledby="tabViewTitle">
+    <div id="tabView" role="dialog" aria-modal="true" aria-labelledby="tabViewTitle" data-editor-keys>
       <div class="dialog-header">
         <span class="dialog-title" id="tabViewTitle">Tablature</span>
         <button id="tabViewClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
@@ -1288,7 +1288,7 @@
 
   <!-- Rocksmith export modal -->
   <div id="rocksmithExportBackdrop" hidden>
-    <div id="rocksmithExportModal" role="dialog" aria-modal="true" aria-labelledby="rsExportTitle">
+    <div id="rocksmithExportModal" role="dialog" aria-modal="true" aria-labelledby="rsExportTitle" tabindex="-1">
       <div class="dialog-header">
         <span class="dialog-title">
           <span id="rsExportTitle">Rocksmith CDLC</span></span>
@@ -1341,6 +1341,31 @@
           <div class="section">
           <div class="section-head"><span>Arrangements</span></div>
             <div id="rsArrangements" class="rs-arrangements"></div>
+          </div>
+          <!-- The clip Rocksmith plays while the song is highlighted in the list.
+               The strip is the full song's spectrogram; the window is the clip. -->
+          <div class="section">
+          <div class="section-head"><span>Preview clip</span></div>
+          <div id="rsPreviewStrip" class="rs-preview-strip" title="Click to move the playhead; drag the clip to move it">
+            <div id="rsPreviewWindow" class="rs-preview-window"></div>
+            <div id="rsPreviewHead" class="rs-preview-head"></div>
+          </div>
+          <div class="rs-preview-fields">
+            <button type="button" id="rsPreviewPlay" class="icon-btn" aria-label="Play preview clip" title="Play the preview clip with its fades">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button type="button" id="rsPreviewPrev" class="icon-btn" aria-label="Start at previous marker" title="Start at the previous section, phrase, tone or tempo marker"><span data-ui-icon="previousMarker" data-icon-size="16" aria-hidden="true"></span></button>
+            <div class="field-group block is-narrow">
+              <label class="label" for="rsPreviewStart">Start</label>
+              <span class="stepper"><span class="pop-field"><input type="number" id="rsPreviewStart" class="num-4" min="0" step="0.5" data-stepper /><span class="pop-unit">s</span></span></span>
+            </div>
+            <button type="button" id="rsPreviewNext" class="icon-btn" aria-label="Start at next marker" title="Start at the next section, phrase, tone or tempo marker"><span data-ui-icon="nextMarker" data-icon-size="16" aria-hidden="true"></span></button>
+            <button type="button" id="rsPreviewHere" class="btn btn--secondary" title="Start the clip at the playhead">Start here</button>
+            <div class="field-group block is-narrow" title="5 to 30 seconds; DLC Builder uses 28">
+              <label class="label" for="rsPreviewLength">Length</label>
+              <span class="stepper"><span class="pop-field"><input type="number" id="rsPreviewLength" class="num-4" min="5" max="30" step="1" value="28" data-stepper /><span class="pop-unit">s</span></span></span>
+            </div>
+          </div>
           </div>
           <div class="section">
           <div class="section-head"><span>Package</span></div>

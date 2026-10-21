@@ -4,6 +4,11 @@ const explicitOpeners = new WeakMap();
 export function rememberModalOpener(dialog, opener) {
   explicitOpeners.set(dialog, opener);
 }
+// While a dialog is open its keys are its own: the editor's shortcuts wait.
+// `selector` narrows which dialogs count (see data-editor-keys in edit.js).
+export function modalOpen(selector = '[aria-modal="true"]') {
+  return [...document.querySelectorAll(selector)].some((el) => el.getClientRects().length && !el.closest('[hidden]'));
+}
 export function initModalFocus() {
   const priorFocus = new Map();
   const priorInert = new Map();
@@ -26,8 +31,12 @@ export function initModalFocus() {
       if (!child.isConnected) priorInert.delete(child);
     }
     const closed = open.filter((dialog) => !next.includes(dialog));
-    for (const dialog of next) {
-      if (!open.includes(dialog)) priorFocus.set(dialog, explicitOpeners.get(dialog) || document.activeElement);
+    const opened = next.filter((dialog) => !open.includes(dialog));
+    for (const dialog of opened) {
+      priorFocus.set(dialog, explicitOpeners.get(dialog) || document.activeElement);
+      // A click on a blank spot focuses the dialog itself, not the page, so the
+      // dialog keeps its keys and nothing pulls focus back into a field.
+      if (!dialog.hasAttribute('tabindex')) dialog.tabIndex = -1;
     }
     // Preserve opening order: the most recently opened dialog owns focus.
     open = [...open.filter((dialog) => next.includes(dialog)), ...next.filter((dialog) => !open.includes(dialog))];
@@ -44,7 +53,10 @@ export function initModalFocus() {
     if (top && returnTarget && roots.some((root) => root.contains(returnTarget)) && visible(returnTarget)) {
       returnTarget.focus({ preventScroll: true });
     }
-    if (top && !roots.some((root) => root.contains(document.activeElement))) {
+    if (top && !roots.some((root) => root.contains(document.activeElement)) && !opened.includes(top)) {
+      // Focus was lost in a dialog already in use: back to the dialog, not to its first field.
+      top.focus({ preventScroll: true });
+    } else if (top && !roots.some((root) => root.contains(document.activeElement))) {
       const controls = focusable(top);
       // Confirmations start on Cancel; ordinary forms start in their first field.
       const target = top.getAttribute('role') === 'alertdialog'
