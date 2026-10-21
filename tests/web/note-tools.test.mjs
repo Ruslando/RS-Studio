@@ -76,8 +76,8 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
   assert.notEqual(effectSig({ fx: { palmMute: true } }), effectSig({ fx: { vibrato: true } }));
   assert.equal(effectSig({ pos: { string: 1, fret: 2 } }), effectSig({}));
   assert.notEqual(effectSig({ pos: { string: 1, fret: 2 } }, { includePos: true }), effectSig({}, { includePos: true }));
-  assert.equal(effectSig({ pos: { string: 1, fret: 2, adapt: true } }, { includePos: true }),
-    effectSig({ pos: { string: 1, fret: 2, adaptNext: true, scope: "local" } }, { includePos: true }), "the old flag reads as the new one");
+  assert.notEqual(effectSig({ pos: { string: 1, fret: 2, follow: "locked" } }, { includePos: true }),
+    effectSig({ pos: { string: 1, fret: 2 } }, { includePos: true }), "how an override carries on is part of it");
 }
 
 // ---- motifs: labels must not alter the music -------------------------------

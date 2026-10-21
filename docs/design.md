@@ -931,5 +931,11 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
   (`handChoices`), and one that can no longer play it lapses.
 - A note moved along its string keeps its finger and stretch: the hand moves with it
   as an anchor on that note (`followHand`), undone with the move.
+- A position override carries on in one of three ways, chosen on the fretboard
+  (a `.pill`: Only here · Guided · Locked; `follow` on the pin). Only here: that
+  note or chord alone. Guided: the memory forgets those notes and learns the
+  override (weight 3), so the same notes after it prefer it where the hand allows.
+  Locked: the same notes after it are played so until another override of them.
+  Nothing reaches back before an override, and no other note's memory changes.
 - In the package: anchors where the hand changes, plus one at every phrase start,
   four frets wide or as far as a note reaches, counted from the nut (capo added).

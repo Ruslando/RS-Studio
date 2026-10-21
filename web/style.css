@@ -509,7 +509,8 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
 #fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"]:is(:hover, :active):not(:disabled) { background: var(--accent-hover); color: var(--on-engaged); }
 /* Two pairs and the way back: same notes | other notes | reset. */
-#fretboardAdaptPrev, #fretboardAuto { margin-left: var(--s-sibling); }
+#fretboardAuto { margin-left: var(--s-sibling); }
+#fretboardFollow > * { min-width: 0; }
 #fretboardName { padding: 0 var(--s-pair); font: 600 var(--text-body)/1 var(--font-mono); color: var(--stage-text); }
 #fretboardResetStatus.busy::before { border-color: var(--stage-hint); border-top-color: var(--stage-text); }
 #fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
@@ -1517,7 +1518,7 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardShapeActions, #fretboardInfluence { display: flex; align-items: center; gap: 4px; flex: none; }
 #fretboardShapeActions { flex-wrap: nowrap; }
 #fretboardInfluence { margin-left: auto; padding-left: 12px; border-left: 1px solid var(--stage-line); }
-#fretboardInfluence:not(:has(> button:not([hidden]))) { display: none; }
+#fretboardInfluence:not(:has(> :not([hidden]))) { display: none; }
 #fretboardShape { margin-left: 4px; }
 #fretboardShapeNotes { display: flex; align-items: center; gap: 4px; }
 #fretboardShapeNotes[hidden], #fretboardPanel[data-shaping] :is(#fretboardSetup, #fretboardInfluence) { display: none; }

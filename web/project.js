@@ -39,7 +39,6 @@ import { loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars } from "./section-marker-core.js";
 import { inferTablatureEnabled } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
-import { defaultPinFlags } from "./voicing-core.js";
 import { isValidTuningKey, parseTuning, setView, tuningKeyFor } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
@@ -255,11 +254,6 @@ export function mapLane(l, startAt = 0) {
   // dropped on the way in and the next save writes the project without it. A note
   // is a note however it got there.
   const notes = (l.notes || []).map(({ source, ...n }) => n);
-  // An imported tab used to be an "exact" lane, whose positions were never voiced.
-  // They are pins now; ones saved without switches get the current override
-  // defaults (defaultPinFlags).
-  if (l.fingeringMode === "exact") for (const n of notes)
-    if (n.pos && typeof n.pos.influenceNext !== "boolean") n.pos = { ...n.pos, ...defaultPinFlags() };
   migrateMotifs(notes);
   // Keep a valid tuning key. Bare strings (an import, a custom tuning deleted
   // since) are looked up by those strings, so E A D G B E is E Standard; strings

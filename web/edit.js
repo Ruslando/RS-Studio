@@ -687,17 +687,12 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null, foll
     // here. Defaulting to "forward" made an unchanged column compare as changed,
     // so re-applying the same shape rewrote it and cost an undo step.
     (a && b && a.string === b.string && a.fret === b.fret && (a.scope || "local") === scope &&
-      a.influencePrevious === flow.previous && a.influenceNext === flow.next &&
-      !!a.adaptPrevious === flow.adaptPrevious && (a.adaptNext ?? a.adapt) === flow.adaptNext);
+      normalizeOverrideInfluence(a).follow === flow.follow);
   if (colNotes.every((n) => same(n.pos || null, want(n)))) return;
   const prev = snapshotEdit();
   for (const n of colNotes) {
     const p = want(n);
-    if (p) n.pos = {
-      string: p.string, fret: p.fret, scope,
-      influencePrevious: flow.previous, influenceNext: flow.next,
-      adaptPrevious: flow.adaptPrevious, adaptNext: flow.adaptNext,
-    };
+    if (p) n.pos = { string: p.string, fret: p.fret, scope, follow: flow.follow };
     else delete n.pos;
   }
   follow?.();
@@ -705,21 +700,18 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null, foll
   refreshTabIfOpen();
 }
 
-// Turn one of an override's four switches on or off (`previous`, `next`,
-// `adaptPrevious`, `adaptNext` — see normalizeOverrideInfluence), in place on the pin
-// that carries it. Nothing else about the override changes, so this is not a re-application: the
-// shape stays exactly as chosen and only its blast radius moves.
-//
+// How an override carries on: only here, guided or locked (normalizeOverrideInfluence),
+// set in place on the pin that carries it, so the shape itself stays as chosen.
 // Written as a new object rather than mutated, because the undo snapshot shares the
 // note's own `pos` reference and editing it in place would rewrite history too.
-export function setColumnInfluence(colNotes, direction, on) {
+export function setColumnFollow(colNotes, follow) {
   if (positionSelection(laneOf(colNotes?.[0]), S.selection).multiple) return;
-  const key = { previous: "influencePrevious", next: "influenceNext" }[direction] || direction;
+  const want = normalizeOverrideInfluence({ follow }).follow;
   const prev = snapshotEdit();
   let touched = false;
   for (const n of colNotes) for (const field of ["pos", "arrangement"]) {
-    if (!n[field] || n[field][key] === on) continue;
-    n[field] = { ...n[field], [key]: on };
+    if (!n[field] || normalizeOverrideInfluence(n[field]).follow === want) continue;
+    n[field] = { ...n[field], follow: want };
     touched = true;
   }
   if (!touched) return;

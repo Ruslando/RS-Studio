@@ -40,22 +40,23 @@ const D = [76, 78, 79, 78, 76, 78, 79, 76];
 const original = [...A, ...A, ...D, ...A, ...A].map((pitch, start) => ({ pitch, start, end: start + .8 }));
 const opts = { bars: Array.from({ length: 11 }, (_, i) => i * 4), holds: [{ t: 0, fret: 2 }], instrument: 'electric' };
 const base = solve(original, opts);
-const pin = adaptNext => ({ string: 5, fret: 12, scope: 'local', influencePrevious: false,
-  influenceNext: false, adaptPrevious: false, adaptNext });
+const pin = follow => ({ string: 5, fret: 12, scope: 'local', follow });
 const local = structuredClone(original);
-local[24].pos = pin(false);
+local[24].pos = pin('here');
 const localResult = solve(local, opts);
 for (let i = 0; i < local.length; i++) if (i !== 24) {
   assert.deepEqual(localResult.voiced.get(local[i]), base.voiced.get(original[i]),
     'a local exception neither changes the approach nor teaches a new future preference');
 }
 
-const adapted = structuredClone(original);
-adapted[24].pos = pin(true);
-const adaptedResult = solve(adapted, opts);
-for (let i = 0; i < 24; i++) assert.deepEqual(adaptedResult.voiced.get(adapted[i]), base.voiced.get(original[i]));
-assert.ok(adapted.slice(24).every(n => adaptedResult.seats.get(n) === 12),
-  'old low memories do not pull an explicitly redirected run back, including the next bar');
+// Locked: every E3 after it is played there; nothing before it, and no other note, moves.
+const locked = structuredClone(original);
+locked[24].pos = pin('locked');
+const lockedResult = solve(locked, opts);
+for (let i = 24; i < locked.length; i++) if (locked[i].pitch === 52)
+  assert.deepEqual(lockedResult.voiced.get(locked[i]), { string: 5, fret: 12 }, `E3 at ${i} follows the lock`);
+for (let i = 0; i < 24; i++) assert.deepEqual(lockedResult.voiced.get(locked[i]), base.voiced.get(original[i]),
+  'nothing before the override moves');
 
 // A frequently and exclusively used position can outweigh the same large
 // movement cost that beats a weak memory. Offered-position scores expose the
@@ -63,9 +64,8 @@ assert.ok(adapted.slice(24).every(n => adaptedResult.seats.get(n) === 12),
 const preferenceGap = count => {
   const notes = [...Array(count).fill(52), ...D, 52, ...D]
     .map((pitch, start) => ({ pitch, start, end: start + .8 }));
-  // The low position is taught by a pin the following notes adapt to (a hand
-  // anchor no longer moves notes).
-  notes[0].pos = { ...pin(true), string: 3, fret: 2 };
+  // The low position is taught by a guided override (a hand anchor moves no note).
+  notes[0].pos = { ...pin('guided'), string: 3, fret: 2 };
   const index = count + D.length, target = notes[index];
   const offers = [new Map([[target, { string: 3, fret: 2 }]]),
     new Map([[target, { string: 5, fret: 12 }]])];

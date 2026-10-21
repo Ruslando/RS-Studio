@@ -53,8 +53,7 @@ export function sharedPositionPlan(lane, selection, sourceNotes, shape, tuning, 
       if (!pos) return { ...group, error: `At ${column.t0.toFixed(2)} s: a note has no position yet`, changes: [] };
       if (!Number.isInteger(pos.fret) || pos.fret < 0 || pos.fret > maxFret)
         return { ...group, error: `At ${column.t0.toFixed(2)} s: that position is outside this fretboard`, changes: [] };
-      changes.push({ note, pos: { string: pos.string, fret: pos.fret, scope: 'local',
-        influencePrevious: false, influenceNext: false, adaptPrevious: false, adaptNext: false } });
+      changes.push({ note, pos: { string: pos.string, fret: pos.fret, scope: 'local', follow: 'here' } });
     }
   }
   const proposed = new Map(changes.map(({ note, pos }) => [note, pos]));

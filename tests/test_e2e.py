@@ -416,6 +416,41 @@ class EndToEndTests(unittest.TestCase):
         pos = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[1].pos")
         self.assertEqual((pos["string"], pos["fret"]), (5, 12), "changing the hand moves no note")
 
+    def test_an_override_is_only_here_guided_or_locked(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [0, 1, 2, 3].map(i => ({ id: 'f' + i, start: 1 + i, end: 1.6 + i, pitch: 57 }));
+            lane.notes[1].pos = { string: 4, fret: 12, scope: 'local' };
+            lane.handHolds = []; lane.refBoxes = {};
+            S.voicingRevision++;
+        }""")
+        self.fretboard_hover_points(2.1)
+        follow = page.locator("#fretboardFollow")
+        expect(follow).to_be_visible()
+        expect(follow.locator('[data-follow="here"]')).to_have_attribute("aria-checked", "true")
+        shot = Path(__file__).resolve().parents[1] / ".runs" / "fretboard-follow.png"
+        shot.parent.mkdir(exist_ok=True)
+        page.locator("#fretboardPanel").screenshot(path=str(shot))
+        played = """async () => {
+            const { S } = await import('/store.js');
+            const tab = await import('/tablature.js');
+            const lane = S.state.editLanes[0];
+            const f = await tab.laneFingering(lane);
+            return f.notes.map(n => { const p = f.voiced.get(n); return p.string + ':' + p.fret; });
+        }"""
+        here = page.evaluate(played)
+        follow.locator('[data-follow="locked"]').click()
+        expect(follow.locator('[data-follow="locked"]')).to_have_attribute("aria-checked", "true")
+        locked = page.evaluate(played)
+        self.assertEqual(locked[1:], ["4:12", "4:12", "4:12"], "locked: the same notes after it")
+        self.assertEqual(locked[0], here[0], "nothing before it")
+        page.keyboard.press("Control+z")
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[1].pos.follow ?? 'here'"),
+                         "here", "the choice is undone like any edit")
+
     def test_rocksmith_hand_positions_are_the_fretboards(self):
         """What the fretboard shows is what Rocksmith gets: every note's hand position."""
         from rs_studio.rocksmith import builder
@@ -2410,7 +2445,7 @@ class EndToEndTests(unittest.TestCase):
         page.locator('#fretboardHand').press('Enter')
         expect(page.locator('#fretboardHandAuto')).to_be_visible()
         defaults = page.evaluate("async () => (await import('/voicing-core.js')).defaultPinFlags()")
-        self.assertEqual(set(defaults.values()), {False})
+        self.assertEqual(defaults, {"follow": "here"}, "an override is only here unless chosen otherwise")
 
     def test_fretboard_hand_position_field(self):
         self.open_reference_project()

@@ -982,71 +982,40 @@ export function contextualCandidateSets(columns, tuning, cap = DP_SHAPES_PER_COL
 }
 
 
-// An override answers three separate questions, and they are stored apart:
+// WHAT AN OVERRIDE MEANS FOR THE REST OF THE SONG, stored as `follow` on the pin:
 //
-//   previous / next   is this grip also used for the SAME note or chord wherever it
-//                     comes up before / after (spreadPins)
-//   adaptPrevious /   do the OTHER notes before / after it re-finger to suit it —
-//   adaptNext         the hand is already there for the notes leading up to it, or
-//                     stays there for the ones that follow — or carry on as if the
-//                     override were not there
+//   here     this note or chord only; the memory learns what the engine would have
+//            played here, so nothing after it changes (the default)
+//   guided   the memory forgets this note or chord and learns the override three
+//            times over: the same notes after it prefer it, but where the hand is
+//            elsewhere by then a better position nearby may still win
+//   locked   the same notes after it take it, until another override of them or
+//            until a technique rules it out (spreadPins)
 //
-// All four switches default to off. Explicit saved values are retained;
-// `adapt` is the older one-switch spelling of `adaptNext`.
+// Nothing reaches backwards, and no other note's memory is touched.
+export const FOLLOW_MODES = ["here", "guided", "locked"];
+
 export function normalizeOverrideInfluence(value = null) {
-  return {
-    previous: (value?.previous ?? value?.influencePrevious) === true,
-    next: (value?.next ?? value?.influenceNext) === true,
-    adaptPrevious: value?.adaptPrevious === true,
-    adaptNext: (value?.adaptNext ?? value?.adapt) === true,
-  };
+  return { follow: FOLLOW_MODES.includes(value?.follow) ? value.follow : "here" };
 }
 
-// The stored switches of a pin nobody chose them for: an imported tab's positions.
-// Like a fresh override, an imported pin affects its own column by default.
+// The flags a pin nobody chose them for gets: an imported tab's positions.
 export function defaultPinFlags() {
-  const flow = normalizeOverrideInfluence();
-  return { influencePrevious: flow.previous, influenceNext: flow.next,
-    adaptPrevious: flow.adaptPrevious, adaptNext: flow.adaptNext };
+  return { ...normalizeOverrideInfluence() };
 }
 
-// The switches a NEW override on this column is written with: the ones the column
-// already carries, and otherwise the defaults. Not overrideInfluence, which answers
-// how an existing pin behaves — a pin with no switches at all (an old project, every
-// position of an imported tab) behaves as one column's, and writing a fresh override
-// over it uses the current defaults.
+// How an existing override on these notes follows on, or how a new one would.
 export function overrideFlow(notes) {
   const source = (notes || []).find((note) => note.arrangement)?.arrangement
     || (notes || []).find((note) => note.pos)?.pos;
-  const flagged = typeof source?.influencePrevious === "boolean" || typeof source?.influenceNext === "boolean";
-  return normalizeOverrideInfluence(flagged ? source : null);
+  return normalizeOverrideInfluence(source);
 }
+export const overrideInfluence = overrideFlow;
 
-// New overrides store two independent booleans. Legacy "local" pins already
-// participated in the full passage DP, so they map to both directions; legacy
-// "forward" pins keep their original next-only behavior.
-export function overrideInfluence(notes) {
-  const arrangement = (notes || []).find((note) => note.arrangement)?.arrangement;
-  const position = (notes || []).find((note) => note.pos)?.pos;
-  const source = arrangement || position;
-  if (typeof source?.influencePrevious === "boolean" || typeof source?.influenceNext === "boolean")
-    return normalizeOverrideInfluence(source);
-  if (position?.scope === "forward") return { previous: false, next: true };
-  // A pin saved before the flags existed (and every position of an exact import) is
-  // one column's and stays one column's. A column with no override yet answers with
-  // the rule a new one is written under.
-  return position || arrangement ? { previous: false, next: false } : normalizeOverrideInfluence();
-}
-
-// AN OVERRIDE IS A DECISION ABOUT A GRIP, NOT ABOUT ONE BEAT. Pinning a note or a
-// chord answers "how do I play this", and the same pitches a bar later are the same
-// question — so the pin is handed to every identical column after it (`next`), or
-// before it (`previous`), that carries no pin of its own. Read at solve time and never
+// A LOCKED OVERRIDE IS HANDED ON to every identical column after it that carries no
+// pin of its own, until another pin of the same notes. Read at solve time and never
 // written onto the other columns: returning the one pin to automatic returns them all,
 // and a note drawn later joins without anybody re-applying anything.
-//
-// The nearest pin wins, and a later one takes over from where it stands. A pin that
-// reaches nowhere is an exception at its own beat and interrupts nothing.
 // Limitation: "identical" is the same pitches at one onset. The same chord with a
 // note left out is another column and is voiced on its own.
 function spreadPins(columns, pins) {
@@ -1055,21 +1024,17 @@ function spreadPins(columns, pins) {
   if (!pins.some(Boolean)) return out;
   const low = (notes) => [...notes].sort((a, b) => a.pitch - b.pitch);
   const keys = columns.map((c) => low(c.notes).map((n) => n.pitch).join(","));
-  const walk = (indexes, side) => {
-    const live = new Map();
-    for (const i of indexes) {
-      if (pins[i]) {
-        if (overrideInfluence(columns[i].notes)[side]) live.set(keys[i], i);
-      } else if (!out[i] && live.has(keys[i])) {
-        const from = live.get(keys[i]), source = low(columns[from].notes);
-        out[i] = new Map(low(columns[i].notes).map((n, k) => [n, pins[from].get(source[k])]));
-        out.from[i] = from;
-      }
+  const live = new Map();
+  columns.forEach((column, i) => {
+    if (pins[i]) {
+      if (overrideFlow(column.notes).follow === "locked") live.set(keys[i], i);
+      else live.delete(keys[i]);
+    } else if (live.has(keys[i])) {
+      const from = live.get(keys[i]), source = low(columns[from].notes);
+      out[i] = new Map(low(column.notes).map((n, k) => [n, pins[from].get(source[k])]));
+      out.from[i] = from;
     }
-  };
-  const forward = columns.map((_, i) => i);
-  walk(forward, "next");                 // after wins where both reach a column
-  walk(forward.reverse(), "previous");
+  });
   return out;
 }
 
@@ -1141,11 +1106,7 @@ export function chordArrangementChoices(pcs, root, count, tuning, sourcePitches 
 // no string/fret to pin it to) and is never newly written — an out-of-range pitch
 // is a transcription problem, not something to add to the lane.
 function columnRewritePlan(columnNotes, choice, flow) {
-  const pin = (p) => ({
-    string: p.string, fret: p.fret, scope: "local",
-    influencePrevious: flow.previous, influenceNext: flow.next,
-    adaptPrevious: flow.adaptPrevious, adaptNext: flow.adaptNext,
-  });
+  const pin = (p) => ({ string: p.string, fret: p.fret, scope: "local", follow: flow.follow });
   const spare = new Map();
   for (const note of columnNotes) {
     if (!spare.has(note.pitch)) spare.set(note.pitch, []);
@@ -1240,10 +1201,7 @@ export function arrangedNotes(notes) {
     const influence = normalizeOverrideInfluence(arr);
     for (const a of arr.notes) out.push({
       start, end, pitch: a.pitch,
-      pos: {
-        string: a.string, fret: a.fret, scope: "local",
-        influencePrevious: influence.previous, influenceNext: influence.next,
-      },
+      pos: { string: a.string, fret: a.fret, scope: "local", follow: influence.follow },
       arranged: true,
     });
   }
@@ -1630,7 +1588,7 @@ function registerColumns(columns, tuning, options = {}) {
       return fret > frets || (fret === 0 && rules[k] && rules[k].fretted);
     }) ? spread[i] : null;
     const locked = pins[i] || handed;
-    const flow = locked ? normalizeOverrideInfluence(overrideInfluence(columns[pins[i] ? i : spread.from[i]].notes)) : null;
+    const flow = locked ? overrideFlow(columns[pins[i] ? i : spread.from[i]].notes) : null;
     return {
       // A hand put here by the player fixes the hand of this column only. It does not
       // move notes: where they go is decided before the hand (see planHand).
@@ -1647,10 +1605,12 @@ function registerColumns(columns, tuning, options = {}) {
       fixed: locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
       pinned: partial ? notes.map((n) => partial.has(n) ? seat.get(partial.get(n).string) : null) : null,
       soft: !!handed,
-      // Whether the notes after / before the override suit themselves to it. A
-      // handed-on grip answers for the pin it came from. See `aside` and the implied
-      // hold below.
-      adaptNext: flow?.adaptNext, adaptPrev: !!flow?.adaptPrevious,
+      // How the override follows on (normalizeOverrideInfluence). Only here: the
+      // memory learns what would have been played instead (`aside`). Guided: it
+      // forgets these notes and learns the override (`guided`). A locked one is
+      // handed on to the same notes after it (`handed`, spreadPins).
+      aside: !!pins[i] && flow.follow === "here",
+      guided: !!pins[i] && flow.follow === "guided",
       rules,
       // Muted notes, for the hand walk only (planHand): see `reach` in voiceRegister.
       dead: notes.some((n) => n.fx?.dead) ? notes.map((n) => !!n.fx?.dead) : null,
@@ -1687,46 +1647,8 @@ function registerColumns(columns, tuning, options = {}) {
     })),
   } : null;
 
-  // AN OVERRIDE THE OTHERS IGNORE is not where the hand "just was": left in, the
-  // continuity term drags the next notes toward it, which is the override
-  // re-fingering its neighbours with that switched off.
-  for (const c of input) c.aside = c.adaptNext === false;
-
-  // Adapting to an override uses the same hold as a directly placed hand.
-  // Read the override's physical hand anchor from a first solve, then start a
-  // hold there regardless of the distance to a neighbouring note. Before-only
-  // holds start at the bar line and end immediately after the override.
   const seats = [];
   let voiced = null;
-  const adapting = (c) => c.fixed && !c.hold && (c.adaptNext === true || c.adaptPrev);
-  if (input.some(adapting)) {
-    const bars = options.bars && options.bars.length >= 2 ? options.bars : null;
-    const barOf = (i) => {
-      let b = 0;
-      while (b + 1 < bars.length && bars[b + 1] <= columns[i].t0 + 1e-6) b++;
-      return b;
-    };
-    const todo = input.map(adapting);     // decided before any hold is implied
-    // Measure the chosen grip before adaptation, so switching adaptation on
-    // cannot itself change the anchor that it is meant to follow.
-    const first = voiceRegister(low, input.map(c => c.fixed ? { ...c, aside: true } : c),
-      undefined, seats, options.bars, frets);
-    let moved = false;
-    input.forEach((c, i) => {
-      if (!todo[i] || c.hold) return;
-      const shape = pins[i] || spread[i];
-      const anchor = handForShape(shape, seats[i], handProfileForTuning(tuning)).seat;
-      if (!Number.isFinite(anchor)) return;
-      let from = i;
-      if (c.adaptPrev && bars)
-        while (from > 0 && !input[from - 1].hold && barOf(from - 1) === barOf(i)) from--;
-      input[from].hold = { fret: anchor, local: c.adaptNext !== true };
-      if (c.adaptNext !== true && input[i + 1] && !input[i + 1].hold) input[i + 1].cut = true;
-      moved = true;
-    });
-    if (!moved && !price) voiced = first;
-    else seats.length = 0;
-  }
   voiced ||= voiceRegister(low, input, undefined, seats, options.bars, frets, price);
   // One entry per offered shape, in order: that is the contract scoreShapesAsDecided
   // reads back. `fingers` is empty because the engine has none to give — the board falls
@@ -2538,6 +2460,7 @@ const MEMORY_BEAM = 12;
 const MEMORY_REGISTER_WEIGHT = 0.25;
 const MEMORY_SHIFT = 5;
 const MEMORY_STRENGTH = 4;
+const GUIDED_WEIGHT = 3;   // a guided override's bonus (≈8) outweighs a hand shift (5)
 const memoryShiftCost = (from, to) => from == null || from === to ? 0
   : MEMORY_SHIFT + .1 * Math.abs(from - to);
 
@@ -2602,7 +2525,9 @@ function rememberAhead(tuning, columns, start, registers, memory, stand, directe
           return count ? MEMORY_STRENGTH * Math.log2(1 + count) * count / entry.total / c.pitches.length : 0;
         } };
       const yields = c.soft && state.carry && state.carry.some((s, k) => s != null && s !== c.fixed[k]);
-      const fixed = c.fixed && !c.aside && !yields;
+      // An override is obeyed where it stands and planned for nowhere before it:
+      // looking ahead, the hand does not prepare for it, so nothing reaches backwards.
+      const fixed = c.fixed && !c.aside && !yields && i === start;
       const anchored = i === start && c.hold;
       const candidates = anchored ? [state.g] : Array.from({ length: handCeiling(maxFret) }, (_, k) => k + 1);
       for (const g of candidates) {
@@ -2694,6 +2619,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
     const idx = c.pitches.map((_, i) => i).sort((a, b) => c.pitches[a] - c.pitches[b]);
     return {
       idx, t0: c.t0, end: c.end, hold: c.hold, handAt: c.handAt ?? null, cut: !!c.cut, soft: !!c.soft, aside: !!c.aside,
+      guided: !!c.guided,
       pitches: idx.map((i) => c.pitches[i]),
       fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
       pinned: c.pinned ? idx.map((i) => c.pinned[i]) : null,
@@ -2759,7 +2685,9 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
     stand = chosen.g;
     if (!c.aside) {
       if (directed) stood[i] = stand;
-      learnPlacement(memory, c, got, directed ? 2 : 1);
+      // A guided override replaces what was learned for these notes, and only these.
+      if (c.guided) for (const [key] of memoryEntries(c)) memory.delete(key);
+      learnPlacement(memory, c, got, c.guided ? GUIDED_WEIGHT : directed ? 2 : 1);
     } else learnPlacement(memory, c, chosen.out, 1);
     carry = linkedStrings(tuning, c, got, sorted[i + 1], maxFret);
   }

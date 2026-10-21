@@ -22,7 +22,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // Both mm → px scales are the same one, always.
 
 import { barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
-import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEl, fretboardName, fretboardPanel, fretboardAdaptNext, fretboardAdaptPrev, fretboardPin, fretboardReachNext, fretboardReachPrev, fretboardShape, fretboardStage } from "./dom.js";
+import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEl, fretboardFollow, fretboardName, fretboardPanel, fretboardPin, fretboardShape, fretboardStage } from "./dom.js";
 import { UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
 import { dpr, hexA, noteName, rememberPref } from "./util.js";
@@ -41,9 +41,9 @@ import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulation
 import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
-import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, overrideInfluence, placementFault, placementLimits } from "./voicing-core.js";
+import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits } from "./voicing-core.js";
 import { columnAlternatives } from "./voicing.js";
-import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnInfluence, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
+import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnFollow, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { toast } from "./notify.js";
@@ -1059,21 +1059,18 @@ export function drawFretboard() {
   if (waiting && fretboardBusyLabel.textContent !== waiting) fretboardBusyLabel.textContent = waiting;
 }
 
-// The override's four switches, on the column the board is showing: the same notes
-// before / after use it too, and the other notes before / after adapt to it (see
-// normalizeOverrideInfluence). They live ON a pin, and a column can be overridden
-// without one — a hand put on the beat, or an override that dropped notes and left
-// `written` behind — so there the bundle offers the way back alone.
+// How the override on the column the board is showing carries on: only here, guided
+// or locked (normalizeOverrideInfluence). It lives ON a pin, and a column can be
+// overridden without one — a hand put on the beat, or an override that dropped notes
+// and left `written` behind — so there the bundle offers the way back alone.
 function refreshPinControls(lane, show) {
   const col = show ? pinnedColumn(lane) : null;
   const pinned = !selectedPositions(lane).multiple && !!col?.notes.some((n) => n.pos || n.arrangement);
-  for (const [button] of PIN_SWITCHES) button.hidden = !pinned;
+  fretboardFollow.hidden = !pinned;
   if (!pinned) return;
-  const reach = overrideInfluence(col.notes);
-  for (const [button, side] of PIN_SWITCHES) button.setAttribute("aria-pressed", String(reach[side] === true));
+  const { follow } = overrideFlow(col.notes);
+  for (const button of fretboardFollow.children) button.setAttribute("aria-checked", String(button.dataset.follow === follow));
 }
-const PIN_SWITCHES = [[fretboardReachPrev, "previous"], [fretboardReachNext, "next"],
-  [fretboardAdaptPrev, "adaptPrevious"], [fretboardAdaptNext, "adaptNext"]];
 
 // The column under the hand, when it carries an override of any kind. Same focus the
 // offer uses, so the strip is always talking about the grip the heading names, and
@@ -1818,13 +1815,13 @@ export function init_fretboard() {
   for (const button of panelControls("fretboard")) button.addEventListener("click", () => setFretboardVisible(!visible));
   // Both reach toggles act on the column the strip is already naming, and both leave
   // the shape exactly as it is — only the blast radius moves.
-  for (const [button, side] of PIN_SWITCHES) {
+  for (const button of fretboardFollow.children) {
     button.addEventListener("click", () => {
       if (selectedPositions(currentLane()).multiple) return;
       const col = pinnedColumn(currentLane());
       if (!col) return;
       button.blur();                   // or it eats the arrow keys that walk the song
-      setColumnInfluence(col.notes, side, overrideInfluence(col.notes)[side] !== true);
+      setColumnFollow(col.notes, button.dataset.follow);
       drawFretboard();
     });
   }
