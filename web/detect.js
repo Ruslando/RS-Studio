@@ -79,8 +79,9 @@ export function cancelPendingDetection() {
 async function loadDetectors() {
   if (!detectModelSel) return;
   try {
-    const selected = detectModelSel.value;
     const items = await (await fetch("/api/detectors")).json();
+    // Read after the request: a model picked while the list loads is kept.
+    const selected = detectModelSel.value;
     detectModelSel.innerHTML = items
       .map((d) => `<option value="${d.id}" ${d.available ? "" : "disabled"}>${d.label}${d.available ? "" : ` — ${d.reason || "Missing model files"}`}</option>`).join("");
     if (items.some((item) => item.id === selected && item.available)) detectModelSel.value = selected;
