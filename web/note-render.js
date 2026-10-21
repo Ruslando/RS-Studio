@@ -28,7 +28,7 @@ import { gridAt, gridSegments, gridSubdiv, segStep } from "./grid.js";
 import { FX_GLYPHS, HARMONIC_TAG, noteMarks } from "./note-effects.js";
 import { PAINT, WASH, halo, veil } from "./stage-paint.js";
 import { S } from "./store.js";
-import { dpr, fmtTime, hexA, noteName } from "./util.js";
+import { dpr, fmtTime, grayHex, hexA, noteName } from "./util.js";
 
 // ---- detect time frame (Alt-drag) ----
 // Which edge of the frame (if any) a world-x sits on, for resize hit-testing.
@@ -282,6 +282,9 @@ export function drawNoteFx() {
     const capo = options.fromNut ? Number(lane.capo) || 0 : 0;
     const hammerTags = laneHammerTags(lane);
     const slides = laneSlides(lane);
+    // Labels of a layer that is not being edited fade with its notes (draw.js).
+    sctx.save();
+    if (!lane.active || lane.locked) sctx.globalAlpha = 0.5;
     for (const n of lane.notes) {
       const x = xOf(n.start), x1 = xOf(n.end);
       const onto = slides.get(n), ribbon = slideRibbon(n, onto);
@@ -315,8 +318,10 @@ export function drawNoteFx() {
       if (effects) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2);
       if (grace) {
         const gx = xOf(grace.start), width = Math.max(2, x - gx), pitch = n.pitch + grace.offset;
-        paintNoteBar(sctx, gx, yOf(pitch), width, S.state.rowH, lane.color, S.selection.has(n), S.hoverNote === n);
+        paintNoteBar(sctx, gx, yOf(pitch), width, S.state.rowH, !lane.active || lane.locked ? grayHex(lane.color) : lane.color,
+          S.selection.has(n), S.hoverNote === n);
       }
     }
+    sctx.restore();
   }
 }

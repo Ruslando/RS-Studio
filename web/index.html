@@ -379,17 +379,12 @@
             <div id="fretboardControls" role="group" aria-label="Fretboard controls">
               <div id="fretboardSetup" role="group" aria-label="Hand and capo">
               <div id="fretboardCapoField">
-                <label for="fretboardCapo">Capo</label>
-                <button type="button" id="fretboardCapoPrev" class="icon-btn icon-btn--compact" aria-label="Lower capo">−</button>
-                <input type="text" id="fretboardCapo" inputmode="numeric" pattern="[0-9]+" aria-label="Capo fret" />
-                <button type="button" id="fretboardCapoNext" class="icon-btn icon-btn--compact" aria-label="Raise capo">+</button>
+                <span class="label" id="fretboardCapoLabel">Capo</span>
+                <div id="fretboardCapoList" class="pill fretboard-values" role="radiogroup" aria-labelledby="fretboardCapoLabel"></div>
               </div>
               <div id="fretboardHandField">
-                <label for="fretboardHand">Hand</label>
-                <button type="button" id="fretboardHandPrev" class="icon-btn icon-btn--compact" aria-label="Lower hand position">−</button>
-                <input type="text" id="fretboardHand" inputmode="numeric" pattern="[1-9][0-9]*" placeholder="Auto" aria-label="Hand position" title="Positive fret number; clear for Auto" />
-                <span id="fretboardHandAuto" aria-live="polite"></span>
-                <button type="button" id="fretboardHandNext" class="icon-btn icon-btn--compact" aria-label="Raise hand position">+</button>
+                <span class="label" id="fretboardHandLabel">Hand</span>
+                <div id="fretboardHandList" class="pill fretboard-values" role="radiogroup" aria-labelledby="fretboardHandLabel"></div>
               </div>
               <div id="fretboardFingerField">
                 <span class="label" id="fretboardFingerLabel">Finger</span>
@@ -629,9 +624,9 @@
       </span>
     </div>
     <div class="dp-body">
-      <label class="field-group block">Fret
-        <input type="number" id="handAnchorFret" min="0" step="1" />
-      </label>
+      <div class="field-group block"><span class="label" id="handAnchorFretLabel">Fret</span>
+        <div id="handAnchorFret" class="pill fretboard-values" role="radiogroup" aria-labelledby="handAnchorFretLabel"></div>
+      </div>
       <label class="field-group block">Position
         <span class="pop-field"><input type="number" id="handAnchorTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>

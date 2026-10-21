@@ -40,6 +40,16 @@ export function rememberPref(key, value) {
 
 // "#rrggbb" + alpha -> an rgba() string. Canvas has no way to set a fill's
 // opacity separately from its colour, so every translucent shape builds one.
+// The same colour without its hue (luminance-weighted), for a layer that is not the
+// one being edited. A colour that is not #rrggbb is returned as it is.
+export function grayHex(hex) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex || "")) return hex;
+  const v = parseInt(hex.slice(1), 16);
+  const g = Math.round(0.299 * ((v >> 16) & 255) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255));
+  const h = g.toString(16).padStart(2, "0");
+  return `#${h}${h}${h}`;
+}
+
 export function hexA(hex, a) {
   const v = parseInt(hex.slice(1), 16);
   return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${a})`;

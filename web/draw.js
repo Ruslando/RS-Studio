@@ -29,7 +29,7 @@ import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
-import { dpr, hexA } from "./util.js";
+import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
 import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
@@ -413,9 +413,10 @@ function paintFrame() {
     // or not the tab view happens to render this lane — so the range warning is
     // not conditional on tablatureEnabled.
     const tuning = laneFretTuning(lane);
-    // Non-active and locked lanes are read-only reference — dim them so the one
-    // layer you're actually editing stands out.
-    const laneAlpha = (lane === actLane && !lane.locked) ? 1 : 0.55;
+    // Non-active and locked lanes are read-only reference: gray and half transparent,
+    // notes and their labels (drawNoteFx), so the layer being edited stands out.
+    const dimmed = lane !== actLane || lane.locked;
+    const laneAlpha = dimmed ? 0.5 : 1, laneColor = dimmed ? grayHex(lane.color) : lane.color;
     for (const ghost of addedNotes) ghostNotes.push({ ...ghost, alpha: laneAlpha, capo: Number(lane.capo) || 0 });
     // Adjacent written attacks otherwise fuse into one solid bar. Indexing their
     // shared edges makes sliced sustains (and other re-attacks) explicit without
@@ -430,7 +431,7 @@ function paintFrame() {
       const x = xOf(motion.start), w = Math.max(2, xOf(ribbon?.end ?? motion.end) - x), y = yOf(n.pitch);
       if (x > vx1 || x + w < vx0) continue; // off-screen
       const rowH = S.state.rowH;
-      const fill = stackCount.has(n) ? PAINT.error : lane.color;
+      const fill = stackCount.has(n) ? PAINT.error : laneColor;
       sctx.save();
       sctx.translate(x + w / 2, y + rowH / 2);
       sctx.scale(motion.scaleX, motion.scale);

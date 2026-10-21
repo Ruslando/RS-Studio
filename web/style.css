@@ -1506,9 +1506,11 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardSetup > * { flex: none; }
 #fretboardCapoField, #fretboardHandField, #fretboardFingerField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
 #fretboardSetup > :first-child { border-left: 0; padding-left: 0; }
-#fretboardCapoField label, #fretboardHandField label, #fretboardFingerLabel { color: var(--stage-label); font-size: var(--text-caption); }
-#fretboardCapo, #fretboardHand { width: 46px; min-width: 0; text-align: center; padding-inline: 4px; }
-#fretboardHandAuto { color: var(--stage-label); font-size: var(--text-caption); white-space: nowrap; }
+#fretboardCapoField .label, #fretboardHandField .label, #fretboardFingerLabel { color: var(--stage-label); font-size: var(--text-caption); }
+/* A row of the values that can be chosen (the hand: only those that play the note). */
+.fretboard-values { gap: 2px; }
+.fretboard-values > * { min-width: 26px; padding: 0 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.fretboard-values > [data-value="auto"] { font-family: var(--font-ui); }
 #fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField, #fretboardFingerField) { display: none; }
 #fretboardFinger { min-width: 4ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
 #fretboardFinger[data-auto] { color: var(--stage-label); }
