@@ -210,14 +210,16 @@ function fretOptions(note, tuning) {
 }
 
 // A finger may cover several strings at one fret (a barre), but only when
-// every string across that span is played at the same or a higher fret. Missing,
-// muted, open and lower-fretted strings break it. A higher finger can cover a
+// every string across that span that is played is played at the same or a higher
+// fret. A string the chord leaves out may lie under it (pressed, not picked, like
+// EOF's F7 1x1211); muted, open and lower-fretted strings break it. A higher finger can cover a
 // lower barre. With at most six strings, a tiny bitmask search enumerates every
 // physically valid barre/separate-fingertip partition rather than assuming that
 // every equal-fret note must share one finger.
 const noteIsDead = (note) => !!note?.fx?.dead;
 
 function groupsAtEachFret(shape) {
+  const present = [...shape.values()];
   const entries = [...shape.entries()].map(([note, p]) => ({ note, ...p })).filter((e) => !noteIsDead(e.note));
   const byFret = new Map();
   for (const e of entries) {
@@ -235,7 +237,7 @@ function groupsAtEachFret(shape) {
       const loS = Math.min(...members.map((e) => e.string));
       const hiS = Math.max(...members.map((e) => e.string));
       const coversAllContacts = same.every(e => e.string < loS || e.string > hiS || members.includes(e));
-      if (coversAllContacts && (members.length === 1 || barreSpanSupported(entries, fret, loS, hiS))) valid.push({ mask, members });
+      if (coversAllContacts && (members.length === 1 || barreSpanSupported(entries, fret, loS, hiS, present))) valid.push({ mask, members });
     }
     // Enumerate every honest partition, not only the smallest one. Three notes
     // at one fret may be one barre or three separate fingertips; those grips do

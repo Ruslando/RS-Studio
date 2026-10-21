@@ -578,9 +578,12 @@ export function pickBox(boxes, x, y) {
 
 // Every string under a barre must sound at that fret or above it. A missing,
 // muted, open or lower-fretted string breaks the span; a higher finger covers it.
-export function barreSpanSupported(positions, fret, lo, hi) {
+// A string the chord does not play at all (not in `present`) may lie under the
+// barre: it is pressed but not picked. One it plays must be fretted at or above it.
+export function barreSpanSupported(positions, fret, lo, hi, present = positions) {
   if (!Number.isInteger(lo) || !Number.isInteger(hi)) return false;
   for (let string = lo; string <= hi; string++) {
+    if (!present.some(p => p.string === string)) continue;
     if (!positions.some(p => p.string === string && p.fret >= fret
       && !p.dead && !p.note?.fx?.dead && p.note?.harmonic !== "natural")) return false;
   }
@@ -605,7 +608,7 @@ export function barreGroups(marks, filled = true) {
       && !!m.releasing === !!first.releasing && (m.opacity ?? 1) > 0);
     let connected = [];
     for (const m of sorted) {
-      if (connected.length && !barreSpanSupported(support, m.fret, connected.at(-1).string, m.string)) {
+      if (connected.length && !barreSpanSupported(support, m.fret, connected.at(-1).string, m.string, marks)) {
         groups.push(connected); connected = [];
       }
       connected.push(m);
