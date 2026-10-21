@@ -122,6 +122,11 @@ def _open_window(url: str) -> bool:
         # pywebview cancels downloads by default; exports (.psarc, project
         # archives) are page downloads and would silently go nowhere.
         webview.settings["ALLOW_DOWNLOADS"] = True
+        # Qt WebEngine (Linux): the sound engine loads before the first click, so
+        # Chromium would hold its audio until then and log a warning about it.
+        flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+        if "--autoplay-policy" not in flags:
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{flags} --autoplay-policy=no-user-gesture-required".strip()
         shell = _Shell()
         window = webview.create_window("RS Studio", url,
                                        width=1500, height=950, min_size=(1000, 640),
