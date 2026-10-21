@@ -21,7 +21,7 @@ for (const column of columns) {
 
 // Availability alone is insufficient: conventional C and D should use the
 // ring finger, rather than unnecessarily spreading the grip onto the pinky.
-for (const [start, expected] of [[12, [3, 2, 0, 1, 0]], [16, [0, 1, 3, 2]]]) {
+for (const [start, expected] of [[12, [3, 2, -1, 1, -1]], [16, [-1, 1, 3, 2]]]) {   // -1: open, no finger
   const column = columns.find(c => c.t0 === start);
   const best = gripCostBreakdown(new Map(column.notes.map(n => [n, n.pos])));
   assert.deepEqual(column.notes.map(n => best.fingering.fingers.get(n)), expected);

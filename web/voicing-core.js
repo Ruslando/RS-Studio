@@ -4,7 +4,7 @@
 
 import { noteName } from "./util.js";
 import { OVERLAP_EPS } from "./constants.js";
-import { barreSpanSupported, fretboardFor } from "./fretboard-core.js";
+import { NO_FINGER, THUMB, barreSpanSupported, fretboardFor } from "./fretboard-core.js";
 import { SLIDES_TO_NEXT as SLIDE_TO_NEXT } from "./bend.js";
 
 // One source of truth for string/fret choice, shared by the chord preview and
@@ -13,10 +13,11 @@ import { SLIDES_TO_NEXT as SLIDE_TO_NEXT } from "./bend.js";
 // bar; a separate, small grip model assigns fingers and checks alternatives.
 export const MAX_FRET = 24;
 
-// Fretting fingers, index through little. The thumb is not modeled, and a barre
+// Fretting fingers, index through little. The thumb is only a choice, and a barre
 // is one finger across strings — so this also bounds the number of DISTINCT
 // frets any playable shape can hold.
 export const MAX_FINGERS = 4;
+export { THUMB, NO_FINGER };
 
 export const HAND_SPAN = 8;      // generous search guard; physical finger-pair reach decides comfort/feasibility
 
@@ -299,7 +300,7 @@ function fingerGroups(shape) {
 // ============================================================================
 
 export function stringStates(shape, fingering, profile = GUITAR_HAND_PROFILE) {
-  const entries = [...shape].map(([note, p]) => ({ note, ...p, finger: fingering?.fingers.get(note) || 0 }));
+  const entries = [...shape].map(([note, p]) => ({ note, ...p, finger: fingering?.fingers.get(note) ?? NO_FINGER }));
   const byString = new Map(entries.map((e) => [e.string, e]));
   const sounding = entries.filter((e) => !noteIsDead(e.note));
   const soundingStrings = sounding.map((e) => e.string);
@@ -315,7 +316,7 @@ export function stringStates(shape, fingering, profile = GUITAR_HAND_PROFILE) {
       continue;
     }
     const internal = string > lo && string < hi;
-    const muter = internal ? entries.find((e) => e.fret > 0 && e.finger > 0 && Math.abs(e.string - string) === 1) : null;
+    const muter = internal ? entries.find((e) => e.fret > 0 && e.finger >= THUMB && Math.abs(e.string - string) === 1) : null;
     if (muter) states.push({ string, state: "mute-left", method: "finger-overhang", finger: muter.finger });
     else states.push({ string, state: "skip-right", method: internal ? (explicitStroke ? "selective-strum" : "selective-pick") : "outside-attack" });
   }
@@ -407,7 +408,7 @@ export function fingeringOptions(shape, profile = GUITAR_HAND_PROFILE) {
   if (!byProfile) { byProfile = new Map(); FINGERING_CACHE.set(shape, byProfile); }
   let base = byProfile.get(profile.id);
   if (!base) {
-    const openFingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([note]) => [note, 0]));
+    const openFingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([note]) => [note, NO_FINGER]));
     const candidates = [];
     for (const grouping of fingerGroupings(shape)) {
       const used = new Set(), assigned = [];
@@ -472,15 +473,14 @@ export function handForShape(shape, seat, profile = GUITAR_HAND_PROFILE, require
   if (contacts.length === 1) {
     const [note, pos] = contacts[0];
     const at = Number.isFinite(seat) && seat >= 1 && pos.fret - seat >= 0 && pos.fret - seat < handReach(profile) ? seat : pos.fret;
-    const fingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([n]) => [n, 0]));
+    const fingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([n]) => [n, NO_FINGER]));
     fingers.set(note, Math.min(4, pos.fret - at + 1));
     return { fingers, seat: at, playable: true };
   }
-  let poses = fingeringOptions(shape, profile);
-  // A chord only the widest hands reach still has a hand and fingers.
+  // A chord only the widest hands reach still has a hand and fingers; a chosen
+  // fingering may be any valid one, not only the few kept for the search.
+  let poses = required.size ? posesFor(shape, profile, required) : fingeringOptions(shape, profile);
   if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
-  // A chosen fingering may be any valid one, not only the few kept for the search.
-  if (required.size) poses = poses.all;
   const compatible = poses.filter(pose => [...required].every(([note, finger]) => pose.fingers.get(note) === finger));
   let choices = compatible.length ? compatible : poses;
   if (fixedSeat) {
@@ -517,6 +517,28 @@ export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infi
   return [...new Set(seats)].filter((g) => Number.isInteger(g) && g >= 1 && g <= maxHand).sort((a, b) => a - b);
 }
 
+// THE THUMB, only ever chosen (fingeringChoices), never picked by the engine. It
+// frets the instrument's lowest string over the neck, on the fret of the lowest
+// other fretted note, with the next string left out (its tip mutes it): EOF's
+// thumb shapes, D/F# 2x0232 and the E-shape 1x3211. The other notes are fingered
+// as usual, and the hand is theirs.
+export function thumbPoses(shape, profile = GUITAR_HAND_PROFILE) {
+  const fretted = [...shape].filter(([note, p]) => p.fret > 0 && !noteIsDead(note));
+  const low = fretted.find(([, p]) => p.string === profile.stringCount - 1);
+  if (!low || fretted.length < 2 || [...shape.values()].some((p) => p.string === profile.stringCount - 2)) return [];
+  const rest = new Map([...shape].filter(([note]) => note !== low[0]));
+  if (low[1].fret !== Math.min(...fretted.filter((f) => f !== low).map(([, p]) => p.fret))) return [];
+  return fingeringOptions(rest, profile).all.map((pose) => ({
+    ...pose, fingers: new Map([...pose.fingers, [low[0], THUMB]]) }));
+}
+
+// The fingerings that can hold `fingers`: the thumb's when one is the thumb.
+function posesFor(shape, profile, fingers) {
+  if ([...fingers.values()].includes(THUMB)) return thumbPoses(shape, profile);
+  const poses = fingeringOptions(shape, profile).all;
+  return poses.length ? poses : fingeringOptions(shape, stretchProfile(profile)).all;
+}
+
 // THE FINGERINGS ONE COLUMN CAN BE PLAYED WITH, as Map(note -> finger): what the
 // fretboard's Finger buttons step through. One fretted note: each finger whose hand
 // (fret − finger + 1) is on the neck. A chord: its valid fingerings, cheapest first.
@@ -529,6 +551,7 @@ export function fingeringChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand =
   }
   let poses = fingeringOptions(shape, profile).all;
   if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile)).all;
+  poses = [...poses, ...thumbPoses(shape, profile)];
   const seen = new Set(), out = [];
   for (const pose of poses) {
     const fingers = new Map(contacts.map(([note]) => [note, pose.fingers.get(note)]));
@@ -730,7 +753,7 @@ export function transitionCostBreakdown(prevShape, prevFingering, curShape, curF
 }
 
 
-// Left-hand fingers (1=index … 4=pinky, 0=open) for a shape. Same-fret notes
+// Left-hand fingers (1=index … 4=pinky, -1 open) for a shape. Same-fret notes
 // share a number only when fingerGroups proves that a real barre can connect
 // them without overriding an open/lower note on an intervening string.
 export function assignFingers(shape, profile = GUITAR_HAND_PROFILE) {
@@ -738,9 +761,9 @@ export function assignFingers(shape, profile = GUITAR_HAND_PROFILE) {
   if (best) return new Map(best.fingers);
   // Imported/manual impossible shapes still render without inventing a fifth
   // finger. This fallback mirrors the old deterministic labelling.
-  const fingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([note]) => [note, 0]));
+  const fingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([note]) => [note, NO_FINGER]));
   fingerGroups(shape).forEach((group, i) => {
-    for (const e of group.members) fingers.set(e.note, i < 4 ? i + 1 : 0);
+    for (const e of group.members) fingers.set(e.note, i < 4 ? i + 1 : NO_FINGER);
   });
   return fingers;
 }
@@ -1703,7 +1726,7 @@ function registerColumns(columns, tuning, options = {}) {
       const key = shapeKey(shape), contacts = [...shape.values()].filter((p) => p.fret > 0).length;
       let required = input[i].fingers;
       if (!required.size && contacts > 1 && fingerMemory.has(key))
-        required = new Map([...shape].map(([note, p]) => [note, fingerMemory.get(key).get(p.string)]).filter(([, f]) => f));
+        required = new Map([...shape].map(([note, p]) => [note, fingerMemory.get(key).get(p.string)]).filter(([, f]) => f != null));
       const hand = handForShape(shape, seats[i], handProfileForTuning(tuning), required, !!holds[i] || input[i].fingers.size > 0);
       options.hands[i] = hand;
       if (contacts > 1 && !input[i].aside)
@@ -1721,7 +1744,7 @@ function chosenFingers(notes, source) {
   const from = low(source), to = low(notes), out = new Map();
   to.forEach((note, k) => {
     const finger = from[k]?.pos?.finger;
-    if (Number.isInteger(finger) && finger >= 1 && finger <= 4) out.set(note, finger);
+    if (Number.isInteger(finger) && finger >= THUMB && finger <= 4) out.set(note, finger);
   });
   return out;
 }
@@ -1732,10 +1755,9 @@ function handOfFingers(shape, fingers, profile) {
   const contacts = [...shape].filter(([note, p]) => p.fret > 0 && !noteIsDead(note));
   if (contacts.length === 1) {
     const [note, p] = contacts[0], finger = fingers.get(note);
-    return finger ? Math.max(1, p.fret - finger + 1) : null;
+    return finger >= 1 ? Math.max(1, p.fret - finger + 1) : null;
   }
-  let poses = fingeringOptions(shape, profile).all;
-  if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile)).all;
+  let poses = posesFor(shape, profile, fingers);
   const pose = poses.find((pose) => [...fingers].every(([note, f]) => pose.fingers.get(note) === f));
   return pose?.seat ?? null;
 }
@@ -1798,7 +1820,7 @@ export function scoreShapesAsDecided(shapes, columns, focusIdx, tuning, options 
     const hand = handForShape(shape, got.seat, handProfileForTuning(tuning));
     if (!hand.playable) return UNPLAYED;
     return { ...got, seat: hand.seat,
-      fingers: [...shape].map(([note, pos]) => [pos.string, hand.fingers.get(note) ?? 0]) };
+      fingers: [...shape].map(([note, pos]) => [pos.string, hand.fingers.get(note) ?? NO_FINGER]) };
   });
 }
 

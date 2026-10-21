@@ -21,7 +21,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // editor, and past that cap the board shrinks and centres instead of stretching.
 // Both mm → px scales are the same one, always.
 
-import { barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
+import { NO_FINGER, fingerLabel, barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
 import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEl, fretboardFollow, fretboardName, fretboardPanel, fretboardPin, fretboardShape, fretboardStage } from "./dom.js";
 import { UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
@@ -219,7 +219,7 @@ function gripsFrom({ tuning, notes, voiced, fingers: walked, seats }) {
         strikeStart: note.start + strumOffset(note, col.notes),
         tremoloStep: tremoloStep(note, gridAt(note.start)?.bpm || 120),
         string: pos.string, fret: pos.fret, start: note.start,
-        finger: fingers.get(note) || 0, dead: !!note.fx?.dead,
+        finger: fingers.get(note) ?? NO_FINGER, dead: !!note.fx?.dead,
         // Carried so the grip can name itself. Not derivable from the mark, whose
         // fret and string are mid-slide while the hand travels.
         pitch: note.pitch,
@@ -519,7 +519,7 @@ function drawShaping(ctx, s, scale, X, Y, lane) {
   const placed = [...shaping.picked].map(([note, p]) => ({
     note, pitch: note.pitch, string: p.string, fret: p.fret,
     x: fretCentre(p.fret, s), mm: fretCentre(p.fret, s), placed: true,
-    finger: shaping.preview?.hand?.fingers.get(note) || 0, dead: !!note.fx?.dead,
+    finger: shaping.preview?.hand?.fingers.get(note) ?? NO_FINGER, dead: !!note.fx?.dead,
   }));
   const cur = shaping.notes[shaping.index];
   // The note being placed is handed in on string -1, which is no string at all: it
@@ -1314,7 +1314,7 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
     // at its middle, and dropped when the body is narrower than the glyph, as the
     // stage drops a note label too wide for its note.
     let glyph = !digits ? "" : g[0].dead ? FX_GLYPHS.dead : g[0].note?.harmonic === "pinch" ? "✦"
-      : showFingers && g[0].finger > 0 ? String(g[0].finger) : "";
+      : showFingers ? fingerLabel(g[0].finger, "") : "";
     if (ghost && glyph && !g[0].dead) {
       glyph = `(${glyph})`;
       ctx.font = stageMono(STAGE_ANCHORED * style.size * 0.8, 600);
@@ -1458,7 +1458,7 @@ function drawOffer(ctx, s, scale, X, Y, hovered, lane) {
     return p ? [{
       string: p.string, fret: p.fret,
       pitch: n.pitch,
-      finger: hovered.hand.byString.get(p.string) || 0,
+      finger: hovered.hand.byString.get(p.string) ?? NO_FINGER,
       dead: !!n.dead, x: fretCentre(p.fret, s),
     }] : [];
   });
@@ -1540,7 +1540,7 @@ function drawNoteOffer(ctx, s, scale, X, Y, lane, { hovered, at, hand }) {
     ? { ...m, string: hovered.string, fret: hovered.fret, x: fretCentre(hovered.fret, s) } : m);
   const marks = at.marks.map(moved);
   drawGrip(ctx, s, scale, X, Y,
-    marks.map((m) => ({ ...m, finger: hand.fingers.get(m.note) || 0 })),
+    marks.map((m) => ({ ...m, finger: hand.fingers.get(m.note) ?? NO_FINGER })),
     lane.color || PAINT.accent, true);
 }
 
@@ -1791,7 +1791,7 @@ function fingeringHere(lane) {
   const ordered = [...fretted].sort((a, b) => b.string - a.string);
   return { placed, choices, index, chord: fretted.length > 1,
     chosen: fretted.some((f) => f.note.pos?.finger != null),
-    text: ordered.map((f) => f.finger || "?").join(fretted.length > 1 ? " " : "") };
+    text: ordered.map((f) => fingerLabel(f.finger, "?")).join(fretted.length > 1 ? " " : "") };
 }
 
 // The hand the player put on this note or chord, if any, so the band can say so.

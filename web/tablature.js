@@ -303,8 +303,8 @@ function buildSpecFromPrepared(prepared) {
             // The fret the index stands on, as the fretboard shows it (counted from the
             // capo, like `fret`). Rocksmith's hand positions are exactly these.
             ...(Number.isFinite(hand) ? { hand } : {}),
-            // The fretboard's finger on a fretted note (1 index … 4 pinky).
-            ...(pos?.fret > 0 && finger >= 1 && finger <= 4 ? { finger } : {}),
+            // The fretboard's finger on a fretted note (0 thumb, 1 index … 4 pinky).
+            ...(pos?.fret > 0 && finger >= 0 && finger <= 4 ? { finger } : {}),
           });
         }), (note) => note),
       };

@@ -103,6 +103,12 @@ class ExporterFixes(unittest.TestCase):
         song = _compiled(em + other)
         self.assertEqual([c.fingers[1:3] for c in song.chords], [[2, 3], [1, 2]])
 
+    def test_a_chosen_thumb_is_rocksmiths_thumb(self):
+        """D/F# with the thumb on the low E: finger 0 there, -1 on the open D."""
+        d = _chord(2.0, 3.0, "2x0232", s6={"finger": 0}, s3={"finger": 1}, s2={"finger": 3}, s1={"finger": 2})
+        self.assertEqual(_compiled(d).chords[0].fingers, [0, -1, -1, 1, 3, 2])
+        self.assertNotIn("I28", [c for c, _ in _codes(_spec(d, lead=5))])
+
     def test_a_chord_without_fingers_is_reported(self):
         warnings = []
         spec = builder._with_lead_in(_spec(_chord(2.0, 3.0, "022000")), 5)
