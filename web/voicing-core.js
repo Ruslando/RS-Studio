@@ -326,8 +326,10 @@ export function stringStates(shape, fingering, profile = GUITAR_HAND_PROFILE) {
 // is [maximum fret difference, maximum longitudinal mm, lateral comfort mm].
 // Inspired by Radicioni/Lombardo's pair constraints; middle/ring is deliberately
 // allowed one fret (their zero would reject the conventional open C fingering).
+// Index/middle spans two frets at the nut (A-shape barre 1-2-3-4) and index/ring
+// the E-shape's ring finger two frets over a barre.
 const FINGER_REACH = Object.freeze({
-  '1:2': [2, 60, 20], '1:3': [3, 85, 30], '1:4': [4, 105, 40],
+  '1:2': [2, 75, 20], '1:3': [3, 90, 30], '1:4': [4, 105, 40],
   '2:3': [1, 38, 18], '2:4': [3, 75, 32], '3:4': [1, 38, 16],
 });
 const pairKey = (a, b) => [a.finger, b.finger].sort((x, y) => x - y).join(':');
@@ -446,6 +448,7 @@ export function fingeringOptions(shape, profile = GUITAR_HAND_PROFILE) {
       if (diverse.length === MAX_FINGERINGS_PER_SHAPE) break;
     }
     base = diverse;
+    base.all = candidates;   // every valid fingering, for the Finger buttons
     byProfile.set(profile.id, base);
   }
   return base;
@@ -476,6 +479,8 @@ export function handForShape(shape, seat, profile = GUITAR_HAND_PROFILE, require
   let poses = fingeringOptions(shape, profile);
   // A chord only the widest hands reach still has a hand and fingers.
   if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
+  // A chosen fingering may be any valid one, not only the few kept for the search.
+  if (required.size) poses = poses.all;
   const compatible = poses.filter(pose => [...required].every(([note, finger]) => pose.fingers.get(note) === finger));
   let choices = compatible.length ? compatible : poses;
   if (fixedSeat) {
@@ -522,8 +527,8 @@ export function fingeringChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand =
     const [note, pos] = contacts[0];
     return [1, 2, 3, 4].filter((f) => pos.fret - f + 1 >= 1 && pos.fret - f + 1 <= maxHand).map((f) => new Map([[note, f]]));
   }
-  let poses = fingeringOptions(shape, profile);
-  if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
+  let poses = fingeringOptions(shape, profile).all;
+  if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile)).all;
   const seen = new Set(), out = [];
   for (const pose of poses) {
     const fingers = new Map(contacts.map(([note]) => [note, pose.fingers.get(note)]));
@@ -1729,8 +1734,8 @@ function handOfFingers(shape, fingers, profile) {
     const [note, p] = contacts[0], finger = fingers.get(note);
     return finger ? Math.max(1, p.fret - finger + 1) : null;
   }
-  let poses = fingeringOptions(shape, profile);
-  if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
+  let poses = fingeringOptions(shape, profile).all;
+  if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile)).all;
   const pose = poses.find((pose) => [...fingers].every(([note, f]) => pose.fingers.get(note) === f));
   return pose?.seat ?? null;
 }

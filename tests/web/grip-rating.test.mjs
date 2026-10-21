@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  BASS_HAND_PROFILE, assignFingers, chordColumns, fingeringOptions, gripCostBreakdown, shapeKey,
+  BASS_HAND_PROFILE, assignFingers, chordColumns, fingeringChoices, fingeringOptions, gripCostBreakdown, handForShape, shapeKey,
 } from '../../web/voicing-core.js';
 
 const project = JSON.parse(readFileSync(new URL('../../examples/chord-showcase/project.json', import.meta.url)));
@@ -106,3 +106,21 @@ try {
 } finally {
   delete globalThis.self;
 }
+
+// Every valid fingering is a Finger choice, not only the few the search keeps, and
+// a chosen one holds: the m7 shell 1x111x with a ring barre (EOF's 2x333x).
+{
+  const shell = shape([1, null, 1, 1, 1, null]);
+  const notes = [...shell.keys()];
+  const ring = new Map(notes.map((n, i) => [n, i === 0 ? 2 : 3]));
+  const same = (a, b) => notes.every(n => a.get(n) === b.get(n));
+  assert.ok(fingeringOptions(shell).length < fingeringOptions(shell).all.length);
+  assert.ok(fingeringChoices(shell).some(c => same(c, ring)), 'the ring barre is offered');
+  assert.ok(same(handForShape(shell, null, undefined, ring).fingers, ring), 'and kept when chosen');
+}
+// A-shape barre with three fingers: index/middle span two frets from fret 3 on.
+{
+  const a = shape([null, 3, 5, 5, 5, 3]), notes = [...a.keys()];
+  assert.ok(fingeringChoices(a).some(c => notes.map(n => c.get(n)).join('') === '12341'));
+}
+console.log('every valid fingering is a choice');
