@@ -106,6 +106,22 @@ def _app_icon() -> Path:
     return resource_root() / "assets" / "icon.ico"
 
 
+def _enable_page_context_menu(window) -> None:
+    """Let Qt WebEngine deliver contextmenu events to the editor.
+
+    pywebview uses NoContextMenu outside debug mode, which blocks WebEngine's
+    page context menus too. CustomContextMenu permits the page event without
+    opening Qt's standard browser menu (no native signal handler is installed).
+    """
+    native = window.native
+    view = getattr(native, "webview", None)
+    if view is None or not hasattr(view, "setContextMenuPolicy"):
+        return
+    from qtpy.QtCore import Qt
+
+    view.setContextMenuPolicy(Qt.CustomContextMenu)
+
+
 def _open_window(url: str) -> bool:
     """Show the UI in a native window. False if no webview backend is usable.
 
@@ -133,6 +149,7 @@ def _open_window(url: str) -> bool:
                                        js_api=shell)
         shell._window = window
         window.events.closing += shell._on_closing
+        window.events.before_show += lambda: _enable_page_context_menu(window)
         # Not private: pywebview's default forgets the page's storage (theme, keys)
         # on every start.
         webview.start(icon=str(_app_icon()), private_mode=False,
