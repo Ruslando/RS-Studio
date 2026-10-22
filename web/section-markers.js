@@ -110,7 +110,6 @@ export function openSectionMarkerPop(clientX, clientY, marker, timing = S.state.
   syncSectionHelp();
   sectionMarkerPop.hidden = false;
   placeFloating(sectionMarkerPop, clientX, clientY);
-  (kindIsCustom() ? sectionMarkerName : sectionMarkerKind).focus();
 }
 
 export function closeSectionMarkerPop() {

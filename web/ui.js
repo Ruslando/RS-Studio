@@ -421,6 +421,23 @@ export function gridDivLabelFor(value) {
 
 // Keep the toolbar's read-only tempo/meter/grid readout in sync with grid state.
 export function init_ui() {
+  // Live editors keep playback usable: blank space releases field focus, and
+  // the large field labels must not activate an input through their default click.
+  const liveEditorControl = 'input, select, textarea, button, a, [contenteditable], [role="button"], [role="checkbox"], [role="radio"]';
+  document.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || event.target.closest(liveEditorControl)) return;
+    const labelControl = event.target.closest('label')?.control;
+    if (labelControl?.matches('input[type="checkbox"], input[type="radio"]')) return;
+    const active = document.activeElement;
+    if (active?.closest('.live-editor')) active.blur();
+  }, true);
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.live-editor') || event.target.closest(liveEditorControl)) return;
+    const control = event.target.closest('label')?.control;
+    if (control?.matches('input:not([type="checkbox"]):not([type="radio"]), select, textarea')) {
+      event.preventDefault();
+    }
+  }, true);
   const syncShortcutHints = () => {
     for (const [id, command, label] of [
       ['zoomIn', 'zoomIn', 'Zoom in'], ['zoomOut', 'zoomOut', 'Zoom out'],

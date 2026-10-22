@@ -277,7 +277,6 @@ export function openMarkerPop(clientX, clientY, seg, timing = S.state.liveTiming
   markerPop.hidden = false;
   syncReverts();
   placeFloating(markerPop, clientX, clientY);
-  markerBpm.focus();
 }
 
 // Each field offers to go back to what it held when the popover opened. editSeg is

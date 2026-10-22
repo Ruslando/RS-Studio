@@ -63,7 +63,6 @@ export function openPhraseMarkerPop(clientX, clientY, boundary, lane = activePhr
   phraseMarkerTime.value = String(+Number(boundary.t).toFixed(3));
   phraseMarkerPop.hidden = false;
   placeFloating(phraseMarkerPop, clientX, clientY);
-  phraseMarkerTime.focus();
 }
 
 export function closePhraseMarkerPop() {
