@@ -227,31 +227,99 @@ def _magma(values) -> "np.ndarray":
     return np.stack([r, g, b], axis=-1).astype("uint8")
 
 
-def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = False) -> dict:
+SPECTROGRAM_VIEWS = ("energy", "fine", "fundamental", "contrast", "fine-sharp", "fundamental-sharp")
+
+
+def _reassigned_power(y, sr: int, n_frames: int, semitones: int = N_BINS, chunk_s: float = 30.0):
+    """Time-frequency reassigned STFT magnitude, binned onto the fine CQT grid.
+
+    Each STFT cell is moved to the time/frequency its energy actually comes from
+    (Auger & Flandrin 1995), so partials collapse into thin lines. Processed in
+    chunks so a long song doesn't need one huge set of STFTs in memory.
+    """
+    import librosa
+    import numpy as np
+
+    rows, n_fft = semitones * 3, 4096
+    low = MIDI_LOW - 1 / 3
+    grid = np.zeros((rows, n_frames), np.float32)
+    step = int(chunk_s * sr)
+    for start in range(0, len(y), step):
+        first = max(0, start - n_fft)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            freqs, times, mags = librosa.reassigned_spectrogram(
+                y[first:start + step + n_fft], sr=sr, n_fft=n_fft, hop_length=HOP_LENGTH,
+                ref_power=1e-10, fill_nan=False)
+        times = times + first / sr
+        ok = (np.isfinite(freqs) & np.isfinite(times) & (freqs > 20)
+              & (times >= start / sr) & (times < (start + step) / sr))
+        r = np.rint((librosa.hz_to_midi(freqs[ok]) - low) * 3).astype(int)
+        c = np.rint(times[ok] * sr / HOP_LENGTH).astype(int)
+        keep = (r >= 0) & (r < rows) & (c >= 0) & (c < n_frames)
+        np.add.at(grid, (r[keep], c[keep]), mags[ok][keep] ** 2)
+    return np.sqrt(grid)
+
+
+def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = False, view: str = "energy") -> dict:
     """Compute a semitone-aligned CQT, render it to a PNG, return metadata.
 
     `with_tempo` runs beat tracking (only worth doing once per song, on the mix).
+    `view` picks an alternative rendering:
+      energy:      plain CQT, 1 row per semitone (stored with the project).
+      fine:        CQT with 3 rows per semitone; the default display.
+      fundamental: Harmonic Product Spectrum (1st-3rd harmonic), so a note lights
+                   up at its fundamental even when an overtone is louder.
+      contrast:    spectral whitening; each row minus the median of +-6 semitones,
+                   so single notes stand out from broadband smear.
+    A "-sharp" suffix (fine, fundamental) starts from a time-frequency
+    reassigned spectrogram instead of the CQT: same view, thinner lines.
     """
     import librosa
     import numpy as np
     from PIL import Image
+    from scipy.ndimage import maximum_filter1d, median_filter
 
+    if view not in SPECTROGRAM_VIEWS:
+        raise ValueError("Unknown spectrogram view")
+    base, sharp = view.removesuffix("-sharp"), view.endswith("-sharp")
     y, sr = librosa.load(str(audio_path), sr=SAMPLE_RATE, mono=True)
     duration = float(len(y) / sr)
 
     from .audio_bounds import audible_end
     song_end = audible_end(y, sr)
 
-    fmin = librosa.midi_to_hz(MIDI_LOW)
-    cqt = np.abs(
-        librosa.cqt(
-            y, sr=sr, fmin=fmin, n_bins=N_BINS,
-            bins_per_octave=BINS_PER_OCTAVE, hop_length=HOP_LENGTH,
-        )
-    )
-    db = librosa.amplitude_to_db(cqt, ref=np.max)  # (n_bins, n_frames)
-    lo, hi = db.min(), db.max()
-    norm = (db - lo) / (hi - lo + 1e-9)
+    # 3 rows per semitone except for energy (stored), contrast and unsharpened
+    # fundamental; fmin shifts down a third so each semitone's middle row sits
+    # on the note (rows stay aligned with the grid).
+    per = 1 if base in ("energy", "contrast") or (base == "fundamental" and not sharp) else 3
+    # Fundamental needs 19 extra semitones above C7 for the 3rd harmonic.
+    semitones = N_BINS + (19 if base == "fundamental" else 0)
+    if sharp:
+        mag = _reassigned_power(y, sr, 1 + len(y) // HOP_LENGTH, semitones)
+    else:
+        mag = np.abs(librosa.cqt(
+            y, sr=sr, fmin=librosa.midi_to_hz(MIDI_LOW - (1 / 3 if per == 3 else 0)),
+            n_bins=semitones * per, bins_per_octave=BINS_PER_OCTAVE * per, hop_length=HOP_LENGTH,
+        ))
+    if base == "fundamental":
+        # ponytail: 3-harmonic HPS (3rd harmonic rounded to +19 semitones); misses
+        # notes whose 2nd/3rd harmonic is absent. Thin sharpened lines get +-1 row
+        # of slack, since real strings' overtones sit slightly off 2x and 3x.
+        n = N_BINS * per
+        harm = maximum_filter1d(mag, size=3, axis=0) if per == 3 else mag
+        mag = np.cbrt(mag[:n] * harm[12 * per:n + 12 * per] * harm[19 * per:n + 19 * per])
+    db = librosa.amplitude_to_db(mag, ref=np.max)  # (n_bins, n_frames)
+    if base == "contrast":
+        db = db - median_filter(db, size=(12 * per + 1, 1), mode="nearest")
+        lo, hi = 0.0, float(np.percentile(db, 99.7))
+    elif base == "energy":
+        lo, hi = db.min(), db.max()
+    else:
+        # Percentile stretch: median -> black, top 0.3% -> white. These views have
+        # a compressed range, so plain min-max leaves them washed out. Reassigned
+        # cells are sparse and speckled, so sharpened views use a higher black point.
+        lo, hi = (float(v) for v in np.percentile(db, [85 if sharp else 50, 99.7]))
+    norm = np.clip((db - lo) / (hi - lo + 1e-9), 0, 1)
 
     # Image: row 0 = top = highest pitch, so flip vertically.
     rgb = _magma(norm)                 # (n_bins, n_frames, 3)
@@ -280,7 +348,7 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
         "image": png_out.name,
         "intensity": png_out.name + ".intensity",
         "width": int(n_frames),
-        "height": int(N_BINS),
+        "height": int(norm.shape[0]),
         "midi_low": MIDI_LOW,
         "midi_high": MIDI_HIGH,
         "hop_length": HOP_LENGTH,

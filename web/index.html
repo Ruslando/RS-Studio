@@ -360,9 +360,23 @@
                       <button type="button" class="menu-item" role="menuitemradio" aria-checked="true" data-channel="stereo">Stereo<span class="chkmark">✓</span></button>
                       <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-channel="left">Left<span class="chkmark"></span></button>
                       <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-channel="right">Right<span class="chkmark"></span></button>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-channel="side" title="Side signal (left minus right): removes everything panned to the centre, keeps what differs between the speakers, e.g. double-tracked guitars.">Side<span class="chkmark"></span></button>
                     </div>
                   </div>
-                  <select id="stageChannel" aria-label="Displayed audio channel" hidden><option value="stereo">Stereo</option><option value="left">Left</option><option value="right">Right</option></select>
+                  <select id="stageChannel" aria-label="Displayed audio channel" hidden><option value="stereo">Stereo</option><option value="left">Left</option><option value="right">Right</option><option value="side">Side</option></select>
+                </div>
+                <div class="stage-channel-row"><span>View</span>
+                  <div class="menu-anchor" data-floating-menu>
+                    <button type="button" id="stageViewButton" class="menu-btn btn--compact" aria-haspopup="menu" aria-expanded="false" aria-controls="stageViewMenu"><span id="stageViewLabel">CQT</span><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
+                    <div id="stageViewMenu" class="menu-list" role="menu" aria-label="Spectrogram view" hidden>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="true" data-view="fine" data-short="CQT" title="Energy per pitch: constant-Q transform with 3 rows per semitone. Shows bends, slides, vibrato and off-pitch notes."><span class="menu-item-text">Constant-Q transform<small class="menu-item-desc">Overview: where the sound energy sits</small></span><span class="chkmark">✓</span></button>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-view="fundamental" data-short="HPS" title="Harmonic Product Spectrum: lights each note at its fundamental, even when an overtone is louder. Best for low and distorted notes."><span class="menu-item-text">Harmonic product spectrum<small class="menu-item-desc">Low or distorted notes, octave errors</small></span><span class="chkmark"></span></button>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-view="contrast" data-short="SW" title="Spectral whitening: each pitch compared to its surroundings, so single notes stand out from the mix. Good all-rounder."><span class="menu-item-text">Spectral whitening<small class="menu-item-desc">Single notes in a dense mix</small></span><span class="chkmark"></span></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="stage-channel-row" title="Time-frequency reassignment: moves energy to where it actually comes from, so lines get thinner. Available for CQT and HPS."><span id="stageSharpLabel" class="menu-item-text">Reassignment<small class="menu-item-desc">Thinner lines: bends, vibrato, slides</small></span>
+                  <input type="checkbox" id="stageSharp" aria-labelledby="stageSharpLabel" />
                 </div>
                 <label>Intensity min <input id="stageIntensityMin" type="range" min="0" max="100" step="1" value="0" aria-label="Minimum spectrogram intensity" /><output id="stageIntensityMinValue" for="stageIntensityMin">0%</output></label>
                 <label>Intensity max <input id="stageIntensityMax" type="range" min="0" max="100" step="1" value="100" aria-label="Maximum spectrogram intensity" /><output id="stageIntensityMaxValue" for="stageIntensityMax">100%</output></label>

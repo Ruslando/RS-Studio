@@ -4,7 +4,7 @@ class Control extends EventTarget {
   value = ''; hidden = false; disabled = false; checked = true; textContent = '';
   setAttribute() {} matches() { return false; } querySelectorAll() { return []; }
 }
-const ids = ['spectrogramControls','stageChannel','stageIntensityMin','stageIntensityMax','stageIntensityMinValue','stageIntensityMaxValue','stageChannelStatus','traceSnap','stageChannelButton','stageChannelLabel','stageControlsSummary'];
+const ids = ['spectrogramControls','stageChannel','stageViewButton','stageViewLabel','stageSharp','stageIntensityMin','stageIntensityMax','stageIntensityMinValue','stageIntensityMaxValue','stageChannelStatus','traceSnap','stageChannelButton','stageChannelLabel','stageControlsSummary'];
 const controls = Object.fromEntries(ids.map(id => [id, new Control()]));
 controls.stageIntensityMin.value = '0'; controls.stageIntensityMax.value = '100';
 const a = { id: 'a', channel: 'left' }, b = { id: 'b', channel: 'stereo' };
