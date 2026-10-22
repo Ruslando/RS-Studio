@@ -1581,3 +1581,8 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardShapePrev svg, #fretboardShapeNext svg { transform: rotate(-90deg); }
 #fretboardPanel[data-collapsed] #fretboardControls { visibility: hidden; pointer-events: none; }
 #fretboardPanel { container-type: inline-size; }
+
+#matchNavigator { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: var(--s-sibling); padding: 3px; border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--surface-toolbar); }
+#matchNavigator[hidden] { display: none; }
+#matchPosition { min-width: 7ch; text-align: center; color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); }
+#matchNavigator button { min-width: var(--h-control); height: var(--h-control); padding: 0; }
