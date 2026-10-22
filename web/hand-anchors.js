@@ -57,7 +57,6 @@ export function openHandAnchorPop(clientX, clientY, anchor, lane) {
   $('handAnchorTime').max = String(S.state.duration || S.state.scoreDuration);
   $('handAnchorPop').hidden = false;
   placeFloating($('handAnchorPop'), clientX, clientY);
-  $('handAnchorFret').querySelector('[aria-checked="true"]')?.focus();
 }
 
 // THE FRETS THIS ANCHOR CAN BE: the hands that can play its note or chord

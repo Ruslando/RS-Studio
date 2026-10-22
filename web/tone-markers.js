@@ -67,7 +67,6 @@ export function openToneMarkerPop(clientX, clientY, marker, lane = activeToneLan
   toneMarkerTime.value = String(+Number(marker.t).toFixed(3));
   toneMarkerPop.hidden = false;
   placeFloating(toneMarkerPop, clientX, clientY);
-  toneMarkerPreset.focus();
 }
 
 export function closeToneMarkerPop() {
