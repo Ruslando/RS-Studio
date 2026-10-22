@@ -405,14 +405,6 @@ function scrubField(input, apply, { step = 0.01, min = 0, max = Infinity, decima
 }
 
 export function init_markers() {
-  // Double-click the flag band (and not on an existing flag) to drop a marker.
-  stage.addEventListener("dblclick", (e) => {
-    if (!S.state || railsHidden() || railScale() < 1) return;
-    const [x, y] = toCanvas(e.clientX, e.clientY);
-    if (y - scroll.scrollTop > MARK_H + 2) return;
-    if (markerAt(x, y)) return;   // dbl-click on a flag = edit, handled by mousedown
-    addMarkerAtTime(timeAt(x), e.clientX, e.clientY);
-  });
   [markerBpm, markerTsNum, markerTsDen].forEach((el) => el.addEventListener("input", inEditTiming(applyPop)));
   markerSubdiv.addEventListener("change", inEditTiming(() => { syncSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap); applyPop(); }));
   markerSubdivCustom.addEventListener("input", inEditTiming(applyPop));

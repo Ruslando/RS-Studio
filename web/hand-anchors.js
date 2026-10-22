@@ -11,7 +11,7 @@ import { xOf, timeAt } from './geometry.js';
 import { registerMarkerRail, railBand, inRailBand } from './marker-rails.js';
 import { paintMarkerFlag } from './canvas-components.js';
 import { PAINT } from './stage-paint.js';
-import { STATE_RESTORED, snapshotEdit, commit } from './edit.js';
+import { STATE_RESTORED, snapshotEdit, commit, setHandAnchor } from './edit.js';
 import { draw } from './repaint.js';
 import { refreshSaveState } from './project.js';
 import { placeFloating } from './floating-position.js';
@@ -172,6 +172,19 @@ export function init_hand_anchors() {
   });
   registerMarkerRail({
     id: RAIL, height: HEIGHT, count: () => shownLane()?.handHolds?.length || 0,
+    menuLabel: 'Add hand anchor',
+    addAt: (time, clientX, clientY) => {
+      const lane = shownLane();
+      if (!canEditLane(lane)) return;
+      const column = handColumnAt(laneHandColumns(lane, { now: true }), time);
+      if (!column?.choices.length) { toast('No playable note at or after this position'); return; }
+      let anchor = lane.handHolds?.find(item => sameTime(item.t, column.t0));
+      if (!anchor) {
+        setHandAnchor(lane, column.t0, column.choices[0], { create: true });
+        anchor = lane.handHolds?.find(item => sameTime(item.t, column.t0));
+      }
+      if (anchor) openHandAnchorPop(clientX, clientY, anchor, lane);
+    },
     draw: drawAnchors, mouseDown,
     cursorAt: (x, y) => inRailBand(RAIL, y - scroll.scrollTop) && rects.some(rect =>
       canEditLane(rect.lane) && x >= rect.x0 && x <= rect.x1 && y >= rect.y0 && y <= rect.y1) ? 'grab' : null,
