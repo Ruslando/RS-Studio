@@ -100,3 +100,6 @@ pitch and duration nudges; setting range boundaries from the playhead; bar-wise
 navigation; other technique variants such as bends, slides and harmonics;
 reference locks and renaming; fretboard influence controls; and a shortcut to
 start detection immediately. These need a separate choice of behavior and scope.
+
+Navigating between notes or chords with the arrow keys also auditions the newly
+selected note or chord using its lane voice and mute settings.

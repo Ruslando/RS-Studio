@@ -18,7 +18,7 @@ import { gridAt, segBarSec } from "./grid.js";
 import { songBarStarts } from "./song-bars.js";
 import { editLanes } from "./lanes.js";
 import { selectedTablatureLane } from "./layer-role.js";
-import { playbackTime } from "./playback.js";
+import { playbackTime, ensureTone, previewNotes } from "./playback.js";
 import { S, setSelection } from "./store.js";
 import { setPlaybackCursor } from "./tracing.js";
 import { clamp } from "./util.js";
@@ -184,6 +184,7 @@ function centerViewOnNotes(notes) {
 // Move the focus to the column containing `note`: select that column's notes and
 // jump the playhead + view to them. The fretboard follows the playhead, so this is
 // what puts a chord on the neck.
+let focusAudition = 0;
 function focusColumn(note, { seek = true } = {}) {
   const ctx = note && columnOf(note);
   if (!ctx) return;
@@ -192,6 +193,11 @@ function focusColumn(note, { seek = true } = {}) {
   // the playhead: moving it would change the very set they are choosing from.
   if (seek) setPlaybackCursor(ctx.col.t0);
   centerViewOnNotes(ctx.col.notes);   // ends with draw()
+  const audition = ++focusAudition, project = S.state;
+  ensureTone().then(() => {
+    if (audition === focusAudition && S.state === project)
+      previewNotes(ctx.col.notes, ctx.lane);
+  });
 }
 
 // The lane the arrow keys walk: the one the fretboard is drawing.
