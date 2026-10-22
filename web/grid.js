@@ -285,7 +285,8 @@ function hasGridContent() {
 // A tempo marker's BPM changed: re-time what sits under it (see retimeSpan).
 export function retimeTempoSpan(t0, t1, oldBpm, newBpm) {
   if (!S.state) return 0;
-  return retimeSpan(timedLanes(), S.state.sectionMarkers, S.state.duration, minDur(), t0, t1, oldBpm, newBpm);
+  const sections = (S.state.sectionMarkers || []).filter(marker => !S.state.stems?.length || marker.sectionType !== 'end');
+  return retimeSpan(timedLanes(), sections, S.state.duration, minDur(), t0, t1, oldBpm, newBpm);
 }
 
 export function init_grid() {

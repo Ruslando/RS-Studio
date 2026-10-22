@@ -32,6 +32,7 @@ export const SECTION_TYPES = [
   ["prebrdg", "Pre Bridge"],
   ["vamp", "Vamp"],
   ["noguitar", "No Guitar"],
+  ["end", "End"],
   ["silence", "Silence"],
   ["tapping", "Tapping"],
 ];
@@ -61,6 +62,7 @@ export const SECTION_GROUPS = [
   ]],
   ["Special", [
     ["noguitar", "No Guitar"],
+    ["end", "End"],
   ]],
 ];
 
@@ -94,6 +96,7 @@ export const SECTION_HELP = {
   prebrdg: "A short lead-in immediately before a bridge.",
   vamp: "A short chord or riff pattern repeated for an extended time.",
   noguitar: "A passage with no playable guitar part; practice tools usually skip it.",
+  end: "The end of the song. Notes at or after this section are outside the playable song. Export uses this exact time for END.",
   silence: "A deliberately silent passage.",
   tapping: "A passage primarily played with fretboard tapping.",
 };
@@ -138,7 +141,17 @@ export function normalizeSectionMarkers(markers, duration = Infinity) {
     });
   }
   out.sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));
-  return out;
+  const terminal = out.find(marker => marker.sectionType === 'end');
+  return out.filter(marker => marker.sectionType !== 'end' || marker === terminal);
+}
+
+export function withEndSection(markers, time, duration = Infinity) {
+  const normalized = normalizeSectionMarkers(markers, duration);
+  if (normalized.some(marker => marker.sectionType === 'end')) return normalized;
+  if (!(Number(time) > 0)) return normalized;
+  return normalizeSectionMarkers([...normalized, {
+    id: 'section_end', t: Number(time), text: 'End', sectionType: 'end', custom: false,
+  }], duration);
 }
 
 export function normalizePhraseBoundaries(boundaries, duration = Infinity) {

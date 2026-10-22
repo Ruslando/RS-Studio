@@ -36,7 +36,7 @@ import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.j
 import { normalizedLaneFields } from "./marker-rails.js";
 import { tonePresetLabel, tonePresetMissing, withStartTone } from "./tone-marker-core.js";
 import { loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets-core.js";
-import { normalizeSectionMarkers, sectionMarkersFromScoreBars } from "./section-marker-core.js";
+import { normalizeSectionMarkers, sectionMarkersFromScoreBars, withEndSection } from "./section-marker-core.js";
 import { inferTablatureEnabled, laneScrollSpeed } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
 import { isValidTuningKey, parseTuning, setView, tuningKeyFor } from "./tablature.js";
@@ -343,7 +343,8 @@ export async function applyProject(data) {
     Array.isArray(data.sectionMarkers) && data.sectionMarkers.length
       ? data.sectionMarkers
       : layerSections.length ? layerSections : sectionMarkersFromScoreBars(coveredBars);
-  const restoredSections = normalizeSectionMarkers(sectionSource,
+  const restoredSections = withEndSection(sectionSource,
+    Number(data.songEnd) || Number(data.duration) || Number(data.scoreDuration),
     Number(data.duration) || Number(data.scoreDuration) || Infinity)
     .filter((marker, index, all) => index === all.findIndex((candidate) =>
       Math.abs(candidate.t - marker.t) < 1e-6 &&
@@ -364,7 +365,8 @@ export async function applyProject(data) {
     metadata: normalizeMetadata(data.metadata || {}),
     guitarPro: data.guitarPro || null,
     sectionMarkers: restoredSections,
-    timings: loadTimings(data.timings),   // the song's timing is the fields around it; it starts live
+    timings: loadTimings(data.timings, Number(data.songEnd) || Number(data.duration) || Number(data.scoreDuration),
+      Number(data.duration) || Number(data.scoreDuration) || Infinity),
     scoreBars: coveredBars,
     scoreDuration: coveredBars.length ? coveredBars.at(-1).seconds + coveredBars.at(-1).durationSeconds
       : Number(data.scoreDuration) || Number(data.duration) || 1,
@@ -1005,7 +1007,12 @@ function applyStemReplacement(stem, s, warn, duration) {
   if (stem.id === S.state.curStem) selectStem(stem.id);
   // The master's file can change length on replace — resize the canvas to match
   // (separated stems are assumed to match the full song's existing length).
-  if (duration != null && isMasterStem(stem)) { S.state.duration = duration; layout(); draw(); }
+  if (duration != null && isMasterStem(stem)) {
+    S.state.duration = duration;
+    // Preserve an authored End section when replacing the recording.
+    S.state.sectionMarkers = withEndSection(S.state.sectionMarkers, Number(s.spectrogram.songEnd) || duration, duration);
+    layout(); draw();
+  }
   if (warn) toast(warn, 6000, "warn");
 }
 

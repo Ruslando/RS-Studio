@@ -32,6 +32,13 @@ _STANDARD_BASS = [28, 33, 38, 43]
 PREVIEW_SECONDS = 28.0
 
 
+def _song_end(spec: dict, duration: float) -> float:
+    value = spec.get("songEnd")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0:
+        return min(float(value), duration)
+    return duration
+
+
 @dataclass
 class SongContext:
     dlc_key: str
@@ -209,6 +216,8 @@ def _with_lead_in(spec: dict, lead: float) -> dict:
     if lead <= 0:
         return spec
     out = copy.deepcopy(spec)
+    if isinstance(out.get("songEnd"), (int, float)):
+        out["songEnd"] += lead
 
     def moved(item):
         if isinstance(item, dict):
@@ -602,7 +611,8 @@ def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: f
         phrase_boundaries=(
             track.get("phraseBoundaries")
             or track.get("practiceBoundaries")
-            or []))
+            or []),
+        song_end=_song_end(spec, song_length))
     warnings.extend(compiled.warnings)
     compiled.sng.metadata.tuning = tuple(offsets)
     compiled.sng.metadata.part = 3 if is_bass else (2 if arr["path"] == "rhythm" else 1)

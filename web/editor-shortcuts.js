@@ -12,6 +12,7 @@ import { markSelectionAsMotif, selectEntireMotif, unmarkSelectedMotifs, setFxOnS
 import { runFindSimilar } from './tracing.js';
 import { xOf } from './geometry.js';
 import { moveViewportTo } from './viewport-motion.js';
+import { songEnd } from './project-position-core.js';
 import { toggleDrawingSettings, toggleDrawingSnap } from './drawing-settings.js';
 
 const click = id => { const control = $(id); if (control && !control.disabled) control.click(); };
@@ -44,7 +45,7 @@ export const EDITOR_COMMAND_HANDLERS = {
   slower: () => speed(-1), faster: () => speed(1),
   normalSpeed: () => { $('speed').value = '1'; $('speed').dispatchEvent(new Event('change', { bubbles: true })); },
   metronome: () => click('metro'),
-  songStart: () => goTo(0), songEnd: () => goTo(S.state.duration),
+  songStart: () => goTo(0), songEnd: () => goTo(songEnd(S.state)),
   rangeStart: () => goTo(S.detectRegion?.t0),
   clearRange: () => { S.detectRegion = null; updateDetectStatus(); draw(); },
   detectNotes: () => { const rect = stage.getBoundingClientRect(); openDetectPanel(rect.left + 40, rect.top + 40); },

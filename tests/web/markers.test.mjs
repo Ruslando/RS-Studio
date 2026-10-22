@@ -1,7 +1,7 @@
 // Run: node tests/web/markers.test.mjs
 // Section, phrase and tone markers: what is kept on load, and where sections land on export.
 import assert from "node:assert/strict";
-import { assignSectionsToBars, beatStartsFromScoreBars, normalizePhraseBoundaries, normalizeSectionMarkers, sectionMarkersForExport, sectionMarkersFromScoreBars, sectionTypeLabel, validSectionType } from "../../web/section-marker-core.js";
+import { SECTION_GROUPS, SECTION_HELP, assignSectionsToBars, beatStartsFromScoreBars, normalizePhraseBoundaries, normalizeSectionMarkers, sectionMarkersForExport, sectionMarkersFromScoreBars, sectionTypeLabel, validSectionType, withEndSection } from "../../web/section-marker-core.js";
 import { normalizeToneMarkers, startTone, withStartTone, tonePresetMissing, tonePresetLabel } from "../../web/tone-marker-core.js";
 
 import { SOUND_BASES } from "../../web/sound-presets-core.js";
@@ -12,6 +12,18 @@ assert.equal(validSectionType("pre-chorus"), validSectionType("PreChorus"));
 assert.equal(validSectionType("zzz"), "riff");
 assert.equal(validSectionType("zzz", "intro"), "intro");
 assert.equal(sectionTypeLabel("chorus"), "Chorus");
+assert.equal(validSectionType('End'), 'end');
+assert.ok(SECTION_GROUPS.find(([name]) => name === 'Special')[1].some(([type]) => type === 'end'));
+assert.ok(SECTION_HELP.end);
+{
+  const sections = withEndSection([{ t: 0, text: 'Intro', sectionType: 'intro' }], 18.237, 20);
+  const end = sections.find(marker => marker.sectionType === 'end');
+  assert.equal(end.t, 18.237, 'detected End retains its exact time');
+  assert.equal(withEndSection(sections, 19, 20).find(marker => marker.sectionType === 'end').t, 18.237,
+    'an existing End is preserved on reload');
+  assert.equal(normalizeSectionMarkers([...sections, { t: 19, text: 'End', sectionType: 'end' }]).filter(marker => marker.sectionType === 'end').length, 1);
+  assert.equal(sectionMarkersForExport(sections).at(-1).sectionType, 'end', 'End round-trips as a section type');
+}
 
 // ---- sections on load -----------------------------------------------------
 {

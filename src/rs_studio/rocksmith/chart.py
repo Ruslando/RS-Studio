@@ -491,14 +491,23 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
 
 def _beats_phrases_sections(grid: dict, song_length: float, section_markers: list | None,
                             phrase_boundaries: list | None, first_t: float, last_end: float,
-                            warnings: list) -> _Arrangement:
+                            warnings: list, song_end: float | None = None) -> _Arrangement:
     """The beat map, and the phrase/section structure laid over it.
 
     Sections come from the editor's markers when there are any and from an
-    eight-measure fallback when there are not. Either way they must land on
-    measure boundaries, so authored times are snapped -- with a warning once the
-    snap exceeds 20ms.
+    eight-measure fallback when there are not. Ordinary sections land on
+    measure boundaries, with a warning if snapping exceeds 20ms. The special
+    End section retains its exact timestamp and defines the terminal phrase.
     """
+    # End is an editor section type with terminal semantics. Rocksmith stores
+    # it as its END phrase plus the final noguitar section, not a riff section.
+    ends = [
+        _f(raw.get("t"), -1.0) for raw in section_markers or []
+        if str(raw.get("sectionType") or raw.get("rocksmithType") or raw.get("text") or "").strip().lower() == "end"
+        and _f(raw.get("t"), -1.0) >= 0
+    ]
+    if ends:
+        song_end = min(ends)
     beats = _gen_beats(grid, song_length)
     measure_starts = [t for t, _, beat_in in beats if beat_in == 0]
     beat_starts = [t for t, _, _ in beats]
@@ -511,14 +520,14 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
             break
     automatic_boundaries = [
         ms for ms in measure_starts[p1_idx::SECTION_MEASURES]
-        if ms < last_end - 1e-4
+        if ms < min(last_end, song_end if song_end is not None else song_length) - 1e-4
     ]
     if not automatic_boundaries:
         automatic_boundaries = [measure_starts[p1_idx]]
-    end_t = next((ms for ms in measure_starts if ms >= last_end - 1e-4), None)
-    if end_t is None or end_t <= automatic_boundaries[0] + 1e-4:
-        end_t = min(last_end + 0.001, song_length - 0.01)
-    end_t = min(end_t, song_length - 0.001)
+    end_t = max(beats[0][0] + 0.001, min(song_length, song_end if song_end is not None else song_length))
+    # Even an arrangement whose first note is beyond END needs a valid initial
+    # section; the checker will report that note rather than hiding it.
+    automatic_boundaries = [t for t in automatic_boundaries if t < end_t - 1e-4] or [beats[0][0]]
 
     # Authored section starts replace the eight-measure fallback. Rocksmith
     # sections must align with the beat/measure map and must begin at phrase
@@ -532,6 +541,8 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
         # renamed it to `sectionType` still carry it.
         raw_name = str(raw.get("sectionType") or raw.get("rocksmithType") or raw.get("text") or "riff")
         name = "".join(ch for ch in raw_name.lower() if ch.isalnum())
+        if name == "end":
+            continue
         if name not in ROCKSMITH_SECTION_NAMES:
             warnings.append(f"Section '{raw_name}' is not recognized by Rocksmith and was exported as riff")
             name = "riff"
@@ -1049,7 +1060,8 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
 
 def compile_track(track: dict, grid: dict, song_length: float,
                   section_markers: list | None = None,
-                  phrase_boundaries: list | None = None) -> Compiled:
+                  phrase_boundaries: list | None = None,
+                  song_end: float | None = None) -> Compiled:
     """Run the five stages, then assemble the SNG.
 
     The stages are a straight pipeline, each named for what it produces. The
@@ -1070,10 +1082,12 @@ def compile_track(track: dict, grid: dict, song_length: float,
                                _sustain_rule(grid, song_length), capo)
     entities = voicing.entities
     _leave_note_gaps(entities, grid)
+    audio_end = song_length
     song_length = max(song_length, voicing.last_end + 0.5)
 
     arr = _beats_phrases_sections(grid, song_length, section_markers, phrase_boundaries,
-                                  voicing.first_t, voicing.last_end, warnings)
+                                  voicing.first_t, voicing.last_end, warnings,
+                                  song_end=audio_end if song_end is None else song_end)
 
     anchors_raw = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, warnings)
     fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)

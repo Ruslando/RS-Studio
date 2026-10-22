@@ -421,6 +421,17 @@ def _safe_filename(name: str) -> str:
     return base or "project"
 
 
+def _manifest_song_end(m: dict) -> float | None:
+    ends = [section.get("t") for section in m.get("sectionMarkers") or []
+            if section.get("sectionType") == "end"]
+    valid = [time for time in ends if isinstance(time, (int, float)) and not isinstance(time, bool)
+             and math.isfinite(time) and time >= 0]
+    if valid:
+        return min(valid)
+    # Older projects and freshly analyzed audio supply the initial End section.
+    return m.get("songEnd") or ((m.get("stems") or [{}])[0].get("spectrogram") or {}).get("songEnd") or m.get("duration")
+
+
 def _response_from_manifest(m: dict) -> dict:
     """Shape a manifest into the payload the frontend restores from."""
     job = m["job"]
@@ -444,6 +455,7 @@ def _response_from_manifest(m: dict) -> dict:
         "filename": m.get("filename"),
         "duration": m.get("duration"),
         "projectStart": m.get("projectStart", 0.0),
+        "songEnd": _manifest_song_end(m),
         "tempo": m.get("tempo"),
         "separated": m.get("separated", False),
         "separator": m.get("separator"),
@@ -670,6 +682,7 @@ def api_project_mix(job: str, audio: UploadFile) -> JSONResponse:
     m["stems"] = [s for s in m["stems"] if s["id"] != "mix"]
     m["stems"].insert(0, entry)
     m["duration"] = view.spectrogram.get("duration")
+    m["songEnd"] = view.spectrogram.get("songEnd") or m["duration"]
     m["tempo"] = view.spectrogram.get("tempo")
     m["grid"]["bpm"] = m["tempo"] or 120
     m["grid"]["offset"] = view.spectrogram.get("offset") or 0.0
@@ -695,6 +708,7 @@ def api_project_attach_audio(job: str, audio: UploadFile) -> JSONResponse:
     view = _ingest_full_song(job, m, audio)
     m["stems"] = [_stem_entry(job_dir, view)]
     m["duration"] = view.spectrogram.get("duration") or m.get("scoreDuration")
+    m["songEnd"] = view.spectrogram.get("songEnd") or m["duration"]
     m["tempo"] = view.spectrogram.get("tempo") or m.get("tempo")
     m["saved_at"] = _now()
     _write_manifest(job, m)
@@ -1096,6 +1110,7 @@ def api_project_tutorial(progress_id: str = "") -> JSONResponse:
     m["stems"] = [_stem_entry(job_dir, mix)]
     m["tutorialStems"] = {bass.id: _stem_entry(job_dir, bass)}
     m["duration"] = mix.spectrogram.get("duration")
+    m["songEnd"] = mix.spectrogram.get("songEnd") or m["duration"]
     m["tempo"] = mix.spectrogram.get("tempo")
     m["grid"]["bpm"] = m["tempo"] or 120
     m["grid"]["offset"] = mix.spectrogram.get("offset") or 0.0
@@ -1653,6 +1668,7 @@ def api_stem_replace(job: str, stem_id: str, file: UploadFile) -> JSONResponse:
     is_master = m["stems"] and m["stems"][0]["id"] == stem_id
     if is_master:
         m["duration"] = view.spectrogram.get("duration")
+        m["songEnd"] = view.spectrogram.get("songEnd") or m["duration"]
     _write_manifest(job, m)
 
     spec, audio_url = _cache_busted(job, stem_id)
