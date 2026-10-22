@@ -257,6 +257,8 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
     rgb = _magma(norm)                 # (n_bins, n_frames, 3)
     rgb = np.flipud(rgb)
     Image.fromarray(rgb, "RGB").save(png_out)
+    from .spectrogram_intensity import write_intensity
+    write_intensity(Path(str(png_out) + ".intensity"), np.flipud(norm))
 
     # Tempo + first-beat estimate, so the UI can lay down a beat grid.
     # Best-effort: a bad estimate shouldn't break analysis, and the user can
@@ -276,6 +278,7 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
     n_frames = db.shape[1]
     return {
         "image": png_out.name,
+        "intensity": png_out.name + ".intensity",
         "width": int(n_frames),
         "height": int(N_BINS),
         "midi_low": MIDI_LOW,

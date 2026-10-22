@@ -252,6 +252,9 @@ def _project_assets(m: dict) -> list[str]:
         img = st.get("spectrogram", {}).get("image")
         if img:
             rels.append(img)
+        intensity = st.get("spectrogram", {}).get("intensity")
+        if intensity:
+            rels.append(intensity)
         aud = st.get("audio_rel")
         if aud:
             rels.append(aud)
@@ -352,6 +355,8 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
             volume = setting.get("volume")
             if isinstance(volume, (int, float)) and not isinstance(volume, bool) and 0 <= volume <= 1:
                 stem["volume"] = float(volume)
+            if setting.get("channel") in ("stereo", "left", "right"):
+                stem["channel"] = setting["channel"]
     if "grid" in payload:
         m["grid"] = payload["grid"]
     project_start = payload.get("projectStart")
@@ -366,6 +371,9 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
         m["timings"] = payload["timings"]
     if isinstance(payload.get("mix"), dict):   # the note and audio buses (web/volume.js)
         m["mix"] = payload["mix"]
+    if isinstance(payload.get("view"), dict):
+        view = payload["view"]
+        m["view"] = {key: view[key] for key in ("stem", "zoomX", "zoomY", "speed", "intensity") if key in view}
     if "scoreDuration" in payload:
         try:
             score_duration = float(payload["scoreDuration"])
@@ -448,6 +456,7 @@ def _response_from_manifest(m: dict) -> dict:
             "muted": bool(st.get("muted", False)),
             "solo": bool(st.get("solo", False)),
             "volume": st.get("volume", 1.0),
+            "channel": st.get("channel", "stereo"),
         })
     return {
         "job": job,
@@ -469,6 +478,7 @@ def _response_from_manifest(m: dict) -> dict:
         "scoreBars": m.get("scoreBars", []),
         "scoreDuration": m.get("scoreDuration"),
         "grid": m.get("grid", {}),
+        "view": m.get("view", {}),
         "warnings": m.get("warnings", []),
         "saved_at": m.get("saved_at"),
     }
@@ -1524,6 +1534,8 @@ def api_detect(payload: dict = Body(...)) -> JSONResponse:
 
     audio = _project_file_or_404(job, st.get("audio_rel"), "Stem audio")
     try:
+        from .audio_channels import channel_assets
+        audio, _ = channel_assets(audio, payload.get("channel", "stereo"))
         notes, warn = processing.run(payload.get("progress_id"), pipeline.detect, audio, model, start=start, end=end)
     except processing.OperationCancelled:
         return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
@@ -1821,10 +1833,35 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
 
 
 @app.get("/api/spectrogram/{job}/{stem}.png")
-def api_spectrogram(job: str, stem: str) -> FileResponse:
+def api_spectrogram(job: str, stem: str, channel: str = "stereo") -> FileResponse:
     st = _find_stem(_read_manifest(job), stem)
     png = _project_file_or_404(job, st.get("spectrogram", {}).get("image"), "Spectrogram")
+    if channel != "stereo":
+        from .audio_channels import channel_assets
+        source = _project_file_or_404(job, st.get("audio_rel"), "Audio")
+        try:
+            _, selected = channel_assets(source, channel, spectrogram=True)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        png = selected or png
     return FileResponse(png, media_type="image/png")
+
+
+@app.get("/api/intensity/{job}/{stem}")
+def api_intensity(job: str, stem: str, channel: str = "stereo", start: int = 0, count: int = 1024, stride: int = 1) -> Response:
+    if start < 0 or count < 1 or count > 1024 or stride < 1 or stride > 65536 or stride & (stride - 1):
+        raise HTTPException(status_code=400, detail="Invalid intensity tile")
+    st = _find_stem(_read_manifest(job), stem)
+    audio = _project_file_or_404(job, st.get("audio_rel"), "Audio")
+    image = Path(api_spectrogram(job, stem, channel).path)
+    from .audio_channels import channel_assets
+    from .spectrogram_intensity import intensity_tile
+    try:
+        audio, _ = channel_assets(audio, channel)
+        data = intensity_tile(image, audio, start, count, stride)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(data, media_type="application/octet-stream")
 
 
 @app.get("/api/audio/{job}/{stem}")

@@ -32,6 +32,7 @@ import { init_updates } from "./updates.js";
 import { initModalFocus } from "./modal-focus.js";
 import { initSelectPickers } from "./select-pickers.js";
 import { init_artifacts } from "./artifacts.js";
+import { initSpectrogramControls } from './spectrogram-controls.js';
 import { initDrawingSettings } from './drawing-settings.js';
 
 init_project();
@@ -44,6 +45,7 @@ init_settings();   // restore persisted prefs before features read their inputs
 init_sound_designer();
 init_tracing();
 initDrawingSettings();
+initSpectrogramControls();
 init_interaction();
 init_sidebar();
 init_splitters();
