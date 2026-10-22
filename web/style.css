@@ -20,7 +20,7 @@
   --spectral-hint: #787c84;
   --stage-hint: var(--spectral-hint);
   --spectral-accent: #74a9ff;
-  --stage-accent: var(--spectral-accent);   /* Musical playhead and selection. */
+  --stage-accent: var(--spectral-accent);   /* Musical playhead and edit targets. */
   --spectral-ok: #63c398;
   --stage-ok: var(--spectral-ok);
   --spectral-warn: #dda65c;
