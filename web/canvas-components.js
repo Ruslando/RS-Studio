@@ -24,14 +24,62 @@ function rectangle(ctx, x, y, width, height, radius) {
   else ctx.rect(x, y, width, height);
 }
 
+const selectionPatterns = new WeakMap();
+export function noteSelectionFill(ctx) {
+  const key = `${PAINT.paper}:${PAINT.ink}`;
+  let cached = selectionPatterns.get(ctx);
+  if (cached?.key !== key) {
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = 8;
+    const paint = tile.getContext('2d');
+    paint.fillStyle = PAINT.paper; paint.fillRect(0, 0, 8, 8);
+    paint.strokeStyle = PAINT.ink; paint.lineWidth = 1.25;
+    paint.beginPath();
+    for (const x of [-8, 0, 8]) { paint.moveTo(x, 0); paint.lineTo(x + 8, 8); }
+    paint.stroke();
+    cached = { key, pattern: ctx.createPattern(tile, 'repeat') };
+    selectionPatterns.set(ctx, cached);
+  }
+  return cached.pattern;
+}
+
+// Stroke the current silhouette with light and dark edges. Neither edge relies
+// on the layer colour, and selection stays opaque even on dimmed/bent notes.
+// For ribbons, pass their body width and repaint the coloured centre afterward.
+export function paintNoteSelection(ctx, bodyWidth = 0) {
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([]);
+  ctx.strokeStyle = PAINT.ink; ctx.lineWidth = bodyWidth + 4; ctx.stroke();
+  ctx.strokeStyle = PAINT.paper; ctx.lineWidth = bodyWidth + 1.5; ctx.stroke();
+  ctx.restore();
+}
+
 export function paintNoteBar(ctx, x, y, width, height, color, selected = false, hovered = false, emphasis = 0) {
+  if (selected) {
+    // A screen-space selection envelope stays readable when pitch rows shrink.
+    // It changes only painting, never the note's pitch, duration or hit target.
+    const visibleHeight = Math.max(6, height);
+    y -= (visibleHeight - height) / 2;
+    height = visibleHeight;
+    ctx.save(); ctx.globalAlpha = 1;
+    const radius = Math.min(2, width / 2, height / 2);
+    rectangle(ctx, x + .5, y + .5, Math.max(1, width - 1), height - 1, radius);
+    paintNoteSelection(ctx);
+    // Paint inside the edge afterward: otherwise its dark backing swallows
+    // the pattern completely on short rows.
+    rectangle(ctx, x + 1.25, y + 1.25, Math.max(0, width - 2.5), height - 2.5, Math.min(1, radius));
+    ctx.fillStyle = noteSelectionFill(ctx); ctx.fill();
+    ctx.restore();
+    return;
+  }
   const radius = Math.min(2, width / 2, height / 2);
   ctx.save();
   rectangle(ctx, x, y, width, height, radius);
   // Glass-like tint without sampling or blurring the stage behind every note.
   // These flat layers are cheap enough to redraw during playback and dragging.
   ctx.fillStyle = hexA(PAINT.chrome, .72); ctx.fill();
-  ctx.fillStyle = hexA(color, selected ? .72 : hovered ? .62 : .50); ctx.fill();
+  ctx.fillStyle = hexA(color, hovered ? .62 : .50); ctx.fill();
   ctx.strokeStyle = hexA(PAINT.text, .20); ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(x + 1, y + 1); ctx.lineTo(x + Math.max(1, width - 1), y + 1); ctx.stroke();
   rectangle(ctx, x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1), radius);
@@ -39,7 +87,7 @@ export function paintNoteBar(ctx, x, y, width, height, color, selected = false, 
   // layer identity readable even when labels are too small to render.
   ctx.lineWidth = 3.5; ctx.strokeStyle = hexA(PAINT.ink, 0.94); ctx.stroke();
   ctx.lineWidth = 1.5;
-  ctx.strokeStyle = selected ? PAINT.accent : hovered ? PAINT.text : color; ctx.stroke();
+  ctx.strokeStyle = hovered ? PAINT.text : color; ctx.stroke();
   if (hovered) {
     rectangle(ctx, x - 1, y - 1, width + 2, height + 2, radius + 1);
     ctx.lineWidth = 2; ctx.strokeStyle = PAINT.text; ctx.stroke();

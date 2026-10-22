@@ -2,7 +2,7 @@ import { paintNoteRow } from './timeline-paint.js';
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
 import { hideTooltip, showTooltip } from "./tooltip.js";
 import { rocksmithIssueNotes } from "./rocksmith-check.js";
-import { paintNoteBar, paintNoteGlow } from "./canvas-components.js";
+import { paintNoteBar, paintNoteGlow, paintNoteSelection, noteSelectionFill } from "./canvas-components.js";
 import { renderArtifacts } from "./artifacts.js";
 import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGhosts, notePlaybackGlow } from "./note-motion.js";
 // Canvas rendering: the main spectrogram + notes draw loop, the overview minimap
@@ -493,10 +493,8 @@ function paintFrame() {
         else sctx.roundRect(x, y, w, rowH, Math.min(2, w / 2, rowH / 2));
         paintNoteGlow(sctx, glow, curve ? rowH : 0);
       }
-      // While a bend is selected its handles are on show and its ribbon is the
-      // thing being edited. Let the spectrogram show through the ribbon so its
-      // pitch trace remains visible for precise curve placement.
-      sctx.globalAlpha = laneAlpha * motion.alpha * (curve && S.selection.has(n) ? 0.5 : 1);
+      // Selection uses an opaque, patterned body, including on curved notes.
+      sctx.globalAlpha = S.selection.has(n) ? 1 : laneAlpha * motion.alpha;
       const drop = curve ? bendPeak(curve) * rowH : 0;
       // Dashed outer frames mark edit recipients, including distant occurrences
       // in a shared selection. Playback retains its separate soft glow.
@@ -513,9 +511,10 @@ function paintFrame() {
       if (curve) {
         sctx.lineCap = "butt"; sctx.lineJoin = "round";
         sctx.beginPath(); traceBendPath(x, w, y + rowH / 2, curve, rowH);
-        if (S.selection.has(n)) {                // selected (solid white outline)
-          sctx.lineWidth = rowH; sctx.strokeStyle = PAINT.accent; sctx.stroke();
-          sctx.lineWidth = Math.max(1, rowH - 4); sctx.strokeStyle = fill; sctx.stroke();
+        if (S.selection.has(n)) {
+          const selectionHeight = Math.max(6, rowH);
+          paintNoteSelection(sctx, selectionHeight);
+          sctx.lineWidth = selectionHeight - 2; sctx.strokeStyle = noteSelectionFill(sctx); sctx.stroke();
         } else if (n === S.hoverNote) {
           sctx.lineWidth = rowH + 1.5; sctx.strokeStyle = PAINT.text; sctx.stroke();
           sctx.lineWidth = Math.max(1, rowH - 1.5); sctx.strokeStyle = fill; sctx.stroke();
