@@ -260,7 +260,7 @@
         <span class="pt-dot" id="projDirtyDot" title="Unsaved changes" hidden></span>
       </div>
     </div>
-<button type="button" id="drawingSettings" class="drawing-settings-button" aria-label="Drawing quick settings" aria-haspopup="dialog" aria-controls="drawingQuickPanel" aria-expanded="false"><span data-ui-icon="edit" aria-hidden="true"></span><span id="drawingSettingsStatus">Snap · 18%</span></button>
+<button type="button" id="drawingSettings" class="drawing-settings-button" aria-label="Drawing quick settings" aria-haspopup="dialog" aria-controls="drawingQuickPanel" aria-expanded="false"><span data-ui-icon="edit" aria-hidden="true"></span><span id="drawingSettingsStatus">Snap to pitch</span></button>
 <output id="autoGridStatus" class="zval" title="Automatic time grid. Hold Alt while resizing a note to place its edge freely.">Auto</output>
 <div class="group zoom-cluster" id="zoomCluster">
           <button id="zoomOut" class="icon" title="Zoom out (− / Ctrl+scroll)" aria-label="Zoom out"><span data-ui-icon="minus" aria-hidden="true"></span></button>
@@ -490,7 +490,6 @@
     <div class="dp-body">
       <div class="field-inline"><label class="chk"><input type="checkbox" id="quickTraceSnap" checked /> Snap to pitch</label><span class="kbd" id="quickTraceSnapKey">T</span></div>
       <label class="field-group block"><span>Range</span><select id="quickTraceRange" class="trace-range-ctl" aria-label="Drawing search range"><option value="1">±1</option><option value="2" selected>±2</option><option value="3">±3</option></select></label>
-      <label class="field-slider"><span class="label">Heat</span><input type="range" id="quickTraceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" aria-label="Drawing heat threshold" /><output id="quickTraceThresholdValue" class="ro trace-thresh-val" for="quickTraceThreshold">18%</output></label>
     </div>
   </div>
 
@@ -954,7 +953,6 @@
             <option value="2" selected>±2</option>
             <option value="3">±3</option>
           </select>
-          <input type="range" id="traceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" hidden />
 
           </div><div class="pane-intro"><h2>Editor</h2></div>
           <section class="sound-section" id="spectrogramSettings" data-section="spectrogram">
@@ -989,8 +987,7 @@
           <fieldset class="editor-subsection" id="tracePlacement">
             <legend>Note placement</legend>
             <!-- Rule 27: Range only qualifies Snap to pitch, so it rides on that
-                 line rather than pretending to be a peer, and Heat is a slider,
-                 which is always label-beside-control. Three controls, two rows. -->
+                 line rather than pretending to be a peer. -->
             <div class="field-inline">
               <label class="chk"><input type="checkbox" id="traceSnapM" checked /> Snap to pitch <span class="info" role="img" tabindex="0" title="On: snap traced notes to the brightest nearby spectrogram pitch. Off: draw notes exactly where you trace, ignoring the spectrogram." aria-label="On: snap traced notes to the brightest nearby spectrogram pitch. Off: draw notes exactly where you trace, ignoring the spectrogram.">i</span></label>
               <label class="field-group"><span class="label">Range <span class="info" role="img" tabindex="0" title="How many semitones above/below the drawn line to search" aria-label="How many semitones above/below the drawn line to search">i</span></span>
@@ -1001,10 +998,6 @@
                 </select>
               </label>
             </div>
-            <label class="field-slider"><span class="label">Heat <span class="info" role="img" tabindex="0" title="Highlight spectrogram cells bright enough for Trace to consider" aria-label="Highlight spectrogram cells bright enough for Trace to consider">i</span></span>
-              <input type="range" id="traceThresholdM" class="trace-heat-ctl" min="0" max="100" step="1" value="18" />
-              <span id="traceThresholdValueM" class="ro trace-thresh-val">18%</span>
-            </label>
           </fieldset>
             </div></div>
           </section>

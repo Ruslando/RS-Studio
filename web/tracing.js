@@ -3,7 +3,7 @@
 
 import { MIN_DUR, stageMono, SIMILAR_MAX_MATCHES, SIMILAR_PITCH_MARGIN, SIMILAR_THRESHOLD, TRACE_FALLBACK_STEP, TRACE_POINT_GAP } from "./constants.js";
 import { similarScores } from "./similar-core.js";
-import { audio, scroll, sctx, traceRangeSel, traceSnapInput, traceThresholdInput } from "./dom.js";
+import { audio, scroll, sctx, traceRangeSel, traceSnapInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { commit, confirmPasteMode, copyEffects, snapshotEdit } from "./edit.js";
 import { boxOfNote } from "./references.js";
@@ -23,10 +23,6 @@ export let spectSampleCanvas = document.createElement("canvas");
 
 export let spectSampleCtx = spectSampleCanvas.getContext("2d", { willReadFrequently: true });
 
-export let heatMaskCanvas = document.createElement("canvas");
-
-export let heatMaskCtx = heatMaskCanvas.getContext("2d");
-
 export function prepareSpectSample() {
   if (!S.spectImg || !spectSampleCtx) return;
   spectSampleCanvas.width = S.spectImg.width;
@@ -38,19 +34,10 @@ export function prepareSpectSample() {
   } catch {
     S.spectPixels = null;
   }
-  rebuildHeatMask();
 }
 
 function traceStep() {
   return gridStep() || TRACE_FALLBACK_STEP;
-}
-
-function traceThresholdPercent() {
-  return clamp(parseFloat(traceThresholdInput.value) || 0, 0, 100);
-}
-
-function traceThreshold() {
-  return traceThresholdPercent() / 100 * 255;
 }
 
 function traceSearchRange() {
@@ -58,106 +45,22 @@ function traceSearchRange() {
 }
 
 // On (default): trace snaps each note to the brightest nearby spectrogram pitch.
-// Off: notes land exactly on the drawn path (free draw), ignoring heat + Range.
+// Off: notes land exactly on the drawn path (free draw), ignoring the spectrogram + Range.
 function traceSnap() {
   return traceSnapInput ? traceSnapInput.checked : true;
 }
 
-// Range/Heat only steer the snap search, so dim them when free-drawing.
+// Range only steers the snap search, so dim them when free-drawing.
 // Covers the hidden state inputs and their Settings-modal mirrors.
 function updateTraceControls() {
   const off = !traceSnap();
-  document.querySelectorAll(".trace-range-ctl, .trace-heat-ctl").forEach((el) => (el.disabled = off));
+  document.querySelectorAll(".trace-range-ctl").forEach((el) => (el.disabled = off));
 }
 
-function updateTraceThresholdLabel() {
-  const txt = `${Math.round(traceThresholdPercent())}%`;
-  document.querySelectorAll(".trace-thresh-val").forEach((el) => (el.textContent = txt));
-}
-
-let quickHeatPreview = false;
-let heatPreviewRequested = false;
-export function setQuickHeatPreview(on) {
-  quickHeatPreview = !!on;
-  refreshHeatPreview();
-}
-function setHeatPreview(on) {
-  heatPreviewRequested = !!on;
-  refreshHeatPreview();
-}
-function refreshHeatPreview() {
-  S.heatPreview = (quickHeatPreview || heatPreviewRequested) && traceSnap();
-  draw();
-}
-
-function showHeatPreviewBriefly() {
-  if (S.heatPreviewTimer) clearTimeout(S.heatPreviewTimer);
-  setHeatPreview(true);
-  S.heatPreviewTimer = setTimeout(() => {
-    S.heatPreviewTimer = 0;
-    if (document.activeElement !== traceThresholdInput) setHeatPreview(false);
-  }, 1400);
-}
-
-// The heat overlay's colour ramp: a green that gets brighter and more opaque
-// with energy. Written out rather than pulled from the theme because it sits on
-// the always-dark stage and has to stay legible over the magma spectrogram
-// underneath — the themed accents do not.
-function heatColorForEnergy(e) {
-  const a = clamp((e - traceThreshold()) / Math.max(1, 255 - traceThreshold()), 0, 1);
-  return [
-    Math.round(90 + 120 * a),
-    Math.round(230 + 25 * a),
-    Math.round(190 + 45 * a),
-    Math.round(70 + 120 * a),
-  ];
-}
-
-// How bright one spectrogram pixel counts as. Used by BOTH the heat overlay
-// (what you see) and the trace snap search (where a note actually lands) — they
-// must agree, or the green preview shows a ridge the tracer won't snap to.
-// Rec.601 luma blended with peak channel: the magma colormap runs dark-purple →
-// pink → pale-yellow, so peak alone over-reads saturated mid-energy pink and
-// luma alone under-reads it.
+// Relative brightness used by tracing and passage matching on the original PNG.
 function pixelEnergy(r, g, b) {
   const lum = 0.299 * r + 0.587 * g + 0.114 * b;
   return Math.max(r, g, b) * 0.65 + lum * 0.35;
-}
-
-function rebuildHeatMask() {
-  if (!S.spectPixels || !S.spectImg || !heatMaskCtx) return;
-  heatMaskCanvas.width = S.spectImg.width;
-  heatMaskCanvas.height = S.spectImg.height;
-  const image = heatMaskCtx.createImageData(S.spectImg.width, S.spectImg.height);
-  const threshold = traceThreshold();
-  for (let y = 0; y < S.spectImg.height; y++) {
-    for (let x = 0; x < S.spectImg.width; x++) {
-      const src = (y * S.spectImg.width + x) * 4;
-      const energy = pixelEnergy(S.spectPixels[src], S.spectPixels[src + 1], S.spectPixels[src + 2]);
-      if (energy < threshold) continue;
-      const dst = src;
-      const c = heatColorForEnergy(energy);
-      image.data[dst] = c[0];
-      image.data[dst + 1] = c[1];
-      image.data[dst + 2] = c[2];
-      image.data[dst + 3] = c[3];
-    }
-  }
-  heatMaskCtx.putImageData(image, 0, 0);
-}
-
-export function drawHeatThresholdOverlay() {
-  if (!S.heatPreview || !S.state || !S.spectImg || !heatMaskCanvas.width) return;
-  const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
-  const t0 = Math.max(0, vx0 / S.pxPerSec), t1 = Math.min(S.state.duration, vx1 / S.pxPerSec);
-  if (t1 <= t0) return;
-  sctx.save();
-  sctx.globalCompositeOperation = "screen";
-  sctx.drawImage(heatMaskCanvas,
-    (t0 / S.state.duration) * heatMaskCanvas.width, 0,
-    ((t1 - t0) / S.state.duration) * heatMaskCanvas.width, heatMaskCanvas.height,
-    t0 * S.pxPerSec, 0, (t1 - t0) * S.pxPerSec, contentH());
-  sctx.restore();
 }
 
 export function addTracePoint(points, x, y) {
@@ -248,7 +151,7 @@ export function notesFromTrace(points) {
   if (!S.state || !S.spectImg || points.length < 2) return [];
   const snap = traceSnap();
   const step = traceStep();
-  const threshold = traceThreshold();
+  const threshold = 0.18 * 255; // Existing background-rejection baseline for pitch snapping.
   const off = gridStep() ? gridOffset() : 0;
   const minX = Math.max(0, Math.min(...points.map((p) => p[0])));
   const maxX = Math.min(songWidth(), Math.max(...points.map((p) => p[0])));
@@ -359,19 +262,6 @@ export function drawTraceRange(points) {
   }
   sctx.setLineDash([]);
   sctx.restore();
-}
-
-// Rebuilding the heat mask scans the whole spectrogram (~10k×73 px), so coalesce
-// rapid slider input to at most one rebuild per animation frame.
-export let heatMaskRaf = 0;
-
-function scheduleHeatMaskRebuild() {
-  if (heatMaskRaf) return;
-  heatMaskRaf = requestAnimationFrame(() => {
-    heatMaskRaf = 0;
-    rebuildHeatMask();
-    if (S.heatPreview) draw();   // reflect the new threshold in the live preview
-  });
 }
 
 // ---- similar-passage search ----
@@ -733,20 +623,6 @@ export function init_tracing() {
     });
   }
   updateMatchNavigator();
-  updateTraceThresholdLabel();
-  if (traceThresholdInput) {
-    traceThresholdInput.addEventListener("input", () => {
-      updateTraceThresholdLabel();
-      scheduleHeatMaskRebuild();
-      if (!quickHeatPreview) showHeatPreviewBriefly();
-    });
-    traceThresholdInput.addEventListener("focus", () => setHeatPreview(true));
-    traceThresholdInput.addEventListener("blur", () => setHeatPreview(false));
-    traceThresholdInput.addEventListener("mouseenter", () => setHeatPreview(true));
-    traceThresholdInput.addEventListener("mouseleave", () => {
-      if (document.activeElement !== traceThresholdInput) setHeatPreview(false);
-    });
-  }
   if (traceRangeSel) traceRangeSel.addEventListener("input", () => draw());
   updateTraceControls();
   if (traceSnapInput) traceSnapInput.addEventListener("change", () => { updateTraceControls(); draw(); });
