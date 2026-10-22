@@ -1,6 +1,9 @@
 // Absolute project positions. Relative note effects and reference-box shapes
 // are deliberately absent: translating a project never changes its rhythm.
 export const projectStart = state => Math.max(0, Number(state?.projectStart) || 0);
+export const songEnd = state => Math.max(projectStart(state), Math.min(Number(state?.duration) || Infinity,
+  Number(state?.sectionMarkers?.find(marker => marker.sectionType === 'end')?.t
+    ?? state?.duration ?? state?.scoreDuration ?? 0)));
 
 export function projectShiftPlan(state, timings) {
   const writes = [], seen = new WeakMap();
@@ -29,7 +32,11 @@ export function projectShiftPlan(state, timings) {
   }
   for (const timing of timings) {
     position(timing.grid, 'offset');
-    for (const marker of [...(timing.tempoMap || []), ...(timing.sectionMarkers || [])]) position(marker, 't');
+    for (const marker of [...(timing.tempoMap || []), ...(timing.sectionMarkers || [])]) {
+      // End belongs to the recording; moving chart contents leaves it in place.
+      if (state.stems?.length && marker.sectionType === 'end') continue;
+      position(marker, 't');
+    }
     for (const bar of timing.scoreBars || []) position(bar, 'seconds');
   }
   const origin = projectStart(state), duration = state.duration;

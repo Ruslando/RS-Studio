@@ -90,8 +90,7 @@ function toCanvas(cx, cy) {
 export function drawMarkers() {
   markerRects = [];
   // Clearing the rects first is what takes the whole strip out of the hit tests
-  // below, so hiding the layer needs nothing else from this file except the
-  // double-click in init_markers, which does not consult them.
+  // below, so hiding the layer needs nothing else from this file.
   if (!S.state || railScale() <= 0) return;
   const vy0 = scroll.scrollTop, vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
   const y = vy0 + 2, h = MARK_H - 4;
@@ -157,7 +156,8 @@ function spanRiders(seg) {
   const inSpan = (t) => t >= seg.t - 1e-6 && t < t1 - 1e-6;
   const dur = S.state.duration, clamp = (t) => Math.max(projectStart(S.state), Math.min(dur, t));
   const lanes = editLanes().filter(onLiveTiming), riders = [];   // a layer with its own timing stays
-  const marks = [...(S.state.sectionMarkers || []), ...timedLaneMarkers(lanes), ...lanes.flatMap((l) => l.handHolds || [])];
+  const sections = (S.state.sectionMarkers || []).filter(marker => !S.state.stems?.length || marker.sectionType !== 'end');
+  const marks = [...sections, ...timedLaneMarkers(lanes), ...lanes.flatMap((l) => l.handHolds || [])];
   for (const m of marks) {
     const t = +m.t;
     if (inSpan(t)) riders.push((d) => { m.t = clamp(t + d); });

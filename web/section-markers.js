@@ -127,7 +127,7 @@ export function addSectionMarkerAtTime(time, clientX, clientY) {
     return;
   }
   const prev = snapshotEdit();
-  const type = sectionMarkers().length ? "riff" : "intro";
+  const type = sectionMarkers().some(marker => marker.sectionType !== 'end') ? "riff" : "intro";
   const marker = {
     id: `section_${Date.now()}_${Math.round(snapped * 1000)}`,
     t: snapped,
@@ -151,6 +151,11 @@ function applyFields() {
   const text = custom ? sectionMarkerName.value.trim() : sectionTypeLabel(type);
   if (!text) return;
   beginPopEdit();
+  if (type === 'end') {
+    // A timing has one terminal section. Converting another flag replaces the
+    // previous End in the same undoable edit.
+    S.state.sectionMarkers = sectionMarkers().filter(marker => marker === editMarker || marker.sectionType !== 'end');
+  }
   editMarker.text = text;
   editMarker.marker = custom ? editMarker.marker || text : text;
   editMarker.sectionType = type;
@@ -242,13 +247,14 @@ function drawSectionMarkers() {
     // so it has nothing to be quieter than.
     sctx.font = stageUi(11, 600);
     const width = Math.max(52, Math.ceil(sctx.measureText(text).width) + 18);
+    const leftEdge = marker.sectionType === 'end' ? x - width : x;
     const rect = { marker: byId.get(marker.id) || marker,
-      x0: x, x1: x + width, y0: top + 2, y1: top + SECTION_MARK_H - 2 };
+      x0: leftEdge, x1: leftEdge + width, y0: top + 2, y1: top + SECTION_MARK_H - 2 };
     markerRects.push(rect);
     if (rect.x0 > right || rect.x1 < left) continue;
     paintMarkerFlag(sctx, rect, PAINT.section);
     sctx.fillStyle = PAINT.text; sctx.textBaseline = "middle";
-    sctx.fillText(text, x + 9, top + SECTION_MARK_H / 2);
+    sctx.fillText(text, leftEdge + 9, top + SECTION_MARK_H / 2);
   }
   sctx.restore();
 }

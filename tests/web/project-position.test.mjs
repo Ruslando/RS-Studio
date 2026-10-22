@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
-import { projectShiftPlan, projectStart } from '../../web/project-position-core.js';
+import { projectShiftPlan, projectStart, songEnd } from '../../web/project-position-core.js';
 
 const timing = {
   grid: { offset: .2, bpm: 120 }, tempoMap: [{ t: 4, bpm: 160 }],
-  sectionMarkers: [{ t: .2, text: 'Verse' }, { t: 7, text: 'Solo' }],
+  sectionMarkers: [{ t: .2, text: 'Verse' }, { t: 7, text: 'Solo' }, { t: 11, text: 'End', sectionType: 'end' }],
   scoreBars: [{ seconds: .2, durationSeconds: 2 }, { seconds: 8, durationSeconds: 2 }],
 };
 const ownTiming = { grid: { offset: .1, bpm: 90 }, tempoMap: [{ t: 3, bpm: 100 }] };
 const state = {
-  duration: 12, scoreDuration: 10, stems: [{ id: 'mix' }],
+  duration: 12, sectionMarkers: timing.sectionMarkers, scoreDuration: 10, stems: [{ id: 'mix' }],
   editLanes: [{
     visible: false, locked: true,
     notes: [{ start: .25, end: 1, bend: [[0, 0], [1, 2]] }, { start: 9, end: 10 }],
@@ -23,6 +23,7 @@ assert.equal(plan.max, 2, 'the last note stays inside the fixed recording');
 plan.apply(.375);
 assert.equal(projectStart(state), .375);
 assert.equal(state.duration, 12, 'audio and its duration stay fixed');
+assert.equal(songEnd(state), 11, 'the audible end stays with the recording when notes shift');
 assert.equal(state.editLanes[0].notes[1].end, 10.375, 'later tempo spans move too');
 assert.equal(state.editLanes[1].notes[0].start, 2.375, 'independent timing lanes move too');
 assert.equal(ownTiming.grid.offset, .475);
@@ -43,16 +44,23 @@ plan.apply(0);
 assert.deepEqual({ state: { ...state, projectStart: undefined }, timing, ownTiming },
   { ...before, state: { ...before.state, projectStart: undefined } }, 'cancelling restores every original position');
 
-const score = { projectStart: 1, duration: 5, scoreDuration: 5, stems: [], editLanes: [{ notes: [{ start: 1.5, end: 4 }] }] };
-const scorePlan = projectShiftPlan(score, [{ grid: { offset: 1 } }]);
+const score = { projectStart: 1, duration: 5, scoreDuration: 5, stems: [],
+  sectionMarkers: [{ t: 5, text: 'End', sectionType: 'end' }],
+  editLanes: [{ notes: [{ start: 1.5, end: 4 }] }] };
+const scorePlan = projectShiftPlan(score, [{ grid: { offset: 1 }, sectionMarkers: score.sectionMarkers }]);
 assert.equal(scorePlan.min, -1);
 assert.equal(scorePlan.max, Infinity);
 scorePlan.apply(3);
 assert.equal(score.duration, 8, 'a score without audio expands rather than clipping');
+assert.equal(songEnd(score), 8, 'the end of a score without audio moves with its contents');
+assert.equal(score.sectionMarkers[0].t, 8, 'the End section itself moves in score-only projects');
 assert.equal(score.scoreDuration, 8);
 assert.equal(projectStart(score), 4);
 scorePlan.apply(-1);
 assert.equal(projectStart(score), 0);
 assert.equal(score.editLanes[0].notes[0].start, .5);
 assert.equal(projectStart(null), 0);
+assert.equal(songEnd({ duration: 20 }), 20, 'old projects default to the recording end');
+assert.equal(songEnd({ duration: 20, sectionMarkers: [{ t: 15, sectionType: 'end' }] }), 15);
+assert.equal(songEnd({ duration: 20, sectionMarkers: [{ t: 25, sectionType: 'end' }] }), 20);
 console.log('project position: ok');

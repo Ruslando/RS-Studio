@@ -12,6 +12,7 @@
 
 import { currentGridState, restoreGridState } from "./grid.js";
 import { S } from "./store.js";
+import { withEndSection } from './section-marker-core.js';
 
 export const SONG = "song";
 const liveId = () => S.state.liveTiming || SONG;
@@ -140,12 +141,12 @@ export function timingsForSave() {
   return out;
 }
 
-export function loadTimings(raw) {
+export function loadTimings(raw, end = 0, duration = Infinity) {
   const out = {};
   for (const [id, t] of Object.entries(raw && typeof raw === "object" ? raw : {})) {
     if (id === SONG || !t?.grid) continue;
     out[id] = { grid: t.grid, tempoMap: Array.isArray(t.tempoMap) ? t.tempoMap : [],
-      sectionMarkers: Array.isArray(t.sectionMarkers) ? t.sectionMarkers : [],
+      sectionMarkers: withEndSection(t.sectionMarkers, end, duration),
       scoreBars: Array.isArray(t.scoreBars) ? t.scoreBars : [] };
   }
   return out;

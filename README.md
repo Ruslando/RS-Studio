@@ -87,6 +87,12 @@ On Linux it uses the system's FFmpeg. With the NVIDIA libraries installed, run
 - [Keyboard shortcuts](docs/keyboard-shortcuts.md): defaults, marker navigation,
   and actions available for custom bindings.
 - Models are optional downloads: **Settings > Models**.
+- The **End** section flag marks the song's end, independently of the last charted
+  note. New audio estimates it from the audible tail (including a short release
+  margin); older projects default to the recording's full length. Drag the flag
+  to correct it, or choose **Special > End** in the section editor. The position
+  is saved with the project, supports undo, and sets
+  Rocksmith's END phrase and final No Guitar section.
 - **Settings > Tone presets**: edit a starting tone to create your own preset, change its gear
   and controls, then choose **Apply**. Select your preset in a project's
   tone marker to reference its current settings, including Rocksmith export values.

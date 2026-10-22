@@ -239,6 +239,9 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
     y, sr = librosa.load(str(audio_path), sr=SAMPLE_RATE, mono=True)
     duration = float(len(y) / sr)
 
+    from .audio_bounds import audible_end
+    song_end = audible_end(y, sr)
+
     fmin = librosa.midi_to_hz(MIDI_LOW)
     cqt = np.abs(
         librosa.cqt(
@@ -280,6 +283,7 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
         "hop_length": HOP_LENGTH,
         "sample_rate": int(sr),
         "duration": duration,
+        "songEnd": song_end,
         "tempo": tempo,
         "offset": offset,
     }

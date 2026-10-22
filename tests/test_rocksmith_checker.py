@@ -35,6 +35,50 @@ def _codes(spec):
 
 
 class ThroughTheExporter(unittest.TestCase):
+    def test_generated_end_follows_audio_instead_of_last_note(self):
+        arr = _compiled([_note(2.0, 2.125, 1, 5)])
+        end = next(pi.start_time for pi in arr.phrase_iterations if arr.phrases[pi.phrase_id].name == "END")
+        self.assertAlmostEqual(end, 25.0)  # 20 seconds of audio + 5 second lead-in
+
+    def test_explicit_song_end_drives_the_checker_with_lead_in(self):
+        for lead in (0, 5):
+            with self.subTest(lead=lead):
+                spec = _spec([_note(2, 2.125, 1, 5), _note(8, 8.125, 1, 7)], lead=lead)
+                spec["songEnd"] = 7.5
+                codes = _codes(spec)
+                self.assertIn(("I16", 8.0), codes)
+                self.assertIn(("I39", 8.0), codes)
+                spec["songEnd"] = 10
+                self.assertNotIn("I16", [code for code, _ in _codes(spec)])
+                self.assertNotIn("I39", [code for code, _ in _codes(spec)])
+
+    def test_end_section_sets_exact_terminal_time_without_becoming_riff(self):
+        sections = [{"t": 7.537, "text": "End", "sectionType": "end"}]
+        for lead in (0, 5):
+            with self.subTest(lead=lead):
+                built = _built([_note(2, 2.125, 1, 5), _note(8, 8.125, 1, 7)], lead=lead, sections=sections)
+                arr = built.compiled.sng
+                end = next(pi.start_time for pi in arr.phrase_iterations if arr.phrases[pi.phrase_id].name == "END")
+                self.assertAlmostEqual(end, 7.537 + lead)
+                self.assertFalse(any('not recognized' in text for text in built.compiled.warnings))
+                spec = _spec([_note(2, 2.125, 1, 5), _note(8, 8.125, 1, 7)], lead=lead, sections=sections)
+                self.assertIn(("I39", 8.0), _codes(spec))
+                self.assertIn(("I16", 8.0), _codes(spec))
+                spec["tracks"][0]["sections"] = [{"t": 10.123, "text": "End", "sectionType": "end"}]
+                self.assertNotIn("I39", [code for code, _ in _codes(spec)], 'own-timing End takes precedence')
+
+    def test_short_last_note_on_measure_boundary_precedes_generated_end(self):
+        for chord in (False, True):
+            for lead in (0, 5):
+                with self.subTest(chord=chord, lead=lead):
+                    notes = [_note(2.0, 2.125, 1, 5), _note(4.0, 4.125, 1, 7)]
+                    if chord:
+                        notes.append(_note(4.0, 4.125, 2, 7))
+                    spec = _spec(notes, lead=lead, toneMarkers=[{"t": 0.0, "tone": "lead"}])
+                    codes = [code for code, _ in _codes(spec)]
+                    self.assertNotIn("I16", codes, "generated No Guitar must start after the last onset")
+                    self.assertNotIn("I39", codes, "generated END must start after the last onset")
+
     def test_the_export_keeps_the_first_phrase_empty(self):
         """However little silence is asked for, the first note leaves an empty COUNT measure."""
         notes = [_note(0.0, 0.5, 6, 3), _note(4.0, 4.5, 6, 5)]
