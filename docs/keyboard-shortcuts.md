@@ -51,6 +51,12 @@ Tone Designer, Artifacts previews, selection, scrolling and zooming.
 
 ## Drawing quick settings
 
+The overview playhead always shows its position as `mm:ss.sss`, adding hours as
+`h:mm:ss.sss` once needed. Double-click its time label (or focus it and press Enter)
+to enter a position. Use `mm:ss` or `h:mm:ss`, optionally followed by `.sss`
+milliseconds. Enter seeks, Escape cancels, and a valid edit also applies when
+focus leaves the field. Times beyond the song duration are rejected.
+
 The time grid automatically adapts to horizontal zoom, from coarse beat/bar
 steps to 1/32 notes. The readout beside Zoom shows the active step. Hold Alt on
 a note edge, or press it during a resize, to move that edge without snapping.
