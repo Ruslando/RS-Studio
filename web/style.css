@@ -611,9 +611,9 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 .live-editor .sp-row { display: flex; gap: var(--s-sibling); align-items: center; }
 #markerPop .sp-slash { color: var(--hint); }
 .live-editor input[type="number"] { width: 100%; }
-/* Position scrubs sideways (DAW-style); once focused it is a text field again. */
-#markerTime { cursor: ew-resize; }
-#markerTime:focus { cursor: text; }
+/* Position and tempo scrub sideways; once focused they allow typing. */
+#markerTime, #markerBpm { cursor: ew-resize; }
+#markerTime:focus, #markerBpm:focus { cursor: text; }
 body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none; }
 .live-editor { width: min(var(--w-popover), calc(100vw - 16px)); }
 .live-editor .pop-title { font-size: var(--text-body); }

@@ -377,7 +377,7 @@ function applyMarkerTime() {
 
 // DAW-style scrub: press on a number field and drag sideways to change it —
 // 10 ms per pixel, 1 ms with Shift. A press without a drag still focuses it for typing.
-function scrubField(input, apply) {
+function scrubField(input, apply, { step = 0.01, min = 0, max = Infinity, decimals = 3 } = {}) {
   input.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     const x0 = e.clientX, v0 = parseFloat(input.value) || 0;
@@ -389,8 +389,8 @@ function scrubField(input, apply) {
         input.blur();
         document.body.classList.add("scrubbing");
       }
-      const v = Math.max(0, v0 + (ev.clientX - x0) * (ev.shiftKey ? 0.001 : 0.01));
-      input.value = v.toFixed(3);
+      const v = Math.max(min, Math.min(max, v0 + (ev.clientX - x0) * step * (ev.shiftKey ? 0.1 : 1)));
+      input.value = v.toFixed(decimals);
       apply();
     };
     const onUp = () => {
@@ -419,6 +419,8 @@ export function init_markers() {
   markerSubdivCustom.addEventListener("input", inEditTiming(applyPop));
   markerTime.addEventListener("input", inEditTiming(applyMarkerTime));
   scrubField(markerTime, inEditTiming(() => { applyMarkerTime(); syncReverts(); }));
+  scrubField(markerBpm, inEditTiming(() => { applyPop(); syncReverts(); }),
+    { step: 0.1, min: 20, max: 320, decimals: 2 });
   markerPop.addEventListener("input", syncReverts);
   markerPop.addEventListener("change", syncReverts);
   for (const b of revertBtns()) b.addEventListener("click", inEditTiming((e) => { e.preventDefault(); revertField(b.dataset.revert); }));

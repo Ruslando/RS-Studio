@@ -1493,7 +1493,9 @@ export function init_edit() {
     // Space = play/pause from anywhere (suppress button clicks / page scroll),
     // except while typing in a text field where a space is a real character.
     if (matchKey(e, "playPause")) {
-      if (!isTextField(e.target)) { e.preventDefault(); ensureTone().then(togglePlay); }
+      if (!isTextField(e.target) || e.target.matches?.('#markerPop input[type="number"]')) {
+        e.preventDefault(); ensureTone().then(togglePlay);
+      }
       return;
     }
     if (mod && (e.key === "s" || e.key === "S")) {
