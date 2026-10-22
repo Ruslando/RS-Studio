@@ -32,11 +32,11 @@
   /* The grid is the meter made visible, so its three weights are data, not three
      borders: a bar line, a beat, a subdivision. This is the only place on the
      stage that gets more than one line value. */
-  --spectral-grid-bar: rgba(255,255,255,.45);
+  --spectral-grid-bar: rgba(255,255,255,.55);
   --stage-grid-bar: var(--spectral-grid-bar);
-  --spectral-grid-beat: rgba(255,255,255,.20);
+  --spectral-grid-beat: rgba(255,255,255,.28);
   --stage-grid-beat: var(--spectral-grid-beat);
-  --spectral-grid-sub: rgba(255,255,255,.06);
+  --spectral-grid-sub: rgba(255,255,255,.12);
   --stage-grid-sub: var(--spectral-grid-sub);
   /* Overlay identity: one hue per kind of thing laid over the song, exactly as
      EDIT_PALETTE gives one hue per layer. These are the values the canvas has
@@ -67,9 +67,9 @@
   --stage-warn: var(--warn);
   --stage-error: var(--error);
   --stage-line: rgba(32,40,56,.12);
-  --stage-grid-bar: rgba(32,40,56,.36);
-  --stage-grid-beat: rgba(32,40,56,.18);
-  --stage-grid-sub: rgba(32,40,56,.07);
+  --stage-grid-bar: rgba(32,40,56,.46);
+  --stage-grid-beat: rgba(32,40,56,.25);
+  --stage-grid-sub: rgba(32,40,56,.12);
 }
 
 * { box-sizing: border-box; }
