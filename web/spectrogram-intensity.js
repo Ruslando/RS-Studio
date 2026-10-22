@@ -81,7 +81,8 @@ export function intensityStatus(image) {
   for (const tile of cache.values()) {
     const url = new URL(tile.url);
     if (url.pathname.replace('/api/intensity/', '/api/spectrogram/') + '.png' !== prefix.pathname
-        || url.searchParams.get('channel') !== prefix.searchParams.get('channel')) continue;
+        || url.searchParams.get('channel') !== prefix.searchParams.get('channel')
+        || url.searchParams.get('view') !== prefix.searchParams.get('view')) continue;
     if (tile.error) return 'Intensity data unavailable';
     if (!tile.values) loading = true;
   }

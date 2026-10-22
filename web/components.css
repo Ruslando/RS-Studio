@@ -207,6 +207,9 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 
 .menu-item:hover .kbd { color: var(--label); }
 
+.menu-item-text { display: grid; gap: 3px; line-height: 1.2; }
+.menu-item:has(.menu-item-desc) { height: auto; padding-block: 6px; }
+.menu-item-desc { color: var(--hint); font-size: var(--text-caption); }
 .menu-item .chkmark { min-width: 48px; color: var(--text); display: flex; justify-content: flex-end; }
 .ctxmenu-item .chkmark { margin-left: auto; color: var(--text); display: flex; }
 .ctxmenu-note { color: var(--hint); font-size: 0.85em; }

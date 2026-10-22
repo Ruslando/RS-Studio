@@ -26,7 +26,7 @@ class IntensityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             image = Path(folder) / 'spec.png'
             image.write_bytes(b'original')
-            def compute(audio, out):
+            def compute(audio, out, view='energy'):
                 out.write_bytes(b'regenerated')
                 write_intensity(Path(str(out) + '.intensity'), np.array([[.5]]))
             with patch('rs_studio.pipeline.compute_spectrogram', side_effect=compute) as render:

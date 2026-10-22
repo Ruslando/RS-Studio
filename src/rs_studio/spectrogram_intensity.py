@@ -16,7 +16,7 @@ def write_intensity(path, values):
     temp.replace(path)
 
 
-def intensity_tile(image: Path, audio: Path, start: int, count: int, stride: int = 1):
+def intensity_tile(image: Path, audio: Path, start: int, count: int, stride: int = 1, view: str = 'energy'):
     from . import pipeline
     if stride < 1 or stride > 65536 or stride & (stride - 1):
         raise ValueError('Invalid intensity stride')
@@ -25,7 +25,7 @@ def intensity_tile(image: Path, audio: Path, start: int, count: int, stride: int
         if not sidecar.exists():
             preview = image.with_name(image.stem + '.intensity-rebuild.png')
             try:
-                pipeline.compute_spectrogram(audio, preview)
+                pipeline.compute_spectrogram(audio, preview, view=view)
                 Path(str(preview) + '.intensity').replace(sidecar)
             finally:
                 preview.unlink(missing_ok=True)

@@ -515,11 +515,21 @@ export async function closeProject(options = {}) {
 // The edit lanes are global, so they stay put across stems.
 let stemViewGeneration = 0;
 const channelRequests = new WeakMap();
+// ponytail: spectrogram view is session-only while testing, persist it in the project if it stays.
+function spectrogramUrl(stem, channel) {
+  const url = new URL(stem.spec.url, location.href);
+  url.searchParams.set('channel', channel);
+  // Default view is the fine CQT (3 rows per semitone); 'energy' (1 row) stays server-side only.
+  const view = S.state?.specView || 'fine';
+  const sharp = S.state?.specSharp && ['fine', 'fundamental'].includes(view);
+  url.searchParams.set('view', sharp ? `${view}-sharp` : view);
+  return url;
+}
+
 export async function changeStemChannel(stem, channel) {
   const state = S.state, request = Symbol();
   channelRequests.set(stem, request);
-  const url = new URL(stem.spec.url, location.href);
-  url.searchParams.set('channel', channel);
+  const url = spectrogramUrl(stem, channel);
   const image = new Image(); image.src = url.href;
   try { await image.decode(); }
   catch { toast('Could not load audio channel'); return; }
@@ -531,6 +541,7 @@ export async function changeStemChannel(stem, channel) {
     stemViewGeneration++;
     clearMatches(); S.spectImg = image; prepareSpectSample(); draw();
   }
+  return true;
 }
 
 export function selectStem(id) {
@@ -556,8 +567,7 @@ export function selectStem(id) {
     };
     img.onerror = () => resolve();
   });
-  const specUrl = new URL(stem.spec.url, location.href);
-  specUrl.searchParams.set('channel', stem.channel || 'stereo');
+  const specUrl = spectrogramUrl(stem, stem.channel || 'stereo');
   img.src = specUrl.href;
 
   if (detectStemNameEl) detectStemNameEl.textContent = stem.name;
