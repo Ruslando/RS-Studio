@@ -9,18 +9,25 @@ export function noteLabelSize() {
   return NOTE_LABEL_SIZES.includes(size) ? size : NOTE_LABEL_SIZE;
 }
 
-export function paintNoteLabel(ctx, text, x, width, y) {
+export function paintNoteLabel(ctx, text, x, width, y, height = Infinity, availableWidth = width) {
   if (!text) return;
   ctx.save();
-  ctx.font = stageUi(noteLabelSize(), 600);
+  const preferred = noteLabelSize();
+  ctx.font = stageUi(preferred, 600);
+  const measured = ctx.measureText(text).width;
+  const size = Math.min(preferred, height * 0.75,
+    availableWidth > 0 ? preferred * Math.max(0, availableWidth - 4) / measured : preferred);
+  // At overview scales, leave the note body visible instead of drawing tiny text.
+  if (size < 6) { ctx.restore(); return; }
+  ctx.font = stageUi(size, 600);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = 2.5; ctx.strokeStyle = halo(); ctx.fillStyle = PAINT.text;
+  ctx.lineWidth = 2.5 * size / preferred; ctx.strokeStyle = halo(); ctx.fillStyle = PAINT.text;
   ctx.strokeText(text, x + width / 2, y);
   ctx.fillText(text, x + width / 2, y);
   ctx.restore();
 }
 
-export function paintSlideLabel(ctx, slide, x0, x1, y) {
+export function paintSlideLabel(ctx, slide, x0, x1, y, height = Infinity) {
   const mark = edgeSlide(slide);
-  if (mark) paintNoteLabel(ctx, mark.glyph, mark.side === 'left' ? x0 - 9 : x1 + 9, 0, y);
+  if (mark) paintNoteLabel(ctx, mark.glyph, mark.side === 'left' ? x0 - 9 : x1 + 9, 0, y, height, Math.abs(x1 - x0));
 }

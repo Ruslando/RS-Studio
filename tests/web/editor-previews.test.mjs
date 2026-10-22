@@ -9,7 +9,7 @@ class Canvas extends EventTarget {
   matches() { return this.hovered; }
   getContext() { return ctx; }
 }
-const ctx = new Proxy({ fillText: value => text.push(value) }, { get: (target, key) => target[key] || noop });
+const ctx = new Proxy({ measureText(text) { return { width: text.length * parseFloat(this.font.match(/[\d.]+(?=px)/)[0]) * 0.5 }; }, fillText: value => text.push(value) }, { get: (target, key) => target[key] || noop });
 const note = new Canvas(), board = new Canvas();
 const controls = { noteAppearancePreview: note, fretboardSettingsPreview: board, spTrace: {},
   spectrogramNoteNames: { value: 'off' }, spectrogramPositions: { value: 'hover' },

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
 
 const painted = [], noop = () => {};
-const ctx = new Proxy({ fillText(text, x, y) { painted.push({ text, x, y, font: this.font }); } }, {
+const ctx = new Proxy({ measureText(text) { return { width: text.length * parseFloat(this.font.match(/[\d.]+(?=px)/)[0]) * 0.5 }; }, fillText(text, x, y) { painted.push({ text, x, y, font: this.font }); } }, {
   get: (target, name) => name in target ? target[name] : noop,
 });
 const controls = { spectrogramNoteNames: { value: 'always' }, spectrogramPositions: { value: 'hover' },
@@ -36,6 +36,18 @@ try {
   assert.ok(painted.at(-1).x > 200, 'slide-out sits right of the note');
   controls.fretNumbering.value = 'nut'; lane.capo = 2; painted.length = 0; drawNoteFx();
   assert.equal(painted[0].text, 'E4 S2:F7 PM', 'one shared capo preference changes spectrogram fret labels');
+  S.hoverNote = null;
+  S.state.rowH = 10; painted.length = 0; drawNoteFx();
+  assert.equal(parseFloat(painted[0].font.match(/[\d.]+(?=px)/)[0]), 7.5,
+    'vertical zoom reduces label size with note height');
+  S.state.rowH = 20; note.end = 1.12; painted.length = 0; drawNoteFx();
+  assert.ok(parseFloat(painted[0].font.match(/[\d.]+(?=px)/)[0]) < 12,
+    'short notes shrink labels to fit their width');
+  note.end = 1.03; painted.length = 0; drawNoteFx();
+  assert.equal(painted.length, 0, 'tiny note bodies remain visible without oversized labels');
+  note.end = 2; S.state.rowH = 5; painted.length = 0; drawNoteFx();
+  assert.equal(painted.length, 0, 'tiny rows hide unreadable text');
+  S.state.rowH = 20;
   for (const id of ['spectrogramNoteNames', 'spectrogramPositions', 'spectrogramEffects']) controls[id].value = 'off';
   painted.length = 0; drawNoteFx();
   assert.equal(painted.length, 0, 'Off hides every label including slide glyphs');
