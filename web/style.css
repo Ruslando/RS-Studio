@@ -275,6 +275,7 @@ main { flex: 1; min-height: 0; overflow: hidden; background: var(--workspace-gro
 .tap-tempo-readout { color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; user-select: text; white-space: nowrap; }
 
 .zoom-cluster { position: relative; gap: var(--s-sibling); }
+#autoGridStatus { flex: none; min-width: 10ch; color: var(--label); font: 400 var(--text-data)/1 var(--font-mono); white-space: nowrap; }
 .drawing-settings-button { display: inline-flex; align-items: center; gap: var(--s-sibling); flex: none; height: var(--h-control); }
 #drawingSettingsStatus { color: var(--label); font: 400 var(--text-data)/1 var(--font-mono); white-space: nowrap; }
 #drawingSettings[aria-expanded="true"] { background: var(--control-hover); }

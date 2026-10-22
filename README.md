@@ -87,6 +87,11 @@ On Linux it uses the system's FFmpeg. With the NVIDIA libraries installed, run
 - [Keyboard shortcuts](docs/keyboard-shortcuts.md): defaults, marker navigation,
   and actions available for custom bindings.
 - Models are optional downloads: **Settings > Models**.
+- New notes reuse the rhythmic length of the last clicked, drawn or resized
+  note in the current project. Until then they default to a quarter note.
+- The time grid adapts to horizontal zoom; its current division appears beside
+  Zoom. Hold **Alt** while dragging a note edge to resize freely, and release
+  Alt to restore snapping. Resizing leaves the opposite edge in place.
 - The **End** section flag marks the song's end, independently of the last charted
   note. New audio estimates it from the audible tail (including a short release
   margin); older projects default to the recording's full length. Drag the flag

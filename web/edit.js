@@ -115,11 +115,11 @@ export function snapshotEdit() {
 // `{ ref, i }` naming the reference box the user actually dragged, so
 // reconcileReferences mirrors from that one instead of guessing which box
 // changed. Only the refBox drag passes it (interaction.js).
-export function commit(prev, mirrorSource, cuts = null) {
+export function commit(prev, mirrorSource, cuts = null, { preserveTiming = false } = {}) {
   if (rejectLockedEdit(prev)) return false;
   reconcileReferences(prev, mirrorSource);
   animateNoteChanges(prev, S.state, cuts);
-  recordUndo(prev);
+  recordUndo(prev, null, preserveTiming);
 }
 
 // For edits that retime everything at once — inserting or removing a bar, moving
@@ -140,11 +140,12 @@ function rejectLockedEdit(prev, translation = 0) {
   return true;
 }
 
-function recordUndo(prev, translation = null) {
+function recordUndo(prev, translation = null, preserveTiming = false) {
   if (rejectLockedEdit(prev, translation || 0)) return;
   // A whole-project translation preserves imported/off-grid rhythm exactly.
   // Its locked references may move, but their shapes and contents must match.
-  if (S.state && translation == null) eachTiming(editLanes(), snapStrayNotes);
+  if (S.state && translation == null && !preserveTiming)
+    eachTiming(editLanes(), lanes => snapStrayNotes(lanes, prev.lanes));
   if (rejectLockedEdit(prev, translation || 0)) return;
   S.voicingRevision++;
   S.undoStack.push(prev);
