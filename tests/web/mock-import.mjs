@@ -20,7 +20,7 @@ export async function mockImport(url, overrides = {}, real = {}) {
       const mock = exports.map(name => `export const ${name} = globalThis[${JSON.stringify(key)}][${JSON.stringify(specifier)}][${JSON.stringify(name)}];`).join('\n');
       return statement.replace(specifier, 'data:text/javascript,' + encodeURIComponent(mock));
     },
-  ).replace(/export\s*\{[^}]+\}\s*from\s*["']([^"']+)["']/g,
+  ).replace(/export\s*(?:\{[^}]+\}|\*)\s*from\s*["']([^"']+)["']/g,
     (statement, specifier) => statement.replace(specifier, new URL(specifier, url).href));
   try { return await import('data:text/javascript,' + encodeURIComponent(source + `\n//# sourceURL=${url.href}`)); }
   finally { delete globalThis[key]; }
