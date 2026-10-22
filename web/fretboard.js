@@ -3,6 +3,7 @@ import { previewPositionReferences } from "./references.js";
 import { positionPreviewHand, positionPreviewLane } from "./position-preview.js";
 import { positionEditTargets, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { fretboardHandKey } from "./fretboard-cache.js";
+import { automaticHandSeat } from './hand-anchor-core.js';
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
 import { overrideResetPreview } from './override-reset.js';
 import { panelControls, syncPanelControls } from "./canvas-controls.js";
@@ -987,7 +988,8 @@ export function drawFretboard() {
   const capo = Number(lane?.capo) || 0;
   fillValues($("fretboardCapoList"), Array.from({ length: MAX_CAPO + 1 }, (_, k) => [k, String(k)]), capo, disabled);
   const choices = handColumnHere(lane)?.choices || [];
-  fillValues($("fretboardHandList"), [["auto", seatNow ? `Auto (${seatNow})` : "Auto"], ...choices.map((g) => [g, String(g)])],
+  const autoSeat = held ? automaticSeatHere(lane, held) : seatNow;
+  fillValues($("fretboardHandList"), [["auto", autoSeat ? `Auto (${autoSeat})` : "Auto"], ...choices.map((g) => [g, String(g)])],
     held ? Number(held.fret) : "auto", disabled || shared || !choices.length);
   // The fingering of this note or chord, and the ones it could have (fingeringChoices).
   const fingering = fingeringHere(lane);
@@ -1754,6 +1756,17 @@ function beatUnderBoard() {
 // holdsByColumn reads it), and the hands that can play it. Remembered per column
 // object, because the board asks every frame and a new answer comes with a new walk.
 const handChoicesOf = new WeakMap();
+const automaticSeats = new WeakMap();
+function automaticSeatHere(lane, hold) {
+  const key = `${handKey(lane)}:${hold.t}:${hold.fret}`;
+  let cached = automaticSeats.get(lane);
+  if (cached?.key !== key) {
+    cached = { key, seat: automaticHandSeat(lane.notes, laneFretTuning(lane), hold.t,
+      { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds }) };
+    automaticSeats.set(lane, cached);
+  }
+  return cached.seat;
+}
 function handColumnHere(lane) {
   const found = lane?.notes?.length ? gripsFor(lane) : null;
   if (!found) return null;

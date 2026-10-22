@@ -1,4 +1,5 @@
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
+import { automaticHandSeat } from './hand-anchor-core.js';
 // Note editing: undo/redo across all edit lanes, clipboard (incl. paste-as-reference),
 // the per-note effects (bend / harmonic / articulations / slide), the fingering
 // override, and the right-click note context menu.
@@ -775,6 +776,10 @@ export function setHandAnchor(lane, t, fret, { create = false } = {}) {
   if (!canEditLane(lane) || !Number.isFinite(t) || (fret !== null && (!Number.isFinite(fret) || fret < 1))) return;
   const near = (h) => Math.abs(Number(h.t) - t) <= 1e-6;
   const had = (lane.handHolds || []).find(near);
+  if (!create && fret !== null && fret === automaticHandSeat(lane.notes, laneFretTuning(lane), t,
+    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds })) {
+    fret = null;
+  }
   if (!had && fret !== null && !create) {
     toast('Add a hand anchor from the spectrogram context menu first.');
     return;
