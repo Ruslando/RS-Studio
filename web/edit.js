@@ -24,7 +24,7 @@ import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, tog
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock } from "./references.js";
+import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { beginArtifactRename } from "./artifact-names.js";
 import { beginChordRename } from "./chord-rename.js";
@@ -342,12 +342,27 @@ export function confirmPasteMode({ signal } = {}) {
   });
 }
 
+function pasteHitsReference(lane, at, shift, asReference = false, refShift = 0) {
+  if (!lane || !Object.keys(lane.refBoxes || {}).length) return false;
+  const placed = placeClip(S.clipboard, lane, at, asReference);
+  let bounds = noteBounds(placed.map((times, i) => ({ ...times, pitch: S.clipboard[i].pitch + shift })));
+  const source = S.clipboardRef;
+  const group = asReference && source?.lane === lane && lane.refBoxes[source.ref];
+  if (group) {
+    bounds = { ...spanAt(group, bounds.t0, laneClock(lane)), pLo: group.pLo + refShift, pHi: group.pHi + refShift };
+  }
+  return overlapsRefBox(lane, bounds);
+}
+
 // mode: "copy" | "reference" forces that result; undefined = auto — when the copy
 // came entirely from one reference, ask via confirmPasteMode, otherwise plain copy.
 export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
   if (!S.clipboard.length || !S.state) return;
+  const pasteAt = at ?? playbackTime();
   if (mode == null) {
-    if (S.clipboardRef == null) mode = "copy";
+    // Pasted notes become part of the destination reference. A nested reference
+    // is not an available choice, so there is nothing to ask here.
+    if (S.clipboardRef == null || pasteHitsReference(targetLane(), pasteAt, shift)) mode = "copy";
     else {
       if (!pasteBackdrop.hidden) return;       // a choice is already open
       mode = await confirmPasteMode();
@@ -361,10 +376,14 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
   if (!lane) return;
   if (!lane.visible) { toast(`Layer “${lane.name}” is hidden — show it to edit`); return; }
   if (lane.locked) { toast(`Layer “${lane.name}” is locked — unlock it to edit`); return; }
+  if (asReference && pasteHitsReference(lane, pasteAt, shift, true, refShift)) {
+    toast('References cannot overlap another reference; paste as a copy instead');
+    return;
+  }
   const prev = snapshotEdit();
   // Anchor the paste at the current time: the clipboard's earliest note starts at
   // the playhead, the rest at their beat distance from it (see placeClip).
-  const placed = placeClip(S.clipboard, lane, at ?? playbackTime(), asReference);
+  const placed = placeClip(S.clipboard, lane, pasteAt, asReference);
   // Preserve copied motifs, but mint new ids so the paste is independent from
   // the original. A partial copy keeps its annotation, including a single note.
   const pastedMotifIds = new Map();
