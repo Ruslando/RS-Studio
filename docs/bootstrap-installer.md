@@ -107,9 +107,9 @@ migrate data from an existing portable installation.
 **In one step:** `tools/release.py` sets the version, tags, packages, builds
 the setup EXE and publishes the GitHub release with its four assets
 (RS-Studio-Setup.exe, bootstrap-manifest.json, the app and FFmpeg ZIPs). It
-refuses to run outside a clean main checkout and publishes nothing until all
-builds succeeded. Requires the GitHub CLI (winget install GitHub.cli, then
-gh auth login).
+requires a clean main checkout (or release-candidate for previews) and publishes
+nothing until all builds succeeded. Requires the GitHub CLI (winget install
+GitHub.cli, then gh auth login).
 
     build/cpu-venv/Scripts/python tools/release.py 0.2.2-alpha --notes notes.txt
     build/cpu-venv/Scripts/python tools/release.py 0.2.2-alpha --dry-run
@@ -138,9 +138,9 @@ The command builds and publishes a GitHub **pre-release** without changing the
 Stable channel. If the release version differs from the checkout, the command
 updates all three version fields and commits that change before tagging, just
 like a regular release. This keeps source checkouts of the tag reporting the
-same version as the release. As with regular releases, commit your work to main
-first. `--dry-run` builds locally and restores the original version without
-publishing.
+same version as the release. Commit your work to main or release-candidate
+first; the command pushes that branch and the new tag. `--dry-run` builds locally
+and restores the original version without publishing.
 
 `--prerelease` is an alias for `--preview`, for example:
 

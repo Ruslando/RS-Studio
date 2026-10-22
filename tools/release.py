@@ -76,7 +76,7 @@ def set_version(version: str, root: Path = ROOT) -> None:
         path.write_bytes(text.encode("utf-8"))
 
 
-def check(args) -> None:
+def check(args) -> str:
     from packaging.version import InvalidVersion, Version
     try:
         parsed = Version(args.version)
@@ -87,8 +87,9 @@ def check(args) -> None:
     if parsed.is_devrelease and not args.prerelease:
         raise SystemExit("Development builds must use --preview or --prerelease.")
     check_version_metadata()
-    if run("git", "rev-parse", "--abbrev-ref", "HEAD", capture=True) != "main":
-        raise SystemExit("Releases are made from main.")
+    branch = run("git", "rev-parse", "--abbrev-ref", "HEAD", capture=True)
+    if branch != "main" and not (args.prerelease and branch == "release-candidate"):
+        raise SystemExit("Releases are made from main; previews may also use release-candidate.")
     if run("git", "status", "--porcelain", capture=True):
         raise SystemExit("Commit or stash your changes first.")
     if not SIGNING_KEY.is_file():
@@ -102,6 +103,7 @@ def check(args) -> None:
         run("gh", "auth", "status", capture=True)
     print("Running the tests (about 2 min)…", flush=True)
     run(sys.executable, "-m", "unittest", "discover", "-s", "tests")
+    return branch
 
 
 def build(version: str, notes: Path | None, *, channel: str = "stable") -> list[Path]:
@@ -130,7 +132,7 @@ def main() -> None:
     parser.add_argument("--notes", type=Path, help="Optional release notes (plain text): shown in the app's update dialog and above GitHub's generated changelog")
     parser.add_argument("--dry-run", action="store_true", help="Build everything, publish nothing")
     args = parser.parse_args()
-    check(args)
+    branch = check(args)
     tag = "v" + args.version
     bump = current_version() != args.version
     try:
@@ -154,7 +156,7 @@ def main() -> None:
     if bump:
         run("git", "commit", "-m", f"chore(release): bump version to {args.version}", "--", *(name for name, _, _ in VERSION_FILES))
     run("git", "tag", tag)
-    run("git", "push", "origin", "main", tag)
+    run("git", "push", "origin", branch, tag)
     notes = args.notes.read_text(encoding="utf-8").strip() if args.notes else ""
     body = SETUP_HINT + ("\n\n" + notes if notes else "")
     # Keep incomplete uploads out of both update feeds. Publish only once all assets exist.
