@@ -346,6 +346,11 @@
               </div>
             </div>
 
+            <nav id="matchNavigator" aria-label="Similar passage results" hidden>
+              <button type="button" id="matchPrevious" aria-label="Previous similar passage" title="Previous similar passage (←)">‹</button>
+              <output id="matchPosition" aria-live="polite">0 / 0</output>
+              <button type="button" id="matchNext" aria-label="Next similar passage" title="Next similar passage (→)">›</button>
+            </nav>
             <canvas id="rulerRight" aria-label="Right pitch scale"></canvas>
             <button type="button" id="projectStartHandle" class="splitter splitter--x timeline-start" aria-label="Project start: move entire project" hidden>
               <svg class="splitter-dots" width="5" height="26" viewBox="0 0 5 26" fill="none" aria-hidden="true"><circle cx="2.5" cy="5" r="1.4" fill="currentColor"/><circle cx="2.5" cy="13" r="1.4" fill="currentColor"/><circle cx="2.5" cy="21" r="1.4" fill="currentColor"/></svg>

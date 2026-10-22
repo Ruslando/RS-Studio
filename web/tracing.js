@@ -383,12 +383,21 @@ let hoverPreviewGeneration = 0;
 let hoverPlaybackToken = null;
 let matchChoice = null;
 
+function updateMatchNavigator() {
+  const nav = document.getElementById('matchNavigator');
+  if (!nav) return;
+  nav.hidden = !S.matches.length;
+  document.getElementById('matchPosition').textContent =
+    `${S.matchFocus >= 0 ? S.matchFocus + 1 : '–'} / ${S.matches.length}`;
+}
+
 export function clearMatches() {
   matchChoice?.abort();
   if (!S.matches.length && S.matchHover < 0 && S.matchFocus < 0) return;
   S.matches = [];
   S.matchHover = -1;
   S.matchFocus = -1;
+  updateMatchNavigator();
   cancelHoverPreview();
   cancelPassagePreview({ pauseAudio: true });
   clearPreview();
@@ -420,6 +429,7 @@ function focusMatch(i, opts = {}) {
   if (!S.matches.length) return;
   S.matchFocus = (i + S.matches.length) % S.matches.length;
   const m = S.matches[S.matchFocus];
+  updateMatchNavigator();
   scrollMatchIntoView(m);
   setPlaybackCursor(m.t0);
   draw();
@@ -428,7 +438,7 @@ function focusMatch(i, opts = {}) {
 
 function firstMatchInDirection(dir) {
   if (!S.matches.length) return -1;
-  if (S.matchFocus >= 0) return S.matchFocus + dir;
+  if (S.matchFocus >= 0) return (S.matchFocus + dir + S.matches.length) % S.matches.length;
   const ref = timeAt(scroll.scrollLeft + scroll.clientWidth * 0.5);
   if (dir > 0) {
     const next = S.matches.findIndex((m) => m.t0 > ref + 1e-6);
@@ -585,7 +595,7 @@ export function runFindSimilar() {
   S.matches = computeSimilarMatches(selNotes, lane);
   if (!S.matches.length) { toast("No similar passages found"); draw(); return; }
   toast(`Found ${S.matches.length} similar passage${S.matches.length === 1 ? "" : "s"}`);
-  draw();
+  focusMatch(0);
 }
 
 // Drop the ghost notes of one (or all) suggestions into the target edit lane,
@@ -677,6 +687,7 @@ export function matchAt(x, y) {
 // Paint the suggestions on top of the committed notes: dashed pink ghosts inside
 // a box, opacity rising with confidence, a % label, and a brighter hovered box.
 export function drawMatches() {
+  updateMatchNavigator();
   if (!S.matches.length) return;
   const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
   const vy0 = scroll.scrollTop;
@@ -716,6 +727,12 @@ export function drawMatches() {
 }
 
 export function init_tracing() {
+  for (const [id, direction] of [['matchPrevious', -1], ['matchNext', 1]]) {
+    document.getElementById(id)?.addEventListener('click', () => {
+      focusAdjacentMatch(direction, { preview: true });
+    });
+  }
+  updateMatchNavigator();
   updateTraceThresholdLabel();
   if (traceThresholdInput) {
     traceThresholdInput.addEventListener("input", () => {
