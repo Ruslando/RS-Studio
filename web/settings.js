@@ -82,7 +82,6 @@ export function init_settings() {
   }
   persistSetting($("traceSnap"), { mirror: [$("traceSnapM"), $('quickTraceSnap')], bool: true });
   persistSetting($("traceRange"), { mirror: [$("traceRangeM"), $('quickTraceRange')] });
-  persistSetting($("traceThreshold"), { mirror: [$("traceThresholdM"), $('quickTraceThreshold')] });
   // The fretboard reads its options straight off the inputs while it draws, the way
   // the voicing engine reads its own preferences — so persisting them and repainting
   // is the whole wiring. These controls live in Editor options.

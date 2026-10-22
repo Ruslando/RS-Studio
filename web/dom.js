@@ -32,7 +32,6 @@ export const pasteBackdrop = $("pasteBackdrop");
 export const pasteCopyBtn = $("pasteCopy"), pasteAsRefBtn = $("pasteAsRef"), pasteCancelBtn = $("pasteCancel");
 export const undoMI = $("menuUndo"), redoMI = $("menuRedo");
 export const traceRangeSel = $("traceRange");
-export const traceThresholdInput = $("traceThreshold");
 export const traceSnapInput = $("traceSnap");
 export const saveBtn = $("save"), saveAsBtn = $("saveAs"), openBtn = $("open"), openFileInput = $("openFile");
 export const importGpBtn = $("importGp"), gpImportFile = $("gpImportFile");

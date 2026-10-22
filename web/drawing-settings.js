@@ -5,7 +5,6 @@ import { S } from './store.js';
 import { keyOf, matchKey, shortcutTitle } from './keymap.js';
 import { placeFloating } from './floating-position.js';
 import { registerEscapeLayer, ESC_DEPTH } from './escape-stack.js';
-import { setQuickHeatPreview } from './tracing.js';
 import { closeMenus } from './menus.js';
 
 function position() {
@@ -13,28 +12,22 @@ function position() {
   placeFloating(panel, rect.right - panel.offsetWidth, rect.bottom);
 }
 function sync() {
-  const snap = $('traceSnap').checked, heat = `${Math.round(Number($('traceThreshold').value))}%`;
-  $('drawingSettingsStatus').textContent = snap ? `Snap · ${heat}` : 'Free draw';
-  $('drawingSettings').title = shortcutTitle(`Drawing: ${snap ? `snap to pitch, heat ${heat}` : 'free draw'}`, 'drawingSettings');
+  const snap = $('traceSnap').checked;
+  $('drawingSettingsStatus').textContent = snap ? 'Snap to pitch' : 'Free draw';
+  $('drawingSettings').title = shortcutTitle(`Drawing: ${snap ? 'snap to pitch' : 'free draw'}`, 'drawingSettings');
   $('quickTraceSnapKey').textContent = keyOf('drawingSnap') || '';
   $('quickTraceSnap').title = shortcutTitle('Snap to pitch', 'drawingSnap');
-  $('quickTraceThreshold').setAttribute('aria-valuetext', heat);
-  setQuickHeatPreview(snap && !$('drawingQuickPanel').hidden);
 }
 export function toggleDrawingSnap() {
   const control = $('traceSnap');
-  // Turning snap off disables the heat slider, and the browser drops focus from it; keep it in the panel.
-  const onHeat = document.activeElement === $('quickTraceThreshold');
   control.checked = !control.checked;
   control.dispatchEvent(new Event('change', { bubbles: true }));
-  if (onHeat && !control.checked) $('quickTraceSnap').focus();
 }
 function close(returnFocus = false) {
   const panel = $('drawingQuickPanel');
   if (panel.hidden) return false;
   if (panel.contains(document.activeElement)) document.activeElement.blur();
   panel.hidden = true; $('drawingSettings').setAttribute('aria-expanded', 'false');
-  setQuickHeatPreview(false);
   if (returnFocus) $('drawingSettings').focus({ preventScroll: true });
   return true;
 }
@@ -44,13 +37,13 @@ export function toggleDrawingSettings() {
   $('drawingQuickPanel').hidden = false;
   $('drawingSettings').setAttribute('aria-expanded', 'true');
   sync(); position();
-  ($('quickTraceThreshold').disabled ? $('quickTraceSnap') : $('quickTraceThreshold')).focus({ preventScroll: true });
+  $('quickTraceSnap').focus({ preventScroll: true });
 }
 export function initDrawingSettings() {
   const panel = $('drawingQuickPanel'), button = $('drawingSettings');
   button.addEventListener('click', toggleDrawingSettings);
   $('drawingQuickClose').addEventListener('click', () => close(true));
-  for (const id of ['traceSnap','traceRange','traceThreshold'])
+  for (const id of ['traceSnap','traceRange'])
     $(id).addEventListener(id === 'traceSnap' ? 'change' : 'input', sync);
   window.addEventListener('cw-keymap-changed', sync);
   registerEscapeLayer(ESC_DEPTH.popover, () => close(true));

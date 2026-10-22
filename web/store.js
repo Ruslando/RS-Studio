@@ -71,8 +71,6 @@ export const S = {
   toolMode: "pan",
   traceHeld: false,
   sliceHeld: false,  // temporary FL-style Slice gesture while the S key is held
-  heatPreview: false,
-  heatPreviewTimer: 0,
   taps: [],
   undoStack: [],
   redoStack: [],

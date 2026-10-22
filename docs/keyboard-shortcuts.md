@@ -64,14 +64,12 @@ Release Alt to snap again. Alt-drag on empty space still creates a time range.
 Free edge positions persist after release and through unrelated edits; the
 opposite edge of a resized note stays fixed.
 
-The Drawing button beside Zoom shows the snap state and heat threshold. Its
-popover provides Snap to pitch, a search range of ±1, ±2 or ±3 semitones, and a
-Heat slider with a live spectrogram preview. Changes persist immediately and
-stay synchronized with Editor settings. Turning snap off disables Range and
-Heat. A former saved ±5 range is migrated to ±3.
+The Drawing button beside Zoom shows the snap state. Its popover provides
+Snap to pitch and a search range of ±1, ±2 or ±3 semitones. Changes persist
+immediately and stay synchronized with Editor settings. Turning snap off
+disables Range. A former saved ±5 range is migrated to ±3.
 
-H opens the popover and focuses Heat (or Snap when Heat is disabled). Arrow keys
-adjust the focused slider; Escape or an outside click closes the popover. Both
+H opens the popover and focuses Snap. Escape or an outside click closes it. Both
 H and T are editable commands, with the same conflict checking, removal, staged
 Apply/cancel and persistence as other bindings. The button hints follow the
 current bindings.
@@ -101,6 +99,8 @@ navigation; other technique variants such as bends, slides and harmonics;
 reference locks and renaming; fretboard influence controls; and a shortcut to
 start detection immediately. These need a separate choice of behavior and scope.
 
+Navigating between notes or chords with the arrow keys also auditions the newly
+selected note or chord using its lane voice and mute settings.
 
 The spectrogram's floating controls select Stereo / Left / Right for the
 viewed audio layer and set the displayed Intensity range (Min / Max). Values
@@ -113,5 +113,3 @@ The spectrogram controls collapse to a compact channel/range summary. Use its
 chevron to expand, or drag its grip to dock along any spectrogram edge. With
 the grip focused, arrow keys choose an edge. Dock position and collapsed state
 are remembered on this device. Channel choices use the app's menu controls.
-Navigating between notes or chords with the arrow keys also auditions the newly
-selected note or chord using its lane voice and mute settings.

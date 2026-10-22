@@ -31,7 +31,7 @@ import { songBarStarts } from "./song-bars.js";
 import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
-import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
+import { cancelHoverPreview, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
@@ -422,7 +422,6 @@ function paintFrame() {
     }
   }
   drawRuler();   // depends on rowH + vertical scroll, so repaint alongside the stage
-  drawHeatThresholdOverlay();
 
   sctx.strokeStyle = PAINT.gridSub;
   for (let p = S.state.spec.midi_low; p <= S.state.spec.midi_high; p++) {
@@ -433,7 +432,7 @@ function paintFrame() {
   drawGrid();
   if (S.detectRegion) drawDetectRegion(vx0, vx1);
   if (S.drag && S.drag.mode === "trace") drawTraceRange(S.drag.points);
-  else if ((S.toolMode === "trace" || S.traceHeld || S.heatPreview) && S.mouseX != null && S.mouseY != null) drawTraceRange([[S.mouseX, S.mouseY]]);
+  else if ((S.toolMode === "trace" || S.traceHeld) && S.mouseX != null && S.mouseY != null) drawTraceRange([[S.mouseX, S.mouseY]]);
 
   // Overlap stacks (same pitch + overlapping time inside one edit lane) are no
   // longer merged — flag them with a hot color + a count badge instead.
@@ -742,8 +741,8 @@ function paintFrame() {
 export let mmBackdrop = document.createElement("canvas");
 
 export let mmBackdropCtx = mmBackdrop.getContext("2d");
-let mmBackdropRange = "";
 
+let mmBackdropRange = "";
 export let mmBackdropImg = null;   // spectImg the current backdrop was built from
 
 function buildMinimapBackdrop(W, H) {
@@ -752,8 +751,8 @@ function buildMinimapBackdrop(W, H) {
   if (S.spectImg) {
     paintIntensity(mmBackdropCtx, S.spectImg, 0, 0, S.spectImg.width, S.spectImg.height, 0, 0, W, H, ...(S.state.viewIntensity || [0, 100]));
   }
-  mmBackdropRange = `${S.state.viewIntensity || [0, 100]}:${intensityRevision()}`;
   mmBackdropImg = S.spectImg;
+  mmBackdropRange = `${S.state.viewIntensity || [0, 100]}:${intensityRevision()}`;
 }
 
 function overviewTimeLabel(time, fractional = false) {
