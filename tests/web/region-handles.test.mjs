@@ -25,7 +25,7 @@ try {
     './marker-rails.js': { markerRails: () => [] },
     './note-render.js': { regionEdgeAt: x => Math.abs(x - S.detectRegion.t0 * 100) < 7 ? 'l' : Math.abs(x - S.detectRegion.t1 * 100) < 7 ? 'r' : null },
     './detect.js': { updateDetectStatus: noop }, './note-motion.js': { finishNoteGesture: noop },
-  }, { './constants.js': true, './util.js': true });
+  }, { './constants.js': true, './util.js': true, './note-length.js': true });
   init_interaction();
   for (const tool of ['pan', 'trace', 'select', 'frame', 'marquee']) {
     S.toolMode = tool; S.detectRegion = { t0: 2, t1: 4 };

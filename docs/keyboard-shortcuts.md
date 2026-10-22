@@ -51,6 +51,13 @@ Tone Designer, Artifacts previews, selection, scrolling and zooming.
 
 ## Drawing quick settings
 
+The time grid automatically adapts to horizontal zoom, from coarse beat/bar
+steps to 1/32 notes. The readout beside Zoom shows the active step. Hold Alt on
+a note edge, or press it during a resize, to move that edge without snapping.
+Release Alt to snap again. Alt-drag on empty space still creates a time range.
+Free edge positions persist after release and through unrelated edits; the
+opposite edge of a resized note stays fixed.
+
 The Drawing button beside Zoom shows the snap state and heat threshold. Its
 popover provides Snap to pitch, a search range of ±1, ±2 or ±3 semitones, and a
 Heat slider with a live spectrogram preview. Changes persist immediately and

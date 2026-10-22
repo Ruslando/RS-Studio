@@ -14,6 +14,7 @@ const timedLanes = () => editLanes().filter(onLiveTiming);
 import { refreshSaveState } from "./project.js";
 import { S } from "./store.js";
 import { projectStart } from "./project-position-core.js";
+import { autoGridStep } from './auto-grid.js';
 
 // ---- tempo grid ----
 export const gridBpm = () => parseFloat(bpmInput.value) || 0;
@@ -136,6 +137,7 @@ export function gridAt(t) {
 // caller keeps importing the grid from the grid.
 export { segBarSec, segBeatSec } from "./bars.js";
 export const segStep = (seg) => segBeatSec(seg) / segSubdiv(seg);        // one grid cell
+export const displayGridStep = seg => autoGridStep(seg, S.pxPerSec);
 
 // Add a marker at the nearest note-grid position. Inherits the tempo/meter in force
 // there, so dropping it moves no beat; its grid division starts at 1/32. Returns
@@ -198,25 +200,23 @@ export function snap(t, segments = null) {
   // A tempo-flag drag uses its starting grid, so its moving origin cannot
   // pull subsequent pointer events onto a different set of snap positions.
   const seg = segments ? [...segments].reverse().find(s => s.t <= t) || segments[0] : gridAt(t);
-  const step = segStep(seg);
+  const step = displayGridStep(seg);
   if (!step) return Math.max(projectStart(S.state), t);
   return Math.max(projectStart(S.state), Math.round((t - seg.t) / step) * step + seg.t);
 }
 
-// Pull a whole note onto the current display grid: snap the start to the nearest
-// gridline AND round the length to a whole number of grid cells (min one), so both
-// edges land on gridlines. This is the "enforce grid placement" primitive every
-// note-moving operation funnels through. With no tempo grid the note is returned
-// unchanged, which is how off-grid notes stay allowed only before timing exists.
-export function snapNote(start, end) {
-  const seg = gridAt(start), step = segStep(seg);
+// Move a note's start onto the visible grid without stretching its rhythm to a
+// coarse zoom level. Length retains the underlying musical resolution.
+export function snapNote(start, end, { adaptive = true } = {}) {
+  const seg = gridAt(start), step = adaptive ? displayGridStep(seg) : segStep(seg);
   if (!step) {
     const s = Math.max(projectStart(S.state), start);
     return { start: s, end: end + s - start };
   }
   const s = Math.max(projectStart(S.state), Math.round((start - seg.t) / step) * step + seg.t);
-  const cells = Math.max(1, Math.round((end - start) / step));
-  return { start: s, end: S.state ? Math.min(S.state.duration, s + cells * step) : s + cells * step };
+  const lengthStep = Math.min(segStep(seg) || step, step);
+  const cells = Math.max(1, Math.round((end - start) / lengthStep));
+  return { start: s, end: S.state ? Math.min(S.state.duration, s + cells * lengthStep) : s + cells * lengthStep };
 }
 
 // After every committed edit: a note whose start fell off its grid — a tempo flag
@@ -226,14 +226,17 @@ export function snapNote(start, end) {
 // 1/8 and 1/16 triplets, so detected notes and imported tuplets keep their rhythm.
 // Hand holds on a snapped note's start follow it. Returns how many notes moved.
 // ponytail: start-only check, a note whose end alone is off is left as it is
-export function snapStrayNotes(lanes) {
+export function snapStrayNotes(lanes, previous = {}) {
   const on = (t, seg, step) => { const k = (t - seg.t) / step; return Math.abs(k - Math.round(k)) * step < 1e-4; };
   let moved = 0;
   for (const lane of lanes) {
+    const oldNotes = new Map((previous[lane.id] || []).map(note => [note.id, note]));
     for (const n of lane.notes) {
+      // Unrelated edits must not quantize an earlier freely placed edge.
+      if (oldNotes.get(n.id)?.start === n.start) continue;
       const seg = gridAt(n.start);
       if (n.start >= projectStart(S.state) && (!seg.bpm || on(n.start, seg, segStep(seg)) || on(n.start, seg, 60 / seg.bpm / 24))) continue;
-      const q = snapNote(n.start, n.end);
+      const q = snapNote(n.start, n.end, { adaptive: false });
       for (const h of lane.handHolds || []) if (Math.abs(+h.t - n.start) < 1e-6) h.t = q.start;
       n.start = q.start; n.end = q.end;
       moved++;

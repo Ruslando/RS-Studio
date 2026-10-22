@@ -12,7 +12,8 @@ import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
 import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { pitchAt, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
-import { gridAt, minDur, snap, snapNote } from "./grid.js";
+import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
+import { NoteLengthMemory } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
 import { updateProjectStartAt } from "./project-position.js";
 import { projectStart } from "./project-position-core.js";
@@ -33,6 +34,7 @@ import { coastViewport, manualViewportNavigation } from "./viewport-motion.js";
 import { createPanTracker } from './pan-momentum.js';
 
 let sliceHeld = false;
+const noteLength = new NoteLengthMemory();
 
 function noteAt(lane, t, pitch) {
   if (!lane) return null;
@@ -206,21 +208,27 @@ function updateDrag(x, y) {
     // delta (so a multi-note selection resizes together). Each note is clamped
     // so it can't invert past its own opposite edge.
     const o = S.drag.orig.get(S.drag.note);
+    if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 1) return;
+    S.drag.resizeMoved = true;
+    const minimum = Math.min(MIN_DUR, minDur());
+    const time = timeAt(x) - (S.drag.resizeGrab || 0);
+    S.drag.resizeTime = time;
+    const target = S.drag.freeResize ? time : snap(time);
     if (S.drag.edge === "r") {
-      const dt = Math.max(o.start + minDur(), snap(timeAt(x))) - o.end;
+      const dt = Math.max(o.start + minimum, target) - o.end;
       for (const n of S.drag.notes) {
         const oo = S.drag.orig.get(n);
-        n.end = Math.max(oo.start + minDur(), oo.end + dt);
+        n.end = Math.min(S.state.duration, Math.max(oo.start + minimum, oo.end + dt));
       }
     } else {
-      const dt = Math.min(o.end - minDur(), Math.max(0, snap(timeAt(x)))) - o.start;
+      const dt = Math.min(o.end - minimum, Math.max(projectStart(S.state), target)) - o.start;
       for (const n of S.drag.notes) {
         const oo = S.drag.orig.get(n);
-        n.start = Math.min(oo.end - minDur(), Math.max(projectStart(S.state), oo.start + dt));
+        n.start = Math.min(oo.end - minimum, Math.max(projectStart(S.state), oo.start + dt));
       }
     }
     S.drag.lane.notes = makeResizeRoom(S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig,
-      S.drag.edge, minDur(), note => !!boxOfNote(note)?.group.locked);
+      S.drag.edge, minimum, note => !!boxOfNote(note)?.group.locked);
     updateNoteGesture(S.state, laneOf(S.drag.note), S.drag.notes);
     draw(); return;
   }
@@ -299,6 +307,16 @@ export function init_interaction() {
   };
   window.addEventListener('keydown', traceModifier);
   window.addEventListener('keyup', traceModifier);
+  const resizeModifier = event => {
+    if (event.key !== 'Alt' || S.drag?.mode !== 'resize') return;
+    event.preventDefault();
+    S.drag.freeResize = event.type === 'keydown';
+    const [x, y] = clientToCanvas(S.lastPointerX, S.lastPointerY);
+    updateDrag(x, y);
+    draw();
+  };
+  window.addEventListener('keydown', resizeModifier);
+  window.addEventListener('keyup', resizeModifier);
   window.addEventListener('blur', () => { S.traceHeld = false; });
   // Like FL Studio's temporary tools, Slice exists only while its key is held.
   // It deliberately does not alter the active persistent Select/Trace/etc. mode.
@@ -340,9 +358,12 @@ export function init_interaction() {
     const defaultTrace = noMod && S.toolMode === "trace";
     const wantTrace = tool === "trace";
     const wantMarquee = e.shiftKey || tool === "marquee";
-    const wantFrame = e.altKey || tool === "frame";
+    const altHit = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey ? pickNote(t, pitch) : null;
+    const altResize = altHit && !altHit.grace && edgeOf(altHit.note, x)
+      && canEditLane(altHit.lane) && !boxOfNote(altHit.note)?.group.locked;
+    const wantFrame = (e.altKey && !altResize) || tool === "frame";
     const wantSlice = sliceHeld && noMod;
-    const plainSelect = noMod && (["select", "pan"].includes(S.toolMode) || defaultTrace);
+    const plainSelect = altResize || (noMod && (["select", "pan"].includes(S.toolMode) || defaultTrace));
     const noteHit = plainSelect ? pickNote(t, pitch) : null;
 
     // Existing range edges stay grabbable in every tool, including the default
@@ -462,11 +483,13 @@ export function init_interaction() {
       if (hit.lane !== activeLane()) {
         S.state.lanes.forEach((l) => (l.active = l === hit.lane));
         renderLanes();
+        noteLength.remember(S.state, hit.note, gridSegments());
         setSelection(new Set([hit.note]));
         auditionNote(hit.note, hit.lane);
         draw();
         return;
       }
+      noteLength.remember(S.state, hit.note, gridSegments());
       if (!S.selection.has(hit.note)) setSelection(new Set([hit.note]));
       // Click-to-hear: audition the clicked note's pitch (also unlocks audio on
       // this gesture so a follow-up vertical drag can play landing pitches).
@@ -477,12 +500,14 @@ export function init_interaction() {
         const notes = [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked);
         S.drag = {
           mode: "resize", edge, note: hit.note, prev: snapshotEdit(), notes,
+          startX: x, resizeGrab: t - (edge === 'r' ? hit.note.end : hit.note.start), freeResize: !!e.altKey,
           lane: hit.lane, resizeLaneNotes: [...hit.lane.notes],
           orig: new Map(hit.lane.notes.map((n) => [n, { start: n.start, end: n.end }])),
         };
+        S.lastPointerX = e.clientX; S.lastPointerY = e.clientY;
       } else {
         S.drag = {
-          mode: "move", startX: x, startY: y, moved: false, prev: snapshotEdit(),
+          mode: "move", note: hit.note, startX: x, startY: y, moved: false, prev: snapshotEdit(),
           lane: hit.lane, lastRow: 0,
           notes: [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked),
           orig: new Map([...S.selection].map((n) => [n, { start: n.start, end: n.end, pitch: n.pitch }])),
@@ -529,14 +554,13 @@ export function init_interaction() {
       const lane = targetLane(), step = minDur();
       if (!canEditLane(lane) || !step) return;
       const start = Math.max(0, Math.min(snap(timeAt(x)), S.state.duration - step));
-      // A new note is a quarter long, whatever the grid division (bpm counts quarters).
-      const bpm = gridAt(start).bpm;
-      const end = Math.min(S.state.duration, start + (bpm ? 60 / bpm : step));
+      const end = Math.min(S.state.duration, Math.max(start + step, noteLength.end(S.state, start, gridSegments())));
       if (end - start < MIN_DUR) return;
       const note = { id: nid(), start, end, pitch: pitchAt(y), confidence: 1 };
       const prev = snapshotEdit();
       lane.notes.push(note);
       commit(prev);
+      noteLength.remember(S.state, note, gridSegments());
       setSelection(new Set([note]));
       refreshCounts();
       draw();
@@ -592,6 +616,7 @@ export function init_interaction() {
   window.addEventListener("mousemove", (e) => {
     if (!S.drag || !S.state) return;
     S.lastPointerX = e.clientX; S.lastPointerY = e.clientY;
+    if (S.drag.mode === 'resize') S.drag.freeResize = !!e.altKey;
     const [x, y] = localXY(e);
     updateDrag(x, y);
   });
@@ -656,10 +681,10 @@ export function init_interaction() {
   // happened to start on a note must not push a no-op onto the stack. Comparing
   // two full-project snapshots as JSON is blunt and was written out four times;
   // it is affordable because it runs once per mouse RELEASE, not per mousemove.
-  const commitIfChanged = (mirrorSource) => {
+  const commitIfChanged = (mirrorSource, preserveTiming = false) => {
     if (!S.drag?.prev) return;
     if (JSON.stringify(snapshotEdit()) === JSON.stringify(S.drag.prev)) return;
-    commit(S.drag.prev, mirrorSource);
+    commit(S.drag.prev, mirrorSource, null, { preserveTiming });
   };
   window.addEventListener("mouseup", (e) => {
     if (!S.drag || !S.state) return;
@@ -692,6 +717,7 @@ export function init_interaction() {
         if (added.length) {
           lane.notes.push(...added);
           commit(prev);
+          noteLength.remember(S.state, added[added.length - 1], gridSegments());
           setSelection(new Set(added));
           S.state.lanes.forEach((l) => (l.active = l === lane));
           renderLanes(); refreshCounts();
@@ -741,17 +767,18 @@ export function init_interaction() {
       updateDetectStatus();
       // Keep the range available for looping and explicitly requested detection.
     } else if (S.drag.mode === "move" || S.drag.mode === "resize") {
-      // The moved/resized notes stay selected. Enforce full grid placement on the
-      // final position so neither edge is left straddling a gridline (move already
-      // snapped live; this is what pulls a resize's untouched edge on too). Then
-      // Make room for a resized edge and record the entire gesture for undo.
-      for (const n of S.drag.notes) { const q = snapNote(n.start, n.end); n.start = q.start; n.end = q.end; }
+      // Resize only the grabbed edge. In particular, do not re-quantize an Alt
+      // placement or the fixed edge when the gesture is released.
+      if (S.drag.mode === 'move' && S.drag.moved) for (const n of S.drag.notes) {
+        const q = snapNote(n.start, n.end); n.start = q.start; n.end = q.end;
+      }
       if (S.drag.mode === "resize") S.drag.lane.notes = makeResizeRoom(
-        S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig, S.drag.edge, minDur(),
+        S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig, S.drag.edge, Math.min(MIN_DUR, minDur()),
         note => !!boxOfNote(note)?.group.locked);
       updateNoteGesture(S.state, S.drag.lane || laneOf(S.drag.note), S.drag.notes);
+      noteLength.remember(S.state, S.drag.note, gridSegments());
       // Pitch edits leave hand placement to the solver; they do not author anchors.
-      commitIfChanged();
+      commitIfChanged(undefined, S.drag.mode === 'resize');
     } else if (S.drag.mode === "bendPoint") {
       commitIfChanged();
     } else if (S.drag.mode === "refBox") {

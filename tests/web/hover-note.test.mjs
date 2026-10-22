@@ -17,7 +17,7 @@ try {
     './geometry.js': { timeAt: x => x / 100, pitchAt: () => 64 },
     './marker-rails.js': { railsBottom: () => 20 },
     './references.js': { boxOfNote: () => referenceLocked ? { group: { locked: true } } : null },
-  });
+  }, { './note-length.js': true });
   assert.equal(hoveredStageNote(), lane.notes[0]);
   scroll.scrollLeft = 190;
   assert.equal(hoveredStageNote(), lane.notes[1], 'scrolling under a stationary pointer updates the target');
