@@ -244,11 +244,6 @@ export function init_tone_markers() {
     changed(lane);
   });
   toneMarkerPopClose.addEventListener("click", closeToneMarkerPop);
-  stage.addEventListener("dblclick", (event) => {
-    if (!S.state) return;
-    const [x, y] = toCanvas(event.clientX, event.clientY);
-    if (!inBand(y - scroll.scrollTop) || markerAt(x, y)) return;
-    addToneMarkerAtTime(timeAt(x), event.clientX, event.clientY);
-  });
+
   // Marker editors stay open until their close button is pressed.
 }

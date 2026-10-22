@@ -10,10 +10,6 @@ import { openDetectPanel, updateDetectStatus } from './detect.js';
 import { refMenuEntry, detachSelection } from './references.js';
 import { markSelectionAsMotif, selectEntireMotif, unmarkSelectedMotifs, setFxOnSelection } from './edit.js';
 import { runFindSimilar } from './tracing.js';
-import { addMarkerAtTime } from './markers.js';
-import { addSectionMarkerAtTime } from './section-markers.js';
-import { addPhraseBoundaryAtTime } from './phrase-markers.js';
-import { addToneMarkerAtTime } from './tone-markers.js';
 import { xOf } from './geometry.js';
 import { moveViewportTo } from './viewport-motion.js';
 import { toggleDrawingSettings, toggleDrawingSnap } from './drawing-settings.js';
@@ -36,10 +32,6 @@ function goTo(time) {
   moveViewportTo(xOf(time) - scroll.clientWidth * .2, scroll.scrollTop);
   draw();
 }
-function atPlayhead(action) {
-  const rect = stage.getBoundingClientRect();
-  action(playbackTime(), rect.left + Math.min(rect.width - 20, Math.max(20, xOf(playbackTime()) - scroll.scrollLeft)), rect.top + 40);
-}
 function withSelection(action) {
   const notes = [...S.selection].filter(note => laneOf(note));
   if (notes.length && notes.every(note => canEditLane(laneOf(note)))) action(notes);
@@ -55,8 +47,6 @@ export const EDITOR_COMMAND_HANDLERS = {
   songStart: () => goTo(0), songEnd: () => goTo(S.state.duration),
   rangeStart: () => goTo(S.detectRegion?.t0),
   clearRange: () => { S.detectRegion = null; updateDetectStatus(); draw(); },
-  addTempo: () => atPlayhead(addMarkerAtTime), addSection: () => atPlayhead(addSectionMarkerAtTime),
-  addPhrase: () => atPlayhead(addPhraseBoundaryAtTime), addTone: () => atPlayhead(addToneMarkerAtTime),
   detectNotes: () => { const rect = stage.getBoundingClientRect(); openDetectPanel(rect.left + 40, rect.top + 40); },
   findSimilar: () => withSelection(runFindSimilar),
   groupReference: () => withSelection(notes => refMenuEntry(notes)?.fn()),

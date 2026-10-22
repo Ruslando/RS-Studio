@@ -40,7 +40,7 @@ import { matchKey } from "./keymap.js";
 import { runEditorShortcut } from "./editor-shortcuts.js";
 import { navigateMarker } from "./marker-artifacts.js";
 import { normLayerVolume } from "./util.js";
-import { chordColumns, handChoices, handProfileForTuning, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
+import { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
 
 // ---- undo / redo (all edit lanes) ----
 export const MAX_UNDO = 200;
@@ -736,11 +736,8 @@ export function applyColumnAlternative(colNotes, choice, influence = null) {
     if (result.error) toast(result.error);
     return;
   }
-  const lane = laneOf(colNotes?.[0]);
-  const before = lane && handsBefore(lane);
   const prev = snapshotEdit();
   if (writeAlternative(colNotes, choice, influence)) {
-    followHand(lane, before, Math.min(...colNotes.map((n) => n.start)));
     commit(prev); draw(); refreshTabIfOpen();
   }
 }
@@ -774,10 +771,14 @@ function writeAlternative(colNotes, choice, influence) {
 // planned on from there. The fretboard only offers hands that can play the column
 // (handChoices); one that no longer can (its notes changed) lapses. Placing the hand
 // already held there clears it.
-export function setHandAnchor(lane, t, fret) {
+export function setHandAnchor(lane, t, fret, { create = false } = {}) {
   if (!canEditLane(lane) || !Number.isFinite(t) || (fret !== null && (!Number.isFinite(fret) || fret < 1))) return;
   const near = (h) => Math.abs(Number(h.t) - t) <= 1e-6;
   const had = (lane.handHolds || []).find(near);
+  if (!had && fret !== null && !create) {
+    toast('Add a hand anchor from the spectrogram context menu first.');
+    return;
+  }
   const rest = (lane.handHolds || []).filter((h) => !near(h));
   if ((!had && fret === null) || (had && Number(had.fret) === fret)) return;
   const prev = snapshotEdit();
@@ -856,9 +857,7 @@ export function setColumnShape(colNotes, shape, limits = null, maxFret = undefin
   if (!lane) return "These notes are not in an editable note layer";
   const wrong = shapeFault(colNotes, laneFretTuning(lane), shape, limits, maxFret);
   if (wrong) return wrong;
-  const before = handsBefore(lane);
-  applyColumnPos(colNotes, shape, "local", overrideFlow(colNotes),
-    () => followHand(lane, before, Math.min(...colNotes.map((n) => n.start))));
+  applyColumnPos(colNotes, shape, "local", overrideFlow(colNotes));
   return null;
 }
 
@@ -891,15 +890,10 @@ export function setNotePosition(note, string, fret) {
   }
   const shared = applySelectedPosition(ctx.col.notes, shape);
   if (shared.handled) { if (shared.error) toast(shared.error); return; }
-  applyColumnPos(ctx.col.notes, shape, "local", overrideFlow(ctx.col.notes),
-    () => followHand(ctx.lane, before, Math.min(...ctx.col.notes.map((n) => n.start)), note.id));
+  applyColumnPos(ctx.col.notes, shape, "local", overrideFlow(ctx.col.notes));
 }
 
-// THE HAND FOLLOWS A NOTE MOVED ALONG ITS STRING, keeping its stretch: a note the
-// pinky played four frets above the index is still played that way after the move,
-// so the hand moves by as much as the note did. Stated as a hand on that column
-// (setHandAnchor's kind), visible and undone with the move, and only where the hand
-// the rules would choose differs and the kept one can play the column.
+// Resolve current positions before explicitly changing a note on the fretboard.
 export function handsBefore(lane) {
   const found = voiceNotesFingered(lane.notes, laneFretTuning(lane), Infinity,
     { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
@@ -909,30 +903,6 @@ export function handsBefore(lane) {
     if (pos) byId.set(n.id, { ...pos, seat: found.seats.get(n) });
   }
   return { voiced: found.voiced, byId };
-}
-
-export function followHand(lane, before, t0, movedId = null) {
-  if (!lane || !before) return;
-  const tuning = laneFretTuning(lane), profile = handProfileForTuning(tuning);
-  const after = voiceNotesFingered(lane.notes, tuning, Infinity,
-    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
-  const columns = chordColumns(lane.notes);
-  const i = columns.findIndex((c) => Math.abs(c.t0 - t0) < 1e-6);
-  if (i < 0) return;
-  const column = columns[i].notes;
-  const shape = new Map(column.filter((n) => after.voiced.has(n)).map((n) => [n, after.voiced.get(n)]));
-  const moved = [...column].sort((a, b) => (b.id === movedId) - (a.id === movedId)).find((n) => {
-    const was = before.byId.get(n.id), now = after.voiced.get(n);
-    return was && now && was.seat != null && was.string === now.string && was.fret > 0 && now.fret > 0 && was.fret !== now.fret;
-  });
-  if (!moved) return;
-  const was = before.byId.get(moved.id), now = after.voiced.get(moved);
-  const seat = now.fret - (was.fret - was.seat);
-  if (seat === after.seats.get(moved)) return;
-  if (!handChoices(shape, profile, Math.max(1, laneFretCount(lane) - 3)).includes(seat)) return;
-  const from = i > 0 ? columns[i - 1].t0 : -Infinity, at = columns[i].t0;
-  const rest = (lane.handHolds || []).filter((h) => !(Number(h.t) > from + 1e-6 && Number(h.t) <= at + 1e-6));
-  lane.handHolds = [...rest, { t: at, fret: seat }].sort((a, b) => a.t - b.t);
 }
 
 // THE WAY BACK OFF EVERYTHING THE NECK CAN PUT ON ONE BEAT: the shape pinned there

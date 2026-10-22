@@ -215,11 +215,6 @@ export function init_phrase_markers() {
     changed(lane);
   });
   phraseMarkerPopClose.addEventListener("click", closePhraseMarkerPop);
-  stage.addEventListener("dblclick", (event) => {
-    if (!S.state) return;
-    const [x, y] = toCanvas(event.clientX, event.clientY);
-    if (!inBand(y - scroll.scrollTop) || markerAt(x, y)) return;
-    addPhraseBoundaryAtTime(timeAt(x), event.clientX, event.clientY);
-  });
+
   // Marker editors stay open until their close button is pressed.
 }

@@ -317,11 +317,6 @@ export function init_section_markers() {
     closeSectionMarkerPop();
   });
   sectionMarkerPopClose.addEventListener("click", closeSectionMarkerPop);
-  stage.addEventListener("dblclick", (event) => {
-    if (!S.state) return;
-    const [x, y] = toCanvas(event.clientX, event.clientY);
-    if (!inBand(y - scroll.scrollTop) || markerAt(x, y)) return;
-    addSectionMarkerAtTime(timeAt(x), event.clientX, event.clientY);
-  });
+
   // Marker editors stay open until their close button is pressed.
 }

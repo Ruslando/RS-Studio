@@ -10,7 +10,7 @@ import { updateDetectStatus } from "./detect.js";
 import { bendHandles, regionEdgeAt } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
-import { addBendPoint, commit, followHand, handsBefore, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
+import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { pitchAt, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, minDur, snap, snapNote } from "./grid.js";
 import { markerCursorAt, markerMouseDown } from "./markers.js";
@@ -503,6 +503,8 @@ export function init_interaction() {
   stage.addEventListener("dblclick", (e) => {
     if (!S.state || e.ctrlKey || e.metaKey) return;
     const [x, y] = localXY(e);
+    // Only actual flags consume this area; empty rail space is note-editing space.
+    if (markerCursorAt(x, y) || markerRails().some(rail => rail.cursorAt?.(x, y))) return;
     // Double-click a reference's or motif's name to rename it in place.
     const label = refBadgeAt(x, y) || S.motifLabels.find((m) => x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h);
     if (label && canEditLane(label.lane)) {
@@ -523,7 +525,7 @@ export function init_interaction() {
     const hit = bendCurveAt(x, y);
     if (hit) { e.preventDefault(); addBendPoint(hit.note, hit.t); }
     else if (["trace", "pan"].includes(S.toolMode) && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
-             y - scroll.scrollTop >= railsBottom() + 2 && !pickNote(timeAt(x), pitchAt(y))) {
+             !pickNote(timeAt(x), pitchAt(y))) {
       const lane = targetLane(), step = minDur();
       if (!canEditLane(lane) || !step) return;
       const start = Math.max(0, Math.min(snap(timeAt(x)), S.state.duration - step));
@@ -748,13 +750,7 @@ export function init_interaction() {
         S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig, S.drag.edge, minDur(),
         note => !!boxOfNote(note)?.group.locked);
       updateNoteGesture(S.state, S.drag.lane || laneOf(S.drag.note), S.drag.notes);
-      // One note moved up or down its string: the hand goes with it (followHand).
-      const [moved] = S.drag.notes, was = moved && S.drag.orig.get(moved);
-      if (S.drag.mode === "move" && S.drag.notes.length === 1 && S.drag.lane && was && was.pitch !== moved.pitch) {
-        const lane = S.drag.lane;
-        const before = handsBefore({ ...lane, notes: lane.notes.map((n) => n === moved ? { ...n, ...was } : n) });
-        followHand(lane, before, moved.start, moved.id);
-      }
+      // Pitch edits leave hand placement to the solver; they do not author anchors.
       commitIfChanged();
     } else if (S.drag.mode === "bendPoint") {
       commitIfChanged();
