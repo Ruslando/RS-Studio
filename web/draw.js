@@ -1,4 +1,5 @@
 import { paintNoteRow } from './timeline-paint.js';
+import { createOverviewTime, formatTimelineTime } from './timeline-time.js';
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
 import { hideTooltip, showTooltip } from "./tooltip.js";
 import { rocksmithIssueNotes } from "./rocksmith-check.js";
@@ -39,6 +40,7 @@ const overrideEffectCache = new WeakMap();
 const overrideEffectJobs = new WeakMap();
 const omittedArrangementCache = new WeakMap();
 let warningMarks = [];
+let overviewTime = null;
 const STACKED_BEND_TIP = { title: "Bend points at the same moment", tone: "warning",
   body: "Rocksmith keeps only the first of them. Move one point a little apart." };   // last frame's warning marks: { x0, x1, y0, y1, tip }
 
@@ -377,7 +379,10 @@ function paintFrame() {
   // hand too. Ahead of the guards below because the neck is drawn with or without
   // a project, and it has its own.
   drawFretboard();
-  if (!S.state || !S.state.spec) return;   // spec is set by selectStem; nothing to paint before then
+  if (!S.state || !S.state.spec) {
+    overviewTime?.sync(0, 0, 0);
+    return;
+  }
   if (editorEl.hidden || viewer.clientWidth <= RULER_W || viewer.clientHeight < 1) return;
   if (!S.drag) S.hoverNote = hoveredStageNote();
   // layout() primes the fixed ruler width before measuring #scroll. This is a
@@ -749,10 +754,7 @@ function buildMinimapBackdrop(W, H) {
 }
 
 function overviewTimeLabel(time, fractional = false) {
-  time = Math.round(time * (fractional ? 10 : 1)) / (fractional ? 10 : 1);
-  const minutes = Math.floor(time / 60);
-  const seconds = time - minutes * 60;
-  return `${minutes}:${seconds.toFixed(fractional ? 1 : 0).padStart(fractional ? 4 : 2, "0")}`;
+  return formatTimelineTime(time, fractional);
 }
 
 function drawOverviewRuler(width, dp) {
@@ -783,13 +785,7 @@ function drawOverviewRuler(width, dp) {
   const x = time / duration * width;
   ctx.strokeStyle = PAINT.accent;
   ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, height); ctx.stroke();
-  if (S.mmSeeking) {
-    const label = overviewTimeLabel(time, true);
-    const labelWidth = ctx.measureText(label).width;
-    const left = Math.max(0, Math.min(width - labelWidth - 8, x + 5));
-    ctx.fillStyle = PAINT.chrome; ctx.fillRect(left, 0, labelWidth + 8, height - 3);
-    ctx.fillStyle = PAINT.text; ctx.fillText(label, left + 4, 1);
-  }
+  overviewTime?.sync(time, duration, width);
   overviewRuler.setAttribute("aria-valuemax", String(duration));
   overviewRuler.setAttribute("aria-valuenow", String(+time.toFixed(3)));
   overviewRuler.setAttribute("aria-valuetext", overviewTimeLabel(time, true));
@@ -881,6 +877,11 @@ function rulerPitchAt(clientY) {
 }
 
 export function init_draw() {
+  overviewTime = createOverviewTime({
+    root: document.getElementById('overviewTime'), button: document.getElementById('overviewTimeLabel'),
+    input: document.getElementById('overviewTimeInput'), getProject: () => S.state, getTime: playbackTime,
+    onSeek: time => { setPlaybackCursor(time); moveViewportTo(time * S.pxPerSec - scroll.clientWidth / 2); draw(); },
+  });
   setPainter(paintFrame);
   // A canvas draws with whatever is loaded the instant fillText runs, and unlike
   // the DOM it is never re-laid-out when a webfont arrives. Both families are

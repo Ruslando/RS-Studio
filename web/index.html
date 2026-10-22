@@ -321,6 +321,10 @@
 <div id="miniStrip">
             <div id="overviewWrap" title="Overview">
               <canvas id="overviewRuler" tabindex="0" role="slider" aria-label="Overview playhead, seconds" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" title="Click or drag to set the playhead; arrow keys adjust by 0.1 seconds"></canvas>
+              <div id="overviewTime" hidden>
+                <button type="button" id="overviewTimeLabel" title="Double-click to enter a time (mm:ss.sss or h:mm:ss.sss)">00:00.000</button>
+                <input id="overviewTimeInput" type="text" aria-label="Seek to time: mm:ss or h:mm:ss, optional .sss milliseconds" placeholder="mm:ss or h:mm:ss" title="mm:ss or h:mm:ss, optionally .sss milliseconds. Enter to seek; Escape to cancel." spellcheck="false" autocomplete="off" hidden />
+              </div>
               <div id="minimapClip"><canvas id="minimap"></canvas></div>
             </div>
           </div>
