@@ -162,6 +162,7 @@ async function runDetect() {
   if (!lane) { detectStatus.textContent = "no note layer"; return; }
   const stillTargeting = () => S.state === state && editLanes().includes(lane);
   const model = detectModelSel.value, stemId = state.curStem;
+  const channel = curStemObj()?.channel || "stereo";
   const region = S.detectRegion;   // snapshot — the band may be cleared mid-request
   detecting = true;
   closeDetectPanel();
@@ -180,7 +181,7 @@ async function runDetect() {
       if (!stillTargeting()) return;
     }
     detectStatus.textContent = region ? "detecting range…" : "detecting…";
-    const body = { job: state.job, stem: stemId, model };
+    const body = { job: state.job, stem: stemId, model, channel };
     if (region) { body.start = region.t0; body.end = region.t1; }
     const modelName = detectModelSel.selectedOptions[0]?.textContent || model;
     const sourceName = curStemObj()?.name || stemId;

@@ -346,6 +346,29 @@
               </div>
             </div>
 
+            <div id="spectrogramControls" role="group" aria-label="Spectrogram controls" hidden>
+              <div class="stage-controls-head">
+                <button type="button" id="stageControlsDrag" class="icon-btn icon-btn--compact" aria-label="Move spectrogram controls; arrow keys choose an edge" title="Drag along the spectrogram edges"></button>
+                <span id="stageControlsSummary">Stereo · 0–100%</span>
+                <button type="button" id="stageControlsToggle" class="icon-btn icon-btn--compact" aria-controls="stageControlsBody" aria-expanded="false" aria-label="Expand spectrogram controls"></button>
+              </div>
+              <div id="stageControlsBody" hidden>
+                <div class="stage-channel-row"><span>Channel</span>
+                  <div class="menu-anchor" data-floating-menu>
+                    <button type="button" id="stageChannelButton" class="menu-btn btn--compact" aria-haspopup="menu" aria-expanded="false" aria-controls="stageChannelMenu"><span id="stageChannelLabel">Stereo</span><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
+                    <div id="stageChannelMenu" class="menu-list" role="menu" aria-label="Displayed audio channel" hidden>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="true" data-channel="stereo">Stereo<span class="chkmark">✓</span></button>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-channel="left">Left<span class="chkmark"></span></button>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-channel="right">Right<span class="chkmark"></span></button>
+                    </div>
+                  </div>
+                  <select id="stageChannel" aria-label="Displayed audio channel" hidden><option value="stereo">Stereo</option><option value="left">Left</option><option value="right">Right</option></select>
+                </div>
+                <label>Intensity min <input id="stageIntensityMin" type="range" min="0" max="100" step="1" value="0" aria-label="Minimum spectrogram intensity" /><output id="stageIntensityMinValue" for="stageIntensityMin">0%</output></label>
+                <label>Intensity max <input id="stageIntensityMax" type="range" min="0" max="100" step="1" value="100" aria-label="Maximum spectrogram intensity" /><output id="stageIntensityMaxValue" for="stageIntensityMax">100%</output></label>
+              </div>
+              <span id="stageChannelStatus" role="status"></span>
+            </div>
             <nav id="matchNavigator" aria-label="Similar passage results" hidden>
               <button type="button" id="matchPrevious" aria-label="Previous similar passage" title="Previous similar passage (←)">‹</button>
               <output id="matchPosition" aria-live="polite">0 / 0</output>

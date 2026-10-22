@@ -1,3 +1,4 @@
+import { paintIntensity, intensityRevision } from './spectrogram-intensity.js';
 import { paintNoteRow } from './timeline-paint.js';
 import { createOverviewTime, formatTimelineTime } from './timeline-time.js';
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
@@ -415,9 +416,9 @@ function paintFrame() {
     const iw = S.spectImg.width;
     const t0 = Math.max(0, vx0 / S.pxPerSec), t1 = Math.min(S.state.duration, vx1 / S.pxPerSec);
     if (t1 > t0) {
-      sctx.drawImage(S.spectImg,
+      paintIntensity(sctx, S.spectImg,
         (t0 / S.state.duration) * iw, 0, ((t1 - t0) / S.state.duration) * iw, S.spectImg.height,
-        t0 * S.pxPerSec, 0, (t1 - t0) * S.pxPerSec, contentH());
+        t0 * S.pxPerSec, 0, (t1 - t0) * S.pxPerSec, contentH(), ...(S.state.viewIntensity || [0, 100]));
     }
   }
   drawRuler();   // depends on rowH + vertical scroll, so repaint alongside the stage
@@ -741,6 +742,7 @@ function paintFrame() {
 export let mmBackdrop = document.createElement("canvas");
 
 export let mmBackdropCtx = mmBackdrop.getContext("2d");
+let mmBackdropRange = "";
 
 export let mmBackdropImg = null;   // spectImg the current backdrop was built from
 
@@ -748,8 +750,9 @@ function buildMinimapBackdrop(W, H) {
   mmBackdrop.width = W; mmBackdrop.height = H;
   mmBackdropCtx.fillStyle = PAINT.ground; mmBackdropCtx.fillRect(0, 0, W, H);
   if (S.spectImg) {
-    mmBackdropCtx.drawImage(S.spectImg, 0, 0, S.spectImg.width, S.spectImg.height, 0, 0, W, H);
+    paintIntensity(mmBackdropCtx, S.spectImg, 0, 0, S.spectImg.width, S.spectImg.height, 0, 0, W, H, ...(S.state.viewIntensity || [0, 100]));
   }
+  mmBackdropRange = `${S.state.viewIntensity || [0, 100]}:${intensityRevision()}`;
   mmBackdropImg = S.spectImg;
 }
 
@@ -801,7 +804,8 @@ function drawMinimap() {
   const CH = H - OY;            // content (spectrogram) height
   // The cached backdrop covers just the content band, blitted below the headroom.
   // It's built at device resolution so the blit is 1:1 (no resample blur).
-  if (mmBackdrop.width !== minimap.width || mmBackdrop.height !== Math.round(CH * dp) || mmBackdropImg !== S.spectImg) {
+  if (mmBackdrop.width !== minimap.width || mmBackdrop.height !== Math.round(CH * dp) || mmBackdropImg !== S.spectImg
+      || mmBackdropRange !== `${S.state.viewIntensity || [0, 100]}:${intensityRevision()}`) {
     buildMinimapBackdrop(minimap.width, Math.round(CH * dp));
   }
   // Headroom strip (the playhead "ruler" you drag the pin along).

@@ -101,5 +101,17 @@ navigation; other technique variants such as bends, slides and harmonics;
 reference locks and renaming; fretboard influence controls; and a shortcut to
 start detection immediately. These need a separate choice of behavior and scope.
 
+
+The spectrogram's floating controls select Stereo / Left / Right for the
+viewed audio layer and set the displayed Intensity range (Min / Max). Values
+outside the range are hidden; 0–100% restores the original appearance. This
+display filter is independent of drawing snap and note analysis.
+Channel selection is saved per audio layer and applies to playback and analysis.
+Audio layer speaker controls retain click to mute and sideways volume dragging.
+
+The spectrogram controls collapse to a compact channel/range summary. Use its
+chevron to expand, or drag its grip to dock along any spectrogram edge. With
+the grip focused, arrow keys choose an edge. Dock position and collapsed state
+are remembered on this device. Channel choices use the app's menu controls.
 Navigating between notes or chords with the arrow keys also auditions the newly
 selected note or chord using its lane voice and mute settings.

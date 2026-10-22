@@ -1,3 +1,4 @@
+import { channelRoute } from './audio-channel.js';
 // In-editor playback: a Tone.js sampler voice per edit lane, the transport + seek,
 // the metronome, and the per-stem mixer.
 
@@ -391,6 +392,7 @@ export async function ensureTone() {
 // master's time in tick() to fight decoder drift.
 export const stemNodes = new Map();      // stem.id -> { el, src, gain }  (master excluded)
 
+let masterChannel;
 export let masterGain = null;
 
 export const masterStem = () => (S.state && S.state.stems[0]) || null;
@@ -434,7 +436,8 @@ export function ensureStemMixer() {
     try {
       S.mediaNode.disconnect();
       masterGain = ctx.createGain();
-      S.mediaNode.connect(masterGain); masterGain.connect(ctx.destination);
+      masterChannel = channelRoute(ctx, S.mediaNode, masterGain);
+      masterChannel("stereo"); masterGain.connect(ctx.destination);
     } catch { /* leave master on its direct connection */ }
   }
   for (const stem of S.state.stems) {
@@ -442,13 +445,14 @@ export function ensureStemMixer() {
     const el = new Audio();
     el.src = stem.audioUrl; el.preload = "auto"; el.playbackRate = audio.playbackRate;
     el.preservesPitch = true; if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = true;
-    let src = null, gain = null;
+    let src = null, gain = null, selectChannel = null;
     try {
       src = ctx.createMediaElementSource(el);
       gain = ctx.createGain();
-      src.connect(gain); gain.connect(ctx.destination);
+      selectChannel = channelRoute(ctx, src, gain);
+      selectChannel(stem.channel); gain.connect(ctx.destination);
     } catch { /* fall back to element.muted below */ }
-    stemNodes.set(stem.id, { el, src, gain });
+    stemNodes.set(stem.id, { el, src, gain, selectChannel });
   }
   applyStemGains();
 }
@@ -470,6 +474,8 @@ export function applyStemGains() {
   if (!S.state) return;
   for (const stem of S.state.stems) {
     const on = stemAudible(stem);
+    if (isMasterStem(stem)) masterChannel?.(stem.channel);
+    else stemNodes.get(stem.id)?.selectChannel?.(stem.channel);
     if (isMasterStem(stem)) {
       if (masterGain) {
         audio.muted = false;

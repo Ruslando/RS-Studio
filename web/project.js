@@ -76,7 +76,7 @@ function projectBody() {
     // Audio-mixer choices belong to the project too. Keep the persisted shape
     // deliberately small: audio/spectrogram metadata remains server-owned.
     stemSettings: S.state.stems.map((stem) => ({
-      id: stem.id, muted: !!stem.muted, solo: !!stem.solo, volume: normLayerVolume(stem.volume),
+      id: stem.id, muted: !!stem.muted, solo: !!stem.solo, volume: normLayerVolume(stem.volume), channel: stem.channel || "stereo",
     })),
     mix: normMix(S.state.mix),   // the two buses: all note layers, all audio layers
     projectStart: Number(S.state.projectStart) || 0,
@@ -88,7 +88,7 @@ function projectBody() {
     scoreBars: (song.scoreBars || []).map((bar) => ({ ...bar })),
     timings: timingsForSave(),
     scoreDuration: Number(S.state.scoreDuration) || Number(S.state.duration) || 1,
-    view: { stem: S.state.curStem, zoomX: S.zoomX, zoomY: S.zoomY, speed: speedSel.value },
+    view: { intensity: S.state.viewIntensity || [0, 100], stem: S.state.curStem, zoomX: S.zoomX, zoomY: S.zoomY, speed: speedSel.value },
     grid: {
       bpm: song.grid.bpm, offset: song.grid.offset, subdiv: song.grid.subdiv,
       snap: true, showGrid: true,
@@ -374,7 +374,7 @@ export async function applyProject(data) {
     // the full song is muted they play as a combined stem mix.
     stems: (data.stems || []).map((s) => ({
       id: s.id, name: s.name, spec: s.spectrogram, audioUrl: s.audio_url,
-      muted: !!s.muted, solo: !!s.solo, volume: normLayerVolume(s.volume),
+      muted: !!s.muted, solo: !!s.solo, volume: normLayerVolume(s.volume), channel: s.channel || "stereo",
     })),
     mix: normMix(data.mix),
     editLanes: sourceLanes.map(lane => mapLane(lane, Number(data.projectStart) || 0)),
@@ -392,6 +392,7 @@ export async function applyProject(data) {
 
   // 7. view settings (which stem, zoom, speed) so reload lands where you left off.
   const v = data.view || {};
+  S.state.viewIntensity = Array.isArray(v.intensity) ? v.intensity : [0, 100];
   S.zoomX = clamp(+v.zoomX || 1, ZOOM_MIN_X, ZOOM_MAX_X);
   S.zoomY = clamp(+v.zoomY || 1, ZOOM_MIN_Y, ZOOM_MAX_Y);
   S.pxPerSec = PX_PER_SEC * S.zoomX;
@@ -512,28 +513,57 @@ export async function closeProject(options = {}) {
 // mixer's job now (master clock + slaved stem followers), so the playhead, play
 // state and what you hear are untouched — switch the view freely while playing.
 // The edit lanes are global, so they stay put across stems.
+let stemViewGeneration = 0;
+const channelRequests = new WeakMap();
+export async function changeStemChannel(stem, channel) {
+  const state = S.state, request = Symbol();
+  channelRequests.set(stem, request);
+  const url = new URL(stem.spec.url, location.href);
+  url.searchParams.set('channel', channel);
+  const image = new Image(); image.src = url.href;
+  try { await image.decode(); }
+  catch { toast('Could not load audio channel'); return; }
+  if (S.state !== state || channelRequests.get(stem) !== request || !state.stems.includes(stem)) return;
+  stem.channel = channel;
+  applyStemGains(); refreshSaveState();
+  window.dispatchEvent(new Event("cw-stem-view-changed"));
+  if (state.curStem === stem.id) {
+    stemViewGeneration++;
+    clearMatches(); S.spectImg = image; prepareSpectSample(); draw();
+  }
+}
+
 export function selectStem(id) {
   if (!S.state || !S.state.stems.length) return;
   const stem = S.state.stems.find((s) => s.id === id) || S.state.stems[0];
   clearMatches();   // suggestions are tied to the previous stem's spectrogram
   S.state.curStem = stem.id;
+  window.dispatchEvent(new Event("cw-stem-view-changed"));
   S.state.spec = stem.spec;
   syncRowHeight();
   rebuildLanes();
 
   // Keep the old backdrop until the new image decodes, then swap (no blank flash).
+  const generation = ++stemViewGeneration;
+  const requestedChannel = stem.channel || 'stereo';
   const img = new Image();
   projectVisuals = new Promise((resolve) => {
-    img.onload = () => { S.spectImg = img; prepareSpectSample(); layout(); draw(); resolve(); };
+    img.onload = () => {
+      if (generation === stemViewGeneration && S.state?.stems.includes(stem) && S.state.curStem === stem.id && (stem.channel || 'stereo') === requestedChannel) {
+        S.spectImg = img; prepareSpectSample(); layout(); draw();
+      }
+      resolve();
+    };
     img.onerror = () => resolve();
   });
-  img.src = stem.spec.url;
+  const specUrl = new URL(stem.spec.url, location.href);
+  specUrl.searchParams.set('channel', stem.channel || 'stereo');
+  img.src = specUrl.href;
 
   if (detectStemNameEl) detectStemNameEl.textContent = stem.name;
   updateDetectStatus();
   layout();
-  renderStemTabs();
-  renderLanes();
+  renderStemTabs(); renderLanes();
   draw();
 }
 
@@ -631,7 +661,6 @@ export function renderStemTabs() {
     name.setAttribute("aria-label", `View ${stem.name} on the spectrogram`);
 
 
-    // The same control a note layer has: one action, one mark.
     const mute = volumeControl(stem, { name: stem.name,
       onChange: applyStemGains, onMute: () => toggleStemMute(stem), onDone: refreshSaveState });
     if (!busLevel("audio") || (!master && !masterOn && anySolo && !stem.solo)) mute.classList.add("dim");   // silent by the bus or another's solo
