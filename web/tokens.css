@@ -75,7 +75,7 @@
   --ease-note-bounce: cubic-bezier(.2,1.55,.35,1);
   --dur-note-lift: 220ms;
   --ease-note-lift: cubic-bezier(.2,2.4,.35,1);
-  --note-held-scale: 1.18;
+  --note-held-scale: 1.05;
   --dur-note-glow-in: 90ms;
   --dur-note-glow-out: 180ms;
   --note-glow-radius: 12;
