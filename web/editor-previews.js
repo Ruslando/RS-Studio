@@ -31,8 +31,8 @@ export function drawNoteAppearancePreview() {
     const { mode, effects } = resolveNoteAppearance(options, hovered);
     paintNoteRow(ctx, x, y, span, rowHeight, S.state?.lanes.find(lane => lane.active)?.color || PAINT.ok, false, hovered);
     const label = spectrogramLabel(note, { string: 1, fret: [5, 8][i] }, mode, effects ? noteMarks(note) : [], options.fromNut ? 2 : 0);
-    paintNoteLabel(ctx, label, x, span, y + rowHeight / 2);
-    if (effects) paintSlideLabel(ctx, note.slide, x, x + span, y + rowHeight / 2);
+    paintNoteLabel(ctx, label, x, span, y + rowHeight / 2, rowHeight);
+    if (effects) paintSlideLabel(ctx, note.slide, x, x + span, y + rowHeight / 2, rowHeight);
   }
 }
 

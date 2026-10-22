@@ -233,9 +233,9 @@ export function drawStackBadges(badges, vx0, vx1) {
 const SLIDE_TAG = { shift: "↗", legato: "⌒↗", inBelow: "↗", inAbove: "↘", outDown: "↘", outUp: "↗" };
 
 // Labels stay horizontal, including at the individual bend control points.
-// Allow overflow so short notes and thin rows keep the same readable type size.
-function centeredLabel(text, x, width, pitch) {
-  paintNoteLabel(sctx, text, x, width, yOf(pitch) + S.state.rowH / 2);
+// Fit labels to the note dimensions as either zoom axis changes.
+function centeredLabel(text, x, width, pitch, availableWidth = width) {
+  paintNoteLabel(sctx, text, x, width, yOf(pitch) + S.state.rowH / 2, S.state.rowH, availableWidth);
 }
 
 function bendPitchName(pitch) {
@@ -302,7 +302,7 @@ export function drawNoteFx() {
       const label = spectrogramLabel(n, positions?.get(n), mode, tags, capo);
       const curve = bendCurve(n);
       if (ribbon && !curve) {
-        centeredLabel(label, x, 0, n.pitch);
+        centeredLabel(label, x, 0, n.pitch, x1 - x);
         const arrow = onto.pitch < n.pitch ? "\u2198" : "\u2197";
         if (effects) centeredLabel((n.slide === "legato" ? "\u2312" : "") + arrow,
           x, xOf(ribbon.end) - x, (n.pitch + onto.pitch) / 2);
@@ -316,11 +316,11 @@ export function drawNoteFx() {
         }
       } else if (curve) {
         if (mode === 'notes' || mode === 'both') for (const [t, semi] of curve)
-          centeredLabel(bendPitchName(n.pitch + semi), x + (x1 - x) * t, 0, n.pitch + semi);
+          centeredLabel(bendPitchName(n.pitch + semi), x + (x1 - x) * t, 0, n.pitch + semi, (x1 - x) / curve.length);
         const baseLabel = spectrogramLabel(n, positions?.get(n), mode === 'both' ? 'positions' : mode === 'notes' ? 'none' : mode, tags, capo);
         if (baseLabel) centeredLabel(baseLabel, x, x1 - x, n.pitch);
       } else if (label) centeredLabel(label, x, x1 - x, n.pitch);
-      if (effects) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2);
+      if (effects) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2, S.state.rowH);
       if (grace) {
         const gx = xOf(grace.start), width = Math.max(2, x - gx), pitch = n.pitch + grace.offset;
         paintNoteBar(sctx, gx, yOf(pitch), width, S.state.rowH, !lane.active || lane.locked ? grayHex(lane.color) : lane.color,
