@@ -8,6 +8,7 @@ to the default browser when no native webview backend is available.
 from __future__ import annotations
 
 import os
+import signal
 import socket
 import sys
 import threading
@@ -160,7 +161,54 @@ def _open_window(url: str) -> bool:
     return True
 
 
+def _exit_now() -> None:
+    """Quit at once, skipping Python's normal shutdown.
+
+    After the window closes, Qt WebEngine's teardown can hang (seen on Linux /
+    Wayland: the profile stays open and the process never exits). Nothing is left
+    to save by then: the page already asked about unsaved work before it quit.
+    Audio workers run in their own session (processing.py uses setsid), so they
+    and their FFmpeg children are stopped here instead of being orphaned.
+    """
+    import multiprocessing
+
+    for child in multiprocessing.active_children():
+        try:
+            if os.name == "nt":
+                child.terminate()
+            else:
+                os.killpg(child.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            child.terminate()
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:  # noqa: BLE001 - a closed console must not block quitting
+            pass
+    os._exit(0)
+
+
+def _quit_on_ctrl_c() -> None:
+    """Make Ctrl+C in the terminal quit the app.
+
+    Python only runs its SIGINT handler on the main thread, which Qt's event loop
+    never hands back. So SIGINT is blocked for every thread started after this,
+    and one waiting thread receives it instead. Call before other threads start.
+    """
+    if os.name == "nt":
+        return
+
+    def wait() -> None:
+        signal.sigwait({signal.SIGINT})
+        print("\n[desktop] Ctrl+C, quitting")
+        _exit_now()
+
+    signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT})
+    threading.Thread(target=wait, name="ctrl-c", daemon=True).start()
+
+
 def launch() -> None:
+    _quit_on_ctrl_c()
     _prep_runtime()
     host, port = "127.0.0.1", _free_port()
     url = f"http://{host}:{port}/"
@@ -175,7 +223,7 @@ def launch() -> None:
     _wait_until_ready(host, port)
 
     if _open_window(url):
-        return            # window closed — quit, taking the server with us
+        _exit_now()       # window closed — quit, taking the server with us
     # No webview backend: hand the UI to the browser and keep serving until
     # the process is interrupted, since nothing else is holding it open now.
     webbrowser.open(url)
