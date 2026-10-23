@@ -104,7 +104,7 @@ export function overlapsRefBox(lane, box, except = null) {
 }
 
 // A note moved to another pitch cannot keep its string, fret or written chord.
-export function dropFingering(note) { delete note.pos; delete note.arrangement; }
+export function dropFingering(note) { delete note.pos; delete note.arrangement; delete note.auto; }
 
 // Notes from `arr` that sit inside `box`: pitch within range, and at least one
 // full cell (the smallest a note may be) of the note lies inside the box's time
