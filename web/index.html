@@ -442,16 +442,10 @@
                 <div id="fretboardHandList" class="pill fretboard-values" data-collapsible role="radiogroup" aria-labelledby="fretboardHandLabel"></div>
                 <button type="button" id="fretboardHandToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardHandList" aria-expanded="false" aria-label="Show every hand position" title="Show every hand position"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
               </div>
-              <div id="fretboardFingerField">
-                <span class="label" id="fretboardFingerLabel">Finger</span>
-                <span class="fretboard-values-up"><div id="fretboardFingerList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardFingerLabel"></div></span>
-                <button type="button" id="fretboardFingerToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardFingerList" aria-expanded="false" aria-label="Show every fingering" title="Show every fingering"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
-              </div>
-              <!-- The chord's name, as the stage writes it; open, its other readings and Custom for any text. -->
               <div id="fretboardChordField">
                 <span class="label" id="fretboardChordLabel">Chord</span>
-                <span class="fretboard-values-up"><div id="fretboardChordList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardChordLabel"></div></span>
-                <button type="button" id="fretboardChordToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardChordList" aria-expanded="false" aria-label="Show every name for this chord" title="Show every name for this chord"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+                <input type="text" id="fretboardChordInput" maxlength="31" aria-labelledby="fretboardChordLabel" spellcheck="false">
+                <button type="button" id="fretboardChordAuto" class="btn btn--compact" title="Use the automatic name" hidden>Auto</button>
               </div>
               </div>
               <button type="button" id="fretboardShowAnyway" class="btn btn--compact" hidden
@@ -469,9 +463,10 @@
                   <span id="fretboardName" aria-live="polite" hidden></span>
                   <button type="button" id="fretboardShapeNext" class="icon-btn icon-btn--compact" aria-label="Next note" title="Next note (Right arrow)"><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
                 </div>
-                <div id="fretboardAlternatives" role="group" aria-label="Alternative positions" hidden>
+                <div id="fretboardAlternatives" role="group" aria-labelledby="fretboardAltLabel" hidden>
+                  <span class="label" id="fretboardAltLabel">Grip</span>
                   <button type="button" id="fretboardAltPrev" class="icon-btn icon-btn--compact" aria-label="Previous alternative" title="Previous alternative (Left arrow)"><span data-ui-icon="chevronUp" aria-hidden="true"></span></button>
-                  <span id="fretboardAltCount" role="status" aria-live="polite">0 / 0</span>
+                  <span class="pill"><span id="fretboardAltCount" role="status" aria-live="polite">0 / 0</span></span>
                   <button type="button" id="fretboardAltNext" class="icon-btn icon-btn--compact" aria-label="Next alternative" title="Next alternative (Right arrow)"><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
                   <button type="button" id="fretboardChoose" class="btn btn--compact">Use position</button>
                 </div>

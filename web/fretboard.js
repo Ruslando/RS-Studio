@@ -32,21 +32,21 @@ import { splitter } from "./splitters.js";
 import { draw } from "./repaint.js";
 import { MAX_CAPO, canEditLane, editLanes } from "./lanes.js";
 import { laneChords } from "./chord-names.js";
-import { beginChordRename, renameChord } from "./chord-rename.js";
+import { renameChord } from "./chord-rename.js";
 import { songBarStarts } from "./song-bars.js";
 import { gridAt, gridBpm, gridSegments, segBeatSec } from "./grid.js";
 import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
-import { S, setSelection } from "./store.js";
+import { S } from "./store.js";
 import { fingerLightAt, fingerPulseAt, fingerWaveAt, popLiftAt, popPreparation, popThicknessAt } from "./string-techniques.js";
 import { stringAttackPulse, stringGlow } from "./string-glow.js";
 import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulations.js";
 import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
-import { assignFingers, chordColumns, fingeringChoices, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
+import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
 import { columnAlternatives, stepVoiceFocus } from "./voicing.js";
-import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, clearColumnFingers, setColumnFingers, setColumnFollow, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
+import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnFollow, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { toast } from "./notify.js";
@@ -321,6 +321,7 @@ function selectAlternative(key, items) {
 
 function stepAlternative(delta) {
   if (!alternativeCount) return;
+  hoverPicked = false;
   // Original is part of the cycle: Original → alternatives → Original.
   alternativeIndex = ((alternativeIndex + 1 + delta + alternativeCount + 1) % (alternativeCount + 1)) - 1;
   previewAlternative = alternativeIndex >= 0;
@@ -337,10 +338,17 @@ function useAlternative() {
 
 let altsJob = null;   // the note a request is out for, so one column is asked once
 
-// Only the displayed alternative is a click target. Custom shape entry retains
-// its own per-note targets while that explicit mode is active.
+// A single note's rings are all click targets; for a chord only the displayed
+// alternative is. Custom shape entry keeps its own per-note targets.
 let spots = null;     // last frame's targets: { note, string, fret, x0, x1, y0, y1 }
 let spotHover = -1;
+let hoverPicked = false, hoverAt = -1;   // the browsed ring came from hovering, not the arrows
+// The hand positions that can play it, as fret spaces you click; open with the rings.
+let handSpots = [], handHover = -1, handHoverFret = 0;
+// The chord the bar's name field is editing, so a commit lands on the right one.
+let chordShown = null;
+// A Hand or Capo value under the pointer in the bar, previewed on the board.
+let listPeek = null;   // { kind: "hand" | "capo", value }
 
 // Custom shape entry keeps its existing staged walk; its redesign is separate.
 let shownAnyway = null;   // "laneId:t0" of the stretched chord the user asked to see
@@ -354,13 +362,12 @@ let shaping = null;   // { notes, index, picked: Map(note -> { string, fret }) }
 // travel animation used to paper over this by drawing the next grip arriving.
 const boardTime = () => playbackTime() + (transportPlaying() ? 0 : 1e-3);
 
-function selectPlayheadNotes() {
-  const lane = currentLane();
-  if (!visible || !editing || transportPlaying() || !canEditLane(lane)) return;
-  // Only the latest onset column: notes still held from earlier columns are other
-  // voices (reachable with ↑ ↓), not part of this chord.
+// The column under the playhead, without selecting it: only the latest onset column,
+// since notes still held from earlier columns are other voices (reachable with ↑ ↓).
+function playheadColumnNote(lane) {
+  if (!lane?.notes?.length) return null;
   const latest = soundingColumns(lane.notes, boardTime()).reduce((a, c) => (!a || c.t0 >= a.t0 ? c : a), null);
-  setSelection(new Set(latest?.notes || []));
+  return latest?.notes.find((n) => Number.isFinite(n.pitch)) || null;
 }
 
 // Expose the actual edit recipients, independently of the playback cursor.
@@ -373,12 +380,11 @@ export function fretboardEditTargets() {
   return positionEditTargets(group, note ? columnOf(note)?.col.notes || [] : []);
 }
 
-// The column being decided: the selection's, and nothing without one. Pausing and
-// seeking select the column under the playhead once (selectPlayheadNotes); after that
-// a deselect must stay a deselect, so there is no fallback to the playhead here.
+// The column being decided: the selection's, else the one under the playhead.
+// Pausing no longer selects it, so the spectrogram shows no marking it did not ask for.
 function focusNote(lane) {
   for (const n of S.selection) if (Number.isFinite(n.pitch) && lane?.notes.includes(n)) return n;
-  return null;
+  return playheadColumnNote(lane);
 }
 
 // The moment the board holds while a choice is being made — the onset of the column
@@ -439,7 +445,6 @@ export function setFretboardEdit(on) {
   editing = next;
   previewAlternative = false; alternativeIndex = -1;
   fretboardPanel.toggleAttribute("data-editing", editing);
-  if (editing && !S.selection.size) selectPlayheadNotes();
   drawFretboard();
   setFretboardAlts(editing);
   if (!editing) { setFretboardShape(false); }
@@ -905,6 +910,11 @@ function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, o
   }
 
   paintBoardCapo(ctx, s, scale, X, Y);
+  if (listPeek?.kind === "capo" && listPeek.value > 0 && listPeek.value !== (s.capo || 0)) {
+    ctx.save(); ctx.globalAlpha = 0.45;
+    paintBoardCapo(ctx, { ...s, capo: listPeek.value }, scale, X, Y);
+    ctx.restore();
+  }
 
   // Fret numbers below the board, on the dotted frets only — a number under
   // every fret is 22 numbers nobody reads. Mono, because a fret number is a
@@ -984,35 +994,14 @@ export function drawFretboard() {
   const autoSeat = held ? automaticSeatHere(lane, held) : seatNow;
   fillValues($("fretboardHandList"), [["auto", autoSeat ? `Auto (${autoSeat})` : "Auto"], ...choices.map((g) => [g, String(g)])],
     held ? Number(held.fret) : "auto", disabled || shared || !choices.length);
-  // The fingering of this note or chord, and the ones it could have (fingeringChoices).
-  const fingering = fingeringHere(lane);
-  $("fretboardFingerLabel").textContent = fingering?.chord ? "Fingering" : "Finger";
-  // Every fingering it could have, like the hands; one it has that is none of them leads.
-  const fingerList = $("fretboardFingerList");
-  // Auto, like the hand's: the engine's fingering, so trying the others is never a dead end.
-  const fingerValues = fingering
-    ? [["auto", fingering.chosen ? "Auto" : `Auto (${fingering.text})`], ...fingering.choices.map((c, i) => [i, fingering.label(c)])]
-    : [["none", "\u2013"]];
-  if (fingering?.chosen && fingering.index < 0) fingerValues.splice(1, 0, [-1, fingering.text]);
-  const fingerChosen = !fingering ? "none" : fingering.chosen ? fingering.index : "auto";
-  fillValues(fingerList, fingerValues, fingerChosen, disabled || shared || !fingering);
-  fingerList.parentElement.dataset.current = fingerValues.find(([v]) => String(v) === String(fingerChosen))?.[1] || "";
-  fingerList.toggleAttribute("data-auto", !fingering?.chosen);
-  fingerList.title = fingering ? (fingering.chosen ? "Chosen" : "Automatic") : "";
-  // The chord's name and its other readings, and Custom for any text (chord-rename.js).
-  const chordHere = chordAtBoard(lane), chordList = $("fretboardChordList");
-  const chordNames = chordHere ? [...new Set([chordHere.auto, ...chordHere.alternatives, chordHere.name].filter(Boolean))] : [];
-  fillValues(chordList, chordHere ? [...chordNames.map((n) => [n, n]), ["__custom", "Custom"]] : [["none", "\u2013"]],
-    chordHere ? chordHere.name : "none", disabled || !chordHere);
-  chordList.parentElement.dataset.current = chordHere?.name || "\u2013";
-  chordList.title = !chordHere ? "Not a chord" : chordHere.own ? "Your name" : "";
+  updateChordField(lane, disabled);
   const projection = boardProjection(ctx, s, w, h, tuning);
   if (!projection) return;
   const { scale, X, Y, strung, tunePx } = projection;
   // Resolve the selected preview before painting its hand-position band.
   const at = editing ? focusGrip(lane, s) : null;
   const chord = (at?.marks.length || 0) > 1;
-  spots = null;
+  spots = null; handSpots = []; if (alts) alts.boxes = [];
   // And the working views stand down with it. They are offers about one column, so a
   // column arriving sixty times a second makes them noise — and the boxes would ask the
   // worker for a fresh set on every one of them.
@@ -1044,6 +1033,9 @@ export function drawFretboard() {
   // Something else is on offer: the grip in the hand steps back. See drawHand.
   if (!shaping) drawHand(ctx, s, scale, X, Y, lane, now, hovered || spot || resetPeeking ? "fade" : null);
   drawBundle(ctx, s, scale, X, Y, lane, held, w, h, chord, placing, impossible);
+  if (offering && at && !chord) drawNoteRings(ctx, lane);
+  if (offering && chord) drawChordBoxes(ctx, lane);
+  if (offering && at) drawHandChoices(ctx, s, X, Y, lane, seat);
   if (hovered) drawOffer(ctx, s, scale, X, Y, hovered, lane);
   if (spot) drawNoteOffer(ctx, s, scale, X, Y, lane, spot);
   // An empty board is two different answers and it has to say which. The wait that
@@ -1452,20 +1444,70 @@ function drawAlternatives(ctx, s, scale, X, Y, lane, held) {
       const p = choice.shape.get(voice), note = found.notes[k];
       return p && note && placementFault(limits?.get(note), note.pitch, p.string, found.tuning, s.frets);
     })) continue;
-    const mm = shapeBox(positions, s);
-    if (!mm) continue;
-    const pad = markRadius(mm.x1, scale, s) + 3;
-    boxes.push({ choice, x0: X(mm.x0) - pad, x1: X(mm.x1) + pad,
-      y0: Math.min(Y(mm.off0), Y(mm.off1)) - pad, y1: Math.max(Y(mm.off0), Y(mm.off1)) + pad });
+    const b = gripBox(positions, scale, s, X, Y);
+    if (b) boxes.push({ choice, ...b });
   }
   const box = selectAlternative(`chord:${lane.id}:${found.note?.id}:${found.rev}:${sharedSelection.key}`, boxes);
-  found.boxes = box ? [box] : [];
-  found.hover = box ? 0 : -1;
+  // Clicking the area around the chord opens every alternative as a box (as in
+  // 0.3.0): hover previews one, click takes it. Painted by drawChordBoxes.
+  const area = held && gripBox(held.marks, scale, s, X, Y);
+  found.boxes = boxes;
+  found.hover = alternativeIndex;
   if (!box) return null;
   const shape = new Map(found.notes.map((n, k) => [n, box.choice.shape.get(box.choice.notes[k])]));
   const preview = previewAlternative ? previewPosition(lane, found.notes, shape, "chord") : null;
   return { box, tuning: found.tuning, preview, hand: preview?.hand || null };
 
+}
+
+// A grip's area on screen, padded by a marker so the border holds the shape.
+function gripBox(positions, scale, s, X, Y) {
+  const mm = shapeBox(positions, s);
+  if (!mm) return null;
+  const pad = markRadius(mm.x1, scale, s) + 3;
+  return { x0: X(mm.x0) - pad, x1: X(mm.x1) + pad,
+    y0: Math.min(Y(mm.off0), Y(mm.off1)) - pad, y1: Math.max(Y(mm.off0), Y(mm.off1)) + pad };
+}
+
+// The hand positions other than the current one: a faint wash of the layer's hue
+// on each fret space, the same colour as the hand's own band, so it reads as "the
+// hand can go here" and not as another grip. Hovered, offeredSeat outlines it.
+function drawHandChoices(ctx, s, X, Y, lane, seat) {
+  const choices = (handColumnHere(lane)?.choices || []).filter((g) => g !== seat && g > 0 && g <= s.frets);
+  const hue = lane.color || PAINT.accent;
+  choices.forEach((fret, i) => {
+    const n = fret + (s.capo || 0), x0 = fretDistance(n - 1, s.scale), x1 = fretDistance(n, s.scale);
+    const h = Math.max(boardHalfWidthAt(x0, s), boardHalfWidthAt(x1, s));
+    handSpots.push({ fret, x0: X(x0), x1: X(x1), y0: Math.min(Y(-h), Y(h)), y1: Math.max(Y(-h), Y(h)) });
+    ctx.fillStyle = hexA(hue, i === handHover ? WASH : WASH * 0.45);
+    fretSpace(ctx, fret, s, X, Y);
+    ctx.fill();
+    // And its two fret wires in the hue, so each position's edges read on the wood.
+    ctx.strokeStyle = hexA(hue, i === handHover ? 1 : 0.7); ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const x of [x0, x1]) { const hx = boardHalfWidthAt(x, s); ctx.moveTo(X(x), Y(-hx)); ctx.lineTo(X(x), Y(hx)); }
+    ctx.stroke();
+  });
+}
+
+// The bar's Chord field: the name as text, and Auto when it is not the automatic one.
+function updateChordField(lane, disabled) {
+  const chord = chordAtBoard(lane), input = $("fretboardChordInput");
+  chordShown = chord;
+  if (document.activeElement !== input) input.value = chord?.name || "";
+  input.placeholder = chord ? chord.auto || "Name" : "\u2013";
+  input.disabled = disabled || !chord;
+  $("fretboardChordAuto").hidden = !chord?.own || !chord.auto;
+}
+
+function drawChordBoxes(ctx, lane) {
+  ctx.lineWidth = 1.8;
+  (alts?.boxes || []).forEach((b, i) => {
+    ctx.strokeStyle = i === alternativeIndex ? (lane.color || PAINT.accent) : PAINT.hint;
+    ctx.beginPath();
+    ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 8);
+    ctx.stroke();
+  });
 }
 
 // The selected alternative is filled in the layer's hue over the dim original.
@@ -1544,12 +1586,25 @@ function drawNotePlaces(ctx, s, scale, X, Y, lane, at) {
   if (!got) return null;
   const list = got.out.map((p) => spotBox(p, scale, s, X, Y));
   const hovered = selectAlternative(`note:${lane.id}:${got.at.marks[0]?.note?.id}:${S.voicingRevision}:${sharedSelection.key}`, list);
-  spots = hovered ? [hovered] : [];
+  // Every other position is a ring (as in 0.3.0), once the note is clicked: hover
+  // previews it, click moves the note there. Painted by drawNoteRings.
+  spots = list;
   if (!hovered) return null;
   const shape = new Map(got.at.marks.map(mark => [mark.note, mark.note === hovered.note
     ? { string: hovered.string, fret: hovered.fret } : { string: mark.string, fret: mark.fret }]));
   const preview = previewAlternative ? previewPosition(lane, got.at.marks.map(m => m.note), shape, "note") : null;
   return { hovered, at: got.at, preview, hand: preview?.hand || null };
+}
+
+function drawNoteRings(ctx, lane) {
+  const hovered = spots?.[alternativeIndex];
+  ctx.lineWidth = 1.8;
+  for (const p of spots || []) {
+    ctx.strokeStyle = p === hovered ? (lane.color || PAINT.accent) : PAINT.hint;
+    ctx.beginPath();
+    ctx.arc((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, Math.max(1, p.r - 0.9), 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 // Re-finger the preview after moving a single note, without changing the song.
@@ -1633,6 +1688,8 @@ function offeredSeat(lane) {
     const i = columns ? gripIndex(columns, frozenAt(lane) ?? boardTime()) : -1;
     return i >= 0 ? Number(columns[i].seat) || 0 : 0;
   }
+  if (listPeek?.kind === "hand") return listPeek.value;
+  if (handHoverFret) return handHoverFret;
   if (shaping?.preview?.hand) return Number(shaping.preview.hand.seat) || 0;
   if (altsOn && activeAlternative?.hand) return Number(activeAlternative.hand.seat) || 0;
   return 0;
@@ -1802,31 +1859,6 @@ function fillValues(list, values, chosen, disabled) {
   }));
 }
 
-// THE FINGERING THE BUTTONS STEP THROUGH: the column's fingers as the board shows
-// them, the valid ones (fingeringChoices), where the current one is among them, and
-// whether it was chosen. A chord reads as its fingers from the low string up.
-const fingeringChoicesOf = new WeakMap();
-function fingeringHere(lane) {
-  const at = handColumnHere(lane);
-  if (!at) return null;
-  const placed = at.column.fingers.filter((f) => !f.dead);
-  const fretted = placed.filter((f) => f.fret > 0);
-  if (!fretted.length) return null;
-  if (!fingeringChoicesOf.has(at.column)) {
-    const shape = new Map(placed.map((f) => [f.note, { string: f.string, fret: f.fret }]));
-    fingeringChoicesOf.set(at.column, fingeringChoices(shape, handProfileForTuning(laneFretTuning(lane)),
-      Math.max(1, laneFretCount(lane) - 3)));
-  }
-  const choices = fingeringChoicesOf.get(at.column);
-  const index = choices.findIndex((c) => fretted.every((f) => c.get(f.note) === f.finger));
-  const ordered = [...fretted].sort((a, b) => b.string - a.string);
-  const sep = fretted.length > 1 ? " " : "";
-  return { placed, choices, index, chord: fretted.length > 1,
-    chosen: fretted.some((f) => f.note.pos?.finger != null),
-    text: ordered.map((f) => fingerLabel(f.finger, "?")).join(sep),
-    label: (choice) => ordered.map((f) => fingerLabel(choice.get(f.note), "?")).join(sep) };
-}
-
 // The layer's chord at the column the board shows, if that column is a chord.
 function chordAtBoard(lane) {
   const at = handColumnHere(lane);
@@ -1923,12 +1955,23 @@ export function init_fretboard() {
     if (!editing || transportPlaying() || fretboardPanel.hasAttribute("data-edit-blocked")) return;
     const spot = spots ? spots.indexOf(spotUnder(e)) : -1;
     const i = spot >= 0 || shaping ? -1 : boxUnder(e);
+    // Hovering a ring or box browses to it; leaving them returns to the original.
+    const over = alternativeKey.startsWith("note:") ? spot : alternativeKey.startsWith("chord:") ? i : -1;
+    if (!shaping && over !== hoverAt) {
+      if (over >= 0) { alternativeIndex = over; previewAlternative = true; hoverPicked = true; }
+      else if (hoverPicked) { alternativeIndex = -1; previewAlternative = false; hoverPicked = false; }
+    }
+    hoverAt = over;
     spotHover = spot;
-    fretboardEl.style.cursor = spot >= 0 || i >= 0 ? "pointer" : "";
+    const r = fretboardEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    const hand = spot >= 0 || i >= 0 ? -1 : pickBox(handSpots, x, y);
+    handHover = hand; handHoverFret = hand >= 0 ? handSpots[hand].fret : 0;
+    fretboardEl.style.cursor = spot >= 0 || i >= 0 || hand >= 0 ? "pointer" : "";
     drawFretboard();
   });
   fretboardEl.addEventListener("mouseleave", () => {
-    fretboardEl.style.cursor = ""; spotHover = -1;
+    fretboardEl.style.cursor = ""; spotHover = -1; hoverAt = -1; handHover = -1; handHoverFret = 0;
+    if (hoverPicked) { alternativeIndex = -1; previewAlternative = false; hoverPicked = false; }
     if (editing) drawFretboard();
   });
   $("fretboardVoiceUp").addEventListener("click", () => stepVoiceFocus(1));
@@ -1941,7 +1984,7 @@ export function init_fretboard() {
     useAlternative(); $("fretboardChoose").blur();
   });
   const navigateAlternative = e => {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input")) return;
     if (!editing || transportPlaying() || fretboardPanel.hasAttribute("data-edit-blocked")) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault(); e.stopPropagation();
@@ -1979,18 +2022,19 @@ export function init_fretboard() {
     }
     // Rings place one note, candidate boxes place a whole shape, and bare wood
     // sets the hand position. The smaller ring wins when the marks overlap.
-    if (!previewAlternative || !previewIsCurrent(activeAlternative, lane)) { drawFretboard(); return; }
+    // A ring is a complete single-note move; it needs no finished preview.
     const spot = spotUnder(e);
-    if (spot) { setNotePosition(spot.note, spot.string, spot.fret); return; }
-    const box = alts?.boxes?.[boxUnder(e)];
-    if (box?.choice) {
-      applyColumnAlternative(alts.notes, box.choice, alts.influence);
-      return;
-    }
+    if (spot) { previewAlternative = false; hoverPicked = false; setNotePosition(spot.note, spot.string, spot.fret); return; }
+    const pick = alts?.boxes?.[boxUnder(e)];
+    if (pick?.choice) { previewAlternative = false; hoverPicked = false; applyColumnAlternative(alts.notes, pick.choice, alts.influence); return; }
+    const r = fretboardEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    const hand = handSpots[pickBox(handSpots, x, y)];
+    if (hand) { handHover = -1; handHoverFret = 0; setHandAnchor(lane, handTimeHere(lane), hand.fret, { create: true }); drawFretboard(); return; }
+    drawFretboard();
   });
   // Capo, Hand, Fingering and Chord: shut, a list shows its value; a click there or on the chevron opens it,
   // choosing a value, the chevron again or a click elsewhere shuts it.
-  const toggles = ["Capo", "Hand", "Finger", "Chord"].map((name) => $(`fretboard${name}Toggle`));
+  const toggles = ["Capo", "Hand"].map((name) => $(`fretboard${name}Toggle`));
   const listOf = (toggle) => $(toggle.getAttribute("aria-controls"));
   const setOpen = (toggle, open) => {
     const list = listOf(toggle), up = list.classList.contains("fretboard-values--up");
@@ -2028,6 +2072,35 @@ export function init_fretboard() {
     moveLaneCapo(lane, Number(button.dataset.value));
     drawFretboard();
   });
+  // The chord name field: Enter or leaving commits, Escape puts the name back.
+  const chordInput = $("fretboardChordInput");
+  const commitChordName = () => {
+    const chord = chordShown, text = chordInput.value.trim();
+    if (!chord || text === (chord.name || "")) return;
+    renameChord(chord, text || chord.auto || "");
+  };
+  chordInput.addEventListener("change", commitChordName);
+  chordInput.addEventListener("keydown", (e) => {
+    e.stopPropagation();   // typing a name is not a shortcut
+    if (e.key === "Enter") chordInput.blur();
+    if (e.key === "Escape") { chordInput.value = chordShown?.name || ""; chordInput.blur(); }
+  });
+  $("fretboardChordAuto").addEventListener("click", () => {
+    if (chordShown?.auto) renameChord(chordShown, chordShown.auto);
+    $("fretboardChordAuto").blur();
+  });
+  // Hovering a Hand or Capo value shows it on the board before it is chosen.
+  for (const [id, kind] of [["fretboardHandList", "hand"], ["fretboardCapoList", "capo"]]) {
+    const list = $(id);
+    list.addEventListener("mouseover", (event) => {
+      const button = event.target.closest("[data-value]");
+      const value = button && !button.disabled && button.dataset.value !== "auto" ? Number(button.dataset.value) : null;
+      const next = value == null ? null : { kind, value };
+      if (next?.value === listPeek?.value && next?.kind === listPeek?.kind) return;
+      listPeek = next; drawFretboard();
+    });
+    list.addEventListener("mouseleave", () => { if (listPeek) { listPeek = null; drawFretboard(); } });
+  }
   $("fretboardHandList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-value]"), lane = currentLane();
     if (!button || button.disabled || opened(event.currentTarget) || !editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;
@@ -2037,30 +2110,8 @@ export function init_fretboard() {
     setHandAnchor(lane, handTimeHere(lane), value);
     drawFretboard();
   });
-  $("fretboardFingerList").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-value]"), lane = currentLane();
-    if (!button || button.disabled || opened(event.currentTarget) || !editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;
-    button.blur();
-    const fingering = fingeringHere(lane);
-    if (!fingering) return;
-    if (button.dataset.value === "auto") clearColumnFingers(lane, fingering.placed.map(({ note }) => note));
-    else {
-      const next = fingering.choices[Number(button.dataset.value)];
-      if (!next) return;
-      setColumnFingers(lane, fingering.placed.map(({ note, string, fret }) => ({ note, string, fret })), next);
-    }
-    drawFretboard();
-  });
-  $("fretboardChordList").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-value]"), lane = currentLane(), chord = chordAtBoard(lane);
-    if (!button || button.disabled || opened(event.currentTarget) || !chord || !canEditLane(lane)) return;
-    button.blur();
-    if (button.dataset.value === "__custom") beginChordRename(chord, $("fretboardChordField").getBoundingClientRect());
-    else if (button.dataset.value !== chord.name) { renameChord(chord, button.dataset.value); drawFretboard(); }
-  });
   window.addEventListener("cw-transport", event => {
     if (event.detail === "play" || event.detail === "pause") setFretboardEdit(!transportPlaying());
-    if (event.detail === "seek" || event.detail === "pause") selectPlayheadNotes();
     if (event.detail === "seek") {
       alts = null; altsJob = null; alternativeKey = "";
       alternativeIndex = -1; previewAlternative = false;
