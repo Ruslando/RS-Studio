@@ -453,6 +453,32 @@ export function doDelete({ hovered = false } = {}) {
   refreshCounts(); draw();
 }
 
+// Copy or move the selection into another layer at the same time and pitch.
+// Fingering is dropped: it was placed for the source layer's tuning.
+export function sendSelectionToLane(target, { move = false } = {}) {
+  if (!canEditLane(target)) return;
+  const picked = [...S.selection].map((note) => [note, laneOf(note)])
+    .filter(([, lane]) => lane && lane !== target && (!move || canEditLane(lane)));
+  if (!picked.length) return;
+  const prev = snapshotEdit(), motifs = new Map();
+  const added = picked.map(([n, lane]) => {
+    if (move) { lane.notes.splice(lane.notes.indexOf(n), 1); dropFingering(n); return n; }
+    const note = copyEffects(n, { id: nid(), start: n.start, end: n.end, pitch: n.pitch });
+    if (n.motifId) {
+      if (!motifs.has(n.motifId)) motifs.set(n.motifId, motifId());
+      note.motifId = motifs.get(n.motifId);
+    }
+    dropFingering(note);
+    return note;
+  });
+  target.notes.push(...added);
+  commit(prev);
+  setSelection(new Set(added));
+  S.state.lanes.forEach((l) => (l.active = l === target));
+  renderLanes(); refreshCounts(); refreshTabIfOpen(); draw();
+  toast(`${move ? "Moved" : "Copied"} ${added.length} note${added.length === 1 ? "" : "s"} to “${target.name}”`);
+}
+
 // Cut = copy the selection, then delete the deletable part (same lane rules as
 // Delete).
 export function doCut() {
@@ -1303,6 +1329,18 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
         ? [{ label: "Motif", kw: "group phrase label", children: motifActions }]
         : []),
   ];
+  // Other layers to copy or move the selection into; hidden/locked ones are shown
+  // but disabled, so the list does not change shape with layer state.
+  const others = editLanes().filter((l) => !(oneLane && l === laneOf(sel[0])));
+  const laneItems = (move) => others.map((l) => ({
+    label: l.name, disabled: !canEditLane(l),
+    tip: canEditLane(l) ? undefined : `Layer is ${l.visible ? "locked" : "hidden"}`,
+    fn: () => sendSelectionToLane(l, { move }),
+  }));
+  const laneTargets = others.length ? [
+    { label: "Copy to layer", kw: "duplicate layer lane", children: laneItems(false) },
+    { label: "Move to layer", kw: "transfer layer lane", children: laneItems(true) },
+  ] : [];
   const tree = [
     // Grouping a selection leads the menu. It sat under the whole effect tree,
     // which is where you put something nobody reaches for — and while charting a
@@ -1316,6 +1354,9 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     ...similarEntries(),
     ...families,
     { sep: true },
+    { label: "Copy", kw: "clipboard duplicate", fn: () => doCopy() },
+    { label: "Cut", kw: "clipboard", fn: () => doCut() },
+    ...laneTargets,
     { label: "Delete", kw: "remove erase", fn: () => doDelete() },
   ];
   // Quick-remove strip pinned above the effect tree: one click strips an applied

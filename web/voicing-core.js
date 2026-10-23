@@ -140,6 +140,15 @@ export function chordColumns(notes, cap = Infinity) {
   return cols;
 }
 
+// The onset columns still sounding at `t`, low to high by their top pitch. A held
+// note under a moving line is two columns here, not one chord.
+export function soundingColumns(notes, t) {
+  const top = (c) => Math.max(...c.notes.map((n) => n.pitch));
+  return chordColumns(notes)
+    .filter((c) => c.t0 <= t && c.notes.some((n) => n.end > t))
+    .sort((a, b) => top(a) - top(b));
+}
+
 // Techniques that need a finger on the string — a slide slides a fretting finger,
 // a bend pushes a fretted note, a harmonic needs a touch/node position, fretting-
 // hand vibrato needs a fretted note (whammy-bar wobble is the separate `whammy`

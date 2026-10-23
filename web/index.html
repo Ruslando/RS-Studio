@@ -452,6 +452,11 @@
               <!-- Fingering controls are visible only in edit mode. -->
               <div id="fretboardPin" role="group" aria-label="Fingering" hidden>
                 <div id="fretboardShapeActions" role="group" aria-label="Shape">
+                <div id="fretboardVoices" role="group" aria-label="Notes sounding together" hidden>
+                  <button type="button" id="fretboardVoiceDown" class="icon-btn icon-btn--compact" aria-label="Lower voice" title="Lower voice (Down arrow)"><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
+                  <span id="fretboardVoiceCount" role="status" aria-live="polite">1 / 2</span>
+                  <button type="button" id="fretboardVoiceUp" class="icon-btn icon-btn--compact" aria-label="Higher voice" title="Higher voice (Up arrow)"><span data-ui-icon="chevronUp" aria-hidden="true"></span></button>
+                </div>
                 <div id="fretboardShapeNotes" role="group" aria-label="Custom shape notes" hidden>
                   <button type="button" id="fretboardShapePrev" class="icon-btn icon-btn--compact" aria-label="Previous note" title="Previous note (Left arrow)"><span data-ui-icon="chevronUp" aria-hidden="true"></span></button>
                   <span id="fretboardName" aria-live="polite" hidden></span>

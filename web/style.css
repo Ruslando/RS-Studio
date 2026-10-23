@@ -1512,7 +1512,9 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardPin { max-width: calc(100% - 8px); flex-wrap: wrap; }
 #fretboardAlternatives { display: flex; align-items: center; gap: var(--s-pair); }
 #fretboardAlternatives[hidden] { display: none; }
-#fretboardAltCount { min-width: 5ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
+#fretboardVoices { display: flex; align-items: center; gap: 4px; }
+#fretboardVoices[hidden] { display: none; }
+#fretboardVoiceCount, #fretboardAltCount { min-width: 7ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
 #fretboardAltPrev svg, #fretboardAltNext svg { transform: rotate(-90deg); }
 
 #fretboardPin #fretboardChoose:not(:disabled) { color: var(--stage-text); }
