@@ -305,7 +305,9 @@ def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
         t_end = segments[i + 1][0] if i + 1 < len(segments) else song_length
         step = 60.0 / bpm
         t, beat_in = t0, 0
-        while t < t_end - 1e-4:
+        # A marker a hair after a beat (placed by hand, float drift) must not leave
+        # a sliver measure before it: EOF reads a 1 ms measure as 60000 BPM.
+        while t < t_end - step / 4:
             if beat_in == 0:
                 measure += 1
             beats.append((t, measure, beat_in))
