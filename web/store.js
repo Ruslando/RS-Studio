@@ -77,6 +77,7 @@ export const S = {
   // Bumped by every note edit/restore. The preview voicing cache uses this to
   // avoid re-running the full passage optimizer until musical data changes.
   voicingRevision: 0,
+  fingerRevision: 0,     // typed fingers only: redraw the grips, voice nothing again
   metro: null,  // Tone synth for the metronome click
   // Playback clock anchor: song position ≈ anchorSong + (ctxNow - anchorCtx) *
   // playbackRate. Armed on play/seek/rate-change and servo-corrected while

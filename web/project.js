@@ -32,6 +32,7 @@ import { closeStemSettings, initStemSettings, openStemSettings } from "./stem-se
 import { downloadProjectBlob, toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
 import { S } from "./store.js";
+import { initProjectView, restoreView, savedView } from "./project-view.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
 import { tonePresetLabel, tonePresetMissing, withStartTone } from "./tone-marker-core.js";
@@ -397,7 +398,8 @@ export async function applyProject(data) {
   if (!anyActive && S.state.editLanes[0]) S.state.editLanes[0].active = true;
 
   // 7. view settings (which stem, zoom, speed) so reload lands where you left off.
-  const v = data.view || {};
+  // Where you left it last time, over what the file saved (see project-view.js).
+  const v = { ...(data.view || {}), ...(savedView(data.job) || {}) };
   S.state.viewIntensity = Array.isArray(v.intensity) ? v.intensity : [0, 100];
   S.zoomX = clamp(+v.zoomX || 1, ZOOM_MIN_X, ZOOM_MAX_X);
   S.zoomY = clamp(+v.zoomY || 1, ZOOM_MIN_Y, ZOOM_MAX_Y);
@@ -470,6 +472,7 @@ export async function applyProject(data) {
   }
   if (attachAudioBtn) attachAudioBtn.hidden = S.state.stems.length > 0;
   markSaved();    // freshly loaded project is the clean baseline; shows the tab, no dot
+  restoreView(savedView(data.job));
   warmSynths();   // start fetching the guitar samples ahead of first play
   // The editor exists now, which is the only moment its walkthrough can be
   // pointed at anything. An event rather than a call: tour.js reaches into the
@@ -1072,6 +1075,7 @@ export async function loadCached(job) {
 }
 
 export function init_project() {
+  initProjectView();
   saveBtn.addEventListener("click", () => saveProject());
   saveAsBtn.addEventListener("click", () => saveProject({ saveAs: true }));
   openBtn.addEventListener("click", openProject);

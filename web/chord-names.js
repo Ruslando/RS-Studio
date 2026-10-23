@@ -2,7 +2,7 @@
 // gave it. A given name rides on the chord's notes (chordName) together with the
 // tones it was given to (chordNameFor), so a chord whose tones change goes back
 // to the engine's name instead of keeping one that no longer fits.
-import { analyzeChord } from "./chords.js";
+import { PC_NAMES, analyzeChord } from "./chords.js";
 import { chordColumns } from "./voicing-core.js";
 
 const pitchKey = (pitches) => [...new Set(pitches)].sort((a, b) => a - b).join(",");
@@ -39,6 +39,14 @@ export function laneChords(lane) {
   const chords = chordsOf(lane.notes);
   cache.set(lane, { signature, chords });
   return chords;
+}
+
+// What to call a chord the engine has no name for: two tones are spelled out ("A + C#").
+// Shown only — the export keeps no name for them, as before.
+export function chordLabel(chord) {
+  if (chord?.auto) return chord.auto;
+  const pcs = [...new Set(playedPitches(chord?.notes || []).sort((a, b) => a - b).map((p) => PC_NAMES[p % 12]))];
+  return pcs.length === 2 ? pcs.join(" + ") : "";
 }
 
 // The chord `note` belongs to, if it is part of one.

@@ -8,7 +8,7 @@ const { laneFingering, laneFingeringKey } = await mockImport(new URL('../../web/
   './song-bars.js': { songBarStarts: timing => timing ? timing.bars : liveBars },
   './timing.js': { onLiveTiming: lane => !lane.timing, timingIdOf: lane => lane.timing,
     timingData: () => ({ bars: ownBars }) },
-  './voicing.js': { arrangedNotes: notes => notes, voiceNotesFingered: (notes, tuning, limit, options) => {
+  './voicing.js': { arrangedNotes: notes => notes, isChosenFinger: () => false, voiceNotesFingered: (notes, tuning, limit, options) => {
     solves++;
     return { voiced: new Map(notes.map(note => [note, { string: 0, fret: options.bars[1] }])), fingers: new Map(), seats: new Map() };
   } },

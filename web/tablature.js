@@ -30,7 +30,7 @@ import { isTablatureLane, selectedTablatureLane } from "./layer-role.js";
 import { modernGpProjectionStatus, modernGpResult, projectedGpLaneScore } from "./guitar-pro-score.js";
 import { parseTuning, songTimeToTabMs, tabMsToSongTime } from "./util.js";
 import { TUNINGS } from "./tunings.js";
-import { arrangedNotes, chordColumns, handChoices, handProfileForTuning, keepVoicing, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
+import { arrangedNotes, chordColumns, handChoices, handProfileForTuning, isChosenFinger, keepVoicing, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
 import { draw } from "./repaint.js";
 
 // ---- tablature (Guitar Pro export + alphaTab preview) ----
@@ -322,7 +322,14 @@ function buildSpecFromPrepared(prepared) {
 export async function laneFingering(lane, signal) {
   const tuning = laneFretTuning(lane), notes = arrangedNotes(lane.notes);
   const found = await voiceLaneAsync(lane, notes, tuning, signal);
+  // A finger typed in by the player is shown and exported as typed: no check that a
+  // hand can hold it. On an open string there is nothing to finger, so it waits.
+  // Before the references, so a repeat takes it from its first time; after, so a
+  // repeat's own typed finger still wins.
+  const typed = () => { for (const n of notes) if (isChosenFinger(n.finger) && found.voiced.get(n)?.fret > 0) found.fingers.set(n, n.finger); };
+  typed();
   alignReferences(lane, notes, found);
+  typed();
   // What was just voiced stays put: the next edit voices only what is new or no
   // longer fits (keepVoicing). No undo step and no new revision — the answer is the
   // same, it is only remembered.
