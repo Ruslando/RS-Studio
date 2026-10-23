@@ -85,20 +85,19 @@ def _late_cuts(n: dict) -> tuple[float | None, float | None]:
     return slide, vibrato
 
 
-def _split_late_effects(notes: list, warnings: list) -> list:
+def _split_late_effects(notes: list, fixes: list) -> list:
     """Late slides and late vibrato as linked pieces; see the comment above."""
-    onsets_at = _onset_counter(notes)
-    out, unsplit = [], 0
+    out = []
     for n in notes:
         slide_cut, vib_cut = _late_cuts(n)
         cuts = sorted({c for c in (slide_cut, vib_cut) if c is not None})
         if not cuts:
             out.append(n)
             continue
-        # A Child is a single note: one sharing its onset with another is a chord.
-        # A bend curve spans the whole note and is not cut.
-        if n.get("bend") or onsets_at(_f(n.get("start"))) > 1 or any(onsets_at(c) for c in cuts):
-            unsplit += 1
+        # A bend curve spans the whole note and is not cut. A chord is cut too:
+        # what follows a cut goes out as single notes (_voiced_entities).
+        if n.get("bend"):
+            fixes.append(("late-fx", _f(n.get("start"))))
             out.append(n)
             continue
         bounds = [_f(n.get("start")), *cuts, _f(n.get("end"))]
@@ -118,13 +117,10 @@ def _split_late_effects(notes: list, warnings: list) -> list:
                 piece.pop("slide", None)
                 piece["linkNext"] = True
             out.append(piece)
-    if unsplit:
-        warnings.append(f"{unsplit} note(s) with a late slide or vibrato are bent, in a chord or start with "
-                        "another note; Rocksmith plays the effect over the whole note")
     return out
 
 
-def _add_grace_notes(notes: list, grid: dict, warnings: list) -> list:
+def _add_grace_notes(notes: list, grid: dict, fixes: list) -> list:
     """An editor grace note as Rocksmith charts one: a short note before the
     beat, a semitone or two lower, that the main note hammers on from.
 
@@ -132,7 +128,7 @@ def _add_grace_notes(notes: list, grid: dict, warnings: list) -> list:
     never below the open string.
     """
     segments = _tempo_segments(grid)
-    out, blocked = [], 0
+    out = []
     by_string: dict = {}
     for n in notes:
         by_string.setdefault(n.get("string"), []).append(_f(n.get("start")))
@@ -146,7 +142,7 @@ def _add_grace_notes(notes: list, grid: dict, warnings: list) -> list:
         dur = min(0.08, 15.0 / bpm, start)
         step = min(interval, fret)
         if dur <= 0 or not step or any(start - dur - _LINK_EPS < t < start - _LINK_EPS for t in by_string[n.get("string")]):
-            blocked += 1
+            fixes.append(("grace", start))
             out.append(n)
             continue
         grace = {k: n[k] for k in ("string", "hand") if k in n}
@@ -154,8 +150,6 @@ def _add_grace_notes(notes: list, grid: dict, warnings: list) -> list:
         main = {k: v for k, v in n.items() if k != "grace"}
         main["fx"] = {**(n.get("fx") or {}), "hammer": True}
         out += [grace, main]
-    if blocked:
-        warnings.append(f"{blocked} grace note(s) had no room before their note and were left out")
     return out
 
 
@@ -184,8 +178,8 @@ def _link_bend_continuations(notes: list) -> list:
 # source is the Parent, held exactly until the target, and the target is its
 # Child, which the game draws as the same note carrying on — no second pick. A
 # shift slide stays two picked notes, which is what "shift" means.
-# Limitation: only a single-note target becomes a Child (the reference converter
-# links nothing into a chord either), so a legato slide into a chord is re-picked.
+# A chord a linked note runs into is written as single notes at one time, as EOF
+# does, so every one of them can be a Child.
 
 
 @dataclass
@@ -282,9 +276,11 @@ def _leave_note_gaps(entities: list, grid: dict) -> None:
         return ts * 60.0 / bpm / 32
 
     for i, e in enumerate(entities):
-        if e.sustain <= 0 or i + 1 == len(entities):
+        # The next onset: single notes written for one chord share a time.
+        nxt = next((x.time for x in entities[i + 1:] if x.time > e.time + _LINK_EPS), None)
+        if e.sustain <= 0 or nxt is None:
             continue
-        end, nxt = e.time + e.sustain, entities[i + 1].time
+        end = e.time + e.sustain
         strings = {s for s, _, _ in e.notes}
         same = next((x.time for x in entities[i + 1:] if strings & {s for s, _, _ in x.notes}), None)
         limits = [same - gap_at(same)] if same is not None and end > same - gap_at(same) else []
@@ -439,8 +435,7 @@ class _Notes:
     arr_props: dict
     per_pi: list                   # note count per phrase iteration
     ignored_per_pi: list           # of which ignored (_ignored)
-    dropped_slides: int            # connected slides with no fretted target
-    slides_into_chords: list = field(default_factory=list)   # chord times a legato slide reaches unlinked (I03)
+    dropped_slides: list           # times of connected slides with no fretted target
 
 
 # Both lookups walk backwards from the end because callers ask in time order and
@@ -462,7 +457,7 @@ def _find_section(sections: list, time: float) -> int:
 
 
 def _voiced_entities(track: dict, n_str: int, tuning_low: list,
-                     warnings: list, sustained, capo: int = 0) -> _Voicing:
+                     warnings: list, fixes: list, sustained, capo: int = 0) -> _Voicing:
     """Editor notes -> entities (chords = same onset), chord templates, Shapes.
 
     Takes nothing from the rest of the compile: it reads the track and produces
@@ -470,16 +465,14 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
     are dropped and frets past the neck are clamped, both with a warning.
     """
     voiced = []
-    dropped = 0
-    clamped = 0
     for n in track.get("notes") or []:
         if n.get("string") is None or n.get("fret") is None:
-            dropped += 1
+            fixes.append(("unvoiced", _f(n.get("start"))))
             continue
         rs_string = n_str - int(n["string"])  # GP string 1 = highest
         fret = int(n["fret"])
         if not (0 <= rs_string < n_str) or fret < 0:
-            dropped += 1
+            fixes.append(("unvoiced", _f(n.get("start"))))
             continue
         # The editor counts frets from the capo; Rocksmith counts them from the nut
         # and keeps 0 for a string open at the capo (Rocksmith2014.NET Midi.toMidiNote).
@@ -487,12 +480,8 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             fret += capo
         if fret > MAX_FRET:
             fret = MAX_FRET
-            clamped += 1
+            fixes.append(("fret", _f(n.get("start"))))
         voiced.append((_f(n.get("start")), rs_string, fret, n))
-    if clamped:
-        warnings.append(f"{clamped} note(s) above fret {MAX_FRET} were moved down to it")
-    if dropped:
-        warnings.append(f"{dropped} note(s) without a string/fret position were skipped")
     if not voiced:
         raise ValueError("No voiced notes to export")
     voiced.sort(key=lambda v: (v[0], v[1]))
@@ -500,19 +489,17 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
     chord_templates: list[S.ChordTemplate] = []
     chord_ids: dict[tuple, int] = {}
 
-    unfingered = 0
-
-    def ensure_chord_template(frets: list, midi: list, fingers: list, name: str, *, arpeggio: bool = False) -> int:
+    def ensure_chord_template(frets: list, midi: list, fingers: list, name: str, t: float, *, arpeggio: bool = False) -> int:
         """One template per grip, fingering and name: the same grip fingered or named two ways is two.
 
         The name is the editor's (web/chords.js, or the user's own), sent on the notes.
         """
-        nonlocal unfingered
         mask = S.CHORD_MASK_ARPEGGIO if arpeggio else 0
         key = (tuple(frets), tuple(fingers), name, mask)
         if key not in chord_ids:
             chord_ids[key] = len(chord_templates)
-            unfingered += sum(1 for f, g in zip(frets, fingers) if f > 0 and g == -1)
+            if any(f > 0 and g == -1 for f, g in zip(frets, fingers)):
+                fixes.append(("finger", t))   # where the grip is first played
             chord_templates.append(S.ChordTemplate(
                 frets=frets, fingers=fingers, notes=midi,
                 name=name, mask=mask))
@@ -563,12 +550,13 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         start = min(item[0] for item in members)
         end = max(max(_f(item[3].get("end"), item[0]), item[0] + 0.02) for item in members)
         shape_info[shape_id] = {
-            "chord_id": ensure_chord_template(frets, midi, fingers, _chord_name(m[3] for m in members), arpeggio=True),
+            "chord_id": ensure_chord_template(frets, midi, fingers, _chord_name(m[3] for m in members), start, arpeggio=True),
             "start": start, "end": end, "frets": list(by_string.values()),
         }
 
     entities: list[_Entity] = []
     dead_left_out = []
+    carried: dict[int, bool] = {}   # string -> its last note is carried on by the next (linked)
     i = 0
     while i < len(voiced):
         j = i
@@ -584,31 +572,34 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             # note's pitch to detect the chord (I29). A fully muted chord stays.
             notes = [item for item in notes if item not in dead]
             dead_left_out.append(t)
-        dur = max(_f(n.get("end"), t) - t for _, _, n in notes)
-        sustain = dur if sustained(t, dur) else 0.0
-        if not sustain and any((n.get("fx") or {}).get("vibrato") or n.get("tremPick") for _, _, n in notes):
-            # Vibrato and tremolo are drawn on the tail; without one DLC Builder
-            # reports I40. Such a note keeps the length it has in the editor.
-            sustain = max(dur, TECHNIQUE_SUSTAIN_MIN)
-        ent = _Entity(time=t, sustain=sustain, notes=notes)
-        entity_shape_ids = {n.get("shapeId") for _, _, n in notes if n.get("shapeId") in shape_info}
-        if len(entity_shape_ids) == 1 and all(n.get("shapeId") in entity_shape_ids for _, _, n in notes):
-            ent.shape_id = next(iter(entity_shape_ids))
-        if len(notes) >= 2:
-            frets = [-1] * 6
-            midi = [-1] * 6
-            fingers = [-1] * 6
-            for s, fret, n in notes:
-                frets[s] = fret
-                midi[s] = tuning_low[s] + (fret or capo)
-                fingers[s] = _finger(n, fret)
-            ent.chord_id = ensure_chord_template(frets, midi, fingers, _chord_name(n for _, _, n in notes))
-        entities.append(ent)
+        # A chord that a linked note runs into goes out as single notes at one time,
+        # as EOF writes it: Rocksmith links a note only to a single note (I03).
+        split = len(notes) > 1 and any(carried.get(s) for s, _, _ in notes)
+        for s, _, n in notes:
+            carried[s] = bool(n.get("linkNext") or n.get("slide") == "legato")
+        for notes in ([[item] for item in notes] if split else [notes]):
+            dur = max(_f(n.get("end"), t) - t for _, _, n in notes)
+            sustain = dur if sustained(t, dur) else 0.0
+            if not sustain and any((n.get("fx") or {}).get("vibrato") or n.get("tremPick") for _, _, n in notes):
+                # Vibrato and tremolo are drawn on the tail; without one DLC Builder
+                # reports I40. Such a note keeps the length it has in the editor.
+                sustain = max(dur, TECHNIQUE_SUSTAIN_MIN)
+            ent = _Entity(time=t, sustain=sustain, notes=notes)
+            entity_shape_ids = {n.get("shapeId") for _, _, n in notes if n.get("shapeId") in shape_info}
+            if len(entity_shape_ids) == 1 and all(n.get("shapeId") in entity_shape_ids for _, _, n in notes):
+                ent.shape_id = next(iter(entity_shape_ids))
+            if len(notes) >= 2:
+                frets = [-1] * 6
+                midi = [-1] * 6
+                fingers = [-1] * 6
+                for s, fret, n in notes:
+                    frets[s] = fret
+                    midi[s] = tuning_low[s] + (fret or capo)
+                    fingers[s] = _finger(n, fret)
+                ent.chord_id = ensure_chord_template(frets, midi, fingers, _chord_name(n for _, _, n in notes), t)
+            entities.append(ent)
         i = j
 
-    if unfingered:
-        warnings.append(f"{unfingered} fretted chord note(s) had no finger from the editor; "
-                        "Rocksmith shows them without one")
     return _Voicing(
         entities=entities,
         chord_templates=chord_templates,
@@ -767,7 +758,7 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
                         sections=sections, end_t=end_t)
 
 
-def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, warnings: list) -> list:
+def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, fixes: list) -> list:
     """Rocksmith hand positions from the editor's: (time, fret, width), stamped on each entity.
 
     Every note arrives with the fret the fretboard's index finger stands on
@@ -785,7 +776,6 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, w
     floor = capo + 1
     changes: list[tuple[float, int]] = []
     cur = None
-    guessed = 0
     for e in entities:
         held = shape_info[e.shape_id]["frets"] if e.shape_id in shape_info else [f for _, f, _ in e.notes]
         fretted = [f for f in held if f > 0]
@@ -795,15 +785,13 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, w
         elif fretted:
             lo, hi = min(fretted), max(fretted)
             fret = cur if cur is not None and cur <= lo and hi - cur < 6 else max(floor, lo)
-            guessed += 1
+            fixes.append(("hand", e.time))
         else:
             fret = cur if cur is not None else floor
         fret = min(fret, MAX_FRET - ANCHOR_WIDTH + 1)
         if fret != cur:
             changes.append((e.time, fret))
             cur = fret
-    if guessed:
-        warnings.append(f"{guessed} note(s) had no hand position from the editor; the export placed the hand on them")
 
     anchors = _phrase_start_anchors([(t, fret, ANCHOR_WIDTH) for t, fret in changes], pi_times)
     phrase_times = set(pi_times)
@@ -947,8 +935,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         "bends", "tapping", "vibrato", "fretHandMutes", "slapPop", "sustain"), False)
     last_fret_on_string: dict[int, int] = {}
     prev_note: S.Note | None = None
-    dropped_connected_slides = 0
-    slides_into_chords = []
+    dropped_connected_slides = []
 
     # string -> index of a legato Parent still waiting for its Child. The index
     # is the note's own: one SNG note per entity, so it equals `idx`.
@@ -967,7 +954,6 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         per-string chord notes (XmlToSngNote.fs applies this same set to both;
         Open/Sustain/PalmMute/Vibrato/etc are handled by _base_note_mask instead).
         """
-        nonlocal dropped_connected_slides
         mask = 0
         slide_to = -1
         unpitch_to = -1
@@ -1003,15 +989,10 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                     # notwithstanding: the game only links a Child that starts
                     # where its Parent's sustain ends.
                     sustain = target[1] - time
-                    if target[2]:
-                        # Rocksmith links a note only to a single note (I03),
-                        # so a slide into a chord is picked again on arrival.
-                        slides_into_chords.append(target[1])
-                    else:
-                        mask |= S.PARENT
-                        link_parents[string] = idx
+                    mask |= S.PARENT
+                    link_parents[string] = idx
             else:
-                dropped_connected_slides += 1
+                dropped_connected_slides.append(time)
         elif slide in ("outDown", "outUp"):
             sustain = max(sustain, SUSTAIN_MIN)
             mask |= S.UNPITCHEDSLIDE | S.SUSTAIN
@@ -1092,7 +1073,8 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 link_parents.pop(s, None)      # a chord is never a Child
             template = chord_templates[e.chord_id]
             cn_id = -1
-            include_chord_notes = e.first_in_shape or e.arpeggio_print != -1
+            include_chord_notes = (e.first_in_shape or e.arpeggio_print != -1
+                                   or any(n.get("linkNext") or n.get("slide") == "legato" for _, _, n in e.notes))
             if include_chord_notes:
                 # 6, not n_str: the SNG ChordNotes struct is a fixed uint32[6]
                 # regardless of instrument (see sng.py), so a bass chord leaves
@@ -1198,7 +1180,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
 
     return _Notes(notes=notes, chord_notes=chord_notes_list, anchor_extensions=anchor_exts,
                   arr_props=arr_props, per_pi=notes_per_pi, ignored_per_pi=ignored_per_pi,
-                  dropped_slides=dropped_connected_slides, slides_into_chords=slides_into_chords)
+                  dropped_slides=dropped_connected_slides)
 
 
 def compile_track(track: dict, grid: dict, song_length: float,
@@ -1214,6 +1196,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
     function body is for.
     """
     warnings: list[str] = []
+    fixes: list = []   # (code, time): what the export changed on a note (checker.FIXED)
     tuning_hi_lo = [int(p) for p in track.get("tuning") or []]
     n_str = len(tuning_hi_lo)
     if n_str < 4 or n_str > 6:
@@ -1221,10 +1204,10 @@ def compile_track(track: dict, grid: dict, song_length: float,
     tuning_low = list(reversed(tuning_hi_lo))  # index 0 = lowest string
 
     capo = max(0, int(track.get("capo") or 0))
-    notes = _add_grace_notes(track.get("notes") or [], grid, warnings)
-    notes = _link_bend_continuations(_split_late_effects(notes, warnings))
+    notes = _add_grace_notes(track.get("notes") or [], grid, fixes)
+    notes = _link_bend_continuations(_split_late_effects(notes, fixes))
     track = {**track, "notes": notes}
-    voicing = _voiced_entities(track, n_str, tuning_low, warnings,
+    voicing = _voiced_entities(track, n_str, tuning_low, warnings, fixes,
                                _sustain_rule(grid, song_length), capo)
     entities = voicing.entities
     _leave_note_gaps(entities, grid)
@@ -1235,7 +1218,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
                                   voicing.first_t, voicing.last_end, warnings,
                                   song_end=audio_end if song_end is None else song_end)
 
-    anchors_raw = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, warnings)
+    anchors_raw = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, fixes)
     fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)
     emitted = _emit_notes(entities, voicing.chord_templates, arr)
     notes = emitted.notes
@@ -1293,11 +1276,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
 
     duration = arr.beats[-1][0] - arr.beats[0][0]
     average_tempo = (len(arr.beats) - 1) / duration * 60.0 if duration > 0 else 120.0
-    if emitted.dropped_slides:
-        warnings.append(
-            f"{emitted.dropped_slides} connected slide(s) had no fretted "
-            "same-string target and were dropped")
     return Compiled(sng=sng_obj, note_count=len(notes), arr_props=emitted.arr_props,
                     average_tempo=average_tempo, warnings=warnings,
-                    fixes=sorted([("I29", t) for t in voicing.dead_left_out]
-                                 + [("I03", t) for t in emitted.slides_into_chords], key=lambda f: f[1]))
+                    fixes=sorted(dict.fromkeys(fixes + [("I29", t) for t in voicing.dead_left_out]
+                                               + [("slide", t) for t in emitted.dropped_slides]), key=lambda f: f[1]))

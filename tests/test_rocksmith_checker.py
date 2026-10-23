@@ -158,7 +158,7 @@ class ExporterFixes(unittest.TestCase):
         spec = builder._with_lead_in(_spec(_chord(2.0, 3.0, "022000")), 5)
         built = builder._compile_arrangement(spec, spec["tracks"][0], {"kind": "lead"}, 25.0, "KEY", warnings)
         self.assertEqual(built.compiled.sng.chords[0].fingers, [-1] * 6)
-        self.assertIn("2 fretted chord note(s) had no finger from the editor; Rocksmith shows them without one", warnings)
+        self.assertIn(("finger", 7.0), built.compiled.fixes)
 
     def test_every_phrase_starts_with_an_anchor(self):
         # One hand position across two phrases (120 BPM: a phrase every 8 measures = 16 s).
@@ -197,23 +197,29 @@ class ExporterFixes(unittest.TestCase):
         self.assertEqual(sum(song.levels[0].notes_in_pi_excl_ignored), 2)
         self.assertNotIn("I13", [c for c, _ in _codes(_spec(notes, lead=5))])
 
-    def test_legato_slide_into_a_chord_is_not_linked(self):
+    def test_legato_slide_into_a_chord_links_to_its_note(self):
+        # As EOF writes it: the chord goes out as single notes, so the slide's target is a Child.
         notes = [_note(2.0, 2.5, 3, 5, slide="legato"), *_chord(3.0, 4.0, "x02270")]
         [found] = builder.check_spec(_spec(notes, lead=5))
-        # Shown at the chord, as what the export did rather than as DLC Builder's issue.
-        self.assertEqual([(i["code"], i["time"], i["title"], i["important"]) for i in found["issues"]],
-                         [("I03", 3.0, "Slide into a chord is picked again", False)])
-        source = _compiled(notes).levels[0].notes[0]
-        self.assertTrue(source.mask & S.SLIDE)
-        self.assertFalse(source.mask & S.PARENT)
+        self.assertEqual([i["code"] for i in found["issues"] if i["code"] not in ("hand", "finger")], [])
+        source, *rest = _compiled(notes).levels[0].notes
+        self.assertTrue(source.mask & S.SLIDE and source.mask & S.PARENT)
         self.assertEqual(source.slide_to, 2)     # the G string of x02270
+        self.assertEqual(len(rest), 5, "the chord's five notes, one by one")
+        self.assertEqual([n.parent_prev_note for n in rest].count(0), 1)
+
+    def test_a_slide_off_its_string_is_shown_where_it_is(self):
+        notes = [_note(2.0, 2.5, 3, 5, slide="shift"), _note(2.5, 3.0, 2, 7)]
+        [found] = builder.check_spec(_spec(notes, lead=5))
+        self.assertIn(("slide", 2.0), [(i["code"], i["time"]) for i in found["issues"]])
 
     def test_dead_notes_leave_chords_that_are_not_muted(self):
         partly = _chord(2.0, 3.0, "355xxx") + [_note(2.0, 3.0, 3, 5, fx={"dead": True})]
         fully = _chord(4.0, 5.0, "355xxx", s6={"fx": {"dead": True}}, s5={"fx": {"dead": True}},
                        s4={"fx": {"dead": True}})
         [found] = builder.check_spec(_spec(partly + fully, lead=5))
-        self.assertEqual([(i["code"], i["time"], i["title"], i["important"]) for i in found["issues"]],
+        self.assertEqual([(i["code"], i["time"], i["title"], i["important"]) for i in found["issues"]
+                          if i["code"] not in ("hand", "finger")],
                          [("I29", 2.0, "Dead note left out of the chord", False)])
         song = _compiled(partly + fully)
         first, second = song.levels[0].notes
@@ -250,7 +256,7 @@ class ExporterFixes(unittest.TestCase):
                                              _spec([_note(2.0, 2.4, 2, 5)])["tracks"][0],
                                              {"track": 0, "kind": "lead"}, 20.0, "KEY", warnings := [])
         self.assertEqual(built.compiled.sng.levels[0].anchors[0].fret, 5)
-        self.assertIn("1 note(s) had no hand position from the editor; the export placed the hand on them", warnings)
+        self.assertIn("hand", [code for code, _ in built.compiled.fixes])
 
     def test_slide_out_ends_before_the_next_position(self):
         notes = [_note(2.0, 2.5, 1, 3, slide="outUp"), _note(2.5, 3.0, 1, 12)]
@@ -272,7 +278,7 @@ class ExporterFixes(unittest.TestCase):
         built = _built(notes, kind="bass", tuning=b_std)
         self.assertEqual(built.compiled.sng.metadata.tuning, (7, 7, 7, 7, 0, 0))
         self.assertEqual(built.cent_offset, -1200.0)
-        self.assertEqual(built.issues(), [])
+        self.assertEqual([i for i in built.issues() if i.code not in ("hand", "finger")], [])
         # Template pitches follow the reported tuning, as DLC Builder writes them.
         self.assertEqual(built.compiled.sng.chords[0].notes, [40, 47, -1, -1, -1, -1])
         spec = _spec(notes, lead=5, tuning=b_std)
