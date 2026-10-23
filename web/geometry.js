@@ -34,6 +34,9 @@ export function syncRowHeight() {
   if (S.state && S.state.spec) S.state.rowH = (S.stageHeight / rowCount()) * S.zoomY;
 }
 
+// The pitch under y without rounding to a row: a row's centre is its pitch.
+export const pitchAtExact = (y) => S.state.spec.midi_high + 0.5 - y / S.state.rowH;
+
 export function pitchAt(y) {
   const p = S.state.spec.midi_high - Math.floor(y / S.state.rowH);
   return Math.max(S.state.spec.midi_low, Math.min(S.state.spec.midi_high, p));

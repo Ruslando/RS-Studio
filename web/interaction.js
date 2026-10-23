@@ -4,14 +4,14 @@ import { makeResizeRoom } from "./note-merge.js";
 // the sidebar drag-to-resize / collapse.
 
 import { graceBefore } from "./grace.js";
-import { SNAP_SEMI, SNAP_T, bendAt, bendCurve, clampSemi, snapTo } from "./bend.js";
+import { SLIDES_TO_NEXT, SNAP_SEMI, SNAP_T, bendCurve, clampSemi, easedCurveAt, slideRibbon, snapTo } from "./bend.js";
 import { AUTOSCROLL_MAX, AUTOSCROLL_ZONE, BEND_HANDLE_R, EDGE_PX, MIN_DUR, MIN_REGION, ZOOM_STEP } from "./constants.js";
 import { updateDetectStatus } from "./detect.js";
-import { bendHandles, regionEdgeAt } from "./note-render.js";
+import { bendHandles, effectStartHandles, laneSlides, regionEdgeAt } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
-import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
-import { pitchAt, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
+import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
+import { pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
 import { NoteLengthMemory } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
@@ -37,32 +37,34 @@ import { createPanTracker } from './pan-momentum.js';
 let sliceHeld = false;
 const noteLength = new NoteLengthMemory();
 
-function noteAt(lane, t, pitch) {
+// A note whose pitch moves (a bend, or a slide's ribbon onto the next note) is
+// drawn along that curve, several rows away from its base pitch and, for a slide,
+// on past its own end. It is grabbed exactly where it is drawn: within half a row
+// of the curve, as the stage eases it (bend.js easedCurveAt). `exact` is the
+// unrounded pitch under the pointer; a plain note only needs its row.
+function noteAt(lane, t, pitch, exact = pitch) {
   if (!lane) return null;
+  const slides = laneSlides(lane);
   for (let i = lane.notes.length - 1; i >= 0; i--) {
     const n = lane.notes[i];
-    if (t < n.start || t > n.end) continue;
-    if (n.pitch === pitch) return n;
-
-    // A bent note is drawn along its audible pitch, which can sit several rows
-    // above its fretted/base pitch. Treat that ribbon as part of the note too,
-    // so an unselected bend can be picked from anywhere along its visible curve.
-    const curve = bendCurve(n);
-    if (!curve) continue;
-    const duration = Math.max(1e-6, n.end - n.start);
-    const audiblePitch = n.pitch + bendAt(curve, (t - n.start) / duration);
-    if (Math.abs(pitch - audiblePitch) <= 0.5) return n;
+    const ribbon = slideRibbon(n, slides.get(n));
+    const curve = bendCurve(n) || ribbon?.points;
+    const end = !bendCurve(n) && ribbon ? ribbon.end : n.end;
+    if (t < n.start || t > end) continue;
+    if (!curve) { if (n.pitch === pitch) return n; continue; }
+    const at = n.pitch + easedCurveAt(curve, (t - n.start) / Math.max(1e-6, end - n.start));
+    if (Math.abs(exact - at) <= 0.5) return n;
   }
   return null;
 }
 
-export function pickNote(t, pitch) {
+export function pickNote(t, pitch, exact = pitch) {
   const order = [activeLane(), ...S.state.lanes.filter((l) => l !== activeLane())];
   for (const lane of order) {
     // Locked or hidden lanes are display-only — never hit-test them, so their
     // notes can't be grabbed, moved, or selected.
     if (!lane || !lane.visible || lane.locked) continue;
-    const n = noteAt(lane, t, pitch);
+    const n = noteAt(lane, t, pitch, exact);
     if (n) return { lane, note: n };
     // A derived grace bar grabs its parent. It is never an independent note,
     // and cannot acquire its own resize handles or separate pitch/timing.
@@ -94,6 +96,19 @@ function bendHandleAt(x, y) {
   return null;
 }
 
+// The effect-start handle (slide or vibrato) under the cursor, on a selected +
+// editable note.
+function effectStartAt(x, y) {
+  for (const n of S.selection) {
+    if (!SLIDES_TO_NEXT.has(n.slide) && !n.fx?.vibrato) continue;
+    const lane = laneOf(n);
+    if (!canEditLane(lane) || boxOfNote(n)?.group.locked) continue;
+    const h = effectStartHandles(n, lane).find((h) => Math.abs(x - h.x) <= 7 && Math.abs(y - h.y) <= 9);
+    if (h) return h;
+  }
+  return null;
+}
+
 // The selected note whose bend curve passes within `grab` px of (x, y) — what
 // double-click adds a control point to.
 function bendCurveAt(x, y, grab = 6) {
@@ -103,7 +118,7 @@ function bendCurveAt(x, y, grab = 6) {
     const x0 = xOf(n.start), w = Math.max(2, xOf(n.end) - x0);
     if (x < x0 - grab || x > x0 + w + grab) continue;
     const t = clamp((x - x0) / w, 0, 1);
-    const cy = yOf(n.pitch) + S.state.rowH / 2 - bendAt(pts, t) * S.state.rowH;
+    const cy = yOf(n.pitch) + S.state.rowH / 2 - easedCurveAt(pts, t) * S.state.rowH;
     if (Math.abs(y - cy) <= grab) return { note: n, t };
   }
   return null;
@@ -134,7 +149,7 @@ export function hoveredStageNote() {
       document.elementFromPoint(S.lastPointerX, S.lastPointerY) !== stage) return null;
   const [x, y] = clientToCanvas(S.lastPointerX, S.lastPointerY);
   if (y - scroll.scrollTop <= railsBottom()) return null;
-  const hit = pickNote(timeAt(x), pitchAt(y));
+  const hit = pickNote(timeAt(x), pitchAt(y), pitchAtExact(y));
   return hit && !boxOfNote(hit.note)?.group.locked ? hit.note : null;
 }
 
@@ -177,6 +192,12 @@ function updateDrag(x, y) {
   }
   if (S.drag.mode === "refBox") { resizeRefBox(S.drag, x, y); return; }
   if (S.drag.mode === "refDrag") { moveRefOccurrence(S.drag, x, y); return; }
+  if (S.drag.mode === "effectStart") {
+    // Snaps to the grid like a note edge; Alt places it freely.
+    const n = S.drag.note, t = S.drag.free ? timeAt(x) : snap(timeAt(x));
+    EFFECT_START_SETTERS[S.drag.kind](n, (t - n.start) / Math.max(1e-6, n.end - n.start));
+    draw(); return;
+  }
   if (S.drag.mode === "bendPoint") {
     // Drag one control point of the curve. Snapping lands on Guitar Pro's own
     // bend grid (12 columns x quarter-tones), which is all .gp5 can store; Alt
@@ -340,7 +361,7 @@ export function init_interaction() {
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
       const [x, y] = localXY(e);
       if (y - scroll.scrollTop <= railsBottom()) return;
-      const hit = pickNote(timeAt(x), pitchAt(y));
+      const hit = pickNote(timeAt(x), pitchAt(y), pitchAtExact(y));
       e.preventDefault();
       S.drag = { mode: 'tracePending', x0: x, y0: y, hit, toggleSelection: true };
       return;
@@ -360,13 +381,13 @@ export function init_interaction() {
     const defaultTrace = noMod && S.toolMode === "trace";
     const wantTrace = tool === "trace";
     const wantMarquee = e.shiftKey || tool === "marquee";
-    const altHit = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey ? pickNote(t, pitch) : null;
+    const altHit = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey ? pickNote(t, pitch, pitchAtExact(y)) : null;
     const altResize = altHit && !altHit.grace && edgeOf(altHit.note, x)
       && canEditLane(altHit.lane) && !boxOfNote(altHit.note)?.group.locked;
     const wantFrame = (e.altKey && !altResize) || tool === "frame";
     const wantSlice = sliceHeld && noMod;
     const plainSelect = altResize || (noMod && (["select", "pan"].includes(S.toolMode) || defaultTrace));
-    const noteHit = plainSelect ? pickNote(t, pitch) : null;
+    const noteHit = plainSelect ? pickNote(t, pitch, pitchAtExact(y)) : null;
 
     // Existing range edges stay grabbable in every tool, including the default
     // Trace tool, and take priority over notes and reference boxes behind them.
@@ -388,6 +409,11 @@ export function init_interaction() {
       const handle = bendHandleAt(x, y);
       if (handle) {
         S.drag = { mode: "bendPoint", note: handle.note, i: handle.i, free: e.altKey, prev: snapshotEdit() };
+        return;
+      }
+      const start = effectStartAt(x, y);
+      if (start) {
+        S.drag = { mode: "effectStart", note: start.note, kind: start.kind, free: e.altKey, prev: snapshotEdit() };
         return;
       }
     }
@@ -476,7 +502,7 @@ export function init_interaction() {
     }
   
     // Plain left-click: grab a note (select / move / resize) or move the cursor.
-    const hit = noteHit || pickNote(t, pitch);
+    const hit = noteHit || pickNote(t, pitch, pitchAtExact(y));
     if (hit) {
       // Editing is scoped to the active layer. Clicking a note in a *different*
       // visible layer just retargets focus to that layer (and selects the note) —
@@ -552,7 +578,7 @@ export function init_interaction() {
     const hit = bendCurveAt(x, y);
     if (hit) { e.preventDefault(); addBendPoint(hit.note, hit.t); }
     else if (["trace", "pan"].includes(S.toolMode) && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
-             !pickNote(timeAt(x), pitchAt(y))) {
+             !pickNote(timeAt(x), pitchAt(y), pitchAtExact(y))) {
       const lane = targetLane(), step = minDur();
       if (!canEditLane(lane) || !step) return;
       const start = Math.max(0, Math.min(snap(timeAt(x)), S.state.duration - step));
@@ -581,6 +607,12 @@ export function init_interaction() {
     // curve to the note and stay) — otherwise fall through to the note menu.
     const handle = bendHandleAt(x, y);
     if (handle) { removeBendPoint(handle.note, handle.i); return; }
+    // Right-click a slide- or vibrato-start handle moves it back to the pick.
+    const start = effectStartAt(x, y);
+    if (start && start.note[`${start.kind}Start`] != null) {
+      const prev = snapshotEdit();
+      EFFECT_START_SETTERS[start.kind](start.note, 0); commit(prev); draw(); return;
+    }
     // Right-click a reference badge opens its menu, acting on the occurrence it
     // identifies. A locked/hidden layer is view-only, so its references are inert.
     const badge = refBadgeAt(x, y);
@@ -596,7 +628,7 @@ export function init_interaction() {
       });
       return;
     }
-    const hit = pickNote(timeAt(x), pitchAt(y));
+    const hit = pickNote(timeAt(x), pitchAt(y), pitchAtExact(y));
     if (hit) {
       if (!S.selection.has(hit.note)) setSelection(new Set([hit.note]));
       openNoteMenu(e.clientX, e.clientY);
@@ -634,7 +666,8 @@ export function init_interaction() {
     }
     // Reference labels and edges set their own cursor in draw.js's handler.
     if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (refLockAt(x, y) || refBadgeAt(x, y) || refBoxEdgeAt(x, y))) return;
-    const hit = pickNote(timeAt(x), pitchAt(y));
+    if (!e.ctrlKey && !e.metaKey && !e.shiftKey && effectStartAt(x, y)) { stage.style.cursor = "ew-resize"; return; }
+    const hit = pickNote(timeAt(x), pitchAt(y), pitchAtExact(y));
     stage.style.cursor = e.ctrlKey || e.metaKey ? 'crosshair' : hit
       ? (!hit.grace && edgeOf(hit.note, x) ? "ew-resize" : "move")
       : (S.toolMode === "trace" ? "crosshair" : "grab");
@@ -786,7 +819,7 @@ export function init_interaction() {
       noteLength.remember(S.state, S.drag.note, gridSegments());
       // Pitch edits leave hand placement to the solver; they do not author anchors.
       commitIfChanged(undefined, S.drag.mode === 'resize');
-    } else if (S.drag.mode === "bendPoint") {
+    } else if (S.drag.mode === "bendPoint" || S.drag.mode === "effectStart") {
       commitIfChanged();
     } else if (S.drag.mode === "refBox") {
       // Box resized: mirror its new contents to the siblings (the dragged box is the

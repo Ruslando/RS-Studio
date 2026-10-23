@@ -6,7 +6,7 @@ import { WHAMMY_TAG } from "./whammy.js";
 // Everything copy/paste, references and undo carry along with a note.
 export const EFFECT_FIELDS = [
   "slide", "fx", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick", "slap",
-  "stroke", "whammy", "pos", "arrangement",
+  "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart",
 ];
 
 // The subset that goes into a change-detection signature — EFFECT_FIELDS minus
@@ -23,17 +23,22 @@ export const EFFECT_FIELDS = [
 // The COMPLETENESS: an effect missing from this list is invisible to change
 // detection, so editing it looks like no edit at all and a source-preserving
 // export silently drops it. Add an effect to EFFECT_FIELDS and you must add it
-// here — `tests/layer-role.test.mjs` fails if you don't.
+// here (or to LATE_SIGNATURE_FIELDS).
 export const SIGNATURE_EFFECT_FIELDS = [
   "slide", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick",
   "slap", "stroke", "whammy", "fx",
 ];
+// Fields added after projects already stored signatures. They join the signature
+// only when set, so a note without them hashes as it always did.
+export const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart"];
 
 // `{ slide: …, bend: …, … }` with an explicit null for anything absent, so a
 // removed effect changes the signature as surely as an added one does. Three
 // call sites in guitar-pro-core.js wrote this list out by hand.
-export const effectSignatureFields = (note) =>
-  Object.fromEntries(SIGNATURE_EFFECT_FIELDS.map((key) => [key, note[key] ?? null]));
+export const effectSignatureFields = (note) => ({
+  ...Object.fromEntries(SIGNATURE_EFFECT_FIELDS.map((key) => [key, note[key] ?? null])),
+  ...Object.fromEntries(LATE_SIGNATURE_FIELDS.filter((key) => note[key] != null).map((key) => [key, note[key]])),
+});
 
 // ---- the effect vocabulary ----
 // Boolean articulations live as flags in note.fx; tab.py maps each to the

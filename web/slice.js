@@ -56,6 +56,25 @@ export function splitNote(note, at, minDuration, newId) {
   delete left.shapeId; delete left.shapeSource;
   delete right.shapeId; delete right.shapeSource;
 
+  // A late slide start stays at its moment in time. Cut before it, the slide
+  // moves to the right half, which is the part that still leads into the target.
+  const slideAt = note.slideStart != null ? note.start + note.slideStart * (note.end - note.start) : null;
+  delete left.slideStart; delete right.slideStart;
+  if (slideAt != null && at <= slideAt) {
+    right.slide = note.slide; delete left.slide;
+    if (slideAt - at > 1e-9) right.slideStart = (slideAt - at) / (note.end - at);
+  } else if (slideAt != null) left.slideStart = (slideAt - note.start) / (at - note.start);
+
+  // Late vibrato likewise: cut before it, the left half is plain.
+  const vibratoAt = note.fx?.vibrato && note.vibratoStart != null
+    ? note.start + note.vibratoStart * (note.end - note.start) : null;
+  delete left.vibratoStart; delete right.vibratoStart;
+  if (vibratoAt != null && at <= vibratoAt) {
+    const fx = { ...left.fx }; delete fx.vibrato;
+    if (Object.keys(fx).length) left.fx = fx; else delete left.fx;
+    if (vibratoAt - at > 1e-9) right.vibratoStart = (vibratoAt - at) / (note.end - at);
+  } else if (vibratoAt != null) left.vibratoStart = (vibratoAt - note.start) / (at - note.start);
+
   const curve = bendCurve(note);
   if (curve) {
     const fraction = (at - note.start) / (note.end - note.start);
