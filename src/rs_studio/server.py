@@ -366,6 +366,8 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
         m["scoreBars"] = payload["scoreBars"]
     if "sectionMarkers" in payload and isinstance(payload.get("sectionMarkers"), list):
         m["sectionMarkers"] = payload["sectionMarkers"]
+    if isinstance(payload.get("comments"), list):   # free spectrogram comments (web/comments.js)
+        m["comments"] = payload["comments"]
     # Layers with their own tempo/sections (web/timing.js); the song's stay in grid & co.
     if isinstance(payload.get("timings"), dict):
         m["timings"] = payload["timings"]
@@ -473,6 +475,7 @@ def _response_from_manifest(m: dict) -> dict:
         "editLanes": m.get("editLanes", []),
         "guitarPro": m.get("guitarPro"),
         "sectionMarkers": m.get("sectionMarkers"),
+        "comments": m.get("comments", []),
         "timings": m.get("timings", {}),
         "mix": m.get("mix", {}),
         "scoreBars": m.get("scoreBars", []),

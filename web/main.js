@@ -34,6 +34,7 @@ import { initSelectPickers } from "./select-pickers.js";
 import { init_artifacts } from "./artifacts.js";
 import { initSpectrogramControls } from './spectrogram-controls.js';
 import { initDrawingSettings } from './drawing-settings.js';
+import { initComments } from './comments.js';
 
 init_project();
 init_detect();
@@ -45,6 +46,7 @@ init_settings();   // restore persisted prefs before features read their inputs
 init_sound_designer();
 init_tracing();
 initDrawingSettings();
+initComments();
 initSpectrogramControls();
 init_interaction();
 init_sidebar();

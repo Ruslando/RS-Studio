@@ -15,13 +15,14 @@ import { sectionTypeLabel } from './section-marker-core.js';
 import { tonePresetLabel, tonePresetMissing } from './tone-marker-core.js';
 import { playbackTime, seekPlayback } from './playback.js';
 import { adjacentMarkerTime } from './marker-navigation-core.js';
-import { xOf } from './geometry.js';
+import { xOf, yOf } from './geometry.js';
+import { openCommentPop, closeCommentPop } from './comments.js';
 import { moveViewportTo, stopViewportMotion } from './viewport-motion.js';
 import { stopArtifactPreview } from './artifact-preview.js';
 import { draw } from './repaint.js';
 import { icon } from './icons.js';
 
-const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['anchor', 'Hand anchors']];
+const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['anchor', 'Hand anchors'], ['comment', 'Comments']];
 const sections = new Map(), rows = new Map();
 const chevron = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
@@ -74,20 +75,25 @@ export function markerArtifacts() {
       });
     }
   }
+  // Comments belong to the song, so they show whichever layer is active.
+  for (const marker of S.state.comments || []) entries.push({
+    key: `comment:${marker.id}`, kind: 'comment', owner: 'Song',
+    marker, t: marker.t, name: marker.text.split('\n')[0] || 'Comment',
+  });
   return entries.sort((a, b) => a.t - b.t || a.key.localeCompare(b.key));
 }
 
 function actOnMarker(key, edit, target, event) {
   stopArtifactPreview(); stopViewportMotion();
   // Commit an open editor while its original timing and layer still own it.
-  closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeToneMarkerPop(); closeHandAnchorPop();
+  closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeToneMarkerPop(); closeHandAnchorPop(); closeCommentPop();
   const entry = markerArtifacts().find(item => item.key === key);
   if (!entry || (edit && ['tone', 'phrase', 'anchor'].includes(entry.kind) && !canEditLane(entry.lane))) return;
   const { lane, kind, marker, timing, t } = entry;
   if (lane) { lane.visible = true; activateLane(lane); renderLanes(); }
   if (!edit) {
     seekPlayback(t);
-    moveViewportTo(xOf(t) - scroll.clientWidth * .2, scroll.scrollTop);
+    moveViewportTo(xOf(t) - scroll.clientWidth * .2, kind === 'comment' ? yOf(marker.pitch) - scroll.clientHeight / 2 : scroll.scrollTop);
     draw(); return;
   }
   const rect = target.getBoundingClientRect();
@@ -97,6 +103,7 @@ function actOnMarker(key, edit, target, event) {
   else if (kind === 'section') openSectionMarkerPop(x, y, marker, timing);
   else if (kind === 'phrase') openPhraseMarkerPop(x, y, marker, lane);
   else if (kind === 'anchor') openHandAnchorPop(x, y, marker, lane);
+  else if (kind === 'comment') openCommentPop(x, y, marker);
   else openToneMarkerPop(x, y, marker, lane);
   draw();
 }

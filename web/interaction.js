@@ -15,6 +15,7 @@ import { pitchAt, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry
 import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
 import { NoteLengthMemory } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
+import { commentAt, commentCursorAt, commentMouseDown, openCommentPop } from "./comments.js";
 import { updateProjectStartAt } from "./project-position.js";
 import { projectStart } from "./project-position-core.js";
 import { markerRails, railsBottom } from "./marker-rails.js";
@@ -348,6 +349,7 @@ export function init_interaction() {
     const rails = markerRails();
     for (let i = rails.length - 1; i >= 0; i--) if (rails[i].mouseDown?.(e)) return;
     if (markerMouseDown(e)) return;
+    if (commentMouseDown(e)) return;
     const [x, y] = localXY(e);
     const t = timeAt(x), pitch = pitchAt(y);
   
@@ -529,7 +531,7 @@ export function init_interaction() {
     if (!S.state || e.ctrlKey || e.metaKey) return;
     const [x, y] = localXY(e);
     // Only actual flags consume this area; empty rail space is note-editing space.
-    if (markerCursorAt(x, y) || markerRails().some(rail => rail.cursorAt?.(x, y))) return;
+    if (markerCursorAt(x, y) || commentAt(x, y) || markerRails().some(rail => rail.cursorAt?.(x, y))) return;
     // Double-click a reference's or motif's name to rename it in place.
     const label = refBadgeAt(x, y) || S.motifLabels.find((m) => x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h);
     if (label && canEditLane(label.lane)) {
@@ -573,6 +575,8 @@ export function init_interaction() {
     if (!S.state) return;
     for (const rail of markerRails()) if (rail.contextMenu?.(e)) return;
     const [x, y] = localXY(e);
+    const comment = commentAt(x, y);
+    if (comment) { openCommentPop(e.clientX, e.clientY, comment); return; }
     // Right-click a bend control point removes it (the two end points pin the
     // curve to the note and stay) — otherwise fall through to the note menu.
     const handle = bendHandleAt(x, y);
@@ -623,7 +627,7 @@ export function init_interaction() {
   stage.addEventListener("mousemove", (e) => {
     if (!S.state || S.drag || sliceHeld || !["select", "trace", "pan"].includes(S.toolMode)) return;
     const [x, y] = localXY(e);
-    const markerCursor = markerCursorAt(x, y) || markerRails().map(rail => rail.cursorAt?.(x, y)).find(Boolean);
+    const markerCursor = markerCursorAt(x, y) || commentCursorAt(x, y) || markerRails().map(rail => rail.cursorAt?.(x, y)).find(Boolean);
     if (markerCursor) { stage.style.cursor = markerCursor; return; }
     if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && regionEdgeAt(x)) {
       stage.style.cursor = "ew-resize"; return;

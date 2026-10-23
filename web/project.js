@@ -37,6 +37,7 @@ import { normalizedLaneFields } from "./marker-rails.js";
 import { tonePresetLabel, tonePresetMissing, withStartTone } from "./tone-marker-core.js";
 import { loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets-core.js";
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars, withEndSection } from "./section-marker-core.js";
+import { normalizeComments } from "./comments.js";
 import { inferTablatureEnabled, laneScrollSpeed } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
 import { isValidTuningKey, parseTuning, setView, tuningKeyFor } from "./tablature.js";
@@ -85,6 +86,7 @@ function projectBody() {
     // The project's own grid, sections and bars are the SONG's timing — whichever
     // layer is active; layers with their own timing save theirs under `timings`.
     sectionMarkers: normalizeSectionMarkers(song.sectionMarkers || [], Number(S.state.duration) || Infinity),
+    comments: normalizeComments(S.state.comments),
     scoreBars: (song.scoreBars || []).map((bar) => ({ ...bar })),
     timings: timingsForSave(),
     scoreDuration: Number(S.state.scoreDuration) || Number(S.state.duration) || 1,
@@ -365,6 +367,7 @@ export async function applyProject(data) {
     metadata: normalizeMetadata(data.metadata || {}),
     guitarPro: data.guitarPro || null,
     sectionMarkers: restoredSections,
+    comments: normalizeComments(data.comments),
     timings: loadTimings(data.timings, Number(data.songEnd) || Number(data.duration) || Number(data.scoreDuration),
       Number(data.duration) || Number(data.scoreDuration) || Infinity),
     scoreBars: coveredBars,

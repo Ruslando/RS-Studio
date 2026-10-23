@@ -18,7 +18,6 @@ export function initSpectrogramControls() {
   let pending = null;
   const channelButton = document.getElementById('stageChannelButton');
   const channelLabel = document.getElementById('stageChannelLabel');
-  const summary = document.getElementById('stageControlsSummary');
   const options = [...panel.querySelectorAll('[data-channel]')];
   const viewOptions = [...panel.querySelectorAll('[data-view]')];
   wireMenuAnchors(panel);
@@ -51,7 +50,6 @@ export function initSpectrogramControls() {
     sharp.checked = !!S.state?.specSharp;
     // Reassignment exists for CQT and HPS only: on whitening it changes nothing visible.
     sharp.disabled = channel.disabled || !['fine', 'fundamental'].includes(view);
-    const sharpened = sharp.checked && !sharp.disabled;
     const name = { stereo: 'Stereo', left: 'Left', right: 'Right', side: 'Side' }[channel.value] || 'Stereo';
     channelLabel.textContent = name;
     for (const option of options) {
@@ -63,7 +61,6 @@ export function initSpectrogramControls() {
     const range = normalizeIntensityRange(...(S.state?.viewIntensity || [0, 100]));
     status.textContent = channel.disabled ? 'Loading channel…'
       : range[0] === 0 && range[1] === 100 ? '' : intensityStatus(S.spectImg);
-    summary.textContent = `${name}${view === 'fine' ? '' : ` · ${viewName}`}${sharpened ? ' · Reassigned' : ''} · ${range[0]}–${range[1]}%`;
     min.value = String(range[0]); max.value = String(range[1]);
     minValue.textContent = `${range[0]}%`; maxValue.textContent = `${range[1]}%`;
     min.setAttribute('aria-valuetext', minValue.textContent);
@@ -103,7 +100,8 @@ export function initSpectrogramControls() {
     sync(); draw();
   });
   panel.addEventListener('keydown', event => {
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) event.stopPropagation();
+    // Space operates the focused checkbox / button without starting playback.
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', ' '].includes(event.key)) event.stopPropagation();
   });
   for (const event of ['cw-stem-view-changed', 'cw-project-opened', 'cw-project-closed', 'cw-intensity-status']) window.addEventListener(event, sync);
   sync();

@@ -17,6 +17,7 @@ import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapNote,
 import { nid, motifId } from "./ids.js";
 import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
+import { addCommentAt } from "./comments.js";
 import { addMarkerAtTime } from "./markers.js";
 import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, targetLane, toggleLaneMute } from "./lanes.js";
 import { FX_KEYS, FX_LABELS, copyEffects } from "./note-effects.js";
@@ -63,6 +64,7 @@ function structureSnapshot() {
     tempoMap: cloneJson(S.state.tempoMap),
     scoreBars: cloneJson(S.state.scoreBars),
     sectionMarkers: cloneJson(S.state.sectionMarkers),
+    comments: cloneJson(S.state.comments || []),
     scoreDuration: S.state.scoreDuration,
     duration: S.state.duration,
     projectStart: S.state.projectStart,
@@ -166,6 +168,7 @@ function restore(snap) {
     S.state.tempoMap = cloneJson(snap.structure.tempoMap);
     S.state.scoreBars = cloneJson(snap.structure.scoreBars);
     S.state.sectionMarkers = cloneJson(snap.structure.sectionMarkers);
+    if (snap.structure.comments) S.state.comments = cloneJson(snap.structure.comments);
     S.state.scoreDuration = snap.structure.scoreDuration;
     S.state.projectStart = snap.structure.projectStart;
     if (snap.structure.duration != null) S.state.duration = snap.structure.duration;
@@ -1127,6 +1130,7 @@ export function openCanvasMenu(clientX, clientY, atTime) {
   const entries = [
     { label: "Detect notes…", fn: () => openDetectPanel(clientX, clientY) },
     ...addMarker,
+    { label: "Add comment", kw: "note annotation", fn: () => addCommentAt(clientX, clientY) },
     { sep: true },
     { label: "Paste", fn: () => doPaste() },
   ];

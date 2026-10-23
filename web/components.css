@@ -172,24 +172,24 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .legend { color: var(--label); font-size: var(--text-control); }
 .link { background: none; border: 0; color: var(--accent); padding: 0; height: auto; font-weight: 600; cursor: pointer; }
 
-.pill, .view-switch, .keymap-tabs {
+.pill, .view-switch, .keymap-tabs, .tabs {
   display: inline-flex; align-items: center; gap: var(--s-pair); flex: none;
   height: var(--h-control); padding: 3px;
   background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-control);
 }
 .keymap-tabs { align-self: flex-start; width: max-content; max-width: 100%; }
 
-.pill > *, .view-switch .mode, .keymap-tabs .keymap-tab {
+.pill > *, .view-switch .mode, .keymap-tabs .keymap-tab, .tabs .tab {
   min-width: 92px; height: var(--h-compact); padding: 0 var(--s-sibling);
   border: 1px solid transparent; border-radius: var(--r-compact); background: transparent;
   color: var(--label); font: 400 var(--text-control)/1 var(--font-ui);
 }
 
-.view-switch .mode:hover:not(.active) { color: var(--text); background: var(--control-hover); }
+.view-switch .mode:hover:not(.active), .tabs .tab:hover:not(.active) { color: var(--text); background: var(--control-hover); }
 
-.pill > [aria-checked="true"], .view-switch .mode.active, .keymap-tab.active { background: var(--control); color: var(--text); font-weight: 600; box-shadow: var(--e-control); }
+.pill > [aria-checked="true"], .view-switch .mode.active, .keymap-tab.active, .tabs .tab.active { background: var(--control); color: var(--text); font-weight: 600; box-shadow: var(--e-control); }
 
-.pill > [aria-checked="true"]:hover, .pill > [aria-checked="true"]:active, .view-switch .mode.active:hover, .view-switch .mode.active:active, .keymap-tab.active:hover, .keymap-tab.active:active { background: var(--control-hover); color: var(--text); }
+.pill > [aria-checked="true"]:hover, .pill > [aria-checked="true"]:active, .view-switch .mode.active:hover, .view-switch .mode.active:active, .keymap-tab.active:hover, .keymap-tab.active:active, .tabs .tab.active:hover, .tabs .tab.active:active { background: var(--control-hover); color: var(--text); }
 
 .menu-item, .ctxmenu-item {
   height: var(--h-compact); width: 100%; text-align: left;
@@ -638,6 +638,7 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 [data-kind="tone"] { --mark: var(--stage-tone); }
 [data-kind="reference"] { --mark: var(--stage-ref); }
 [data-kind="motif"] { --mark: var(--stage-motif); }
+[data-kind="comment"] { --mark: var(--stage-comment); }
 /* Half strength at rest and full under the pointer, as the stage draws the box. */
 .artifact-row:is([data-kind="reference"], [data-kind="motif"]) { border: 1px solid color-mix(in srgb, var(--mark) 50%, transparent); border-radius: var(--r-control); transition: border-color var(--dur-state) var(--ease); }
 .artifact-row:is([data-kind="reference"], [data-kind="motif"]):is(:hover, :focus-within) { border-color: var(--mark); }
