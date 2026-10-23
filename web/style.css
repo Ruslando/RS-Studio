@@ -50,6 +50,7 @@
   --stage-motif:       #c4a7ff;   /* motif annotations */
   --stage-trace:       #f0abfc;   /* find-similar suggestions */
   --stage-ref:         #e7c873;   /* linked reference groups */
+  --stage-comment:     #a3e635;   /* free comments on the spectrogram */
   /* A runtime layout width the user drags. Not a design token — but declared here
      rather than as a var() fallback, because a missing name is a bug (rule 16). */
   --sidebar-w:300px;
@@ -275,13 +276,6 @@ main { flex: 1; min-height: 0; overflow: hidden; background: var(--workspace-gro
 .tap-tempo-readout { color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; user-select: text; white-space: nowrap; }
 
 .zoom-cluster { position: relative; gap: var(--s-sibling); }
-#autoGridStatus { flex: none; min-width: 10ch; color: var(--label); font: 400 var(--text-data)/1 var(--font-mono); white-space: nowrap; }
-.drawing-settings-button { display: inline-flex; align-items: center; gap: var(--s-sibling); flex: none; height: var(--h-control); }
-#drawingSettingsStatus { color: var(--label); font: 400 var(--text-data)/1 var(--font-mono); white-space: nowrap; }
-#drawingSettings[aria-expanded="true"] { background: var(--control-hover); }
-#drawingQuickPanel .dp-body { display: flex; flex-direction: column; gap: var(--s-row); }
-#drawingQuickPanel .field-slider > .label { width: 96px; }
-#drawingQuickPanel .kbd { color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); }
 
 .zoom-cluster #zoomSlider { width: 76px; }
 .zoom-cluster .zval { min-width: 34px; text-align: right; font: 400 var(--text-data)/1 var(--font-mono); color: var(--hint); font-variant-numeric: tabular-nums; }
@@ -1592,11 +1586,14 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #spectrogramControls { position: absolute; z-index: 2; width: 280px; max-width: calc(100% - 16px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--e1); }
 #spectrogramControls.collapsed { width: max-content; }
 .stage-controls-head { display: flex; align-items: center; gap: var(--s-pair); padding: var(--s-pair); }
-#stageControlsSummary { flex: 1; min-width: 132px; color: var(--label); font: 400 var(--text-data)/1 var(--font-mono); white-space: nowrap; }
+#stageControlsTabs { flex: 1; }
+#stageControlsTabs .tab { flex: 1; min-width: 0; }
+#stagePaneDraw .kbd { color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); }
 #stageControlsDrag { cursor: grab; touch-action: none; }
 #spectrogramControls.docking #stageControlsDrag { cursor: grabbing; }
-#stageControlsBody { padding: var(--s-sibling) var(--s-row) var(--s-row); display: grid; gap: var(--s-sibling); border-top: 1px solid var(--line); }
-#stageControlsBody label { display: grid; grid-template-columns: 84px minmax(40px, 1fr) 4ch; gap: var(--s-sibling); align-items: center; color: var(--label); font-size: var(--text-caption); }
+#stageControlsBody { padding: var(--s-sibling) var(--s-row) var(--s-row); border-top: 1px solid var(--line); }
+.stage-pane { display: grid; gap: var(--s-sibling); }
+#stagePaneView > label { display: grid; grid-template-columns: 84px minmax(40px, 1fr) 4ch; gap: var(--s-sibling); align-items: center; color: var(--label); font-size: var(--text-caption); }
 .stage-channel-row { display: flex; align-items: center; justify-content: space-between; color: var(--label); font-size: var(--text-control); }
 #stageChannelButton { display: flex; align-items: center; justify-content: space-between; gap: var(--s-row); min-width: 100px; border: 1px solid var(--line); background: var(--surface-inset); }
 #stageChannelButton svg { width: 14px; height: 14px; }

@@ -19,10 +19,3 @@ export function gridLineKind(time, segment) {
   const near = step => Math.abs((time - segment.t) / step - Math.round((time - segment.t) / step)) < 1e-6;
   return near(segBarSec(segment)) ? 'bar' : near(segBeatSec(segment)) ? 'beat' : 'sub';
 }
-
-export function autoGridLabel(segment, step) {
-  if (!(step > 0)) return 'Auto';
-  const bar = segBarSec(segment);
-  if (step >= bar - 1e-9) return `Auto · ${Math.round(step / bar)} bar${step > bar + 1e-9 ? 's' : ''}`;
-  return `Auto · 1/${Math.round(240 / segment.bpm / step)}`;
-}

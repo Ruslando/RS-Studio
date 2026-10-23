@@ -31,7 +31,7 @@ try {
     './dom.js': { stage, scroll }, './repaint.js': { draw: noop }, './grid.js': grid,
     './lanes.js': { activeLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible },
     './geometry.js': { timeAt: x => x / 100, xOf: t => t * 100, pitchAt: () => 64, yOf: () => 100 },
-    './markers.js': { markerMouseDown: () => false }, './marker-rails.js': { markerRails: () => [] },
+    './markers.js': { markerMouseDown: () => false }, './comments.js': { commentMouseDown: () => false }, './marker-rails.js': { markerRails: () => [] },
     './note-render.js': { regionEdgeAt: () => null }, './grace.js': { graceBefore: () => null },
     './references.js': { boxOfNote: () => null, refLockAt: () => null, refBadgeAt: () => null, refBoxEdgeAt: () => null },
     './playback.js': { auditionNote: noop },

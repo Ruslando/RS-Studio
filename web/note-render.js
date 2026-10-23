@@ -23,9 +23,9 @@ import { laneFingering, laneFingeringKey } from "./tablature.js";
 import { draw } from "./repaint.js";
 import { edgeSlide, resolveNoteAppearance, sourceLabelPositions, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
 import { paintNoteLabel, paintSlideLabel } from "./note-label-paint.js";
-import { contentH, pitchAt, timeAt, xOf, yOf } from "./geometry.js";
+import { contentH, pitchAt, xOf, yOf } from "./geometry.js";
 import { gridAt, gridSegments, displayGridStep } from "./grid.js";
-import { autoGridLabel, gridLineKind } from './auto-grid.js';
+import { gridLineKind } from './auto-grid.js';
 import { FX_GLYPHS, HARMONIC_TAG, noteMarks } from "./note-effects.js";
 import { PAINT, WASH, halo, veil } from "./stage-paint.js";
 import { S } from "./store.js";
@@ -85,12 +85,6 @@ export function drawDetectRegion(vx0, vx1) {
 export function drawGrid() {
   const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
   const ch = contentH(), dur = S.state.duration;
-  const status = document.getElementById('autoGridStatus');
-  if (status) {
-    const segment = gridAt(S.drag?.resizeTime ?? timeAt(S.mouseX ?? scroll.scrollLeft));
-    status.textContent = S.drag?.mode === 'resize' && S.drag.freeResize
-      ? 'Free · Alt' : autoGridLabel(segment, displayGridStep(segment));
-  }
   // Each tempo/meter segment tiles its own bar/beat grid forward from its marker
   // (a bar line) until the next marker. A partial cell before the next marker is
   // just left short — that's the seam a tempo change lands on.

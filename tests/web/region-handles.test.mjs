@@ -22,6 +22,7 @@ try {
     './lanes.js': { activeLane: () => lane },
     './geometry.js': { timeAt: x => x / 100, pitchAt: () => 64 },
     './markers.js': { markerMouseDown: () => false, markerCursorAt: () => null },
+    './comments.js': { commentMouseDown: () => false, commentCursorAt: () => null, commentAt: () => null },
     './marker-rails.js': { markerRails: () => [] },
     './note-render.js': { regionEdgeAt: x => Math.abs(x - S.detectRegion.t0 * 100) < 7 ? 'l' : Math.abs(x - S.detectRegion.t1 * 100) < 7 ? 'r' : null },
     './detect.js': { updateDetectStatus: noop }, './note-motion.js': { finishNoteGesture: noop },

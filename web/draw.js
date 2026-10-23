@@ -18,6 +18,7 @@ import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
 import { drawFretboard, fretboardEditTargets } from "./fretboard.js";
 import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
+import { commentCursorAt, drawComments } from "./comments.js";
 import { syncProjectStartHandle } from "./project-position.js";
 import { markerRails, overviewMarkerRails, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
@@ -711,6 +712,7 @@ function paintFrame() {
   sctx.strokeStyle = PAINT.accent; sctx.lineWidth = 2;   // rule 7: the playhead is one of accent's four uses
   sctx.beginPath(); sctx.moveTo(px, 0); sctx.lineTo(px, contentH()); sctx.stroke();
   sctx.lineWidth = 1;
+  drawComments();
   sctx.save();
   const reveal = railScale();
   sctx.beginPath();
@@ -961,7 +963,7 @@ export function init_draw() {
     let mkCur = null;
     for (let i = markerRails().length - 1; i >= 0 && !mkCur; i--)
       mkCur = markerRails()[i].cursorAt?.(x, y) || null;
-    mkCur = mkCur || markerCursorAt(x, y);
+    mkCur = mkCur || markerCursorAt(x, y) || commentCursorAt(x, y);
     if (e.ctrlKey || e.metaKey) cur = "crosshair";           // Ctrl/Cmd-drag draws; click toggles selection
     else if (mkCur) cur = mkCur;                             // over a timing or section flag
     else if (!e.shiftKey && !S.sliceHeld && regionEdgeAt(x)) cur = "ew-resize";

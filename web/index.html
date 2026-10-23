@@ -260,8 +260,6 @@
         <span class="pt-dot" id="projDirtyDot" title="Unsaved changes" hidden></span>
       </div>
     </div>
-<button type="button" id="drawingSettings" class="drawing-settings-button" aria-label="Drawing quick settings" aria-haspopup="dialog" aria-controls="drawingQuickPanel" aria-expanded="false"><span data-ui-icon="edit" aria-hidden="true"></span><span id="drawingSettingsStatus">Snap to pitch</span></button>
-<output id="autoGridStatus" class="zval" title="Automatic time grid. Hold Alt while resizing a note to place its edge freely.">Auto</output>
 <div class="group zoom-cluster" id="zoomCluster">
           <button id="zoomOut" class="icon" title="Zoom out (− / Ctrl+scroll)" aria-label="Zoom out"><span data-ui-icon="minus" aria-hidden="true"></span></button>
           <input type="range" id="zoomSlider" min="0" max="22" step="1" value="8" title="Zoom" />
@@ -349,10 +347,14 @@
             <div id="spectrogramControls" role="group" aria-label="Spectrogram controls" hidden>
               <div class="stage-controls-head">
                 <button type="button" id="stageControlsDrag" class="icon-btn icon-btn--compact" aria-label="Move spectrogram controls; arrow keys choose an edge" title="Drag along the spectrogram edges"></button>
-                <span id="stageControlsSummary">Stereo · 0–100%</span>
+                <div id="stageControlsTabs" class="tabs" role="tablist" aria-label="Spectrogram controls">
+                  <button type="button" class="tab" role="tab" id="stageTabView" data-stage-tab="view" aria-controls="stagePaneView">View</button>
+                  <button type="button" class="tab" role="tab" id="stageTabDraw" data-stage-tab="draw" aria-controls="stagePaneDraw">Drawing</button>
+                </div>
                 <button type="button" id="stageControlsToggle" class="icon-btn icon-btn--compact" aria-controls="stageControlsBody" aria-expanded="false" aria-label="Expand spectrogram controls"></button>
               </div>
               <div id="stageControlsBody" hidden>
+                <div id="stagePaneView" class="stage-pane" role="tabpanel" aria-labelledby="stageTabView">
                 <div class="stage-channel-row"><span>Channel</span>
                   <div class="menu-anchor" data-floating-menu>
                     <button type="button" id="stageChannelButton" class="menu-btn btn--compact" aria-haspopup="menu" aria-expanded="false" aria-controls="stageChannelMenu"><span id="stageChannelLabel">Stereo</span><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
@@ -380,6 +382,11 @@
                 </div>
                 <label>Intensity min <input id="stageIntensityMin" type="range" min="0" max="100" step="1" value="0" aria-label="Minimum spectrogram intensity" /><output id="stageIntensityMinValue" for="stageIntensityMin">0%</output></label>
                 <label>Intensity max <input id="stageIntensityMax" type="range" min="0" max="100" step="1" value="100" aria-label="Maximum spectrogram intensity" /><output id="stageIntensityMaxValue" for="stageIntensityMax">100%</output></label>
+                </div>
+                <div id="stagePaneDraw" class="stage-pane" role="tabpanel" aria-labelledby="stageTabDraw" hidden>
+                  <div class="stage-channel-row"><label class="chk"><input type="checkbox" id="quickTraceSnap" checked /> Snap to pitch</label><span class="kbd" id="quickTraceSnapKey">T</span></div>
+                  <div class="stage-channel-row"><span>Range</span><select id="quickTraceRange" class="trace-range-ctl" aria-label="Drawing search range"><option value="1">±1</option><option value="2" selected>±2</option><option value="3">±3</option></select></div>
+                </div>
               </div>
               <span id="stageChannelStatus" role="status"></span>
             </div>
@@ -502,15 +509,6 @@
     </div>
   </main>
 
-  <div id="drawingQuickPanel" class="live-editor" role="dialog" aria-labelledby="drawingQuickTitle" hidden>
-    <div class="pop-head"><span class="pop-title" id="drawingQuickTitle">Drawing</span>
-      <button type="button" id="drawingQuickClose" class="pop-x" title="Close (Esc)" aria-label="Close drawing settings"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
-    </div>
-    <div class="dp-body">
-      <div class="field-inline"><label class="chk"><input type="checkbox" id="quickTraceSnap" checked /> Snap to pitch</label><span class="kbd" id="quickTraceSnapKey">T</span></div>
-      <label class="field-group block"><span>Range</span><select id="quickTraceRange" class="trace-range-ctl" aria-label="Drawing search range"><option value="1">±1</option><option value="2" selected>±2</option><option value="3">±3</option></select></label>
-    </div>
-  </div>
 
   <!-- Tablature: alphaTab's render of the current layers, its cursor and its
        click-to-seek synced to the app transport. It is a WINDOW over the editor
@@ -670,6 +668,21 @@
       <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="A phrase boundary is per note layer and snaps to the note grid." aria-label="A phrase boundary is per note layer and snaps to the note grid.">i</span></span>
         <span class="pop-field"><input type="number" id="phraseMarkerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>
+    </div>
+  </div>
+
+  <!-- A free comment on the spectrogram: pinned to a grid time and a pitch row,
+       listed under Artifacts. Emptying the text and closing removes it. -->
+  <div id="commentPop" class="live-editor" hidden role="dialog" aria-label="Comment">
+    <div class="pop-head">
+      <span class="pop-title">Comment</span>
+      <span class="pop-head-actions">
+        <button id="commentDelete" class="pop-x pop-del" title="Delete comment" aria-label="Delete comment"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="commentPopClose" class="pop-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+      </span>
+    </div>
+    <div class="dp-body">
+      <textarea id="commentText" rows="3" maxlength="500" aria-label="Comment text" placeholder="Comment"></textarea>
     </div>
   </div>
 
