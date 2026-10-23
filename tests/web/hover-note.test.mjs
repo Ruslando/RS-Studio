@@ -14,10 +14,11 @@ try {
   const { hoveredStageNote } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
     './dom.js': { stage, scroll }, './store.js': { S },
     './lanes.js': { activeLane: () => lane },
-    './geometry.js': { timeAt: x => x / 100, pitchAt: () => 64 },
+    './geometry.js': { timeAt: x => x / 100, pitchAt: () => 64, pitchAtExact: () => 64 },
     './marker-rails.js': { railsBottom: () => 20 },
     './references.js': { boxOfNote: () => referenceLocked ? { group: { locked: true } } : null },
-  }, { './note-length.js': true });
+    './note-render.js': { laneSlides: () => new Map() },
+  }, { './note-length.js': true, './bend.js': true });
   assert.equal(hoveredStageNote(), lane.notes[0]);
   scroll.scrollLeft = 190;
   assert.equal(hoveredStageNote(), lane.notes[1], 'scrolling under a stationary pointer updates the target');

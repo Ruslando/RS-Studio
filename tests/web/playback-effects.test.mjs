@@ -140,3 +140,12 @@ assert.equal(deadSources[0].output, synth.output, "percussion follows lane volum
 assert.equal(synth._activeSources.get(-1).length, 2, "pause/releaseAll owns the percussion sources");
 deadSources[0].onended(); assert.equal(synth._activeSources.get(-1).length, 1);
 assert.ok(rawBuffers[0].some(v => v !== 0));
+
+// A late legato slide is heard holding, then sliding into its target.
+{
+  const source = n({ slide: "legato", slideStart: 0.5 }), target = n({ start: 2, end: 3, pitch: 64 });
+  const [event] = playbackEvents([source, target]);
+  assert.equal(eventOffsetAt(event, 0.4), 0);
+  assert.equal(eventOffsetAt(event, 0.75), 1);
+  assert.equal(eventOffsetAt(event, 1.5), 2);
+}

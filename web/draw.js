@@ -12,7 +12,7 @@ import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGho
 
 import { bendCurve, bendPeak, slideRibbon } from "./bend.js";
 import { BEND_HANDLE_R, MM_HEAD, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
-import { bendHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, regionEdgeAt } from "./note-render.js";
+import { bendHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, regionEdgeAt } from "./note-render.js";
 import { editorEl, minimap, mmctx, overviewRuler, overviewRulerCtx, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
@@ -21,9 +21,9 @@ import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
 import { commentCursorAt, drawComments } from "./comments.js";
 import { syncProjectStartHandle } from "./project-position.js";
 import { markerRails, overviewMarkerRails, railScale, railsBottom } from "./marker-rails.js";
-import { contentH, layout, pitchAt, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
+import { contentH, layout, pitchAt, pitchAtExact, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
 import { edgeOf, hoveredStageNote, localXY, pickNote } from "./interaction.js";
-import { activeLane, canEditLane } from "./lanes.js";
+import { activeLane, canEditLane, laneOf } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";
 import { motifGroups, motifName } from "./motifs.js";
@@ -239,6 +239,18 @@ function traceBendPath(x, w, ym, pts, rowH) {
 // unselected lane full of bends stays readable.
 function drawBendHandles() {
   for (const n of S.selection) {
+    // Where a slide leaves or vibrato sets in only moves in time: a stem from
+    // the note to an upright grip beside it (note-render.js).
+    for (const slide of effectStartHandles(n, laneOf(n))) {
+      sctx.save();
+      sctx.beginPath(); sctx.moveTo(slide.x, slide.bar); sctx.lineTo(slide.x, slide.y);
+      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.stroke();
+      sctx.lineWidth = 1.5; sctx.strokeStyle = PAINT.accent; sctx.stroke();
+      sctx.lineWidth = 1.5; sctx.strokeStyle = halo(); sctx.fillStyle = PAINT.accent;
+      sctx.beginPath(); sctx.roundRect(slide.x - 4, slide.y - 7, 8, 14, 4);
+      sctx.fill(); sctx.stroke();
+      sctx.restore();
+    }
     if (!n.bend) continue;
     const handles = bendHandles(n);
     if (!handles.length) continue;
@@ -949,7 +961,7 @@ export function init_draw() {
     if (S.drag || !S.state) return;
     const [x, y] = localXY(e);
     const t = timeAt(x), pitch = pitchAt(y);
-    const hit = pickNote(t, pitch);
+    const hit = pickNote(t, pitch, pitchAtExact(y));
     const mi = S.matches.length && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey ? matchAt(x, y) : -1;
     const prevMatchHover = S.matchHover;
     S.matchHover = mi;

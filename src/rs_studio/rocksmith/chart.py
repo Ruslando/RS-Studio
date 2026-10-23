@@ -10,6 +10,7 @@ Conversion rules follow Rocksmith2014.NET's XmlToSng* modules.
 """
 from __future__ import annotations
 
+import bisect
 import itertools
 import math
 import os
@@ -49,6 +50,135 @@ ROCKSMITH_SECTION_NAMES = {
     "melody", "postbrdg", "prebrdg", "vamp", "noguitar", "silence",
     "tapping",
 }
+
+# Rocksmith has no field for an effect that starts late in a note: a slide runs
+# over the whole sustain and so does vibrato. The editor's `slideStart` and
+# `vibratoStart` (fractions of the note) are exported by cutting the note there
+# into notes linked one to the next: each later piece is a Child, not picked
+# again, carrying what starts at its cut. What belongs to the pick stays on the
+# first piece.
+_ATTACK_ONLY = ("grace", "slap", "stroke", "trill", "whammy", "shapeId", "shapeSource", "harmonic")
+_ATTACK_FX = ("hammer", "accent", "staccato", "ghost", "dead")
+_LINK_EPS = 0.002   # what counts as the same moment: onsets closer than this are one chord
+
+
+def _onset_counter(notes: list):
+    onsets = sorted(_f(n.get("start")) for n in notes)
+    return lambda t: bisect.bisect_right(onsets, t + _LINK_EPS) - bisect.bisect_left(onsets, t - _LINK_EPS)
+
+
+def _late_cuts(n: dict) -> tuple[float | None, float | None]:
+    """(slide cut, vibrato cut) in seconds, or None for an effect from the pick."""
+    start, end = _f(n.get("start")), _f(n.get("end"))
+    to_next = n.get("slide") in ("shift", "legato")
+
+    def cut(key: str) -> float | None:
+        frac = _f(n.get(key))
+        return start + frac * (end - start) if 0 < frac < 1 and end > start else None
+
+    slide = cut("slideStart") if to_next else None
+    vibrato = cut("vibratoStart") if (n.get("fx") or {}).get("vibrato") else None
+    if vibrato is not None and to_next:
+        # The slide's own piece can't be cut again: vibrato that starts later
+        # covers the slide part, and a slide from the pick keeps it whole.
+        vibrato = min(vibrato, slide) if slide is not None else None
+    return slide, vibrato
+
+
+def _split_late_effects(notes: list, warnings: list) -> list:
+    """Late slides and late vibrato as linked pieces; see the comment above."""
+    onsets_at = _onset_counter(notes)
+    out, unsplit = [], 0
+    for n in notes:
+        slide_cut, vib_cut = _late_cuts(n)
+        cuts = sorted({c for c in (slide_cut, vib_cut) if c is not None})
+        if not cuts:
+            out.append(n)
+            continue
+        # A Child is a single note: one sharing its onset with another is a chord.
+        # A bend curve spans the whole note and is not cut.
+        if n.get("bend") or onsets_at(_f(n.get("start"))) > 1 or any(onsets_at(c) for c in cuts):
+            unsplit += 1
+            out.append(n)
+            continue
+        bounds = [_f(n.get("start")), *cuts, _f(n.get("end"))]
+        for i, (a, b) in enumerate(zip(bounds, bounds[1:])):
+            piece = {k: v for k, v in n.items() if k not in ("slideStart", "vibratoStart")}
+            fx = dict(n.get("fx") or {})
+            if i:
+                piece = {k: v for k, v in piece.items() if k not in _ATTACK_ONLY}
+                fx = {k: v for k, v in fx.items() if k not in _ATTACK_FX}
+            if vib_cut is not None and a < vib_cut - 1e-9:
+                fx.pop("vibrato", None)
+            piece.pop("fx", None)
+            if fx:
+                piece["fx"] = fx
+            piece["start"], piece["end"] = a, b
+            if b < bounds[-1]:
+                piece.pop("slide", None)
+                piece["linkNext"] = True
+            out.append(piece)
+    if unsplit:
+        warnings.append(f"{unsplit} note(s) with a late slide or vibrato are bent, in a chord or start with "
+                        "another note; Rocksmith plays the effect over the whole note")
+    return out
+
+
+def _add_grace_notes(notes: list, grid: dict, warnings: list) -> list:
+    """An editor grace note as Rocksmith charts one: a short note before the
+    beat, a semitone or two lower, that the main note hammers on from.
+
+    Timed as web/grace.js times it: a sixteenth at the local tempo, at most 80 ms,
+    never below the open string.
+    """
+    segments = _tempo_segments(grid)
+    out, blocked = [], 0
+    by_string: dict = {}
+    for n in notes:
+        by_string.setdefault(n.get("string"), []).append(_f(n.get("start")))
+    for n in notes:
+        interval = {"half": 1, "whole": 2}.get(n.get("grace"), 0)
+        if not interval or n.get("string") is None or n.get("fret") is None:
+            out.append(n)
+            continue
+        start, fret = _f(n.get("start")), int(n["fret"])
+        bpm = next((b for t0, b, _ in reversed(segments) if t0 <= start + 1e-4), segments[0][1])
+        dur = min(0.08, 15.0 / bpm, start)
+        step = min(interval, fret)
+        if dur <= 0 or not step or any(start - dur - _LINK_EPS < t < start - _LINK_EPS for t in by_string[n.get("string")]):
+            blocked += 1
+            out.append(n)
+            continue
+        grace = {k: n[k] for k in ("string", "hand") if k in n}
+        grace.update(start=start - dur, end=start, fret=fret - step, pitch=_f(n.get("pitch")) - step)
+        main = {k: v for k, v in n.items() if k != "grace"}
+        main["fx"] = {**(n.get("fx") or {}), "hammer": True}
+        out += [grace, main]
+    if blocked:
+        warnings.append(f"{blocked} grace note(s) had no room before their note and were left out")
+    return out
+
+
+def _link_bend_continuations(notes: list) -> list:
+    """A bend carried into the next note on its string — the same fret, starting
+    at once, already bent as far as the first note ended — is one string held
+    bent, so the first links to the second, which is not picked again (I07)."""
+    onsets_at = _onset_counter(notes)
+    out = [dict(n) for n in notes]
+    by_string: dict = {}
+    for n in out:
+        if n.get("string") is not None:
+            by_string.setdefault(n["string"], []).append(n)
+    for run in by_string.values():
+        run.sort(key=lambda n: _f(n.get("start")))
+        for a, b in zip(run, run[1:]):
+            pa, pb = bend_points(a), bend_points(b)
+            if (pa and pb and a.get("fret") == b.get("fret") and pa[-1][1] > 0
+                    and abs(pa[-1][1] - pb[0][1]) < 0.05 and onsets_at(_f(b.get("start"))) == 1
+                    and abs(_f(b.get("start")) - _f(a.get("end"))) <= 0.005):
+                a["linkNext"] = True
+    return out
+
 
 # A legato slide is a linked pair, as in XmlToSngNote.fs's pendingLinkNexts: the
 # source is the Parent, held exactly until the target, and the target is its
@@ -848,6 +978,16 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             prev_fret = last_fret_on_string.get(string)
             mask |= S.PULLOFF if (prev_fret is not None and prev_fret > fret) else S.HAMMERON
             arr_props["hopo"] = True
+        linked = False
+        if n.get("linkNext"):
+            # A note carried on by the next one on its string (a late slide or
+            # vibrato, a held bend): it runs exactly to it.
+            target = next_on_string(idx, string)
+            if target is not None and target[0] == fret and not target[2]:
+                sustain = target[1] - time
+                mask |= S.PARENT | S.SUSTAIN
+                link_parents[string] = idx
+                linked = True
         slide = n.get("slide")
         if slide in ("shift", "legato"):
             target = next_on_string(idx, string)
@@ -888,7 +1028,8 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 if abs(time + sustain - boundary) < 0.004 and boundary - time > 0.02:
                     sustain = boundary - time - 0.01
         if n.get("bend"):
-            sustain = max(sustain, 0.2)
+            if not linked:   # a linked tail must end where its Child starts
+                sustain = max(sustain, 0.2)
             mask |= S.BEND | S.SUSTAIN
             bends, max_bend = _bend_curve(n, time, sustain)
             arr_props["bends"] = True
@@ -1078,6 +1219,9 @@ def compile_track(track: dict, grid: dict, song_length: float,
     tuning_low = list(reversed(tuning_hi_lo))  # index 0 = lowest string
 
     capo = max(0, int(track.get("capo") or 0))
+    notes = _add_grace_notes(track.get("notes") or [], grid, warnings)
+    notes = _link_bend_continuations(_split_late_effects(notes, warnings))
+    track = {**track, "notes": notes}
     voicing = _voiced_entities(track, n_str, tuning_low, warnings,
                                _sustain_rule(grid, song_length), capo)
     entities = voicing.entities

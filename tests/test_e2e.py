@@ -2401,6 +2401,141 @@ class EndToEndTests(unittest.TestCase):
         self.assertLess(result['middle'], max(result['from'], result['to']), result)
         self.assertAlmostEqual(result['off'],result['from'],places=5)
 
+    def test_slide_start_handle_drags_and_resets(self):
+        self.open_reference_project()
+        page = self.page
+        # A legato slide from the first note onto the next, with the selection on it.
+        page.evaluate("""async () => {
+            const { S, setSelection } = await import('/store.js');
+            const { commit, snapshotEdit } = await import('/edit.js');
+            const [a, b] = [...S.state.editLanes[0].notes].sort((p, q) => p.start - q.start);
+            const prev = snapshotEdit();
+            a.slide = 'legato'; b.pitch = a.pitch + 3;
+            commit(prev);
+            setSelection(new Set([a]));
+            (await import('/repaint.js')).draw();
+        }""")
+        note_id = page.evaluate("async () => [...(await import('/store.js')).S.selection][0].id")
+        def handle():
+            return page.evaluate("""async (id) => {
+                const { S } = await import('/store.js');
+                const { laneOf } = await import('/lanes.js');
+                const { scroll } = await import('/dom.js');
+                const note = S.state.editLanes[0].notes.find((n) => n.id === id);
+                const h = (await import('/note-render.js')).slideStartHandle(note, laneOf(note));
+                const rect = document.querySelector('#stage').getBoundingClientRect();
+                const { yOf } = await import('/geometry.js');
+                return { x: h.x - scroll.scrollLeft + rect.left, y: h.y - scroll.scrollTop + rect.top,
+                         row: yOf(note.pitch) + S.state.rowH / 2 - scroll.scrollTop + rect.top, rowH: S.state.rowH,
+                         start: note.start, end: note.end, slideStart: note.slideStart ?? null };
+            }""", note_id)
+        h = handle()
+        self.assertIsNone(h["slideStart"])
+        # At the pick the grip sits beside the note, leaving its start edge to other gestures.
+        self.assertGreater(abs(h["y"] - h["row"]), h["rowH"] / 2)
+        page.mouse.move(h["x"] + 1, h["row"])
+        page.mouse.down()
+        self.assertNotEqual(page.evaluate("async () => (await import('/store.js')).S.drag?.mode"), "effectStart")
+        page.mouse.up()
+        self.assertEqual(handle()["start"], h["start"])
+        shot = Path(__file__).resolve().parents[1] / '.runs' / 'slide-start-pick.png'
+        shot.parent.mkdir(exist_ok=True)
+        page.screenshot(path=str(shot), clip={"x": max(0, h["x"] - 120), "y": max(0, h["y"] - 120), "width": 520, "height": 240})
+        width = page.evaluate("async () => (await import('/geometry.js')).xOf(1) - (await import('/geometry.js')).xOf(0)")
+        page.mouse.move(h["x"], h["y"])
+        page.mouse.down()
+        page.mouse.move(h["x"] + (h["end"] - h["start"]) * width * 0.5, h["y"], steps=5)
+        page.mouse.up()
+        moved = handle()
+        self.assertIsNotNone(moved["slideStart"])
+        self.assertGreater(moved["slideStart"], 0.3)
+        self.assertLess(moved["slideStart"], 0.7)
+        shot = Path(__file__).resolve().parents[1] / '.runs' / 'slide-start.png'
+        shot.parent.mkdir(exist_ok=True)
+        page.screenshot(path=str(shot), clip={"x": max(0, h["x"] - 120), "y": max(0, h["y"] - 120), "width": 520, "height": 240})
+        page.mouse.click(moved["x"], moved["y"], button="right")
+        self.assertIsNone(handle()["slideStart"], "right-click moves the start back to the pick")
+        page.keyboard.press("Control+z")
+        self.assertIsNotNone(handle()["slideStart"], "undo restores the dragged start")
+
+    def test_vibrato_start_handle_drags_and_resets(self):
+        self.open_reference_project()
+        page = self.page
+        note_id = page.evaluate("""async () => {
+            const { S, setSelection } = await import('/store.js');
+            const { commit, snapshotEdit } = await import('/edit.js');
+            const note = [...S.state.editLanes[0].notes].sort((p, q) => (q.end - q.start) - (p.end - p.start))[0];
+            const prev = snapshotEdit();
+            note.fx = { ...note.fx, vibrato: true };
+            commit(prev); setSelection(new Set([note]));
+            // Zoomed in on the note, so the wave and the handle have room.
+            const { xOf, yOf, zoomBothTo } = await import('/geometry.js');
+            const { scroll } = await import('/dom.js');
+            const rect = document.querySelector('#stage').getBoundingClientRect();
+            zoomBothTo(3, rect.left + xOf(note.start) - scroll.scrollLeft, rect.top + yOf(note.pitch) - scroll.scrollTop);
+            (await import('/repaint.js')).drawNow?.() ?? (await import('/repaint.js')).draw();
+            return note.id;
+        }""")
+        def handle():
+            return page.evaluate("""async (id) => {
+                const { S } = await import('/store.js');
+                const { laneOf } = await import('/lanes.js');
+                const { scroll } = await import('/dom.js');
+                const note = S.state.editLanes[0].notes.find((n) => n.id === id);
+                const h = (await import('/note-render.js')).effectStartHandles(note, laneOf(note)).find((h) => h.kind === 'vibrato');
+                const rect = document.querySelector('#stage').getBoundingClientRect();
+                const { xOf } = await import('/geometry.js');
+                return { x: h.x - scroll.scrollLeft + rect.left, y: h.y - scroll.scrollTop + rect.top,
+                         width: xOf(note.end) - xOf(note.start), vibratoStart: note.vibratoStart ?? null };
+            }""", note_id)
+        h = handle()
+        self.assertIsNone(h["vibratoStart"])
+        page.mouse.move(h["x"], h["y"])
+        page.mouse.down()
+        page.mouse.move(h["x"] + h["width"] * 0.5, h["y"], steps=5)
+        page.mouse.up()
+        moved = handle()
+        self.assertGreater(moved["vibratoStart"], 0.3)
+        self.assertLess(moved["vibratoStart"], 0.7)
+        shot = Path(__file__).resolve().parents[1] / '.runs' / 'vibrato-start.png'
+        shot.parent.mkdir(exist_ok=True)
+        page.screenshot(path=str(shot), clip={"x": max(0, h["x"] - 60), "y": max(0, h["y"] - 120), "width": 520, "height": 200})
+        page.mouse.click(moved["x"], moved["y"], button="right")
+        self.assertIsNone(handle()["vibratoStart"], "right-click moves the start back to the pick")
+
+    def test_curved_notes_are_grabbed_where_they_are_drawn(self):
+        self.open_reference_project()
+        page = self.page
+        # A slide onto a note five rows up, and a full-step bend: both curves leave
+        # their base row, and the slide's ribbon runs on past its note's end.
+        points = page.evaluate("""async () => {
+            const { S, setSelection } = await import('/store.js');
+            const { commit, snapshotEdit } = await import('/edit.js');
+            const { scroll } = await import('/dom.js');
+            const { xOf, yOf } = await import('/geometry.js');
+            const [a, b, c] = [...S.state.editLanes[0].notes].sort((p, q) => p.start - q.start);
+            const prev = snapshotEdit();
+            a.slide = 'shift'; a.end = a.start + (b.start - a.start) / 2; b.pitch = a.pitch + 5;
+            c.bend = 'custom'; c.bendPoints = [[0, 0], [0.5, 2], [1, 2]];
+            commit(prev); setSelection(new Set());
+            (await import('/repaint.js')).draw();
+            const rect = document.querySelector('#stage').getBoundingClientRect();
+            const at = (t, pitch) => ({ x: xOf(t) - scroll.scrollLeft + rect.left,
+                y: yOf(pitch) + S.state.rowH / 2 - scroll.scrollTop + rect.top });
+            return { slide: at(a.start + (b.start - a.start) * 0.9, a.pitch + 4.7),
+                     slideBase: at(a.start + (a.end - a.start) * 0.9, a.pitch),
+                     bend: at(c.start + (c.end - c.start) * 0.8, c.pitch + 2),
+                     bendBase: at(c.start + (c.end - c.start) * 0.8, c.pitch),
+                     ids: [a.id, c.id] };
+        }""")
+        selected = "async () => [...(await import('/store.js')).S.selection].map((n) => n.id)"
+        for key, note_id in (("slide", points["ids"][0]), ("bend", points["ids"][1])):
+            page.mouse.click(points[key]["x"], points[key]["y"])
+            self.assertEqual(page.evaluate(selected), [note_id], f"the {key} is grabbed on its curve")
+            page.keyboard.press("Escape")
+            page.mouse.click(points[key + "Base"]["x"], points[key + "Base"]["y"])
+            self.assertNotIn(note_id, page.evaluate(selected), f"the {key} is not grabbed where it is not drawn")
+
     def test_bend_and_natural_harmonic_exclude_each_other(self):
         self.open_reference_project()
         page = self.page

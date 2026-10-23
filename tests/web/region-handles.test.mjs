@@ -20,13 +20,13 @@ try {
   const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
     './store.js': { S }, './dom.js': { stage, scroll }, './repaint.js': { draw: noop },
     './lanes.js': { activeLane: () => lane },
-    './geometry.js': { timeAt: x => x / 100, pitchAt: () => 64 },
+    './geometry.js': { timeAt: x => x / 100, pitchAt: () => 64, pitchAtExact: () => 64 },
     './markers.js': { markerMouseDown: () => false, markerCursorAt: () => null },
     './comments.js': { commentMouseDown: () => false, commentCursorAt: () => null, commentAt: () => null },
     './marker-rails.js': { markerRails: () => [] },
-    './note-render.js': { regionEdgeAt: x => Math.abs(x - S.detectRegion.t0 * 100) < 7 ? 'l' : Math.abs(x - S.detectRegion.t1 * 100) < 7 ? 'r' : null },
+    './note-render.js': { laneSlides: () => new Map(), regionEdgeAt: x => Math.abs(x - S.detectRegion.t0 * 100) < 7 ? 'l' : Math.abs(x - S.detectRegion.t1 * 100) < 7 ? 'r' : null },
     './detect.js': { updateDetectStatus: noop }, './note-motion.js': { finishNoteGesture: noop },
-  }, { './constants.js': true, './util.js': true, './note-length.js': true });
+  }, { './constants.js': true, './util.js': true, './note-length.js': true, './bend.js': true });
   init_interaction();
   for (const tool of ['pan', 'trace', 'select', 'frame', 'marquee']) {
     S.toolMode = tool; S.detectRegion = { t0: 2, t1: 4 };

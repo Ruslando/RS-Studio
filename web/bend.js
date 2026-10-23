@@ -45,12 +45,19 @@ export const VIBRATO = { hz: 5.5, semi: 0.4, swell: 0.15 };
 export const vibratoAt = (sec) => sec <= 0 ? 0
   : VIBRATO.semi * (1 - Math.cos(2 * Math.PI * VIBRATO.hz * sec)) / 2 * Math.min(1, sec / VIBRATO.swell);
 
+// Where vibrato sets in, as a fraction of the note (`vibratoStart`, absent from
+// the pick). Rocksmith has no such field; the export cuts the note there and
+// links the vibrato part to the plain one (rocksmith/chart.py).
+export const vibratoStartOf = (n) => n?.fx?.vibrato
+  ? Math.max(0, Math.min(SLIDE_START_MAX, Number(n.vibratoStart) || 0)) : 0;
+
 // How far the string is PUSHED (sideways): the bend curve at fraction u of the
-// note plus the vibrato `sec` seconds after its onset. One answer for the
-// fretboard's finger and the playback's pitch, so the two agree.
+// note plus the vibrato `sec` seconds after its onset (or after its own start).
+// One answer for the fretboard's finger and the playback's pitch, so the two agree.
 export function pitchOffsetAt(n, u, sec) {
   const pts = bendCurve(n);
-  return (pts ? bendAt(pts, u) : 0) + (n?.fx?.vibrato ? vibratoAt(sec) : 0);
+  const from = vibratoStartOf(n) * Math.max(0, (n?.end ?? 0) - (n?.start ?? 0));
+  return (pts ? bendAt(pts, u) : 0) + (n?.fx?.vibrato ? vibratoAt(sec - from) : 0);
 }
 
 // Trills alternate with the upper fret at a sixteenth-note rate. Sharing the
@@ -64,9 +71,9 @@ export const trillOffsetAt = (n, sec, bpm = 120) => sec >= 0
 // a semitone — at a time: `slideAt` is rounded to whole semitones, the steps a real
 // slide clicks through.
 //
-// Onto the next note (shift/legato) the slide runs over THE WHOLE NOTE, from the
-// pick to its end, as Rocksmith plays it: slideTo is a target fret and the note's
-// sustain is the slide (rocksmith/chart.py).
+// Onto the next note (shift/legato) the slide runs from `slideStart` (the pick,
+// unless moved later) to the note's end, as Rocksmith plays it: slideTo is a target
+// fret and the note's sustain is the slide (rocksmith/chart.py).
 // Into and out of a note it is as quick as a player makes it, the same both ways:
 // an eighth note at the song's tempo there (`eighth`, in seconds), never more than
 // half the note — at the start for a slide-in, at the end for a slide-out. Neither
@@ -84,9 +91,17 @@ export const SLIDES_TO_NEXT = new Set(["shift", "legato"]);
 export const SLIDE_IN = new Set(["inBelow", "inAbove"]);
 export const SLIDE_OUT = new Set(["outDown", "outUp"]);
 
+// Where a shift/legato slide leaves its fret, as a fraction of the note: the note
+// is held until then and slides over the rest. `slideStart` is absent for a slide
+// over the whole note. Rocksmith has no such field; the export holds the note and
+// links it to a second one that slides (rocksmith/chart.py).
+export const SLIDE_START_MAX = 0.95;
+export const slideStartOf = (n) => SLIDES_TO_NEXT.has(n?.slide)
+  ? Math.max(0, Math.min(SLIDE_START_MAX, Number(n.slideStart) || 0)) : 0;
+
 // How long a slide takes, in the seconds `dur` is in.
 export const slideSeconds = (n, dur, eighth = SLIDE.eighth) =>
-  SLIDE_IN.has(n.slide) || SLIDE_OUT.has(n.slide) ? Math.min(eighth, dur / 2) : dur;
+  SLIDE_IN.has(n.slide) || SLIDE_OUT.has(n.slide) ? Math.min(eighth, dur / 2) : dur * (1 - slideStartOf(n));
 
 export function slideAt(n, sec, dur, { to = 0, steps = true, eighth = SLIDE.eighth } = {}) {
   const round = steps ? Math.round : (v) => v;
@@ -147,9 +162,12 @@ export function slideTargets(notes, positionOf = (n) => n.pos) {
 
 // A slide joins its source to the next attack's position, even across a rest.
 // The renderer uses the same ribbon geometry as bends; playback stays separate.
+// A late slide start holds the ribbon flat until the note's own fraction of it.
 export function slideRibbon(note, target) {
   if (!SLIDES_TO_NEXT.has(note.slide) || !target || target.start <= note.start) return null;
-  return { end: target.start, points: [[0, 0], [1, target.pitch - note.pitch]] };
+  const to = target.pitch - note.pitch, s = slideStartOf(note);
+  const hold = s * (note.end - note.start) / (target.start - note.start);
+  return { end: target.start, points: hold > 0 && hold < 1 ? [[0, 0], [hold, 0], [1, to]] : [[0, 0], [1, to]] };
 }
 
 export const bendPeak = (pts) => pts.reduce((m, p) => Math.max(m, p[1]), 0);
@@ -161,6 +179,24 @@ export function bendAt(pts, t) {
   for (let i = 1; i < pts.length; i++) {
     const [t0, v0] = pts[i - 1], [t1, v1] = pts[i];
     if (t <= t1) return t1 === t0 ? v1 : v0 + (v1 - v0) * ((t - t0) / (t1 - t0));
+  }
+  return pts[pts.length - 1][1];
+}
+
+// The curve as the stage draws it (draw.js traceBendPath): flat runs straight,
+// every other step eased by a cubic whose handles sit at the step's middle.
+// Hit-testing reads this, so a note is grabbed exactly where it is seen.
+export function easedCurveAt(pts, t) {
+  if (t <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    const [t0, v0] = pts[i - 1], [t1, v1] = pts[i];
+    if (t > t1) continue;
+    if (v0 === v1 || t1 === t0) return t1 === t0 ? v1 : v0;
+    const tm = (t0 + t1) / 2, at = (u) => (1 - u) ** 3 * t0 + 3 * (1 - u) * u * tm + u ** 3 * t1;
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 24; k++) { const mid = (lo + hi) / 2; if (at(mid) < t) lo = mid; else hi = mid; }
+    const u = (lo + hi) / 2;
+    return v0 + (v1 - v0) * (3 * (1 - u) * u * u + u ** 3);
   }
   return pts[pts.length - 1][1];
 }

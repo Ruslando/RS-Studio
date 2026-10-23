@@ -6,7 +6,7 @@ import { automaticHandSeat } from './hand-anchor-core.js';
 
 import { wireContextSubmenu } from "./context-submenu.js";
 import { hoveredStageNote } from "./interaction.js";
-import { MAX_POINTS, bendAt, bendCurve, normalizeCurve } from "./bend.js";
+import { MAX_POINTS, SLIDES_TO_NEXT, SLIDE_START_MAX, bendAt, bendCurve, normalizeCurve } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
 import { icon } from "./icons.js";
@@ -533,10 +533,25 @@ function setSlideOnSelection(kind) {
   let cleared = false;
   for (const n of notes) {
     if (kind) { cleared = clearConflicts(n, "slide") || cleared; n.slide = kind; } else delete n.slide;
+    if (!SLIDES_TO_NEXT.has(n.slide)) delete n.slideStart;   // only a slide onto the next note has one
   }
   commit(prev); draw();
   if (cleared) toast("Cleared conflicting effects");
 }
+
+// Where a slide onto the next note leaves its fret, as a fraction of the note.
+// The pick (0) is the default and is stored as no field at all.
+export function setSlideStart(n, fraction) {
+  const s = Math.max(0, Math.min(SLIDE_START_MAX, fraction));
+  if (s > 1e-3) n.slideStart = s; else delete n.slideStart;
+}
+
+// The same for where vibrato sets in.
+export function setVibratoStart(n, fraction) {
+  const s = Math.max(0, Math.min(SLIDE_START_MAX, fraction));
+  if (s > 1e-3) n.vibratoStart = s; else delete n.vibratoStart;
+}
+export const EFFECT_START_SETTERS = { slide: setSlideStart, vibrato: setVibratoStart };
 
 // ---- bend (Tier-2): a [t, semi] curve on note.bendPoints, seeded from a preset ----
 // The preset id stays on note.bend as the label; bend.js derives the curve from
@@ -617,9 +632,11 @@ function dropEffect(n, name) {
     if (!n.fx || !n.fx[name]) return;
     const fx = { ...n.fx }; delete fx[name];
     if (Object.keys(fx).length) n.fx = fx; else delete n.fx;
+    if (name === "vibrato") delete n.vibratoStart;
   } else if (n[name] != null) {
     delete n[name];
     if (name === "bend") delete n.bendPoints;   // the curve is meaningless without it
+    if (name === "slide") delete n.slideStart;
   }
 }
 // Strip every effect conflicting with the one being turned on; returns whether any
@@ -642,6 +659,7 @@ export function setFxOnSelection(key, on) {
     const fx = { ...n.fx };
     if (on) fx[key] = true; else delete fx[key];
     if (Object.keys(fx).length) n.fx = fx; else delete n.fx;
+    if (!n.fx?.vibrato) delete n.vibratoStart;
   }
   commit(prev); draw();
   if (cleared) toast("Cleared conflicting effects");

@@ -30,14 +30,14 @@ try {
     './store.js': { S, setSelection: value => { S.selection = value; } },
     './dom.js': { stage, scroll }, './repaint.js': { draw: noop }, './grid.js': grid,
     './lanes.js': { activeLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible },
-    './geometry.js': { timeAt: x => x / 100, xOf: t => t * 100, pitchAt: () => 64, yOf: () => 100 },
+    './geometry.js': { timeAt: x => x / 100, xOf: t => t * 100, pitchAt: () => 64, pitchAtExact: () => 64, yOf: () => 100 },
     './markers.js': { markerMouseDown: () => false }, './comments.js': { commentMouseDown: () => false }, './marker-rails.js': { markerRails: () => [] },
-    './note-render.js': { regionEdgeAt: () => null }, './grace.js': { graceBefore: () => null },
+    './note-render.js': { regionEdgeAt: () => null, laneSlides: () => new Map() }, './grace.js': { graceBefore: () => null },
     './references.js': { boxOfNote: () => null, refLockAt: () => null, refBadgeAt: () => null, refBoxEdgeAt: () => null },
     './playback.js': { auditionNote: noop },
     './note-motion.js': { beginNoteGesture: noop, updateNoteGesture: noop, finishNoteGesture: noop },
     './edit.js': { snapshotEdit: () => structuredClone(lane.notes), commit: (...args) => commits.push(args) },
-  }, { './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true,
+  }, { './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true,
     './project-position-core.js': true });
   init_interaction();
   stage.emit('mousedown', { clientX: 149 });
