@@ -827,6 +827,22 @@ function keptShape(notes, tuning, rules, maxFret) {
   return shape;
 }
 
+// A kept column that leaves a slide coming into it: the slide's string has no note
+// here although one of these pitches could land on it. Voiced again, so the slide
+// runs along its string. A target that cannot follow there stays as it was.
+function dropsSlide(prev, prevShape, prevRules, shape, tuning, maxFret) {
+  if (!prev || !prevShape) return false;
+  const strings = new Set([...shape.values()].map((p) => p.string));
+  return prev.some((n, k) => {
+    const link = prevRules[k]?.link, from = prevShape.get(n)?.string;
+    if (!link || from == null || strings.has(from)) return false;
+    return [...shape.keys()].some((t) => {
+      const fret = t.pitch - tuning[from];
+      return fret >= (link === "fretted" ? 1 : 0) && fret <= maxFret;
+    });
+  });
+}
+
 // The column's kept hand: one fret all its notes agree on, or none.
 function keptHand(notes) {
   const hands = new Set(notes.map((n) => n.auto?.hand));
@@ -1713,8 +1729,10 @@ function registerColumns(columns, tuning, options = {}) {
   const frets = fretboardFor(options.instrument).frets - (Number(options.capo) || 0);
   const pins = columns.map(({ notes }) => lockedShape(notes, tuning));
   const spread = spreadPins(columns, pins);
+  const allRules = columns.map(({ notes }, i) => notes.map((n) => effectRule(n, columns[i + 1] ? columns[i + 1].notes : [])));
+  const keptAll = columns.map(({ notes }, i) => pins[i] ? null : keptShape(notes, tuning, allRules[i], frets));
   const input = columns.map(({ notes, t0 }, i) => {
-    const rules = notes.map((n) => effectRule(n, columns[i + 1] ? columns[i + 1].notes : []));
+    const rules = allRules[i];
     // A pin handed on from an identical column is an offer the column can refuse:
     // the pitches match but the technique may not, and a grip with an open string
     // under a note that slides here is not the same grip. (An incoming slide's string
@@ -1722,7 +1740,8 @@ function registerColumns(columns, tuning, options = {}) {
     // Some notes pinned and some not (a note added to an imported chord): the pinned
     // ones keep their strings exactly and only the rest are placed, around them.
     // Voiced before and still fitting (keepVoicing): taken as it is, with its hand.
-    const kept = pins[i] ? null : keptShape(notes, tuning, rules, frets);
+    const kept = keptAll[i] && !dropsSlide(columns[i - 1]?.notes, pins[i - 1] || keptAll[i - 1], allRules[i - 1], keptAll[i], tuning, frets)
+      ? keptAll[i] : null;
     const some = pins[i] || kept ? null : pinnedPositions(notes, tuning);
     const partial = some && some.size ? some : null;
     const handed = !pins[i] && !kept && !partial && spread[i] && !notes.some((n, k) => {

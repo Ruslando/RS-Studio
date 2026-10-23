@@ -105,4 +105,15 @@ assert.deepEqual(where(voice(lane), lane), where(second, lane), "solving again i
   assert.deepEqual(n.auto, { string: 3, fret: 5, hand: 3 });
 }
 
+// A chord slides into a kept chord on other strings: the target follows the slide.
+{
+  const a = { ...note(70, 44), slide: "shift" }, b = { ...note(70, 58), slide: "shift" };
+  a.auto = { string: 5, fret: 4, hand: 3, n: 2 }; b.auto = { string: 2, fret: 3, hand: 3, n: 2 };
+  const c = note(70.5, 46), d = note(70.5, 61);
+  c.auto = { string: 5, fret: 6, hand: 1, n: 2 }; d.auto = { string: 1, fret: 2, hand: 1, n: 2 };
+  const found = voice([a, b, c, d]);
+  assert.deepEqual([c, d].map((n) => found.voiced.get(n).string), [5, 2], "the slides keep their strings");
+  assert.deepEqual([a, b].map((n) => found.voiced.get(n).string), [5, 2], "the source stays");
+}
+
 console.log("voicing-kept: ok");

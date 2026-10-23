@@ -112,15 +112,24 @@ ISSUES = {
 }
 
 
-# What the export changed so the issue cannot happen: code -> (title, help).
+# What the export changed on a note, so the issue cannot happen or the note can
+# be exported at all: code -> (title, help).
 # Shown where it happened, never important: the chart is still fine to ship.
 FIXED = {
-    "I03": ("Slide into a chord is picked again",
-            "Rocksmith cannot link a note to a chord, so the export ends the legato slide and the chord "
-            "is picked again. End the slide on a single note to keep it legato."),
     "I29": ("Dead note left out of the chord",
             "Rocksmith needs the pitch of every chord note, so the export leaves the dead note out. "
             "Mute every string of the chord to keep it."),
+    "slide": ("Slide dropped: no target on its string",
+              "A shift or legato slide moves along one string, but the next note is on another string or open. "
+              "Put the target on the slide's string."),
+    "late-fx": ("Late slide or vibrato covers the whole note",
+                "The note is bent, and a bend cannot be cut, so Rocksmith plays the effect "
+                "from the start of the note."),
+    "grace": ("Grace note left out", "There is no room before its note on that string."),
+    "fret": ("Note moved down to fret 24", "Rocksmith has no frets above 24."),
+    "unvoiced": ("Note skipped", "The note has no string or fret."),
+    "finger": ("Chord without fingering", "Some fretted notes of this grip have no finger; Rocksmith shows them without one."),
+    "hand": ("Hand position guessed", "The note has no hand position from the editor, so the export placed the hand."),
 }
 
 

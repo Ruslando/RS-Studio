@@ -80,21 +80,30 @@ class LateSlideStartTest(unittest.TestCase):
         notes, _ = _late("legato", slide_start=0)
         self.assertEqual(len(notes), 2)
 
-    def test_chord_keeps_whole_note_slide(self):
-        track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40], "notes": [
-            {"string": 5, "fret": 5, "start": 1.0, "end": 1.5, "pitch": 50, "slide": "legato", "slideStart": 0.5},
-            {"string": 4, "fret": 5, "start": 1.0, "end": 1.5, "pitch": 55},
-            {"string": 5, "fret": 7, "start": 1.5, "end": 2.0, "pitch": 52},
-        ]}
-        compiled = compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
-        self.assertEqual(len(compiled.sng.levels[0].notes), 2)
-        self.assertTrue(any("late slide or vibrato" in w for w in compiled.warnings))
+    def test_double_stop_slides_late_as_linked_single_notes(self):
+        """As EOF writes it: the chord holds and links on, and what slides goes out
+        as single notes at one time, each a Child carrying its own slide."""
+        notes, fixes = _sng([
+            {"string": 5, "fret": 4, "start": 1.0, "end": 2.0, "pitch": 44, "slide": "shift", "slideStart": 0.6},
+            {"string": 2, "fret": 3, "start": 1.0, "end": 2.0, "pitch": 58, "slide": "shift", "slideStart": 0.6},
+            {"string": 5, "fret": 6, "start": 2.0, "end": 3.0, "pitch": 46},
+            {"string": 2, "fret": 6, "start": 2.0, "end": 3.0, "pitch": 61}])
+        chord, a, b, target = notes
+        self.assertTrue(chord.mask & S.CHORD and chord.mask & S.PARENT)
+        self.assertAlmostEqual(a.time, 1.6)
+        self.assertEqual(a.time, b.time)
+        for piece in (a, b):
+            self.assertTrue(piece.mask & S.SINGLE and piece.mask & S.CHILD and piece.mask & S.SLIDE)
+            self.assertEqual(piece.parent_prev_note, 0)
+        self.assertEqual((a.slide_to, b.slide_to), (6, 6))
+        self.assertTrue(target.mask & S.CHORD, "the shift's target is picked as a chord")
+        self.assertNotIn("late-fx", [code for code, _ in fixes])
 
 
 def _sng(notes):
     track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40], "notes": notes}
     compiled = compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
-    return compiled.sng.levels[0].notes, compiled.warnings
+    return compiled.sng.levels[0].notes, compiled.fixes
 
 
 class LateVibratoTest(unittest.TestCase):
@@ -143,11 +152,11 @@ class GraceNoteTest(unittest.TestCase):
         self.assertEqual(grace.fret, 0)
 
     def test_grace_without_room_is_left_out(self):
-        notes, warnings = _sng([
+        notes, fixes = _sng([
             {"string": 5, "fret": 3, "start": 0.97, "end": 1.0, "pitch": 48},
             {"string": 5, "fret": 7, "start": 1.0, "end": 1.5, "pitch": 52, "grace": "half"}])
         self.assertEqual(len(notes), 2)
-        self.assertTrue(any("grace" in w for w in warnings))
+        self.assertIn(("grace", 1.0), fixes)
 
 
 class BendContinuationTest(unittest.TestCase):
