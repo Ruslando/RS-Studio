@@ -810,6 +810,35 @@ export function applyColumnAlternative(colNotes, choice, influence = null) {
   }
 }
 
+// THE PLAYER'S OWN FINGER ON ONE NOTE: 0 the thumb, 1-4 index to pinky, null back to
+// the engine's. Taken as typed — the board and the exports show it even where no hand
+// could hold it, which is the player's call. Moves no note and no hand.
+//
+// Typed as a draft: shown at once, one undo step when it is kept, gone when it is not.
+// `original` is the draft's memory, Map(note -> finger before it).
+const putFinger = (note, finger) => { if (finger == null) delete note.finger; else note.finger = finger; };
+
+export function draftNoteFinger(original, note, finger) {
+  if (!canEditLane(laneOf(note)) || (note.finger ?? null) === finger) return;
+  if (!original.has(note)) original.set(note, note.finger ?? null);
+  putFinger(note, finger);
+  // Only the fingers changed, and they are laid over the voicing, not solved into it:
+  // the lane is not voiced again for them (see laneFingering).
+  S.fingerRevision = (S.fingerRevision || 0) + 1; draw();
+}
+
+export function settleFingerDraft(original, keep) {
+  const typed = new Map([...original.keys()].map((n) => [n, n.finger ?? null]));
+  for (const [n, f] of original) putFinger(n, f);
+  if (keep && [...typed].some(([n, f]) => f !== original.get(n))) {
+    const prev = snapshotEdit();   // taken with the draft undone, so undo returns there
+    for (const [n, f] of typed) putFinger(n, f);
+    commit(prev); refreshTabIfOpen();
+  } else if (original.size) S.fingerRevision = (S.fingerRevision || 0) + 1;
+  original.clear();
+  draw();
+}
+
 // Forget where the selection was voiced, so the next solve places it again around
 // everything else, which stays put (keepVoicing). Overrides are left alone: their way
 // back is "Return to automatic".

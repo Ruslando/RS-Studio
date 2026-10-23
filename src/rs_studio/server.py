@@ -1800,6 +1800,42 @@ def api_setup_complete() -> dict:
     return {"complete": True}
 
 
+# The editor's preferences (its localStorage), kept beside the setup marker. The
+# desktop server takes port 8000 only when it is free, and browser storage is
+# scoped to the port, so on any other run the preferences were simply not there.
+_PREFS = _CONFIG_ROOT / "prefs.json"
+_PREFS_MAX = 4 * 1024 * 1024
+
+
+@app.get("/api/prefs")
+def api_prefs() -> dict:
+    try:
+        data = json.loads(_PREFS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+@app.post("/api/prefs")
+def api_prefs_save(payload: dict = Body(...)) -> dict:
+    prefs = {k: v for k, v in payload.items() if isinstance(k, str) and isinstance(v, str)}
+    text = json.dumps(prefs)
+    if len(text) > _PREFS_MAX:
+        raise HTTPException(status_code=413, detail="Preferences too large")
+    _CONFIG_ROOT.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=_CONFIG_ROOT, prefix="prefs.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, _PREFS)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+    return {"saved": len(prefs)}
+
+
 @app.post("/api/projects/{job}/rocksmith")
 def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
     """Build a Rocksmith 2014 CDLC (.psarc) from the tab spec + project audio.

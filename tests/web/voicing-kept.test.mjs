@@ -86,6 +86,18 @@ assert.deepEqual(where(voice(lane), lane), where(second, lane), "solving again i
   assert.equal(voice(notes).seats.get(notes[3]), hand, "without the anchor the hand is back");
 }
 
+// A typed finger is the player's: it is not kept as the engine's own.
+{
+  const n = note(60, 57), notes = [n];
+  const found = voice(notes);
+  keepVoicing(notes, found, tuning);
+  const engine = n.auto.finger;
+  n.finger = 0;
+  found.fingers.set(n, 0);                                 // as laneFingering applies it
+  keepVoicing(notes, found, tuning);
+  assert.equal(n.auto.finger, engine, "removing the typed finger gives the engine's back");
+}
+
 // Moving the capo moves a kept position and hand with the strings.
 {
   const n = { ...note(30, 57), auto: { string: 3, fret: 7, hand: 5 } };

@@ -11,6 +11,18 @@
   <script>try{for(const k of Object.keys(localStorage)){const m=/^(?:mtt|ttt)\.(.+)$/.exec(k);if(m){if(localStorage.getItem("cw."+m[1])===null)localStorage.setItem("cw."+m[1],localStorage.getItem(k));localStorage.removeItem(k);}}}catch(e){}</script>
   <!-- Apply the saved theme before first paint so there's no light/dark flash.
        Dark is the default, so only light is stamped on the root. -->
+  <!-- Preferences live on the server too (/api/prefs): localStorage is scoped to the
+       port, and the desktop app does not always get the same one. Loaded before any
+       module reads them, then every change is written back. -->
+  <script>(()=>{try{const ls=localStorage,x=new XMLHttpRequest();x.open("GET","/api/prefs",false);x.send();
+const saved=x.status===200?JSON.parse(x.responseText):null;if(saved)for(const k in saved)if(typeof saved[k]==="string")ls.setItem(k,saved[k]);
+const P=Storage.prototype,set=P.setItem,del=P.removeItem,clr=P.clear;let t=0;
+const save=(keepalive)=>{t=0;const all={};for(let i=0;i<ls.length;i++){const k=ls.key(i);all[k]=ls.getItem(k);}
+fetch("/api/prefs",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(all),keepalive}).catch(()=>{});};
+const later=s=>{if(s===ls){clearTimeout(t);t=setTimeout(save,400,false);}};
+P.setItem=function(k,v){set.call(this,k,v);later(this);};P.removeItem=function(k){del.call(this,k);later(this);};P.clear=function(){clr.call(this);later(this);};
+addEventListener("pagehide",()=>{if(t){clearTimeout(t);save(true);}});
+if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</script>
   <script>try{if(localStorage.getItem("cw.theme")==="light")document.documentElement.dataset.theme="light";}catch(e){}</script>
   <!-- Self-hosted: the app is a local tool and must render as designed with no
        network. Refresh with tools/fetch-fonts.py. -->
@@ -443,7 +455,7 @@
                 <button type="button" id="fretboardHandToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardHandList" aria-expanded="false" aria-label="Show every hand position" title="Show every hand position"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
               </div>
               <div id="fretboardChordField">
-                <span class="label" id="fretboardChordLabel">Chord</span>
+                <span class="label" id="fretboardChordLabel">Name</span>
                 <input type="text" id="fretboardChordInput" maxlength="31" aria-labelledby="fretboardChordLabel" spellcheck="false">
                 <button type="button" id="fretboardChordAuto" class="btn btn--compact" title="Use the automatic name" hidden>Auto</button>
               </div>
@@ -471,7 +483,11 @@
                   <button type="button" id="fretboardChoose" class="btn btn--compact">Use position</button>
                 </div>
                 <button type="button" id="fretboardShape" class="btn btn--compact" aria-pressed="false" hidden
-                        title="Place every note of the chord by hand">Custom shape</button>
+                        title="Place every note of the chord by hand">Assign custom grip</button>
+                <button type="button" id="fretboardFingering" class="btn btn--compact" aria-pressed="false" hidden
+                        title="Point at a note and type its finger: 0 thumb, 1–4 index to pinky, Delete for automatic">Assign custom fingering</button>
+                <button type="button" id="fretboardFingerReset" class="btn btn--compact" hidden
+                        title="Give this note or chord the automatic fingers back">Reset fingering</button>
                 <button type="button" id="fretboardApply" class="btn btn--compact btn--primary" hidden>Done</button>
                 </div>
                 <div id="fretboardInfluence" role="group" aria-label="Override">

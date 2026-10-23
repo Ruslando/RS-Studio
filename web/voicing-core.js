@@ -843,6 +843,9 @@ function keptFingers(notes) {
   return out;
 }
 
+// A finger the player typed onto a note (note.finger): 0 the thumb, 1-4 index to pinky.
+export const isChosenFinger = (f) => Number.isInteger(f) && f >= THUMB && f <= 4;
+
 // Write a solve back as kept. `holds` are the lane's hand anchors: a column under one
 // keeps the hand it had before, so removing the anchor gives that hand back.
 // Returns whether any note changed.
@@ -853,7 +856,9 @@ export function keepVoicing(notes, { voiced, fingers, seats }, tuning, holds = n
     const p = voiced.get(n);
     if (!p || fitsPitch(n.pos, n.pitch, tuning)) return;
     const a = n.auto || {};
-    const hand = held[i] ? a.hand : seats?.get(n), finger = held[i] ? a.finger : fingers?.get(n);
+    // A typed finger is the player's, not the engine's: keep what the engine had.
+    const hand = held[i] ? a.hand : seats?.get(n);
+    const finger = held[i] || isChosenFinger(n.finger) ? a.finger : fingers?.get(n);
     const next = {
       string: p.string, fret: p.fret,
       ...(Number.isFinite(hand) ? { hand } : {}),
