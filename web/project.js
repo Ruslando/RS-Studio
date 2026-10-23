@@ -139,8 +139,11 @@ let savedSig = null;
 
 function dirtySig() {
   const b = projectBody();
+  // A kept automatic position (note.auto) is written on its own as lanes are voiced;
+  // remembering an answer is not an edit.
+  const withoutAuto = (key, value) => key === "auto" ? undefined : value;
   return JSON.stringify({ editLanes: b.editLanes, grid: b.grid, sectionMarkers: b.sectionMarkers, timings: b.timings,
-    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, projectStart: b.projectStart, stemSettings: b.stemSettings, mix: b.mix });
+    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, projectStart: b.projectStart, stemSettings: b.stemSettings, mix: b.mix }, withoutAuto);
 }
 
 function isDirty() { return !!S.state && S.state.job !== "tutorial" && dirtySig() !== savedSig; }

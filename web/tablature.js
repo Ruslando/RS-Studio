@@ -30,7 +30,7 @@ import { isTablatureLane, selectedTablatureLane } from "./layer-role.js";
 import { modernGpProjectionStatus, modernGpResult, projectedGpLaneScore } from "./guitar-pro-score.js";
 import { parseTuning, songTimeToTabMs, tabMsToSongTime } from "./util.js";
 import { TUNINGS } from "./tunings.js";
-import { arrangedNotes, chordColumns, handChoices, handProfileForTuning, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
+import { arrangedNotes, chordColumns, handChoices, handProfileForTuning, keepVoicing, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
 import { draw } from "./repaint.js";
 
 // ---- tablature (Guitar Pro export + alphaTab preview) ----
@@ -323,6 +323,11 @@ export async function laneFingering(lane, signal) {
   const tuning = laneFretTuning(lane), notes = arrangedNotes(lane.notes);
   const found = await voiceLaneAsync(lane, notes, tuning, signal);
   alignReferences(lane, notes, found);
+  // What was just voiced stays put: the next edit voices only what is new or no
+  // longer fits (keepVoicing). No undo step and no new revision — the answer is the
+  // same, it is only remembered.
+  // Only for the lane itself: previews voice a copy, and their answer is hypothetical.
+  if (S.state?.editLanes?.includes(lane)) keepVoicing(lane.notes, found, tuning, lane.handHolds);
   return { tuning, notes, ...found };
 }
 

@@ -810,6 +810,17 @@ export function applyColumnAlternative(colNotes, choice, influence = null) {
   }
 }
 
+// Forget where the selection was voiced, so the next solve places it again around
+// everything else, which stays put (keepVoicing). Overrides are left alone: their way
+// back is "Return to automatic".
+export function revoiceSelection() {
+  const notes = [...S.selection].filter((n) => n.auto && !n.pos && canEditLane(laneOf(n)));
+  if (!notes.length) return;
+  const prev = snapshotEdit();
+  for (const n of notes) delete n.auto;
+  commit(prev); draw(); refreshTabIfOpen();
+}
+
 // The write itself, with no snapshot of its own, so a caller undoing two things at
 // once can put both inside one step (see clearOverrideAt).
 function writeAlternative(colNotes, choice, influence) {
@@ -1344,6 +1355,10 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     ...(pinnedCol
       ? [{ label: "Return to automatic", kw: "reset unpin fingering position voicing",
         fn: () => applyColumnAlternative(pinnedCol.notes, null) }]
+      : []),
+    ...(sel.some((n) => n.auto && !n.pos && canEditLane(laneOf(n)))
+      ? [{ label: "Recalculate positions", kw: "revoice refinger automatic fingering position hand",
+        fn: revoiceSelection }]
       : []),
     ...(motifActions.length === 1
       ? [{ ...motifActions[0], kw: "motif group phrase label" }]
