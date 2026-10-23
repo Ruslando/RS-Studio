@@ -1504,14 +1504,30 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 
 /* One candidate at a time, with controls that remain inside a narrow board. */
 #fretboardPin { max-width: calc(100% - 8px); flex-wrap: wrap; }
-#fretboardAlternatives { display: flex; align-items: center; gap: var(--s-pair); }
+/* Grip reads like the Capo/Hand fields: a label, then its value in a pill. */
+#fretboardAlternatives { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
+#fretboardAltLabel { color: var(--stage-label); font-size: var(--text-caption); }
+#fretboardAlternatives .pill > #fretboardAltCount {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 7ch;
+  background: var(--control); color: var(--text); font: 600 var(--text-control)/1 var(--font-mono);
+  font-variant-numeric: tabular-nums; box-shadow: var(--e-control);
+}
 #fretboardAlternatives[hidden] { display: none; }
+/* The chord's name: grows with the text, so a long name is never cut off. */
+#fretboardChordInput {
+  field-sizing: content; min-width: 7ch; max-width: 32ch; height: var(--h-control); padding: 0 8px; box-sizing: border-box;
+  background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-control);
+  color: var(--stage-text); font: 600 var(--text-control)/1 var(--font-ui);
+}
+#fretboardChordInput:focus { outline: none; border-color: var(--accent); }
+#fretboardChordInput:disabled { color: var(--stage-hint); }
+#fretboardChordAuto[hidden] { display: none; }
 #fretboardVoices { display: flex; align-items: center; gap: 4px; }
 #fretboardVoices[hidden] { display: none; }
-#fretboardVoiceCount, #fretboardAltCount { min-width: 7ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
+#fretboardVoiceCount { min-width: 7ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
 #fretboardAltPrev svg, #fretboardAltNext svg { transform: rotate(-90deg); }
 
-#fretboardPin #fretboardChoose:not(:disabled) { color: var(--stage-text); }
+#fretboardPin :is(#fretboardChoose, #fretboardShape):not(:disabled) { color: var(--stage-text); }
 
 /* One continuous toolbar. Use natural group widths; a large flex basis made
    alternatives wrap even when all visible controls fitted on one line. */

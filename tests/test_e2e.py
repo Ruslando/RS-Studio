@@ -1959,6 +1959,34 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardPin')).to_be_visible()
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-editing', '')
 
+    def test_fretboard_single_note_shows_every_position_as_rings(self):
+        self.open_reference_project()
+        page = self.page
+        points = self.fretboard_hover_points()
+        before = page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)")
+        page.mouse.click(*points['note'])
+        rings = page.evaluate("""async () => {
+            const { drawFretboard } = await import('/fretboard.js');
+            const canvas = document.querySelector('#fretboard'), ctx = canvas.getContext('2d');
+            const arc = ctx.arc, stroke = ctx.stroke, out = [];
+            let last = null;
+            ctx.arc = function(x, y, ...rest) { last = [x, y]; return arc.call(this, x, y, ...rest); };
+            ctx.stroke = function(...a) { if (last && Math.abs(this.lineWidth - 1.8) < 1e-3) out.push(last); last = null; return stroke.apply(this, a); };
+            try { drawFretboard(); } finally { ctx.arc = arc; ctx.stroke = stroke; }
+            const r = canvas.getBoundingClientRect();
+            return out.map(([x, y]) => [r.left + x, r.top + y]);
+        }""")
+        self.assertEqual(len(rings), 2)
+        page.mouse.move(*rings[1])
+        expect(page.locator('#fretboardAltCount')).to_have_text('3 / 3')
+        page.mouse.move(30, 30)
+        expect(page.locator('#fretboardAltCount')).to_have_text('1 / 3')
+        page.mouse.click(*rings[1])
+        moved = page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)")
+        self.assertNotEqual(moved, before)
+        page.keyboard.press('Control+z')
+        self.assertEqual(page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)"), before)
+
     def test_fretboard_capo_control_and_undo(self):
         self.open_reference_project()
         page = self.page
