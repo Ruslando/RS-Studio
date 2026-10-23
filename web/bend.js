@@ -113,19 +113,34 @@ export const noteOffsetAt = (n, sec, dur, slide = {}) =>
 // Which note each shift/legato slide lands on: in the next chord along, the note on
 // the same string when both are placed, otherwise the nearest pitch. The editor
 // draws a slide to the next note in time; for a chord that is the matching voice.
-export function slideTargets(notes) {
+//
+// One string carries one slide, so a target is claimed once: known strings pair
+// first (`positionOf`: pinned or voiced), then a chord sliding into a chord of the
+// same size moves as a shape (k-th voice from the bottom onto the k-th), and
+// anything else takes the nearest unclaimed pitch. The shape rule covers callers
+// that know no strings.
+export function slideTargets(notes, positionOf = (n) => n.pos) {
   const out = new Map();
   if (!notes.some((n) => SLIDES_TO_NEXT.has(n.slide))) return out;
-  const sorted = [...notes].sort((a, b) => a.start - b.start);
+  const sorted = [...notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+  const cols = [];
   for (const n of sorted) {
-    if (!SLIDES_TO_NEXT.has(n.slide)) continue;
-    const next = sorted.find((m) => m.start > n.start + 1e-4);
-    if (!next) continue;
-    const column = sorted.filter((m) => Math.abs(m.start - next.start) < 1e-4);
-    const string = n.pos?.string;
-    const target = (string != null && column.find((m) => m.pos?.string === string))
-      || column.reduce((best, m) => (Math.abs(m.pitch - n.pitch) < Math.abs(best.pitch - n.pitch) ? m : best));
-    out.set(n, target);
+    if (!cols.length || n.start - cols.at(-1)[0].start >= 1e-4) cols.push([]);
+    cols.at(-1).push(n);
+  }
+  const near = (n, pool) => pool.reduce((best, m) => (Math.abs(m.pitch - n.pitch) < Math.abs(best.pitch - n.pitch) ? m : best));
+  for (let i = 0; i + 1 < cols.length; i++) {
+    const free = [...cols[i + 1]];
+    const claim = (n, m) => { out.set(n, m); if (free.includes(m)) free.splice(free.indexOf(m), 1); };
+    const rest = cols[i].filter((n) => {
+      if (!SLIDES_TO_NEXT.has(n.slide)) return false;
+      const string = positionOf(n)?.string;
+      const same = string != null && free.find((m) => positionOf(m)?.string === string);
+      if (same) claim(n, same);
+      return !same;
+    });
+    if (rest.length > 1 && rest.length === free.length) { const shape = [...free]; rest.forEach((n, k) => claim(n, shape[k])); }
+    else for (const n of rest) claim(n, near(n, free.length ? free : cols[i + 1]));
   }
   return out;
 }

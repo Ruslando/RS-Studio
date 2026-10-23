@@ -246,11 +246,14 @@ function bendPitchName(pitch) {
 
 const hammerTagCache = new WeakMap();
 const slideTargetCache = new WeakMap();
+// Paired by the strings the voicer chose (the same ones the labels show), so a
+// slide's ribbon follows the string the finger actually runs along.
 export function laneSlides(lane) {
+  const positions = positionsForLabels(lane);
   const hit = slideTargetCache.get(lane);
-  if (hit?.revision === S.voicingRevision && hit.notes === lane.notes) return hit.targets;
-  const targets = slideTargets(lane.notes);
-  slideTargetCache.set(lane, { revision: S.voicingRevision, notes: lane.notes, targets });
+  if (hit?.revision === S.voicingRevision && hit.notes === lane.notes && hit.positions === positions) return hit.targets;
+  const targets = slideTargets(lane.notes, (n) => positions.get(n) || n.pos);
+  slideTargetCache.set(lane, { revision: S.voicingRevision, notes: lane.notes, positions, targets });
   return targets;
 }
 

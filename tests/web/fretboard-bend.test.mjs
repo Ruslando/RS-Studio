@@ -52,6 +52,17 @@ const a = [45, 52, 57].map((p, i) => ({ start: 0, end: 1, pitch: p, slide: "shif
 const b = [47, 54, 59].map((p, i) => ({ start: 1, end: 2, pitch: p, pos: { string: 5 - i } }));
 const targets = slideTargets([...b, ...a]);
 assert.deepEqual(a.map((n) => targets.get(n).pitch), [47, 54, 59]);
+// Unplaced octave shape A#2+A#3 → F3+F4: A#3 is nearer F3, but F3 is taken.
+{
+  const src = [46, 58].map((pitch) => ({ start: 0, end: 1, pitch, slide: "shift" }));
+  const dst = [53, 65].map((pitch) => ({ start: 1, end: 2, pitch }));
+  const got = slideTargets([...dst, ...src]);
+  assert.deepEqual(src.map((n) => got.get(n).pitch), [53, 65], "a chord slides as a shape, one voice per target");
+  const lone = { start: 0, end: 1, pitch: 58, slide: "shift" };
+  assert.equal(slideTargets([lone, ...dst]).get(lone).pitch, 53, "a single note into a chord takes the nearest pitch");
+  const strings = new Map([[lone, { string: 3 }], [dst[0], { string: 4 }], [dst[1], { string: 3 }]]);
+  assert.equal(slideTargets([lone, ...dst], (n) => strings.get(n)).get(lone).pitch, 65, "voiced strings beat pitch distance");
+}
 assert.equal(bendLift({ note: { start: 0, end: 1 }, string: 2, fret: 7 }, 0.5, 6), 0, "no bend, no lift");
 console.log("fretboard-bend ok");
 // The slide onto the next note keeps the finger down the whole way: no travel

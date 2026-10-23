@@ -15,7 +15,7 @@ const { stepColumnFocus, stepVoiceFocus } = await mockImport(new URL('../../web/
   './edit.js': { columnOf: note => ({ lane, col: columns.find(col => col.notes.includes(note)) }) },
   './geometry.js': { xOf: t => t * 100, yOf: pitch => pitch },
   './lanes.js': { editLanes: () => [lane] }, './layer-role.js': { selectedTablatureLane: () => lane },
-  './voicing-core.js': { chordColumns: () => columns },
+  './voicing-core.js': { chordColumns: () => columns, soundingColumns: () => columns },
   './column-navigation.js': { adjacentColumn },
   './util.js': { clamp: (v, min, max) => Math.min(max, Math.max(min, v)) },
   './tracing.js': { setPlaybackCursor: t => { time = t; } },

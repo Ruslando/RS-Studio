@@ -44,8 +44,8 @@ import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulation
 import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
-import { assignFingers, chordColumns, fingeringChoices, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits } from "./voicing-core.js";
-import { columnAlternatives } from "./voicing.js";
+import { assignFingers, chordColumns, fingeringChoices, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
+import { columnAlternatives, stepVoiceFocus } from "./voicing.js";
 import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, clearColumnFingers, setColumnFingers, setColumnFollow, setColumnShape, setHandAnchor, setNotePosition } from "./edit.js";
 import { wireMenu } from "./ui.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
@@ -357,8 +357,10 @@ const boardTime = () => playbackTime() + (transportPlaying() ? 0 : 1e-3);
 function selectPlayheadNotes() {
   const lane = currentLane();
   if (!visible || !editing || transportPlaying() || !canEditLane(lane)) return;
-  const t = boardTime();
-  setSelection(new Set(lane.notes.filter(n => n.start <= t && t < n.end)));
+  // Only the latest onset column: notes still held from earlier columns are other
+  // voices (reachable with ↑ ↓), not part of this chord.
+  const latest = soundingColumns(lane.notes, boardTime()).reduce((a, c) => (!a || c.t0 >= a.t0 ? c : a), null);
+  setSelection(new Set(latest?.notes || []));
 }
 
 // Expose the actual edit recipients, independently of the playback cursor.
@@ -371,21 +373,12 @@ export function fretboardEditTargets() {
   return positionEditTargets(group, note ? columnOf(note)?.col.notes || [] : []);
 }
 
-// The column being decided: the selection's if there is one, and otherwise **the one
-// under the playhead**, which is the column the neck is already drawing. Requiring a
-// selection first was a step that bought nothing — the board shows you the grip, and
-// asking for another position for the grip in front of you needs no ceremony.
-//
-// It follows the playhead while the song plays too. It used to hold whatever it last
-// was, so that a list of alternatives could not be re-asked for sixty times a second
-// — but the working views now stand down during playback entirely (see frozenAt), so
-// nothing is asking, and a focus that lags the song is a focus that hands the strip a
-// column that has already gone past.
+// The column being decided: the selection's, and nothing without one. Pausing and
+// seeking select the column under the playhead once (selectPlayheadNotes); after that
+// a deselect must stay a deselect, so there is no fallback to the playhead here.
 function focusNote(lane) {
   for (const n of S.selection) if (Number.isFinite(n.pitch) && lane?.notes.includes(n)) return n;
-  const found = lane && gripsFor(lane);
-  const i = found ? gripIndex(found.columns, boardTime()) : -1;
-  return i >= 0 ? found.columns[i].note || null : null;
+  return null;
 }
 
 // The moment the board holds while a choice is being made — the onset of the column
@@ -1116,6 +1109,13 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   const shown = editing;
   fretboardPin.hidden = !shown;
   if (!shown) { endResetPreview(); return; }
+  // Columns sounding at once (a held note under a moving line): which one is selected.
+  const voices = !playing && !shaping && lane ? soundingColumns(lane.notes, boardTime()) : [];
+  const voice = voices.findIndex(c => c.notes.some(n => S.selection.has(n)));
+  $("fretboardVoices").hidden = voices.length < 2;
+  $("fretboardVoiceCount").textContent = `${voice < 0 ? "–" : voice + 1} / ${voices.length}`;
+  $("fretboardVoiceDown").disabled = voice === 0;
+  $("fretboardVoiceUp").disabled = voice === voices.length - 1;
   const group = selectedPositions(lane);
   const column = (editing) && !shaping && !playing ? pinnedColumn(lane) : null;
   const selectedOverride = group.multiple && !group.error
@@ -1133,8 +1133,10 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   fretboardShape.hidden = !(editing) || playing || (!chord && !shaping);
   fretboardShape.disabled = unplayable || !!group.error;
   $("fretboardAlternatives").hidden = playing || !!shaping || unplayable;
-  $("fretboardAltCount").textContent = alternativeCount ? (alternativeIndex < 0 ? `${alternativeCount} alternatives` : `${alternativeIndex + 1} / ${alternativeCount}`)
-    : chord && (alts?.note !== focusNote(lane) || alts?.rev !== S.voicingRevision) ? "Loading alternatives..." : "No alternatives";
+  // Position 1 is the current (auto or pinned) shape, the alternatives follow, so the
+  // readout keeps one form and the Use button never jumps under the pointer.
+  const altsLoading = !alternativeCount && chord && (alts?.note !== focusNote(lane) || alts?.rev !== S.voicingRevision);
+  $("fretboardAltCount").textContent = `${alternativeIndex + 2} / ${altsLoading ? "…" : alternativeCount + 1}`;
   if (group.multiple) {
     const reasons = [...sharedSelection.failures];
     $("fretboardAltCount").title = group.error || [
@@ -1144,10 +1146,10 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
     else if (!alternativeCount) $("fretboardAltCount").textContent = chord && !alts
       ? "Loading alternatives..." : reasons.length ? reasons[0]
         : sharedSelection.unchanged ? "All selected notes already use this position" : "No position works for the whole selection";
-  } else $("fretboardAltCount").title = "";
+  } else $("fretboardAltCount").title = alternativeIndex < 0 ? "Current position" : "";
   $("fretboardAltPrev").disabled = alternativeCount === 0;
   $("fretboardAltNext").disabled = alternativeCount === 0;
-  $("fretboardChoose").hidden = !activeAlternative;
+  $("fretboardChoose").hidden = false;
   $("fretboardChoose").disabled = !activeAlternative;
   fretboardApply.hidden = !shaping;
   fretboardApply.disabled = !shaping || shaping.picked.size !== shaping.notes.length || !shaping.preview?.hand
@@ -1929,6 +1931,8 @@ export function init_fretboard() {
     fretboardEl.style.cursor = ""; spotHover = -1;
     if (editing) drawFretboard();
   });
+  $("fretboardVoiceUp").addEventListener("click", () => stepVoiceFocus(1));
+  $("fretboardVoiceDown").addEventListener("click", () => stepVoiceFocus(-1));
   $("fretboardAltPrev").addEventListener("click", () => stepAlternative(-1));
   $("fretboardAltNext").addEventListener("click", () => stepAlternative(1));
   $("fretboardShapePrev").addEventListener("click", () => stepShapeNote(-1));

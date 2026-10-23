@@ -22,7 +22,7 @@ import { playbackTime, ensureTone, previewNotes } from "./playback.js";
 import { S, setSelection } from "./store.js";
 import { setPlaybackCursor } from "./tracing.js";
 import { clamp } from "./util.js";
-import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey } from "./voicing-core.js";
+import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey, soundingColumns } from "./voicing-core.js";
 import { adjacentColumn } from './column-navigation.js';
 
 export * from "./voicing-core.js";
@@ -223,15 +223,10 @@ export function stepColumnFocus(dir) {
 // under it is deliberately not one chord — the onset grouping says so — which leaves
 // two independent things at one moment, and one playhead cannot name both. Ordered
 // by pitch, because that is what up and down mean on an instrument.
-const colPitch = (col) => Math.max(...col.notes.map((n) => n.pitch));
-
 export function stepVoiceFocus(dir) {
   const lane = arrowLane();
   if (!lane) return;
-  const t = playbackTime() + 1e-3;
-  const sounding = chordColumns(lane.notes)
-    .filter((c) => c.t0 <= t && Math.max(...c.notes.map((n) => n.end)) >= t)
-    .sort((a, b) => colPitch(a) - colPitch(b));
+  const sounding = soundingColumns(lane.notes, playbackTime() + 1e-3);
   if (sounding.length < 2) return;
   const here = sounding.findIndex((c) => c.notes.some((n) => S.selection.has(n)));
   const idx = clamp((here < 0 ? (dir > 0 ? -1 : sounding.length) : here) + dir, 0, sounding.length - 1);

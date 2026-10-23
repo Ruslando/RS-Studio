@@ -772,6 +772,9 @@ export function init_interaction() {
       if (S.drag.mode === 'move' && S.drag.moved) for (const n of S.drag.notes) {
         const q = snapNote(n.start, n.end); n.start = q.start; n.end = q.end;
       }
+      // Pressing a note of a selection keeps the group so it can be dragged together;
+      // a plain click without dragging narrows it to that one note.
+      if (S.drag.mode === 'move' && !S.drag.moved && S.selection.size > 1) setSelection(new Set([S.drag.note]));
       if (S.drag.mode === "resize") S.drag.lane.notes = makeResizeRoom(
         S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig, S.drag.edge, Math.min(MIN_DUR, minDur()),
         note => !!boxOfNote(note)?.group.locked);
