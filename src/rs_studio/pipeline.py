@@ -23,6 +23,18 @@ from .paths import data_root
 # Source runs and frozen builds must resolve the same audio dependencies.
 prepare_ffmpeg()
 
+# beat_this's final0 weights, where torch.hub (and so the Models pane) keeps them.
+BEAT_THIS_URL = "https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp/final0.ckpt"
+
+
+def beat_this_checkpoint_path() -> Path:
+    """Same rule as models._torch_checkpoints, without importing torch."""
+    home = os.environ.get("TORCH_HOME")
+    base = Path(home).expanduser() / "hub" if home else Path(
+        os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache").expanduser() / "torch" / "hub"
+    return base / "checkpoints" / "beat_this-final0.ckpt"
+
+
 # --- Display / analysis constants -------------------------------------------
 # One CQT bin per semitone. The range covers most guitar/bass material so the
 # spectrogram rows line up exactly with MIDI pitches for note overlay. The floor
@@ -383,6 +395,29 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
         "tempo": tempo,
         "offset": offset,
     }
+
+
+def detect_tempo_map(audio_path: Path) -> dict:
+    """The song's grid as {bpm, offset, tsNum, tsDen, tempoMap} (see tempo_map.py).
+
+    beat_this finds beats and downbeats, so meter and tempo changes come out.
+    Without its weights, librosa's beats are used and the meter stays 4/4.
+    """
+    from .tempo_map import tempo_map
+
+    checkpoint = beat_this_checkpoint_path()
+    if checkpoint.exists():
+        from beat_this.inference import File2Beats
+
+        processing.report("Finding beats and bars")
+        beats, downbeats = File2Beats(checkpoint_path=str(checkpoint), device=_select_device(), dbn=False)(str(audio_path))
+        return tempo_map(beats, downbeats)
+    import librosa
+
+    processing.report("Finding beats")
+    y, sr = librosa.load(str(audio_path), sr=SAMPLE_RATE, mono=True)
+    _, frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LENGTH)
+    return tempo_map(librosa.frames_to_time(frames, sr=sr, hop_length=HOP_LENGTH))
 
 
 def detect_notes(audio_path: Path) -> tuple[list[dict], str | None]:

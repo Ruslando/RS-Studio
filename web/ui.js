@@ -27,6 +27,7 @@ import { S } from "./store.js";
 import { exportRocksmith } from "./rocksmith-export.js";
 import { exportModernGp, exportTab, setView } from "./tablature.js";
 import { runFindSimilar } from "./tracing.js";
+import { detectTempoMap } from "./tempo-detect.js";
 
 // ---- spectrogram drag mode ----
 // Empty-space drag pans; Ctrl/Cmd draws and Shift/Alt retain selection gestures.
@@ -608,6 +609,7 @@ export function init_ui() {
   window.addEventListener("settings-draft-changed", syncSettingsActions);
   wireMenu("menuTraceSettings", () => openSettingsModal("trace"));
   wireMenu("menuProjectSettings", () => openSettingsModal("project"));
+  wireMenu("menuDetectTempo", detectTempoMap);
   wireMenu("menuKeySettings", () => openSettingsModal("keys"));
   wireMenu("menuAppearance", () => openSettingsModal("appearance"));
   wireMenu("menuModels", () => openSettingsModal("models"));

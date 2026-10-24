@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10, <3.13"
 resolution-markers = [
     "python_full_version >= '3.11' and sys_platform == 'linux'",
@@ -133,6 +133,27 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c7/94/1009e248bbfbab11397abca7193bea6626806be9a327d399810d523a07cb/beartype-0.22.9.tar.gz", hash = "sha256:8f82b54aa723a2848a56008d18875f91c1db02c32ef6a62319a002e3e25a975f", size = 1608866, upload-time = "2025-12-13T06:50:30.72Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/71/cc/18245721fa7747065ab478316c7fea7c74777d07f37ae60db2e84f8172e8/beartype-0.22.9-py3-none-any.whl", hash = "sha256:d16c9bbc61ea14637596c5f6fbff2ee99cbe3573e46a716401734ef50c3060c2", size = 1333658, upload-time = "2025-12-13T06:50:28.266Z" },
+]
+
+[[package]]
+name = "beat-this"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "rotary-embedding-torch" },
+    { name = "soxr" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchaudio", version = "2.11.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "torchaudio", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d1/c4/7ce01e047c1e8d99490e95172d710e08901c24fb24e19a5dd4f885177c99/beat_this-1.1.0.tar.gz", hash = "sha256:3017c741f972972a650edcaccfe5760687fe4f5587feaa98896d90f866c2435c", size = 40635, upload-time = "2026-04-14T10:16:39.5Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/0e/e23cbbe6e3efcd54e84dec22b6d88954655036a993cc3843ab741bc24de4/beat_this-1.1.0-py3-none-any.whl", hash = "sha256:3f2b2d1e027c6dac380bf80c71555e3c28a4036a7f1af20129a945915a72a645", size = 40060, upload-time = "2026-04-14T10:16:37.955Z" },
 ]
 
 [[package]]
@@ -2672,11 +2693,13 @@ wheels = [
 
 [[package]]
 name = "rs-studio"
-version = "0.5.0-rc.2"
+version = "0.5.0rc2"
 source = { editable = "." }
+default-groups = ["cpu", "dev", "encoder"]
 dependencies = [
     { name = "basic-pitch" },
     { name = "beartype" },
+    { name = "beat-this" },
     { name = "cryptography" },
     { name = "demucs" },
     { name = "einops" },
@@ -2742,6 +2765,7 @@ encoder = [
 requires-dist = [
     { name = "basic-pitch", specifier = "==0.4.0" },
     { name = "beartype", specifier = ">=0.22.9" },
+    { name = "beat-this", specifier = ">=1.1.0" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "demucs", specifier = ">=4.0" },
     { name = "einops", specifier = ">=0.8.2" },

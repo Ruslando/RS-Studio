@@ -701,3 +701,4 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 #projTuning .field-slider > .ro { width: 48px; text-align: left; }
 .tuning-actions { display: flex; flex-wrap: wrap; gap: var(--s-sibling); }
 .tuning-actions [hidden] { display: none; }
+.tempo-scale { display: flex; gap: var(--s-sibling); }

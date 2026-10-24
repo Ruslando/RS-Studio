@@ -1615,6 +1615,13 @@ export function init_edit() {
       }
       if (runEditorShortcut(e)) { e.preventDefault(); return; }
     }
+    // A button has no undo of its own, and one keeps the focus after every menu
+    // command — so undo/redo reach the editor from there; text fields keep theirs.
+    if (mod && !e.altKey && e.target.tagName === "BUTTON" && ["z", "y"].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      if (e.key.toLowerCase() === "y" || e.shiftKey) redo(); else undo();
+      return;
+    }
     if (/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) return;
     if (!mod && !e.altKey && e.key === "Tab" && openSelectedNoteMenu()) {
       e.preventDefault();

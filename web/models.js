@@ -192,6 +192,7 @@ function render(list, root) {
   const panes = {
     "Stem separation": root.querySelector(".model-list-separation"),
     "Note detection": root.querySelector(".model-list-detection"),
+    "Tempo detection": root.querySelector(".model-list-tempo"),
   };
   for (const el of Object.values(panes)) el.replaceChildren();
   for (const model of list) panes[model.kind]?.append(modelRow(model, root));

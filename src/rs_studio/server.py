@@ -734,6 +734,13 @@ def api_project_mix(job: str, audio: UploadFile) -> JSONResponse:
     m["tempo"] = view.spectrogram.get("tempo")
     m["grid"]["bpm"] = m["tempo"] or 120
     m["grid"]["offset"] = view.spectrogram.get("offset") or 0.0
+    try:
+        grid = processing.run(None, pipeline.detect_tempo_map, _project_input(job_dir, m))
+    except Exception:
+        grid = None   # best effort: the single estimate above still gives a grid
+    if grid:
+        m["tempo"] = grid["bpm"]
+        m["grid"].update(grid)
     _write_manifest(job, m)
 
     spec = dict(view.spectrogram)
@@ -939,6 +946,28 @@ def api_project_tuning(job: str, payload: dict = Body(...)) -> JSONResponse:
     _write_manifest(job, m)
     response = _response_from_manifest(m)
     return JSONResponse({"tuning": response["tuning"], "stems": response["stems"]})
+
+
+@app.post("/api/projects/{job}/tempo-map")
+def api_project_tempo_map(job: str, payload: dict = Body(default={})) -> JSONResponse:
+    """Detect the song's grid: {bpm, offset, tsNum, tsDen, tempoMap}.
+
+    Not saved: the editor applies it as one undoable edit and saves as usual.
+    """
+    m = _read_manifest(job)
+    job_dir = _job_dir(job)
+    try:
+        source = _project_input(job_dir, m)
+    except HTTPException:   # an imported .chart carries the playback audio only
+        stems = m.get("stems") or [{}]
+        source = _project_file_or_404(job, stems[0].get("audio_rel"), "Song audio")
+    try:
+        grid = processing.run((payload or {}).get("progress_id"), pipeline.detect_tempo_map, source)
+    except processing.OperationCancelled:
+        return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Tempo detection failed: {exc}") from exc
+    return JSONResponse(grid)
 
 
 @app.get("/api/projects/{job}/cover")

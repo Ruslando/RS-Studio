@@ -150,6 +150,10 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <span class="field-label">Note detection</span>
               <div class="model-list model-list-detection"></div>
             </div>
+            <div class="field-group block">
+              <span class="field-label">Tempo detection</span>
+              <div class="model-list model-list-tempo"></div>
+            </div>
             <p class="sp-note model-status" hidden></p>
           </div>
         </div>
@@ -193,6 +197,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <!-- Title, artist, album: the open file's own fields, so they belong to
                the menu that owns the file and not to app-wide preferences. -->
           <button class="menu-item" id="menuProjectSettings">Project details…</button>
+          <button class="menu-item" id="menuDetectTempo">Detect tempo map</button>
           <div class="menu-sep"></div>
           <button class="menu-item" id="menuPreviewTab">Tablature view</button>
           <button class="menu-item" id="menuExportModernGp">Export Guitar Pro (.gp)&hellip;</button>
@@ -607,6 +612,11 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           </div>
           <button type="button" class="field-revert" data-revert="ts" aria-label="Revert" hidden><span data-ui-icon="return" aria-hidden="true"></span></button>
         </label>
+      </div>
+      <!-- Beat trackers often land on twice or half the tempo. -->
+      <div class="tempo-scale">
+        <button id="markerHalve" type="button" class="btn btn--compact" title="Halve the tempo">Tempo ÷2</button>
+        <button id="markerDouble" type="button" class="btn btn--compact" title="Double the tempo">Tempo ×2</button>
       </div>
       <output id="tapInfo" class="tap-tempo-readout" aria-live="polite" hidden></output>
       <label class="field-group block">Grid division
@@ -1118,6 +1128,10 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <div class="field-group block">
             <span class="field-label">Note detection</span>
             <div id="modelListDetection" class="model-list model-list-detection"></div>
+          </div>
+          <div class="field-group block">
+            <span class="field-label">Tempo detection</span>
+            <div id="modelListTempo" class="model-list model-list-tempo"></div>
           </div>
           <p id="modelStatus" class="sp-note model-status" hidden></p>
         </div>

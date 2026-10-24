@@ -103,3 +103,62 @@ export function retimeSpan(lanes, sectionMarkers, dur, minCell, t0, t1, oldBpm, 
   retimeMarks(sectionMarkers);
   return spilled;
 }
+
+// Every beat line of a tempo map (segments as grid.js builds them) up to `end`.
+export function beatLines(segs, end) {
+  const out = [];
+  segs.forEach((seg, k) => {
+    const step = segBeatSec(seg), stop = k + 1 < segs.length ? segs[k + 1].t : end;
+    if (!(step > 0)) return;
+    for (let i = 0; seg.t + i * step < stop - 1e-6; i++) out.push(seg.t + i * step);
+  });
+  return out;
+}
+
+// Times on one grid -> the same place on another: each old beat goes to the
+// nearest new beat, and a time between two beats keeps its place between them.
+// Before the first beat and after the last, the nearest beat's shift applies.
+// Two old beats on one new beat (the new grid is half the tempo) keep the first.
+export function beatWarp(oldBeats, newBeats) {
+  const pairs = [];
+  let j = 0;
+  for (const o of oldBeats) {
+    while (j + 1 < newBeats.length && Math.abs(newBeats[j + 1] - o) <= Math.abs(newBeats[j] - o)) j++;
+    if (j < newBeats.length && (!pairs.length || newBeats[j] > pairs.at(-1)[1] + 1e-9)) pairs.push([o, newBeats[j]]);
+  }
+  if (!pairs.length) return (t) => t;
+  return (t) => {
+    if (t <= pairs[0][0]) return t + pairs[0][1] - pairs[0][0];
+    if (t >= pairs.at(-1)[0]) return t + pairs.at(-1)[1] - pairs.at(-1)[0];
+    let lo = 0, hi = pairs.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (pairs[mid][0] <= t) lo = mid; else hi = mid; }
+    const [o0, n0] = pairs[lo], [o1, n1] = pairs[hi];
+    return n0 + (t - o0) * (n1 - n0) / (o1 - o0);
+  };
+}
+
+// Move everything timed in `lanes` (and the section markers) through `warp`:
+// what retimeSpan moves, for a whole new tempo map. Times at 0 stay (a tone
+// marker there is the base tone); notes stay within [floor, dur].
+export function warpTimes(lanes, sectionMarkers, dur, minCell, warp, floor = 0) {
+  const at = (t) => (t <= 1e-9 ? t : Math.max(0, Math.min(dur, warp(t))));
+  const marks = (list) => { for (const m of list || []) m.t = at(+m.t); };
+  for (const lane of lanes) {
+    for (const group of Object.values(lane.refBoxes || {})) {
+      if (!group || !Array.isArray(group.anchors) || !group.anchors.length || typeof group.rt0 !== "number") continue;
+      const a = group.anchors[0];
+      group.rt0 = at(a + group.rt0) - at(a);
+      group.rt1 = at(a + group.rt1) - at(a);
+      group.anchors = group.anchors.map(at);
+    }
+    for (const n of lane.notes) {
+      const s = Math.max(floor, Math.min(at(n.start), dur - minCell));
+      n.end = Math.max(s + minCell, Math.min(dur, at(n.end)));
+      n.start = s;
+    }
+    for (const h of lane.handHolds || []) h.t = Math.max(floor, at(+h.t));   // same arithmetic as the note starts they sit on
+    marks(lane.toneMarkers);
+    marks(lane.phraseBoundaries);
+  }
+  marks(sectionMarkers);
+}
