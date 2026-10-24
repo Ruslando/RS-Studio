@@ -115,7 +115,8 @@ export function playbackEventFrom(event, from, until = Infinity) {
 
 // Each note owns its source, envelope and filter: chord members never change
 // their neighbours' timbre. Keep sources in Sampler's map for pause/releaseAll.
-export function playSampleEvent(synth, event, when, heardAt, r = 1) {
+// `pitch` scales every frequency, so notes match audio that is not at A440.
+export function playSampleEvent(synth, event, when, heardAt, r = 1, pitch = 1) {
   if (event.percussion) { playDeadNote(synth, event, Math.max(when, heardAt), r); return; }
   const name = Tone.Frequency(event.pitch, "midi").toNote();
   const dur = event.duration / r;
@@ -125,6 +126,7 @@ export function playSampleEvent(synth, event, when, heardAt, r = 1) {
   finally { synth.attack = oldAttack; }
   const src = synth._activeSources?.get(Math.round(event.pitch))?.at(-1);
   if (!src) { synth.triggerRelease(name, when + dur); return; }
+  if (pitch !== 1 && src.playbackRate) src.playbackRate.value *= pitch;
   src.fadeOut = event.release / r;
   // Only automate moving pitches; long plain notes need no sampled curve.
   const param = src.playbackRate;

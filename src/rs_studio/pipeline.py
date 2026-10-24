@@ -227,10 +227,32 @@ def _magma(values) -> "np.ndarray":
     return np.stack([r, g, b], axis=-1).astype("uint8")
 
 
+# Closer to A440 than this counts as A440, so a song isn't marked -1 ct.
+TUNING_DEADBAND = 3.0
+
+
+def estimate_tuning(audio_path: Path) -> float:
+    """Cents the recording sits off A440, in [-50, 50).
+
+    Only the part below a semitone: a song tuned a half step down at A440 and one
+    in standard at A415 sound the same, and the half steps belong to the tuning.
+    """
+    import librosa
+
+    y, sr = librosa.load(str(audio_path), sr=SAMPLE_RATE, mono=True)
+    return round(float(librosa.estimate_tuning(y=y, sr=sr)) * 100, 1)
+
+
+def suggested_reference(estimate: float | None) -> float:
+    """The reference pitch to apply for an estimate: A440 inside the dead band."""
+    return 0.0 if estimate is None or abs(estimate) < TUNING_DEADBAND else float(estimate)
+
+
 SPECTROGRAM_VIEWS = ("energy", "fine", "fundamental", "contrast", "fine-sharp", "fundamental-sharp")
 
 
-def _reassigned_power(y, sr: int, n_frames: int, semitones: int = N_BINS, chunk_s: float = 30.0):
+def _reassigned_power(y, sr: int, n_frames: int, semitones: int = N_BINS, chunk_s: float = 30.0,
+                      cents: float = 0.0):
     """Time-frequency reassigned STFT magnitude, binned onto the fine CQT grid.
 
     Each STFT cell is moved to the time/frequency its energy actually comes from
@@ -241,7 +263,7 @@ def _reassigned_power(y, sr: int, n_frames: int, semitones: int = N_BINS, chunk_
     import numpy as np
 
     rows, n_fft = semitones * 3, 4096
-    low = MIDI_LOW - 1 / 3
+    low = MIDI_LOW - 1 / 3 + cents / 100
     grid = np.zeros((rows, n_frames), np.float32)
     step = int(chunk_s * sr)
     for start in range(0, len(y), step):
@@ -260,7 +282,8 @@ def _reassigned_power(y, sr: int, n_frames: int, semitones: int = N_BINS, chunk_
     return np.sqrt(grid)
 
 
-def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = False, view: str = "energy") -> dict:
+def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = False, view: str = "energy",
+                        cents: float = 0.0) -> dict:
     """Compute a semitone-aligned CQT, render it to a PNG, return metadata.
 
     `with_tempo` runs beat tracking (only worth doing once per song, on the mix).
@@ -273,6 +296,8 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
                    so single notes stand out from broadband smear.
     A "-sharp" suffix (fine, fundamental) starts from a time-frequency
     reassigned spectrogram instead of the CQT: same view, thinner lines.
+    `cents` is the recording's offset from A440: every row moves by it, so a
+    song at A432 (-32) still has its notes centred on the grid's rows.
     """
     import librosa
     import numpy as np
@@ -295,10 +320,10 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
     # Fundamental needs 19 extra semitones above C7 for the 3rd harmonic.
     semitones = N_BINS + (19 if base == "fundamental" else 0)
     if sharp:
-        mag = _reassigned_power(y, sr, 1 + len(y) // HOP_LENGTH, semitones)
+        mag = _reassigned_power(y, sr, 1 + len(y) // HOP_LENGTH, semitones, cents=cents)
     else:
         mag = np.abs(librosa.cqt(
-            y, sr=sr, fmin=librosa.midi_to_hz(MIDI_LOW - (1 / 3 if per == 3 else 0)),
+            y, sr=sr, fmin=librosa.midi_to_hz(MIDI_LOW - (1 / 3 if per == 3 else 0) + cents / 100),
             n_bins=semitones * per, bins_per_octave=BINS_PER_OCTAVE * per, hop_length=HOP_LENGTH,
         ))
     if base == "fundamental":
@@ -766,17 +791,23 @@ def detect(
     model: str,
     start: float | None = None,
     end: float | None = None,
+    cents: float = 0.0,
 ) -> tuple[list[dict], str | None]:
     """Run one registered detector by id on an audio file.
 
     With `start`/`end` (seconds) the detector runs on just that time slice and
     the returned note times are offset back to absolute song time — so the
     editor can detect within a selected frame instead of the whole stem.
+
+    With `cents` (the recording's offset from A440) the detector hears the audio
+    moved back to A440, so a note sitting near a quarter tone rounds to the right
+    pitch. The samples are relabelled at a different rate (exact, no artifacts),
+    which changes speed too; the note times are scaled back.
     """
     entry = DETECTORS.get(model)
     if entry is None:
         return [], f"Unknown detector: {model}"
-    if start is None and end is None:
+    if start is None and end is None and not cents:
         return entry["fn"](audio_path)
 
     # Region-scoped: extract the slice to a temp WAV, detect on it, then shift
@@ -799,14 +830,16 @@ def detect(
     fd, tmp_name = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     tmp = Path(tmp_name)
+    rate = int(round(sr * 2 ** (-cents / 1200)))
+    speed = rate / sr   # played this much faster; detected times shrink by it
     try:
-        sf.write(str(tmp), y, int(sr))
+        sf.write(str(tmp), y, rate)
         notes, warn = entry["fn"](tmp)
     finally:
         tmp.unlink(missing_ok=True)
     for n in notes:
-        n["start"] = float(n["start"]) + start
-        n["end"] = float(n["end"]) + start
+        n["start"] = float(n["start"]) * speed + start
+        n["end"] = float(n["end"]) * speed + start
     return notes, warn
 
 

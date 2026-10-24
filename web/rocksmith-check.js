@@ -54,6 +54,7 @@ async function runCheck() {
     if (lanes.length) {
       const spec = await buildSpecForLanesAsync(lanes, controller.signal);
       spec.duration = Number(S.state.duration) || 0;
+      spec.tuning = S.state.tuning;
       spec.rocksmith = { arrangements: lanes.map((lane, track) => ({ track, kind: lane.rocksmithArrangement })),
         leadingSilence: rsLeadIn() };
       const res = await fetch('/api/rocksmith/check', {

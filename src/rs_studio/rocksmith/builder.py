@@ -187,6 +187,24 @@ def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[
     return offsets + [0] * (6 - len(offsets)), is_bass, cents
 
 
+def _concert_pitch(spec: dict) -> tuple[float, float]:
+    """(reference, shift) in cents from A440, each clamped to a quarter tone.
+
+    The recording sits `reference` off A440 and the export moves it by `shift`,
+    so Rocksmith hears it at reference + shift (its CentOffset).
+    """
+    raw = spec.get("tuning") if isinstance(spec.get("tuning"), dict) else {}
+
+    def cents(key: str) -> float:
+        try:
+            value = float(raw.get(key) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(-50.0, min(50.0, value)) if math.isfinite(value) else 0.0
+
+    return cents("reference"), cents("shift")
+
+
 MAX_LEAD_IN = 30.0
 
 
@@ -427,6 +445,12 @@ def _prepare_audio(audio_path: Path, first_note: float, workdir: Path,
     of the main track only, and the returned length includes them.
     """
     spec = spec or {}
+    _, shift = _concert_pitch(spec)
+    if shift:
+        from ..audio_channels import pitch_shift
+        shifted = workdir / "shifted.wav"
+        pitch_shift(audio_path, shifted, shift, ["-c:a", "pcm_s16le"])
+        audio_path = shifted
     data, sr = read_audio(audio_path)
     length = len(data) / sr
 
@@ -600,6 +624,7 @@ def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: f
     if req.get("capo") is not None:
         track["capo"] = int(req["capo"])
     offsets, is_bass, cents = _tuning_offsets(track.get("tuning") or [], warnings)
+    cents += sum(_concert_pitch(spec))
     arr = ARRANGEMENTS[req["kind"]]
     if arr["is_bass"] != is_bass:
         need = "4-string bass" if arr["is_bass"] else "6-string guitar"

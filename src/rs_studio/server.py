@@ -328,6 +328,29 @@ def _metadata_response(m: dict) -> dict:
     return metadata
 
 
+def _cents(value, default: float = 0.0) -> float:
+    """A cent offset within a quarter tone either way, or `default`."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return default
+    return round(max(-50.0, min(50.0, value)), 1) if math.isfinite(value) else default
+
+
+def _tuning(m: dict) -> dict:
+    """The project's concert pitch, in cents from A440.
+
+    `estimate` is what the audio measured (None before it was measured),
+    `reference` how the recording is taken to sit (spectrogram, detection), and
+    `shift` how far playback and export move the audio. Rocksmith is told
+    reference + shift. Read through here: imported manifests are untrusted.
+    """
+    raw = m.get("tuning") if isinstance(m.get("tuning"), dict) else {}
+    estimate = raw.get("estimate")
+    return {"estimate": None if estimate is None else _cents(estimate),
+            "reference": _cents(raw.get("reference")), "shift": _cents(raw.get("shift"))}
+
+
 def _apply_save_payload(job: str, payload: dict) -> dict:
     """Merge an editor-state payload into the on-disk manifest and persist it."""
     m = _read_manifest(job)
@@ -447,14 +470,19 @@ def _response_from_manifest(m: dict) -> dict:
     job = m["job"]
     metadata = _metadata_response(m)
     stems = []
+    tuning = _tuning(m)
+    # The server picks the offset files; the query only keeps the browser from
+    # reusing what it cached for a different pitch.
+    spec_query = f"?cents={tuning['reference']}" if tuning["reference"] else ""
+    audio_query = f"?shift={tuning['shift']}" if tuning["shift"] else ""
     for st in m.get("stems", []):
         spec = dict(st["spectrogram"])
-        spec["url"] = f"/api/spectrogram/{job}/{st['id']}.png"
+        spec["url"] = f"/api/spectrogram/{job}/{st['id']}.png{spec_query}"
         stems.append({
             "id": st["id"],
             "name": st["name"],
             "spectrogram": spec,
-            "audio_url": f"/api/audio/{job}/{st['id']}",
+            "audio_url": f"/api/audio/{job}/{st['id']}{audio_query}",
             "muted": bool(st.get("muted", False)),
             "solo": bool(st.get("solo", False)),
             "volume": st.get("volume", 1.0),
@@ -471,6 +499,7 @@ def _response_from_manifest(m: dict) -> dict:
         "separated": m.get("separated", False),
         "separator": m.get("separator"),
         "metadata": metadata,
+        "tuning": tuning,
         "stems": stems,
         "editLanes": m.get("editLanes", []),
         "guitarPro": m.get("guitarPro"),
@@ -564,6 +593,12 @@ def _ingest_full_song(job: str, m: dict, audio: UploadFile) -> pipeline.StemView
         view = pipeline.ingest_stem(in_path, job_dir, "mix", "Full song", with_tempo=True)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not process the full song: {exc}") from exc
+    try:
+        estimate = pipeline.estimate_tuning(in_path)
+    except Exception:
+        estimate = None   # best effort, like the tempo: the song still opens at A440
+    # New audio, new recording: an earlier shift was for the old one.
+    m["tuning"] = {"estimate": estimate, "reference": pipeline.suggested_reference(estimate), "shift": 0.0}
     m["inputRel"] = in_path.name
     m["filename"] = audio.filename
     return view
@@ -858,6 +893,52 @@ def api_project_finalize(job: str, payload: dict = Body(default={})) -> JSONResp
     m["saved_at"] = _now()
     _write_manifest(job, m)
     return JSONResponse(_response_from_manifest(m))
+
+
+@app.post("/api/projects/{job}/tuning")
+def api_project_tuning(job: str, payload: dict = Body(...)) -> JSONResponse:
+    """Set the concert pitch: {reference, shift} in cents, each within +-50.
+    With `measure`, the audio's estimate is (re)measured first.
+
+    Renders the shifted playback audio before answering, so the editor's reload
+    of the audio finds it ready. Spectrograms render when first asked for.
+    """
+    m = _read_manifest(job)
+    if m.get("tutorial"):
+        raise HTTPException(status_code=403, detail="The walkthrough project cannot be changed")
+    tuning = _tuning(m)
+    if payload.get("measure"):   # projects from before the estimate existed
+        job_dir = _job_dir(job)
+        recorded = _safe_project_file(job_dir, m.get("inputRel"))
+        stems = m.get("stems") or [{}]
+        source = recorded if recorded and recorded.exists() else _safe_project_file(job_dir, stems[0].get("audio_rel"))
+        if not source or not source.exists():
+            raise HTTPException(status_code=404, detail="This project has no audio to measure")
+        try:
+            tuning["estimate"] = pipeline.estimate_tuning(source)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not measure the tuning: {exc}") from exc
+    for key in ("reference", "shift"):
+        if key in payload:
+            value = payload[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not -50 <= value <= 50:
+                raise HTTPException(status_code=400, detail=f"{key} must be between -50 and 50 cents")
+            tuning[key] = _cents(value)
+    if tuning["shift"]:
+        from .audio_channels import shifted_audio
+        job_dir = _job_dir(job)
+        try:
+            for st in m.get("stems", []):
+                source = _safe_project_file(job_dir, st.get("audio_rel"))
+                if source and source.exists():
+                    shifted_audio(source, tuning["shift"])
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not shift the audio: {exc}") from exc
+    m["tuning"] = tuning
+    m["saved_at"] = _now()
+    _write_manifest(job, m)
+    response = _response_from_manifest(m)
+    return JSONResponse({"tuning": response["tuning"], "stems": response["stems"]})
 
 
 @app.get("/api/projects/{job}/cover")
@@ -1539,7 +1620,8 @@ def api_detect(payload: dict = Body(...)) -> JSONResponse:
     try:
         from .audio_channels import channel_assets
         audio, _ = channel_assets(audio, payload.get("channel", "stereo"))
-        notes, warn = processing.run(payload.get("progress_id"), pipeline.detect, audio, model, start=start, end=end)
+        notes, warn = processing.run(payload.get("progress_id"), pipeline.detect, audio, model, start=start, end=end,
+                                     cents=_tuning(m)["reference"])
     except processing.OperationCancelled:
         return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
     except Exception as exc:
@@ -1852,9 +1934,10 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
     if cover_path is not None and not cover_path.exists():
         cover_path = None
 
+    spec = {**(payload or {}), "tuning": _tuning(m)}
     try:
         data, warnings, filename = rs_builder.build_cdlc(
-            payload or {}, source_audio, cover_art_path=cover_path)
+            spec, source_audio, cover_art_path=cover_path)
     except rs_builder.AudioConverterNotFoundError as exc:
         raise HTTPException(status_code=424, detail=str(exc)) from exc
     except ValueError as exc:
@@ -1873,13 +1956,15 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
 
 @app.get("/api/spectrogram/{job}/{stem}.png")
 def api_spectrogram(job: str, stem: str, channel: str = "stereo", view: str = "energy") -> FileResponse:
-    st = _find_stem(_read_manifest(job), stem)
+    m = _read_manifest(job)
+    st = _find_stem(m, stem)
     png = _project_file_or_404(job, st.get("spectrogram", {}).get("image"), "Spectrogram")
-    if channel != "stereo" or view != "energy":
+    cents = _tuning(m)["reference"]
+    if channel != "stereo" or view != "energy" or cents:
         from .audio_channels import channel_assets
         source = _project_file_or_404(job, st.get("audio_rel"), "Audio")
         try:
-            _, selected = channel_assets(source, channel, spectrogram=True, view=view)
+            _, selected = channel_assets(source, channel, spectrogram=True, view=view, cents=cents)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         png = selected or png
@@ -1906,8 +1991,16 @@ def api_intensity(job: str, stem: str, channel: str = "stereo", view: str = "ene
 
 @app.get("/api/audio/{job}/{stem}")
 def api_audio(job: str, stem: str) -> FileResponse:
-    st = _find_stem(_read_manifest(job), stem)
+    m = _read_manifest(job)
+    st = _find_stem(m, stem)
     path = _project_file_or_404(job, st.get("audio_rel"), "Audio")
+    shift = _tuning(m)["shift"]
+    if shift:
+        from .audio_channels import shifted_audio
+        try:
+            path = shifted_audio(path, shift)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not shift the audio: {exc}") from exc
     # mimetypes doesn't know .flac on every OS; map the formats we emit explicitly
     # so the browser gets a real audio content-type (some refuse octet-stream).
     media_type = (

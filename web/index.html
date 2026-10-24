@@ -1156,6 +1156,26 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           </div>
           </div>
           </div>
+          <!-- Concert pitch: how far the recording sits off A440 (cents), and how
+               far playback and the Rocksmith export move the audio. -->
+          <div class="field-group block" id="projTuning">
+            <span class="field-label">Concert pitch</span>
+            <label class="field-slider"><span class="label">Recording</span>
+              <input type="number" id="projTuningRef" min="427.5" max="452.8" step="0.1" title="Where the recording's A4 sits. The spectrogram and note detection follow it." />
+              <span class="ro">Hz</span>
+            </label>
+            <label class="field-slider"><span class="label">Shift audio</span>
+              <input type="range" id="projTuningShift" min="-50" max="50" step="1" value="0" title="Move playback and the exported audio by up to a quarter tone" />
+              <span id="projTuningShiftValue" class="ro">0 ct</span>
+            </label>
+            <p class="sp-note" id="projTuningDetected"></p>
+            <div class="tuning-actions">
+              <button type="button" id="projTuningUse" class="btn btn--compact">Use detected</button>
+              <button type="button" id="projTuningMeasure" class="btn btn--compact">Measure</button>
+              <button type="button" id="projTuningTo440" class="btn btn--compact" title="Shift the audio so it plays at A4 = 440 Hz">Shift to A440</button>
+            </div>
+            <p class="sp-note" id="projTuningExport"></p>
+          </div>
           <p id="projMetaStatus" class="sp-note" hidden></p>
         </div>
         <!-- Tunings: the list on the left, the selected tuning's editor on the right.

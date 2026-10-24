@@ -183,7 +183,7 @@ export function previewNotes(notes, lane, { start } = {}) {
   for (const event of events) {
     const delay = event.start - t0;
     const fire = () => {
-      try { playSampleEvent(synth, event, Math.max(now + delay, ctxNow()), Math.max(now + delay, ctxNow())); }
+      try { playSampleEvent(synth, event, Math.max(now + delay, ctxNow()), Math.max(now + delay, ctxNow()), 1, concertRatio()); }
       catch { /* unavailable samples */ }
     };
     if (delay < 0.001) fire();
@@ -206,6 +206,8 @@ export function auditionNote(note, lane) {
 export const ctxNow = () => (window.Tone ? Tone.getContext().currentTime : 0);
 
 export const rate = () => audio.playbackRate || 1;
+// The pitch the audio is heard at, relative to A440: notes play along with it.
+const concertRatio = () => 2 ** (((S.state?.tuning?.reference || 0) + (S.state?.tuning?.shift || 0)) / 1200);
 
 // ---- the playback clock ----
 // audio.currentTime is authoritative but unusable raw: it advances in coarse,
@@ -359,7 +361,7 @@ function scheduleNotes() {
         scheduled.add(event);
         const r = rate();
         const when = Math.max(S.anchorCtx + (remaining.start - S.anchorSong) / r - onset, ctxNow());
-        try { playSampleEvent(synth, remaining, when, when + onset, r); }
+        try { playSampleEvent(synth, remaining, when, when + onset, r, concertRatio()); }
         catch { /* unavailable samples */ }
       }
     }

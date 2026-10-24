@@ -369,6 +369,7 @@ export async function applyProject(data) {
     separated: data.separated,
     separator: data.separator,
     metadata: normalizeMetadata(data.metadata || {}),
+    tuning: { estimate: null, reference: 0, shift: 0, ...data.tuning },   // cents from A440 (server.py _tuning)
     guitarPro: data.guitarPro || null,
     sectionMarkers: restoredSections,
     comments: normalizeComments(data.comments),
@@ -516,6 +517,32 @@ export async function closeProject(options = {}) {
   markSaved();     // no project: drops the baseline and takes the tab off the bar
   showWelcome();
   return true;
+}
+
+// Change the concert pitch (cents from A440, see server.py _tuning). The server
+// answers with the stems' new URLs: spectrograms always move with `reference`,
+// the audio only when `shift` changed.
+export async function setTuning(change) {
+  const state = S.state;
+  const res = await fetch(`/api/projects/${state.job}/tuning`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Could not change the tuning");
+  const data = await res.json();
+  if (S.state !== state) return data.tuning;
+  const shiftChanged = data.tuning.shift !== state.tuning.shift;
+  state.tuning = data.tuning;
+  const at = audio.currentTime;
+  if (shiftChanged) pauseTransport();
+  for (const fresh of data.stems) {
+    const stem = state.stems.find((item) => item.id === fresh.id);
+    if (!stem) continue;
+    stem.spec.url = fresh.spectrogram.url;
+    if (shiftChanged) refreshStemAudio(stem, fresh.audio_url);
+  }
+  if (shiftChanged) audio.currentTime = at;
+  if (state.curStem) selectStem(state.curStem);
+  return data.tuning;
 }
 
 // Switch the *viewed* stem: swaps only the spectrogram backdrop. Audio is the

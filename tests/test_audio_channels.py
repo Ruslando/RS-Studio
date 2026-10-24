@@ -25,7 +25,7 @@ class AudioChannelTests(unittest.TestCase):
                 self.assertEqual(audio.ndim, 1)
                 self.assertEqual(rate, 22050)
                 np.testing.assert_allclose(audio, expected, atol=1e-5)
-            def render(audio, out, view='energy'):
+            def render(audio, out, view='energy', cents=0.0):
                 Path(out).write_bytes(b'png')
             with patch('rs_studio.pipeline.compute_spectrogram', side_effect=render) as compute:
                 _, image = channel_assets(source, 'left', spectrogram=True)
@@ -69,7 +69,7 @@ class ChannelPersistenceTests(unittest.TestCase):
              patch.object(server, '_project_file_or_404', side_effect=lambda job, path, label: Path(path)), \
              patch('rs_studio.audio_channels.channel_assets', return_value=(Path('right.flac'), Path('right.png'))) as assets:
             self.assertEqual(server.api_spectrogram('test', 'mix', 'right').path, Path('right.png'))
-            assets.assert_called_once_with(Path('mix.wav'), 'right', spectrogram=True, view='energy')
+            assets.assert_called_once_with(Path('mix.wav'), 'right', spectrogram=True, view='energy', cents=0.0)
             assets.return_value = (Path('mix.wav'), None)
             self.assertEqual(server.api_spectrogram('test', 'mix', 'left').path, Path('mix.png'))
 
