@@ -25,7 +25,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from . import roformer
-from .pipeline import BEAT_THIS_URL, PIANO_CKPT_URL, beat_this_checkpoint_path, mt3_checkpoint_path, piano_checkpoint_path
+from .pipeline import PIANO_CKPT_URL, mt3_checkpoint_path, piano_checkpoint_path
 
 MODELS_DIR = roformer.MODELS_DIR
 
@@ -82,7 +82,6 @@ _RUNS = {
     "mt3": {"modes": ["cpu", "cuda"], "needs": "CUDA GPU or CPU."},
     "basic_pitch": {"modes": ["cpu"], "needs": "CPU. No GPU needed."},
     "torchcrepe": {"modes": ["cpu", "cuda"], "needs": "GPU or CPU."},
-    "beat_this": {"modes": ["cpu", "cuda"], "needs": "GPU or CPU."},
 }
 
 
@@ -120,11 +119,6 @@ def _catalog() -> list[dict]:
          "bundled": True},
         {"id": "torchcrepe", "label": "torchcrepe (bass / melody model)", "kind": "Note detection",
          "bundled": True},
-        # Without it the tempo map falls back to librosa: one meter, 4/4.
-        {"id": "beat_this", "label": "beat_this (beats and bars)", "kind": "Tempo detection",
-         "url": BEAT_THIS_URL, "size": 81058141,
-         "sha256": ["8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331"],
-         "files": [beat_this_checkpoint_path()]},
     ]
 
 

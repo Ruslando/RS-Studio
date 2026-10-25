@@ -29,7 +29,7 @@ export function wireContextSubmenu(wrap, row, child) {
   wrap.addEventListener("mouseleave", () => { if (!child.contains(document.activeElement)) close(); });
   row.addEventListener("click", () => open());
   row.addEventListener("keydown", (event) => {
-    if (!["ArrowRight", "ArrowDown"].includes(event.key)) return;
+    if (event.key !== "ArrowRight") return;
     event.preventDefault(); event.stopPropagation(); open(true);
   });
   child.addEventListener("keydown", (event) => {

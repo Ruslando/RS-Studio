@@ -1754,6 +1754,7 @@ function registerColumns(columns, tuning, options = {}) {
     const chosen = authored ? chosenFingers(notes, pins[i] ? notes : columns[spread.from[i]].notes) : new Map();
     const keptAt = kept && !holds[i] && !notes.some((n) => fitsPitch(n.pos, n.pitch, tuning)) ? keptHand(notes) : null;
     const fingers = keptAt != null ? keptFingers(notes) : chosen;
+    const shadow = pins[i] && flow.follow === "here" ? shadowOf(notes, tuning, rules, frets, seat) : null;
     return {
       // A hand put here by the player fixes the hand of this column only. It does not
       // move notes: where they go is decided before the hand (see planHand). A chosen
@@ -1778,6 +1779,17 @@ function registerColumns(columns, tuning, options = {}) {
       // forgets these notes and learns the override (`guided`). A locked one is
       // handed on to the same notes after it (`handed`, spreadPins).
       aside: !!pins[i] && flow.follow === "here",
+      // What the engine had here before the override, while it still fits: the
+      // neighbours keep reading that, so an override "only here" changes nothing
+      // around it. Re-solving the column instead gave a different hand than the
+      // one the neighbours had been placed against.
+      shadow,
+      // Where this column is already played, for the register (blockCost): a kept
+      // placement, a handed-on copy, or a pin that steers what follows. A pin "only
+      // here" offers the placement it replaced instead, so it moves nothing around it.
+      steer: !!pins[i] && flow.follow !== "here",
+      decided: shadow || (pins[i] && flow.follow === "here") ? shadow
+        : locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
       guided: !!pins[i] && flow.follow === "guided",
       rules,
       // Muted notes, for the hand walk only (planHand): see `reach` in voiceRegister.
@@ -1848,6 +1860,12 @@ function registerColumns(columns, tuning, options = {}) {
     }
     return shape.size ? shape : null;
   });
+}
+
+// A pinned column's previous automatic placement (note.auto), as engine seats.
+function shadowOf(notes, tuning, rules, frets, seat) {
+  const auto = keptShape(notes.map(({ pitch, auto }) => ({ pitch, auto })), tuning, rules, frets);
+  return auto ? [...auto.values()].map((p) => seat.get(p.string)) : null;
 }
 
 // The fingers a pin asks for, on this column's notes. A locked override handed on
@@ -2452,13 +2470,24 @@ function hasFrettedPlacement(pitch, tuning, maxFret, reach = 0) {
   });
 }
 
-function blockCost(tuning, cols, T, maxFret) {
+function blockCost(tuning, cols, T, maxFret, counts = () => false) {
   let cost = 0;
   for (const c of cols) {
     // Keep every pitch in the register estimate, even when its position is
     // pinned. A positional override must not erase context before its onset.
+    // A decided column (see `decided` in registerColumns) counts where it IS
+    // played, not where it would fit best, when `counts` allows it: the player's
+    // own choice is the best evidence of where the hand lives. Counted by pitch
+    // alone, a Bb5 pinned at the 3rd still pulled its bar to the 15th.
     const used = new Array(tuning.length).fill(false);
+    const decided = counts(c) && c.decided ? c.decided : c.pitches.map(() => null);
+    decided.forEach((s, i) => {
+      if (s == null || s < 0) return;
+      const f = c.pitches[i] - tuning[s];
+      used[s] = true; cost += f === 0 ? 0 : Math.abs(f - T);
+    });
     for (let i = 0; i < c.pitches.length; i++) {
+      if (decided[i] != null && decided[i] >= 0) continue;
       let best = Infinity, bs = -1;
       for (let s = 0; s < tuning.length; s++) {
         if (used[s]) continue;
@@ -2496,7 +2525,7 @@ function blocksOf(columns, bars, ignoreHolds = false) {
   columns.forEach((c, i) => {
     let b = 0;
     if (graded && typeof c.t0 === "number") { while (b + 1 < bars.length && bars[b + 1] <= c.t0 + 1e-6) b++; }
-    if (!blocks.length || b !== last || (!ignoreHolds && (c.hold != null || c.cut))) { blocks.push([]); bar.push(b); }
+    if (!blocks.length || b !== last || (!ignoreHolds && (c.hold != null || c.cut || c.steer))) { blocks.push([]); bar.push(b); }
     blocks[blocks.length - 1].push(i);
     last = b;
   });
@@ -2539,7 +2568,13 @@ function solveRegisters(tuning, columns, blocks, bar, mu, home, maxFret, bare = 
     // holdOf again: an inner `const held` here shadowed that array, which quietly
     // undid `bare` and let the home estimate see the holds after all.
     if (held[bi]) return Array.from({ length: TOPT }, (_, T) => (T === held[bi].T ? 0 : Infinity));
-    return Array.from({ length: TOPT }, (_, T) => blockCost(tuning, cols, T, maxFret) + mu * Math.abs(T - home));
+    // Kept placements count where they are. A steering pin and the copies it hands
+    // on count only inside their own block, never in the bar's earlier half that is
+    // scored with them, and not at all in the home estimate (`bare`): what was
+    // decided before a pin must stay as it was.
+    const own = new Set(idx.map((i) => columns[i]));
+    const counts = (c) => !(c.steer || c.soft) || (!bare && own.has(c));
+    return Array.from({ length: TOPT }, (_, T) => blockCost(tuning, cols, T, maxFret, counts) + mu * Math.abs(T - home));
   });
   // What the seam between two blocks says about whether a hand would move there.
   const seam = [0];
@@ -2563,7 +2598,7 @@ function solveRegisters(tuning, columns, blocks, bar, mu, home, maxFret, bare = 
   const out = new Array(nb);
   let start = 0;
   for (let b = 1; b <= nb; b++) {
-    if (b < nb && !held[b]) continue;
+    if (b < nb && !held[b] && !columns[blocks[b][0]].steer) continue;
     solveRun(cost, seam, start, b, out);
     start = b;
   }
@@ -2720,7 +2755,7 @@ function rememberAhead(tuning, columns, start, registers, memory, stand, directe
   let beam = [{ g: stand, carry, cost: 0, first: null }];
   for (let i = start; i < Math.min(columns.length, start + MEMORY_LOOKAHEAD); i++) {
     const c = columns[i];
-    if (i > start && (c.hold || c.cut)) break;
+    if (i > start && (c.hold || c.cut || c.steer)) break;   // a pin is not prepared for: nothing reaches backwards
     const states = new Map();
     for (const state of beam) {
       const T = directed && state.g != null ? state.g + ((span - 1) >> 1) : registers[i];
@@ -2830,6 +2865,8 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       guided: !!c.guided,
       pitches: idx.map((i) => c.pitches[i]),
       fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
+      shadow: c.shadow ? idx.map((i) => c.shadow[i]) : null,
+      decided: c.decided ? idx.map((i) => c.decided[i]) : null, steer: !!c.steer,
       pinned: c.pinned ? idx.map((i) => c.pinned[i]) : null,
       rules: c.rules ? idx.map((i) => c.rules[i]) : null,
       dead: c.dead ? idx.map((i) => c.dead[i]) : null,
@@ -2880,7 +2917,9 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
           + memoryShiftCost(stand, target) - rememberedBonus(memory, c, assignment) };
       });
     }
-    const chosen = rememberAhead(tuning, sorted, i, registerAt, memory,
+    // An override "only here" is planned around as the placement it replaced.
+    const plan = c.aside && c.shadow ? Object.assign(sorted.slice(), { [i]: { ...c, fixed: c.shadow, aside: false } }) : sorted;
+    const chosen = rememberAhead(tuning, plan, i, registerAt, memory,
       stand, directed, carry, span, maxFret);
     let got = chosen.out;
     const yields = c.soft && carry && carry.some((s, k) => s != null && s !== c.fixed[k]);

@@ -3,10 +3,10 @@
 
 import { MIN_DUR, stageMono, SIMILAR_MAX_MATCHES, SIMILAR_PITCH_MARGIN, SIMILAR_THRESHOLD, TRACE_FALLBACK_STEP, TRACE_POINT_GAP } from "./constants.js";
 import { similarScores } from "./similar-core.js";
-import { audio, scroll, sctx, traceRangeSel, traceSnapInput } from "./dom.js";
+import { audio, scroll, sctx, stage, traceRangeSel, traceSnapInput } from "./dom.js";
 import { draw } from "./repaint.js";
-import { commit, confirmPasteMode, copyEffects, snapshotEdit } from "./edit.js";
-import { boxOfNote } from "./references.js";
+import { clipOf, commit, copyEffects, placeClip, snapshotEdit } from "./edit.js";
+import { boxOfNote, laneClock } from "./references.js";
 import { normalizeTraceRange } from './drawing-options.js';
 import { contentH, pitchAt, songWidth, timeAt, xOf, yOf } from "./geometry.js";
 import { gridOffset, gridStep } from "./grid.js";
@@ -268,10 +268,10 @@ export function drawTraceRange(points) {
 // Use the selected edit notes as a template: take the spectrogram patch under
 // their pitch band + time span, slide it (pitch-locked) across the whole song,
 // and surface the time-shifted copies that correlate best. Each hit shows as a
-// dashed "ghost" of the selection with a confidence %, which you place on click.
+// dashed "ghost" of the selection with a confidence %; the focused one carries
+// its own Paste as copy / as reference buttons.
 let hoverPreviewGeneration = 0;
 let hoverPlaybackToken = null;
-let matchChoice = null;
 
 function updateMatchNavigator() {
   const nav = document.getElementById('matchNavigator');
@@ -279,10 +279,34 @@ function updateMatchNavigator() {
   nav.hidden = !S.matches.length;
   document.getElementById('matchPosition').textContent =
     `${S.matchFocus >= 0 ? S.matchFocus + 1 : '–'} / ${S.matches.length}`;
+  updateMatchActions();
+}
+
+// A reference paste only makes sense while the source reference still exists.
+function referenceValid(m) {
+  const s = m?.sourceReference;
+  return !!s && s.lane.refBoxes?.[s.ref] === s.group;
+}
+
+// The paste buttons sit right under the focused match box (above it when the
+// box reaches the bottom of the stage), and hide while it is scrolled away.
+function updateMatchActions() {
+  const box = document.getElementById('matchActions');
+  if (!box) return;
+  const m = S.matches[S.matchFocus];
+  const onScreen = m && xOf(m.t1) > scroll.scrollLeft && xOf(m.t0) < scroll.scrollLeft + scroll.clientWidth;
+  box.hidden = !onScreen;
+  if (!onScreen) return;
+  document.getElementById('matchAsRef').hidden = !referenceValid(m);
+  const r = stage.getBoundingClientRect(), gap = 4;
+  const below = yOf(m.pBot) + S.state.rowH - scroll.scrollTop + r.top + gap;
+  const above = yOf(m.pTop) - scroll.scrollTop + r.top - box.offsetHeight - gap;
+  const top = below + box.offsetHeight <= r.bottom ? below : Math.max(r.top, above);
+  const left = clamp(xOf(m.t0) - scroll.scrollLeft + r.left, r.left, r.right - box.offsetWidth);
+  box.style.left = `${left}px`; box.style.top = `${top}px`;
 }
 
 export function clearMatches() {
-  matchChoice?.abort();
   if (!S.matches.length && S.matchHover < 0 && S.matchFocus < 0) return;
   S.matches = [];
   S.matchHover = -1;
@@ -428,6 +452,7 @@ function computeSimilarMatches(selNotes, fillLane = targetLane()) {
   const rBot = clamp(Math.floor(imageYForPitch(pBot)), 0, ih - 1);
   const H = rBot - rTop + 1;
   if (patchW < 1 || H < 2 || c0 + patchW > iw) return [];
+  const clip = clipOf(selNotes);   // beat shape, so a placed match follows the local tempo
 
   const band = new Float64Array(H * iw);
   for (let ri = 0; ri < H; ri++) {
@@ -456,7 +481,7 @@ function computeSimilarMatches(selNotes, fillLane = targetLane()) {
     const ghosts = selNotes.map((nn) => copyEffects(nn, { start: nn.start + dt, end: nn.end + dt, pitch: nn.pitch }));
     if (passageFilled(ghosts, fillLane)) continue;   // already transcribed in the target lane
     picked.push(cs);
-    out.push({ score, dt, t0: t0 + dt, t1: t1 + dt, pTop, pBot, notes: ghosts, sourceReference });
+    out.push({ score, dt, t0: t0 + dt, t1: t1 + dt, pTop, pBot, notes: ghosts, clip, sourceReference });
     if (out.length >= SIMILAR_MAX_MATCHES) break;
   }
   out.sort((a, b) => a.t0 - b.t0);   // left-to-right along the timeline
@@ -488,8 +513,11 @@ export function runFindSimilar() {
   focusMatch(0);
 }
 
-// Drop the ghost notes of one (or all) suggestions into the target edit lane,
-// reusing the paste path so they float + merge on deselect like a normal paste.
+// Drop one (or all) suggestions into the target edit lane the way Paste does: the
+// first note snaps to the grid and the rest keep their beat distance from it. The
+// ghosts are only shifted in seconds, which a different tempo stretches; placed
+// that way, the commit then snapped each note on its own while a reference box
+// stayed where it was, and box and notes drifted apart.
 function placeGhosts(matches, mode) {
   const source = matches[0]?.sourceReference;
   const lane = mode === "reference" ? source?.lane : targetLane();
@@ -500,13 +528,19 @@ function placeGhosts(matches, mode) {
   }
   if (mode === "reference" && lane.refBoxes?.[source.ref] !== source.group) return null;
   const prev = snapshotEdit();
-  const added = [];
+  const added = [], clock = laneClock(lane);
   for (const match of matches) {
-    for (const g of match.notes) {
-      const nn = copyEffects(g, { id: nid(), start: g.start, end: g.end, pitch: g.pitch });
+    const placed = placeClip(match.clip, lane, match.t0, mode === "reference");
+    match.notes.forEach((g, k) => {
+      const nn = copyEffects(g, { id: nid(), start: placed[k].start, end: placed[k].end, pitch: g.pitch });
       lane.notes.push(nn); added.push(nn);
+    });
+    if (mode === "reference") {
+      // The new box sits as many beats before its first note as the source box does.
+      const lead = clock.beatAt(source.anchor) - Math.min(...match.clip.map((c) => c.beat0));
+      const first = Math.min(...placed.map((q) => q.start));
+      source.group.anchors.push(clock.timeAt(clock.beatAt(first) + lead));
     }
-    if (mode === "reference") source.group.anchors.push(source.anchor + match.dt);
   }
   if (!added.length) return null;
   commit(prev);
@@ -514,53 +548,34 @@ function placeGhosts(matches, mode) {
   return { lane, added };
 }
 
-async function chooseMatchMode(matches) {
-  if (matchChoice) return null;
-  if (!matches[0]?.sourceReference) return "copy";
-  const controller = new AbortController();
-  matchChoice = controller;
-  try { return await confirmPasteMode({ signal: controller.signal }); }
-  finally { if (matchChoice === controller) matchChoice = null; }
-}
-
-export async function acceptMatch(i) {
+// mode: "copy" | "reference". Placing one moves the view on to the next match.
+export function acceptMatch(i, mode = "copy") {
   const m = S.matches[i];
-  if (!m) return;
+  if (!m || (mode === "reference" && !referenceValid(m))) return;
   cancelHoverPreview();
   cancelPassagePreview({ pauseAudio: true });
   clearPreview();
-  const state = S.state;
-  const mode = await chooseMatchMode([m]);
-  if (!mode || S.state !== state || S.matches[i] !== m) return;
   const res = placeGhosts([m], mode);
   if (!res) return;
   S.matches.splice(i, 1);
   S.matchHover = -1;
-  if (!S.matches.length) S.matchFocus = -1;
-  else if (S.matchFocus === i) S.matchFocus = Math.min(i, S.matches.length - 1);
-  else if (S.matchFocus > i) S.matchFocus--;
-  if (res) {
-    setSelection(new Set(res.added));   // float them like a paste
-    renderLanes(); refreshCounts();
-  }
-  draw();
+  S.matchFocus = -1;
+  setSelection(new Set(res.added));   // float them like a paste
+  renderLanes(); refreshCounts();
+  if (S.matches.length) focusMatch(i % S.matches.length);
+  else { updateMatchNavigator(); draw(); }
 }
 
-export async function acceptAllMatches() {
-  if (!S.matches.length) return;
+export function acceptAllMatches(mode = "copy") {
+  if (!S.matches.length || (mode === "reference" && !referenceValid(S.matches[0]))) return;
   cancelHoverPreview();
   cancelPassagePreview({ pauseAudio: true });
   clearPreview();
-  const matches = S.matches.slice(), state = S.state;
-  const mode = await chooseMatchMode(matches);
-  if (!mode || S.state !== state || matches.some((match, i) => S.matches[i] !== match)) return;
-  const res = placeGhosts(matches, mode);
+  const res = placeGhosts(S.matches.slice(), mode);
   if (!res) return;
   clearMatches();
-  if (res) {
-    setSelection(new Set(res.added));
-    renderLanes(); refreshCounts();
-  }
+  setSelection(new Set(res.added));
+  renderLanes(); refreshCounts();
   draw();
 }
 
@@ -622,6 +637,8 @@ export function init_tracing() {
       focusAdjacentMatch(direction, { preview: true });
     });
   }
+  for (const [id, mode] of [['matchAsCopy', 'copy'], ['matchAsRef', 'reference']])
+    document.getElementById(id)?.addEventListener('click', () => acceptMatch(S.matchFocus, mode));
   updateMatchNavigator();
   if (traceRangeSel) traceRangeSel.addEventListener("input", () => draw());
   updateTraceControls();

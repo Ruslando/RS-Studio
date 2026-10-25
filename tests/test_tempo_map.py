@@ -112,3 +112,26 @@ class TempoRouteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BundledWeightsTests(unittest.TestCase):
+    def test_a_source_checkout_fetches_the_weights_once_and_checks_them(self):
+        import hashlib
+        import io
+        import tempfile
+        from pathlib import Path
+
+        from rs_studio import pipeline
+        payload = b"weights"
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(pipeline, "resource_root", return_value=Path(folder)), \
+             patch("urllib.request.urlopen", side_effect=lambda *a, **k: io.BytesIO(payload)) as fetch:
+            with patch.object(pipeline, "BEAT_THIS_SHA256", "0" * 64):
+                with self.assertRaises(ValueError):
+                    pipeline.beat_this_checkpoint()
+                self.assertEqual(list(Path(folder, "models").iterdir()), [], "nothing half-written stays")
+            with patch.object(pipeline, "BEAT_THIS_SHA256", hashlib.sha256(payload).hexdigest()):
+                path = pipeline.beat_this_checkpoint()
+                self.assertEqual(path.read_bytes(), payload)
+                pipeline.beat_this_checkpoint()
+            self.assertEqual(fetch.call_count, 2, "fetched once more after the bad one, then reused")

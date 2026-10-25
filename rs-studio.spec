@@ -36,6 +36,10 @@ datas += [
     ("tools/fetch-ffmpeg.py", "source/tools"),
     ("tools/fetch-fonts.py", "source/tools"),
 ]
+# The tempo map's beat_this weights ship with the app (rs_studio.pipeline.beat_this_checkpoint).
+if not Path("models/beat_this-final0.ckpt").is_file():
+    raise RuntimeError("models/beat_this-final0.ckpt missing: uv run python -c \"from rs_studio.pipeline import beat_this_checkpoint; beat_this_checkpoint()\"")
+datas.append(("models/beat_this-final0.ckpt", "models"))
 for source_file in Path("src/rs_studio").rglob("*"):
     if source_file.is_file() and (
         source_file.suffix in {".py", ".json", ".flat", ".wwu"}

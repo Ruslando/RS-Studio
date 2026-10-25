@@ -43,7 +43,7 @@ dependencies = [
     "piano_transcription_inference>=0.0.5",
     # beat_this (CPJKU, ISMIR 2024, MIT): beats and downbeats for the tempo map.
     # Its other dependencies (einops, soxr, rotary-embedding-torch) are already
-    # here. The ~81 MB final0 checkpoint is fetched from the Models pane.
+    # here. The ~81 MB final0 checkpoint ships with the app (pipeline.py).
     "beat-this>=1.1.0",
     # mt3-infer 0.2 supports Transformers 5.10; newer releases remove
     # attention-mask methods still used by its custom T5 model.

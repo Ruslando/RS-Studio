@@ -1596,6 +1596,8 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 
 #matchNavigator { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: var(--s-sibling); padding: 3px; border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--surface-toolbar); }
 #matchNavigator[hidden] { display: none; }
+#matchActions { position: fixed; z-index: var(--z-popover); display: flex; gap: var(--s-sibling); padding: 3px; border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--surface-toolbar); box-shadow: var(--e1); }
+#matchActions[hidden] { display: none; }
 #matchPosition { min-width: 7ch; text-align: center; color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); }
 #matchNavigator button { min-width: var(--h-control); height: var(--h-control); padding: 0; }
 

@@ -147,6 +147,16 @@ def cuda_variant(requirements: str, downloads: list[dict], python_tag: str) -> t
     return requirements, downloads
 
 
+def bundled_beat_this() -> Path:
+    """The tempo-map weights the app ships (rs_studio.pipeline), fetched once and hash-checked."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from rs_studio.pipeline import BEAT_THIS_SHA256, beat_this_checkpoint
+    path = beat_this_checkpoint()
+    if hashlib.sha256(path.read_bytes()).hexdigest() != BEAT_THIS_SHA256:
+        raise SystemExit(f"{path} does not match its checksum; delete it and package again")
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version")
@@ -189,6 +199,7 @@ def main():
         parser.error("--version must match src/rs_studio/__init__.py")
     if not (args.ffmpeg / "ffmpeg.exe").is_file() or not (args.ffmpeg / "build-record.json").is_file():
         parser.error("Stage FFmpeg first: python tools/fetch-ffmpeg.py")
+    beat_this = bundled_beat_this()
 
     python = platform.python_version()
     python_tag = f"cp{sys.version_info.major}{sys.version_info.minor}"
@@ -218,6 +229,7 @@ def main():
 
     app_files: dict[str, Path | bytes] = {name: text.encode("utf-8") for name, text in requirements.items()}
     app_files.update(shipped)
+    app_files["models/beat_this-final0.ckpt"] = beat_this
     for directory in ("src/rs_studio", "web", "assets", "licenses", "bootstrap", "docs", "presets"):
         app_files.update(source_files(ROOT / directory, directory + "/"))
     for file in ("LICENSE", "NOTICE", "README.md", "pyproject.toml", "uv.lock", "standalone.py", "tools/fetch-ffmpeg.py",

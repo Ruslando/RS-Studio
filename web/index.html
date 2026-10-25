@@ -150,10 +150,6 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <span class="field-label">Note detection</span>
               <div class="model-list model-list-detection"></div>
             </div>
-            <div class="field-group block">
-              <span class="field-label">Tempo detection</span>
-              <div class="model-list model-list-tempo"></div>
-            </div>
             <p class="sp-note model-status" hidden></p>
           </div>
         </div>
@@ -1129,10 +1125,6 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <span class="field-label">Note detection</span>
             <div id="modelListDetection" class="model-list model-list-detection"></div>
           </div>
-          <div class="field-group block">
-            <span class="field-label">Tempo detection</span>
-            <div id="modelListTempo" class="model-list model-list-tempo"></div>
-          </div>
           <p id="modelStatus" class="sp-note model-status" hidden></p>
         </div>
         <div class="sp-pane" id="spProject" hidden>
@@ -1507,6 +1499,10 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
     </div>
   </div>
 
+  <div id="matchActions" role="group" aria-label="Place similar passage" hidden>
+    <button type="button" id="matchAsCopy" class="btn--compact" title="Paste as copy (Enter)">Paste as copy</button>
+    <button type="button" id="matchAsRef" class="btn--compact primary" title="Paste as reference (Shift+Enter)">Paste as reference</button>
+  </div>
   <div id="pasteBackdrop" hidden>
     <div id="pasteModal" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
       <div class="dialog-header"><h2 class="dialog-title" id="pasteTitle">Paste reference</h2><button type="button" id="pasteCancel" class="sp-x" aria-label="Close" title="Close (Esc)"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button></div>

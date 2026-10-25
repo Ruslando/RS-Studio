@@ -18,21 +18,39 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .audio_runtime import prepare_ffmpeg
-from .paths import data_root
+from .paths import data_root, resource_root
 
 # Source runs and frozen builds must resolve the same audio dependencies.
 prepare_ffmpeg()
 
-# beat_this's final0 weights, where torch.hub (and so the Models pane) keeps them.
+# beat_this's final0 weights (MIT) ship with the app, under models/.
 BEAT_THIS_URL = "https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp/final0.ckpt"
+BEAT_THIS_SHA256 = "8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331"
 
 
-def beat_this_checkpoint_path() -> Path:
-    """Same rule as models._torch_checkpoints, without importing torch."""
-    home = os.environ.get("TORCH_HOME")
-    base = Path(home).expanduser() / "hub" if home else Path(
-        os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache").expanduser() / "torch" / "hub"
-    return base / "checkpoints" / "beat_this-final0.ckpt"
+def beat_this_checkpoint() -> Path:
+    """The bundled tempo-map weights. Packages carry them; a source checkout
+    fetches them here once (81 MB, hash-checked), the first time they're needed."""
+    path = resource_root() / "models" / "beat_this-final0.ckpt"
+    if path.is_file():
+        return path
+    import hashlib
+    import urllib.request
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    part = path.with_name(path.name + ".part")
+    digest = hashlib.sha256()
+    try:
+        with urllib.request.urlopen(BEAT_THIS_URL, timeout=60) as response, part.open("wb") as out:
+            while chunk := response.read(1 << 20):
+                digest.update(chunk)
+                out.write(chunk)
+        if digest.hexdigest() != BEAT_THIS_SHA256:
+            raise ValueError("beat_this weights failed their checksum")
+        part.replace(path)
+    finally:
+        part.unlink(missing_ok=True)
+    return path
 
 
 # --- Display / analysis constants -------------------------------------------
@@ -401,12 +419,16 @@ def detect_tempo_map(audio_path: Path) -> dict:
     """The song's grid as {bpm, offset, tsNum, tsDen, tempoMap} (see tempo_map.py).
 
     beat_this finds beats and downbeats, so meter and tempo changes come out.
-    Without its weights, librosa's beats are used and the meter stays 4/4.
+    When its weights can't be had (a source checkout offline), librosa's beats
+    are used and the meter stays 4/4.
     """
     from .tempo_map import tempo_map
 
-    checkpoint = beat_this_checkpoint_path()
-    if checkpoint.exists():
+    try:
+        checkpoint = beat_this_checkpoint()
+    except Exception:
+        checkpoint = None
+    if checkpoint:
         from beat_this.inference import File2Beats
 
         processing.report("Finding beats and bars")

@@ -1148,6 +1148,25 @@ function ensureCtxMenu() {
       if (inTourCard(ev.target)) return;
       if (noteMenuEl && !noteMenuEl.hidden && !noteMenuEl.contains(ev.target)) hideNoteMenu();
     });
+    // ↑ ↓ walk the items of the menu (or submenu) holding focus; from outside it
+    // they enter the root menu. → ← open and close submenus (context-submenu.js).
+    // Capture, so the editor's own arrow keys never see these.
+    window.addEventListener("keydown", (ev) => {
+      if (noteMenuEl.hidden || !["ArrowDown", "ArrowUp", "Home", "End"].includes(ev.key)) return;
+      const t = document.activeElement, inMenu = noteMenuEl.contains(t);
+      if (t?.tagName === "INPUT" && (ev.key === "Home" || ev.key === "End")) return;
+      if (t?.classList.contains("ctxmenu-search") && !noteMenuEl.querySelector(".ctxmenu-results").hidden) return;   // the search walks its results
+      if (!inMenu && ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+      const menu = inMenu ? t.closest(".ctxmenu") : noteMenuEl;
+      const items = [...menu.querySelectorAll("button.ctxmenu-item")]
+        .filter((b) => b.closest(".ctxmenu") === menu && !b.disabled && !b.closest("[hidden]"));
+      if (!items.length) return;
+      const i = items.indexOf(t), n = items.length;
+      const next = ev.key === "Home" ? 0 : ev.key === "End" ? n - 1
+        : ev.key === "ArrowDown" ? (i + 1) % n : i < 0 ? n - 1 : (i - 1 + n) % n;
+      ev.preventDefault(); ev.stopPropagation();
+      items[next].focus();
+    }, true);
   }
   noteMenuEl.dataset.origin = "editor";
   return noteMenuEl;
@@ -1648,10 +1667,10 @@ export function init_edit() {
     if (!mod && !e.altKey && S.matches.length && (e.key === "p" || e.key === "P")) { e.preventDefault(); previewFocusedMatch(); return; }
     if (!mod && S.matches.length && e.key === "Enter") {
       e.preventDefault();
-      acceptMatch(S.matchFocus >= 0 ? S.matchFocus : 0);
+      acceptMatch(S.matchFocus >= 0 ? S.matchFocus : 0, e.shiftKey ? "reference" : "copy");
       return;
     }
-    if (!mod && !e.altKey && (e.key === "a" || e.key === "A") && S.matches.length) { e.preventDefault(); acceptAllMatches(); return; }
+    if (!mod && !e.altKey && (e.key === "a" || e.key === "A") && S.matches.length) { e.preventDefault(); acceptAllMatches(e.shiftKey ? "reference" : "copy"); return; }
     if (mod && (e.key === "z" || e.key === "Z")) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
     else if (mod && (e.key === "c" || e.key === "C")) { e.preventDefault(); doCopy(); }

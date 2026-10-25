@@ -29,7 +29,7 @@ import { lineXAtRow } from "./slice.js";
 import { beginNoteGesture, finishNoteGesture, updateNoteGesture } from "./note-motion.js";
 import { nid } from "./ids.js";
 import { S, setSelection } from "./store.js";
-import { acceptMatch, addTracePoint, clearMatches, matchAt, notesFromTrace } from "./tracing.js";
+import { addTracePoint, clearMatches, matchAt, notesFromTrace } from "./tracing.js";
 import { clamp } from "./util.js";
 import { coastViewport, manualViewportNavigation } from "./viewport-motion.js";
 import { createPanTracker } from './pan-momentum.js';
@@ -418,13 +418,10 @@ export function init_interaction() {
       }
     }
 
-    // Similar-passage suggestions on screen: a plain click on one places it; any
-    // other click dismisses them and falls through to normal editing.
-    if (S.matches.length) {
-      const mi = plainSelect ? matchAt(x, y) : -1;
-      if (mi >= 0) { acceptMatch(mi); return; }
-      clearMatches();
-    }
+    // Similar-passage suggestions on screen: placing goes through the buttons
+    // beside the focused match; a click outside every match dismisses them. Either
+    // way the click falls through to normal editing.
+    if (S.matches.length && !(plainSelect && matchAt(x, y) >= 0)) clearMatches();
 
     // Holding S enables FL-style line slicing: mousedown drops the pivot,
     // dragging draws the line (free vertical position, time x-coordinate

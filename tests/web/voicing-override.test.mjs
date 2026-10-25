@@ -231,3 +231,27 @@ for (const chordPin of [false, true]) {
   const constrained = voiceNotes(lane, tuning, Infinity, options);
   assert.notEqual(constrained.get(lane[4]).fret, 0, "a chord slide still requires a fret");
 }
+
+// ---- an override "only here" leaves its neighbours as they were -----------------
+// Bb5 voiced at the 8th, Fsus4/C after it at the 10th. Bb5 is then pinned at the 3rd
+// "only here": recalculating Fsus4/C must give the 10th again, not a fresh solve's 15th.
+{
+  const bb5 = [58, 65, 70].map((p) => note(0, p)), fsus = [60, 65, 70].map((p) => note(1, p));
+  const lane = [...bb5, ...fsus];
+  const kept = new Map([[58, [3, 8]], [65, [2, 10]], [70, [1, 11]]]);
+  bb5.forEach((n) => { const [string, fret] = kept.get(n.pitch); n.auto = { string, fret, hand: 8, n: 3 }; });
+  const before = voiceNotes(lane, tuning);
+  [[2, 3], [1, 6], [0, 6]].forEach(([string, fret], k) => { bb5[k].pos = pin(string, fret); });
+  const after = voiceNotes(lane, tuning);
+  assert.deepEqual(fsus.map((n) => at(after, n)), fsus.map((n) => at(before, n)), "the pin changed its neighbour");
+}
+
+// ---- a guided override pulls its bar's register to where it is played -----------
+// Bb5 pinned at the 3rd, then a chord sharing none of its notes (C5: C4 G4 C5). Read
+// by pitch alone the bar wanted the 10th; read where the Bb5 is played, it stays by it.
+{
+  const bb5 = [58, 65, 70].map((p) => note(0, p)), c5 = [60, 67, 72].map((p) => note(1, p));
+  [[2, 3], [1, 6], [0, 6]].forEach(([string, fret], k) => { bb5[k].pos = pin(string, fret, { follow: "guided" }); });
+  const voiced = voiceNotes([...bb5, ...c5], tuning);
+  assert.deepEqual(c5.map((n) => at(voiced, n)), ["2:5", "1:8", "0:8"], "C5 next to the pinned Bb5");
+}
