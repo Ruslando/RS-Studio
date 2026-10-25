@@ -105,7 +105,7 @@ export const CHORD_GAP = 0.06;   // s; onset spread that still counts as one cho
 // STACKED NOTES ARE ONE NOTE. Two notes of one pitch sounding over each other — a
 // doubled detection, a paste onto itself — are one string struck once, and nothing
 // that plays the lane can do anything else with them: they would need a string each.
-// The editor keeps them and badges the stack (collectStacks, same test); everything
+// The editor keeps them and badges the stack (note-issues.js stackClusters, same test); everything
 // downstream sees the longest of each stack and nothing of the rest. It lives in
 // chordColumns because every reader of a lane comes through here — the voicer, the
 // neck, the tab and both exports — so none of them can forget.

@@ -1,7 +1,7 @@
 import { paintIntensity, intensityRevision } from './spectrogram-intensity.js';
 import { paintNoteRow } from './timeline-paint.js';
 import { createOverviewTime, formatTimelineTime } from './timeline-time.js';
-import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
+import { ISSUE_TEXT, laneIssues } from "./note-issues.js";
 import { hideTooltip, showTooltip } from "./tooltip.js";
 import { rocksmithIssueNotes } from "./rocksmith-check.js";
 import { paintNoteBar, paintNoteGlow, paintNoteSelection, noteSelectionFill } from "./canvas-components.js";
@@ -41,10 +41,9 @@ import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from
 const overrideEffectCache = new WeakMap();
 const overrideEffectJobs = new WeakMap();
 const omittedArrangementCache = new WeakMap();
-let warningMarks = [];
+let warningMarks = [];   // last frame's warning marks: { x0, x1, y0, y1, tip }
 let overviewTime = null;
-const STACKED_BEND_TIP = { title: "Bend points at the same moment", tone: "warning",
-  body: "Rocksmith keeps only the first of them. Move one point a little apart." };   // last frame's warning marks: { x0, x1, y0, y1, tip }
+const BEND_STACK_TIP = { title: ISSUE_TEXT.bendStack[0], body: ISSUE_TEXT.bendStack[1], tone: "warning" };
 
 function overrideEffectKey(lane, tuning) {
   return `${S.voicingRevision}:${tuning.join(",")}:${songBarStarts().join(",")}`;
@@ -165,22 +164,23 @@ function drawOmittedNoteCrosses(items) {
   sctx.restore();
 }
 
-// A hatched amber overlay, deliberately unlike the dark crossed-out wash that
-// marks a note the arrangement drops on purpose: this one is not a choice.
+// A hatched red overlay, deliberately unlike the dark crossed-out wash that
+// marks a note the arrangement drops on purpose: this one is not a choice, and
+// it is an error (note-issues.js).
 function drawOutOfRangeNotes(items) {
   sctx.save();
   for (const { x, y, w, h, alpha } of items) {
     sctx.globalAlpha = alpha;
     sctx.save();
     sctx.beginPath(); sctx.rect(x, y, w, h); sctx.clip();
-    sctx.fillStyle = hexA(PAINT.warn, 0.22);
+    sctx.fillStyle = hexA(PAINT.error, 0.22);
     sctx.fillRect(x, y, w, h);
-    sctx.lineWidth = 1.5; sctx.strokeStyle = hexA(PAINT.warn, 0.85);
+    sctx.lineWidth = 1.5; sctx.strokeStyle = hexA(PAINT.error, 0.85);
     sctx.beginPath();
     for (let o = -h; o < w; o += 5) { sctx.moveTo(x + o, y + h); sctx.lineTo(x + o + h, y); }
     sctx.stroke();
     sctx.restore();
-    sctx.lineWidth = 1.5; sctx.strokeStyle = PAINT.warn;
+    sctx.lineWidth = 1.5; sctx.strokeStyle = PAINT.error;
     sctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
   }
   sctx.restore();
@@ -655,11 +655,16 @@ function paintFrame() {
     warningMarks.push({ x0: markX - 3, x1: markX + 17, y0: top - 19, y1: top + 1, tip });
   };
   const frames = [];
+  const hoverMark = (x, y, w, h, tip) => warningMarks.push({ x0: x, x1: x + w, y0: y, y1: y + h, tip });
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
-    for (const { notes, kind } of chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)) {
-      const [title, body] = SHAPE_WARNINGS[kind];
-      frames.push([notes, { title, body, tone: kind === "impossible" ? "error" : "warning" }]);
+    // The editor's own problems (note-issues.js): a shape is framed; the others
+    // have their own mark on the note already and explain it on hover.
+    for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)) {
+      const tip = { title: issue.title, body: issue.help, tone: issue.tone }, n = issue.notes[0];
+      if (issue.kind === "shape") frames.push([issue.notes, tip]);
+      else if (issue.kind === "outOfRange") hoverMark(xOf(n.start), yOf(n.pitch), Math.max(2, xOf(n.end) - xOf(n.start)), S.state.rowH, tip);
+      else if (issue.kind === "stack") hoverMark(xOf(n.start), yOf(n.pitch) + S.state.rowH / 2 - 9, 18, 18, tip);
     }
     // What the Rocksmith export would report about these notes (rocksmith-check.js).
     for (const { notes, issue } of rocksmithIssueNotes(lane))
@@ -680,7 +685,7 @@ function paintFrame() {
         sctx.fillStyle = veil(PAINT.ground); sctx.fill();
         sctx.lineWidth = 2; sctx.strokeStyle = PAINT.warn; sctx.stroke();
         sctx.fillStyle = PAINT.text; sctx.fillText(String(count), cx, cy + 0.5);
-        warningMarks.push({ x0: cx - 9, x1: cx + 9, y0: cy - 9, y1: cy + 9, tip: STACKED_BEND_TIP });
+        warningMarks.push({ x0: cx - 9, x1: cx + 9, y0: cy - 9, y1: cy + 9, tip: BEND_STACK_TIP });
       }
     }
   }

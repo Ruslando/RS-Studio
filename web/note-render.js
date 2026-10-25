@@ -14,10 +14,11 @@ import { paintTimeGridLine } from './timeline-paint.js';
 // canvas contexts, and nothing mutates project state.
 
 import { hammerDirections } from "./articulations.js";
+import { stackClusters, stackedBends } from "./note-issues.js";
 import { paintNoteBar } from "./canvas-components.js";
 import { graceBefore } from "./grace.js";
 import { bendCurve, easedCurveAt, slideRibbon, slideStartOf, slideTargets, vibratoStartOf } from "./bend.js";
-import { OVERLAP_EPS, REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono } from "./constants.js";
+import { REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
 import { laneFingering, laneFingeringKey } from "./tablature.js";
 import { draw } from "./repaint.js";
@@ -218,42 +219,17 @@ function paintVibratoWave(n, lane) {
 // one { x, y, count } per such moment, at its first point. The export keeps only
 // that first one.
 export function stackedBendPoints(n) {
-  const pts = bendCurve(n);
-  if (!pts || pts.length < 2) return [];
-  const handles = bendHandles(n), ms = (t) => Math.round(t * (n.end - n.start) * 1000), out = [];
-  for (let i = 0, j; i < pts.length; i = j) {
-    for (j = i + 1; j < pts.length && ms(pts[j][0]) === ms(pts[i][0]); j++);
-    if (j - i > 1) out.push({ x: handles[i].x, y: handles[i].y, count: j - i });
-  }
-  return out;
+  const handles = bendHandles(n);
+  return stackedBends(n).map(({ index, count }) => ({ x: handles[index].x, y: handles[index].y, count }));
 }
 
 // Find overlapping same-pitch note clusters within one edit lane. Fills the
 // shared `counts` map (note -> cluster size) for recoloring, and pushes one
 // badge per cluster (anchored at its earliest note) for the numbered marker.
 export function collectStacks(lane, counts, badges) {
-  const byPitch = new Map();
-  for (const n of lane.notes) {
-    let a = byPitch.get(n.pitch);
-    if (!a) byPitch.set(n.pitch, (a = []));
-    a.push(n);
-  }
-  for (const arr of byPitch.values()) {
-    if (arr.length < 2) continue;
-    arr.sort((p, q) => p.start - q.start);
-    let i = 0;
-    while (i < arr.length) {
-      let j = i + 1, maxEnd = arr[i].end;
-      // Require more than a hair of overlap so abutting notes whose end/start
-      // differ only by float rounding (~1e-14 s) aren't flagged as a stack.
-      while (j < arr.length && arr[j].start < maxEnd - OVERLAP_EPS) { maxEnd = Math.max(maxEnd, arr[j].end); j++; }
-      const size = j - i;
-      if (size >= 2) {
-        for (let k = i; k < j; k++) counts.set(arr[k], size);
-        badges.push({ note: arr[i], count: size });   // arr is start-sorted → arr[i] is the anchor
-      }
-      i = j;
-    }
+  for (const cluster of stackClusters(lane.notes)) {
+    for (const n of cluster) counts.set(n, cluster.length);
+    badges.push({ note: cluster[0], count: cluster.length });   // start-sorted → the first is the anchor
   }
 }
 

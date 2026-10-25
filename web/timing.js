@@ -2,7 +2,7 @@
 // offset, meter, division), the tempo/meter markers, the section markers and the
 // imported score bars. Every layer follows the song's timing unless lane.timing
 // names one of its own in S.state.timings: split off by hand (Layer settings), or
-// brought in by a Guitar Pro import whose tempo differs from the song's.
+// brought in by a Guitar Pro import into an existing project.
 //
 // The grid code everywhere reads ONE live timing: the grid inputs plus
 // S.state.tempoMap / sectionMarkers / scoreBars. That is always the active layer's;

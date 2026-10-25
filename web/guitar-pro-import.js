@@ -6,12 +6,11 @@ import { draw } from "./repaint.js";
 import { convertGpScore, inspectGpScore } from "./guitar-pro-core.js";
 import { currentGridState, setSubdiv } from "./grid.js";
 import { rebuildLanes, refreshCounts, renderLanes } from "./lanes.js";
-import { toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
 import { applyProject, markSaved, mapLane, refreshSaveState, saveToServer } from "./project.js";
 import { S } from "./store.js";
 import { projectShiftPlan, projectStart } from "./project-position-core.js";
-import { SONG, addTiming, syncTiming, timingData } from "./timing.js";
+import { addTiming, syncTiming } from "./timing.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { sectionMarkersFromScoreBars } from "./section-marker-core.js";
 import { loadAlphaTab, refreshTabIfOpen } from "./tablature.js";
@@ -43,19 +42,8 @@ function installImportedScoreBars(converted) {
   S.state.scoreDuration = target;
 }
 
-// Does the file keep the song's time? Then its layers can follow the song's timing.
-function sameTiming(song, grid) {
-  const near = (a, b) => Math.abs((+a || 0) - (+b || 0)) < 1e-3;
-  const a = song.tempoMap || [], b = grid.tempoMap || [];
-  return near(song.grid.bpm, grid.bpm) && near(song.grid.offset, grid.offset)
-    && +song.grid.tsNum === +grid.tsNum && +song.grid.tsDen === +grid.tsDen
-    && a.length === b.length && a.every((m, i) => near(m.t, b[i].t) && near(m.bpm, b[i].bpm)
-      && +m.tsNum === +b[i].tsNum && +m.tsDen === +b[i].tsDen);
-}
-
-// Imported into a project that already has notes, in another tempo: the file's
-// layers get their own timing — its grid, tempo markers, bars and sections — and
-// the song's stays as it was.
+// Imported into an existing project: the file's layers get their own timing — its
+// grid, tempo markers, bars and sections — and the song's stays as it was.
 function ownImportedTiming(converted, lanes) {
   const { scoreBars, sectionMarkers, target } = importedStructure(converted);
   const g = converted.grid;
@@ -209,7 +197,6 @@ async function confirmImport() {
       }
 
       const retained = S.state.editLanes.filter((lane) => !importedLane(lane));
-      const retainedHaveNotes = retained.some((lane) => lane.notes.length);
       // Remove only the untouched initial placeholder. Empty user-created/configured
       // lanes are real project content and should survive an import.
       const lonePlaceholder = retained.length === 1 && !retained[0].notes.length
@@ -218,19 +205,15 @@ async function confirmImport() {
       for (const lane of base) lane.active = false;
       const imported = converted.editLanes.map(lane => mapLane(lane, projectStart(S.state)));
       if (imported[0]) imported[0].active = true;
-      // Nothing to keep in time: the file's timing becomes the song's. Otherwise its
-      // layers follow the song if the file keeps the same time, or get their own.
-      const own = retainedHaveNotes && !sameTiming(timingData(SONG), converted.grid);
+      // Into an existing project the file's layers bring their own timing, so the
+      // song's tempo markers and sections stay untouched (Layer settings can make
+      // them follow the song). A project made from the file takes the file's timing.
+      const own = !standalone;
       if (own) ownImportedTiming(converted, imported);
       S.state.editLanes = [...base, ...imported];
       S.state.guitarPro = stored.guitarPro;
       syncTiming();   // live: the first imported layer's timing
-      if (!retainedHaveNotes) { installImportedScoreBars(converted); applyImportedGrid(converted.grid); }
-      else if (!own) {   // the file's bars, as before; the song's own sections stay
-        const sections = S.state.sectionMarkers;
-        installImportedScoreBars(converted);
-        if (sections?.length) S.state.sectionMarkers = sections;
-      }
+      if (!own) { installImportedScoreBars(converted); applyImportedGrid(converted.grid); }
 
       S.selection = new Set();
       S.voicingRevision++;
@@ -243,9 +226,6 @@ async function confirmImport() {
       markSaved();
       gpImportBackdrop.hidden = true;
       pending = null;
-      if (own) toast("Imported with its own tempo and sections — Layer settings can make it follow the song", 4500);
-      else if (retainedHaveNotes) toast("Imported with the song's tempo", 3200);
-      else toast(`Imported ${selected.length} Guitar Pro track${selected.length === 1 ? "" : "s"}`);
       refreshTabIfOpen();
     }, { title: "Importing Guitar Pro", failureTitle: "Could not import the file" });
   } finally {

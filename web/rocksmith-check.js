@@ -5,11 +5,12 @@
 // list here is the list DLC Builder shows for the finished package. A check
 // starts once edits have settled; a newer one cancels the one in flight.
 // Results are listed for the active layer in the artifact pane under Errors and
-// Warnings, with the flags' own problems (design.md 10), and framed on the stage
-// around the notes they concern.
+// Warnings, with the editor's own note problems (note-issues.js) and the flags'
+// (design.md 10), and framed on the stage around the notes they concern.
 import { $, scroll } from './dom.js';
 import { S } from './store.js';
-import { buildSpecForLanesAsync, laneTuning } from './tablature.js';
+import { buildSpecForLanesAsync, laneFretCount, laneFretTuning, laneTuning } from './tablature.js';
+import { laneIssues } from './note-issues.js';
 import { RS_KIND_OPTIONS, isTablatureLane } from './layer-role.js';
 import { rsLeadIn } from './rocksmith-export.js';
 import { seekPlayback } from './playback.js';
@@ -98,13 +99,16 @@ export function rocksmithIssueNotes(lane) {
   return out;
 }
 
-// Every problem of the active layer: the export's (Rocksmith) and its flags'.
+// Every problem of the active layer: the export's (Rocksmith), the editor's own
+// (note-issues.js) and its flags'.
 function rowsFor(lane) {
   const found = results.get(lane?.id);
   const rows = [];
   if (found?.error) rows.push({ title: `Not exported: ${found.error}`, help: '', important: true, time: null });
   for (const text of found?.warnings || []) rows.push({ title: text, help: '', important: false, time: null });
   for (const issue of found?.issues || []) rows.push(issue);
+  if (lane) for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision))
+    rows.push({ title: issue.title, help: issue.help, important: issue.tone === 'error', time: issue.time });
   for (const entry of markerArtifacts()) if (entry.issue)
     rows.push({ title: entry.issue.title, help: entry.issue.help, important: entry.issue.tone === 'error', time: entry.t });
   return rows.sort((a, b) => (a.time ?? -1) - (b.time ?? -1));
