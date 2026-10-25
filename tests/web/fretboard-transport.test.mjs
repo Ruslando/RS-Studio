@@ -11,6 +11,8 @@ class Element extends EventTarget {
   getAttribute(key) { return this.attributes.get(key); }
   getBoundingClientRect() { return { height: 200 }; }
   blur() {}
+  contains() { return false; }
+  get parentElement() { return this.parent ??= new Element(); }
 }
 const elements = new Map(), $ = id => {
   if (!elements.has(id)) elements.set(id, new Element());

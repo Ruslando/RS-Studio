@@ -1004,6 +1004,49 @@ export function setNotePosition(note, string, fret) {
   applyColumnPos(ctx.col.notes, shape, "local", overrideFlow(ctx.col.notes));
 }
 
+// Pin a column where the board shows it, with `note` at (string, fret). Notes the
+// voicer could not place stay automatic.
+function pinColumnAt(note, string, fret, before) {
+  const col = columnOf(note)?.col.notes || [note];
+  const follow = normalizeOverrideInfluence(overrideFlow(col)).follow;
+  for (const n of col) {
+    const p = n === note ? { string, fret } : before.voiced.get(n);
+    if (p) n.pos = { string: p.string, fret: p.fret, scope: "local", follow };
+  }
+}
+
+// A note dragged on the fretboard to another string and fret: its pitch follows the
+// place, so the spectrogram moves it too. One undo step.
+export function moveNoteOnBoard(note, string, fret) {
+  const lane = laneOf(note);
+  if (!lane || !canEditLane(lane)) return;
+  const pitch = laneFretTuning(lane)[string] + fret;
+  const before = handsBefore(lane);
+  if (columnOf(note)?.col.notes.some((n) => n !== note && before.voiced.get(n)?.string === string)) {
+    toast("Another note of this chord is on that string"); return;
+  }
+  const prev = snapshotEdit();
+  if (pitch !== note.pitch) { note.pitch = pitch; dropFingering(note); }
+  pinColumnAt(note, string, fret, before);
+  commit(prev); draw();
+  refreshTabIfOpen();
+}
+
+// A note added on the fretboard at (string, fret), sounding from start to end.
+export function addNoteOnBoard(lane, string, fret, start, end) {
+  if (!lane || !canEditLane(lane) || !(end - start >= minDur())) return null;
+  const before = handsBefore(lane);
+  const note = { id: nid(), start, end, pitch: laneFretTuning(lane)[string] + fret, confidence: 1 };
+  const prev = snapshotEdit();
+  lane.notes.push(note);
+  pinColumnAt(note, string, fret, before);
+  commit(prev);
+  setSelection(new Set([note]));
+  refreshCounts(); draw();
+  refreshTabIfOpen();
+  return note;
+}
+
 // Resolve current positions before explicitly changing a note on the fretboard.
 export function handsBefore(lane) {
   const found = voiceNotesFingered(lane.notes, laneFretTuning(lane), Infinity,

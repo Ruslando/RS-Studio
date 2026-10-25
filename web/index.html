@@ -447,13 +447,11 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <div id="fretboardSetup" role="group" aria-label="Hand and capo">
               <div id="fretboardCapoField">
                 <span class="label" id="fretboardCapoLabel">Capo</span>
-                <div id="fretboardCapoList" class="pill fretboard-values" data-collapsible role="radiogroup" aria-labelledby="fretboardCapoLabel"></div>
-                <button type="button" id="fretboardCapoToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardCapoList" aria-expanded="false" aria-label="Show every capo fret" title="Show every capo fret"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+                <span class="fretboard-values-up"><div id="fretboardCapoList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardCapoLabel"></div></span>
               </div>
               <div id="fretboardHandField">
                 <span class="label" id="fretboardHandLabel">Hand</span>
-                <div id="fretboardHandList" class="pill fretboard-values" data-collapsible role="radiogroup" aria-labelledby="fretboardHandLabel"></div>
-                <button type="button" id="fretboardHandToggle" class="icon-btn icon-btn--compact fretboard-values-toggle" aria-controls="fretboardHandList" aria-expanded="false" aria-label="Show every hand position" title="Show every hand position"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+                <span class="fretboard-values-up"><div id="fretboardHandList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardHandLabel"></div></span>
               </div>
               <div id="fretboardChordField">
                 <span class="label" id="fretboardChordLabel">Name</span>
@@ -478,9 +476,8 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 </div>
                 <div id="fretboardAlternatives" role="group" aria-labelledby="fretboardAltLabel" hidden>
                   <span class="label" id="fretboardAltLabel">Grip</span>
-                  <button type="button" id="fretboardAltPrev" class="icon-btn icon-btn--compact" aria-label="Previous alternative" title="Previous alternative (Left arrow)"><span data-ui-icon="chevronUp" aria-hidden="true"></span></button>
-                  <span class="pill"><span id="fretboardAltCount" role="status" aria-live="polite">0 / 0</span></span>
-                  <button type="button" id="fretboardAltNext" class="icon-btn icon-btn--compact" aria-label="Next alternative" title="Next alternative (Right arrow)"><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
+                  <span class="pill" id="fretboardAltStatus"><span id="fretboardAltCount" role="status" aria-live="polite">0 / 0</span></span>
+                  <span class="fretboard-values-up"><div id="fretboardGripList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardAltLabel"></div></span>
                   <button type="button" id="fretboardChoose" class="btn btn--compact">Use position</button>
                 </div>
                 <button type="button" id="fretboardShape" class="btn btn--compact" aria-pressed="false" hidden
@@ -490,6 +487,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 <button type="button" id="fretboardFingerReset" class="btn btn--compact" hidden
                         title="Give this note or chord the automatic fingers back">Reset fingering</button>
                 <button type="button" id="fretboardApply" class="btn btn--compact btn--primary" hidden>Done</button>
+                <label class="chk" title="Show the other grips on the board as rings and boxes"><input type="checkbox" id="fretboardGripsShown" checked /> Show grips</label>
                 </div>
                 <div id="fretboardInfluence" role="group" aria-label="Override">
                 <div id="fretboardFollow" class="pill" role="radiogroup" aria-label="How this override carries on" hidden>

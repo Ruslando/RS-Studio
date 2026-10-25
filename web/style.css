@@ -1525,7 +1525,6 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardVoices { display: flex; align-items: center; gap: 4px; }
 #fretboardVoices[hidden] { display: none; }
 #fretboardVoiceCount { min-width: 7ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
-#fretboardAltPrev svg, #fretboardAltNext svg { transform: rotate(-90deg); }
 
 #fretboardPin :is(#fretboardChoose, #fretboardShape, #fretboardFingering, #fretboardFingerReset):not(:disabled) { color: var(--stage-text); }
 
@@ -1546,10 +1545,8 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .fretboard-values { gap: 2px; }
 .fretboard-values > * { min-width: 26px; padding: 0 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .fretboard-values > [data-value="auto"] { font-family: var(--font-ui); }
-/* Capo and Hand show their value until opened (chevron or a click on the value). */
+/* Capo, Hand and Grip show their value until a click on it opens them; a click on it again shuts them. */
 .fretboard-values[data-collapsible]:not([data-open]) > :not([aria-checked="true"]) { display: none; }
-.fretboard-values-toggle svg { transition: transform var(--dur-state) var(--ease); }
-.fretboard-values-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 #fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField, #fretboardFingerField, #fretboardChordField) { display: none; }
 /* Shut, the value keeps a width, so a dash becoming "2 1" or "Am7" while the board
    works does not shift everything right of it (Reset among them, under the pointer). */
@@ -1570,8 +1567,8 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
   overflow-y: auto; box-shadow: var(--e1);
 }
 .fretboard-values--up[data-open] > * { flex: none; justify-content: flex-start; }
-.fretboard-values-up + .fretboard-values-toggle[aria-expanded="true"] svg { transform: rotate(-90deg); }
 .fretboard-values-up:has(> [data-open])::before {
+  cursor: pointer;
   content: attr(data-current); display: inline-flex; align-items: center;
   height: var(--h-control); padding: 0 var(--s-sibling); box-sizing: border-box;
   background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-control);
@@ -1582,6 +1579,7 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
   padding: 0; border: 0; border-radius: 0; background: transparent; gap: 12px;
   overflow: visible;
 }
+#fretboardAltStatus[hidden] { display: none; }
 #fretboardShapeActions, #fretboardInfluence { display: flex; align-items: center; gap: 4px; flex: none; }
 #fretboardShapeActions { flex-wrap: nowrap; }
 #fretboardInfluence { margin-left: auto; padding-left: 12px; border-left: 1px solid var(--stage-line); }

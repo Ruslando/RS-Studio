@@ -36,3 +36,6 @@ export class NoteLengthMemory {
     return endAfterBeats(start, this.lengths.get(project) ?? 1, segments);
   }
 }
+
+// One memory for every place notes are drawn: the stage and the fretboard.
+export const noteLength = new NoteLengthMemory();

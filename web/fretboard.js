@@ -22,7 +22,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // editor, and past that cap the board shrinks and centres instead of stretching.
 // Both mm → px scales are the same one, always.
 
-import { NO_FINGER, fingerLabel, barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
+import { NO_FINGER, placeAt, fingerLabel, barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
 import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEl, fretboardFollow, fretboardName, fretboardPanel, fretboardPin, fretboardShape, fretboardStage } from "./dom.js";
 import { UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
@@ -34,7 +34,8 @@ import { MAX_CAPO, canEditLane, editLanes } from "./lanes.js";
 import { chordLabel, laneChords } from "./chord-names.js";
 import { renameChord } from "./chord-rename.js";
 import { songBarStarts } from "./song-bars.js";
-import { gridAt, gridBpm, gridSegments, segBeatSec } from "./grid.js";
+import { gridAt, gridBpm, gridSegments, minDur, segBeatSec, snap } from "./grid.js";
+import { noteLength } from "./note-length.js";
 import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
 import { S } from "./store.js";
@@ -46,7 +47,7 @@ import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
 import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
 import { columnAlternatives, stepVoiceFocus } from "./voicing.js";
-import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnFollow, setColumnShape, setHandAnchor, draftNoteFinger, settleFingerDraft, setNotePosition } from "./edit.js";
+import { applyColumnAlternative, clearOverrideAt, columnOf, moveLaneCapo, setColumnFollow, setColumnShape, setHandAnchor, draftNoteFinger, settleFingerDraft, setNotePosition, addNoteOnBoard, moveNoteOnBoard } from "./edit.js";
 import { wireMenu } from "./ui.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { toast } from "./notify.js";
@@ -352,7 +353,6 @@ let spots = null;     // last frame's targets: { note, string, fret, x0, x1, y0,
 let spotHover = -1;
 let hoverPicked = false, hoverAt = -1;   // the browsed ring came from hovering, not the arrows
 // The hand positions that can play it, as fret spaces you click; open with the rings.
-let handSpots = [], handHover = -1, handHoverFret = 0;
 // The chord the bar's name field is editing, so a commit lands on the right one.
 let chordShown = null;
 // A Hand or Capo value under the pointer in the bar, previewed on the board.
@@ -1067,8 +1067,10 @@ export function drawFretboard() {
   const { scale, X, Y, strung, tunePx } = projection;
   // Resolve the selected preview before painting its hand-position band.
   const at = editing ? focusGrip(lane, s) : null;
+  board = editing && lane && laneFretTuning(lane).length === s.strings
+    ? { lane, s, scale, X, Y, marks: (at?.marks || []).filter((m) => m.note && !m.releasing) } : null;
   const chord = (at?.marks.length || 0) > 1;
-  spots = null; handSpots = []; if (alts) alts.boxes = [];
+  spots = null; if (alts) alts.boxes = [];
   // And the working views stand down with it. They are offers about one column, so a
   // column arriving sixty times a second makes them noise — and the boxes would ask the
   // worker for a fresh set on every one of them.
@@ -1080,6 +1082,8 @@ export function drawFretboard() {
   const spot = previewAlternative ? noteOffer : null;
   activeAlternative = (hovered?.hand ? hovered : null) || (spot?.hand ? spot : null);
   fretboardPanel.dataset.alternativeCount = String(activeAlternative ? 1 : 0);
+  fillGripList(lane, offering ? alternativeCount : 0);
+  if (!gripsShown && offering) spots = null;   // hidden rings are not targets either
   const now = impossible || shaping ? null : handNow(lane, s);
   const seat = anchorFret(lane), offered = impossible ? 0 : offeredSeat(lane);
   paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, offered, strung, tunePx });
@@ -1101,11 +1105,14 @@ export function drawFretboard() {
   if (!shaping) drawHand(ctx, s, scale, X, Y, lane, now, hovered || spot || resetPeeking ? "fade" : null);
   if (fingering && !impossible) drawFingering(ctx, s, scale, X, Y, lane, at);
   drawBundle(ctx, s, scale, X, Y, lane, held, w, h, chord, placing, impossible);
-  if (offering && at && !chord) drawNoteRings(ctx, lane);
-  if (offering && chord) drawChordBoxes(ctx, lane);
-  if (offering && at) drawHandChoices(ctx, s, X, Y, lane, seat);
+  if (offering && at && !chord && gripsShown) drawNoteRings(ctx, lane);
+  if (offering && chord && gripsShown) drawChordBoxes(ctx, lane);
+  // The hands on offer only while the Hand list is open: the toolbar is where it changes.
+  if (at && $("fretboardHandList").hasAttribute("data-open")) drawHandChoices(ctx, s, X, Y, lane, seat);
   if (hovered) drawOffer(ctx, s, scale, X, Y, hovered, lane);
   if (spot) drawNoteOffer(ctx, s, scale, X, Y, lane, spot);
+  if (noteDrag?.to) drawDragTarget(ctx, s, scale, X, Y, lane);
+  else if (boardHover && !noteDrag && spotHover < 0 && hoverAt < 0) drawBoardHover(ctx, s, scale, X, Y, lane);
   // An empty board is two different answers and it has to say which. The wait that
   // matters is the lane's fingering — a whole-song DP in a worker, tens of seconds on
   // a big project, during which there is no hand and no readout at all; the column's
@@ -1211,8 +1218,8 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
       ? "Loading alternatives..." : reasons.length ? reasons[0]
         : sharedSelection.unchanged ? "All selected notes already use this position" : "No position works for the whole selection";
   } else $("fretboardAltCount").title = alternativeIndex < 0 ? "Current position" : "";
-  $("fretboardAltPrev").disabled = alternativeCount === 0;
-  $("fretboardAltNext").disabled = alternativeCount === 0;
+  // The Grip list already shows which grip it is; the pill stays for what a number cannot say.
+  $("fretboardAltStatus").hidden = !group.multiple && !altsLoading;
   $("fretboardChoose").hidden = false;
   $("fretboardChoose").disabled = !activeAlternative;
   fretboardApply.hidden = !shaping && !fingering;
@@ -1551,15 +1558,14 @@ function gripBox(positions, scale, s, X, Y) {
 function drawHandChoices(ctx, s, X, Y, lane, seat) {
   const choices = (handColumnHere(lane)?.choices || []).filter((g) => g !== seat && g > 0 && g <= s.frets);
   const hue = lane.color || PAINT.accent;
-  choices.forEach((fret, i) => {
+  choices.forEach((fret) => {
     const n = fret + (s.capo || 0), x0 = fretDistance(n - 1, s.scale), x1 = fretDistance(n, s.scale);
-    const h = Math.max(boardHalfWidthAt(x0, s), boardHalfWidthAt(x1, s));
-    handSpots.push({ fret, x0: X(x0), x1: X(x1), y0: Math.min(Y(-h), Y(h)), y1: Math.max(Y(-h), Y(h)) });
-    ctx.fillStyle = hexA(hue, i === handHover ? WASH : WASH * 0.45);
+    const peeked = listPeek?.kind === "hand" && listPeek.value === fret;
+    ctx.fillStyle = hexA(hue, peeked ? WASH : WASH * 0.45);
     fretSpace(ctx, fret, s, X, Y);
     ctx.fill();
     // And its two fret wires in the hue, so each position's edges read on the wood.
-    ctx.strokeStyle = hexA(hue, i === handHover ? 1 : 0.7); ctx.lineWidth = 2;
+    ctx.strokeStyle = hexA(hue, peeked ? 1 : 0.7); ctx.lineWidth = 2;
     ctx.beginPath();
     for (const x of [x0, x1]) { const hx = boardHalfWidthAt(x, s); ctx.moveTo(X(x), Y(-hx)); ctx.lineTo(X(x), Y(hx)); }
     ctx.stroke();
@@ -1767,7 +1773,6 @@ function offeredSeat(lane) {
     return i >= 0 ? Number(columns[i].seat) || 0 : 0;
   }
   if (listPeek?.kind === "hand") return listPeek.value;
-  if (handHoverFret) return handHoverFret;
   if (shaping?.preview?.hand) return Number(shaping.preview.hand.seat) || 0;
   if (altsOn && activeAlternative?.hand) return Number(activeAlternative.hand.seat) || 0;
   return 0;
@@ -1924,6 +1929,8 @@ function fillValues(list, values, chosen, disabled) {
   const key = JSON.stringify([values, chosen, disabled]);
   if (list.dataset.key === key) return;
   list.dataset.key = key;
+  if (list.parentElement?.classList.contains("fretboard-values-up"))
+    list.parentElement.dataset.current = values.find(([value]) => String(value) === String(chosen))?.[1] ?? "";
   list.replaceChildren(...values.map(([value, label]) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -1972,8 +1979,133 @@ function spotUnder(e) {
 // anchored on, or the capo (the nut, without one). This is the whole clickable surface
 // of the board outside edit mode.
 
+// ---- moving and adding notes on the board ----
+// Drag a note to another string or fret and its pitch follows; double-click a string
+// to add a note there. Both read last frame's board, so they match what is on screen.
+let board = null;      // { lane, s, scale, X, Y, marks }
+let noteDrag = null;   // { note, from: { string, fret }, to }
+let dragged = false;   // swallows the click that ends a drag
+let boardHover = null; // { mark, place } under the pointer
+let gripsShown = localStorage.getItem("cw.fretboardGrips") !== "0";
+let gripPeekFrom = null;  // the grip chosen before the Grip list was hovered
+
+const boardEditable = () => !!board && editing && !transportPlaying() && !shaping && !fingering
+  && !fretboardPanel.hasAttribute("data-edit-blocked") && canEditLane(board.lane);
+
+function pointerOnBoard(e) {
+  const r = fretboardEl.getBoundingClientRect();
+  return [e.clientX - r.left, e.clientY - r.top];
+}
+
+// The string and fret under the pointer (fret 0 = open, behind the nut or capo).
+function placeUnder(e) {
+  if (!board || board.s.strings < 2) return null;
+  const { s, scale, X, Y, lane } = board, [px, py] = pointerOnBoard(e);
+  const mm = (px - X(0)) / scale;
+  return placeAt(mm, py, (i) => Y(stringOffsetAt(i, Math.max(0, mm), s)), s, laneFretCount(lane));
+}
+
+function markUnder(e) {
+  if (!board?.marks.length) return null;
+  const { s, scale, X, Y } = board, [x, y] = pointerOnBoard(e);
+  const boxes = board.marks.map((m) => spotBox({ mm: m.x, string: m.string, mark: m }, scale, s, X, Y));
+  const i = pickBox(boxes, x, y);
+  return i >= 0 ? boxes[i].mark : null;
+}
+
+// A place on the board: filled for where a dragged note lands, dashed for where a
+// double-click would add one, struck through where it cannot go.
+function drawPlace(ctx, s, scale, X, Y, lane, { string, fret }, { filled, blocked }) {
+  const hue = lane.color || PAINT.accent;
+  const b = spotBox({ mm: fretCentre(fret, s), string }, scale, s, X, Y);
+  const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, r = Math.max(1, b.r - 0.9);
+  const line = blocked ? PAINT.error : hue;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  if (filled) { ctx.fillStyle = hexA(line, blocked ? 0.25 : 0.55); ctx.fill(); }
+  if (!filled) ctx.setLineDash([3, 2]);
+  ctx.strokeStyle = line; ctx.lineWidth = 1.8; ctx.stroke();
+  ctx.setLineDash([]);
+  if (blocked) {
+    ctx.beginPath(); ctx.moveTo(cx - r, cy + r); ctx.lineTo(cx + r, cy - r);
+    ctx.lineWidth = 2.2; ctx.stroke();
+  }
+  ctx.font = stageMono(11); ctx.fillStyle = blocked ? PAINT.error : PAINT.text;
+  ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  ctx.fillText(noteName(laneFretTuning(lane)[string] + fret), cx, b.y0 - 2);
+  ctx.restore();
+}
+
+// Whether `string` is taken by another note sounding here.
+const stringTaken = (string, except = null) => board.marks.some((m) => m.note !== except && m.string === string);
+
+function drawDragTarget(ctx, s, scale, X, Y, lane) {
+  drawPlace(ctx, s, scale, X, Y, lane, noteDrag.to, { filled: true, blocked: stringTaken(noteDrag.to.string, noteDrag.note) });
+}
+
+// Hovering a note lights it; hovering a free place outlines where a note would go.
+function drawBoardHover(ctx, s, scale, X, Y, lane) {
+  const { mark, place } = boardHover;
+  if (mark) {
+    const hue = lane.color || PAINT.accent;
+    const b = spotBox({ mm: mark.x, string: mark.string }, scale, s, X, Y);
+    ctx.save();
+    ctx.shadowColor = hue; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.arc((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.r + 2, 0, Math.PI * 2);
+    ctx.fillStyle = hexA(hue, 0.3); ctx.fill();
+    ctx.strokeStyle = PAINT.text; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+  } else if (place) drawPlace(ctx, s, scale, X, Y, lane, place, { filled: false, blocked: stringTaken(place.string) });
+}
+
+// The Grip list: 1 is the current grip, 2… the others, as the arrows count them.
+function fillGripList(lane, count) {
+  const list = $("fretboardGripList"), disabled = !count || !!selectedPositions(lane).error;
+  fillValues(list, Array.from({ length: count + 1 }, (_, k) => [k - 1, String(k + 1)]), alternativeIndex, disabled);
+  if (disabled) setValuesOpen(list, false);
+}
+
+// A new note joins the note or chord the board shows, with its start and length;
+// on a bare board it starts at the playhead with the length last drawn on the stage.
+function addNoteHere(e) {
+  if (!boardEditable() || markUnder(e)) return;
+  const place = placeUnder(e), lane = board.lane;
+  if (!place) return;
+  if (board.marks.some((m) => m.string === place.string)) { toast("That string is already playing here"); return; }
+  const focus = focusNote(lane), col = focus ? columnOf(focus)?.col.notes || [focus] : null;
+  let start, end;
+  if (col) { start = Math.min(...col.map((n) => n.start)); end = Math.max(...col.map((n) => n.end)); }
+  else {
+    const step = minDur();
+    start = Math.max(0, Math.min(snap(playbackTime()), S.state.duration - step));
+    end = Math.min(S.state.duration, Math.max(start + step, noteLength.end(S.state, start, gridSegments())));
+  }
+  addNoteOnBoard(lane, place.string, place.fret, start, end);
+}
+
+// Capo, Hand and Grip open upward over the board, as a column at most LIST_MAX tall
+// that scrolls past it. Fixed, so the bar's horizontal scroll does not clip it.
+const LIST_MAX = 220;
+function setValuesOpen(list, open) {
+  const was = list.hasAttribute("data-open"), at = open && !was ? list.parentElement.getBoundingClientRect() : null;
+  list.toggleAttribute("data-open", open);
+  if (!open) list.style.left = list.style.top = list.style.maxHeight = list.parentElement.style.minWidth = "";
+  if (at) {
+    // Placed, then measured and moved by what is left over, so it lands 4 above the
+    // value whichever box its fixed position turns out to be relative to.
+    list.parentElement.style.minWidth = `${at.width}px`;   // the bar keeps its layout
+    list.style.maxHeight = `${Math.min(LIST_MAX, Math.max(80, at.top - fretboardPanel.getBoundingClientRect().top - 8))}px`;
+    list.style.left = "0px"; list.style.top = "0px";
+    const origin = list.getBoundingClientRect();
+    list.style.left = `${at.left - origin.left}px`;
+    list.style.top = `${at.top - 4 - origin.height - origin.top}px`;
+    list.querySelector('[aria-checked="true"]')?.scrollIntoView({ block: "nearest" });
+  }
+  if (open !== was) drawFretboard();   // the Hand list shows the hands on offer
+}
+
 function boxUnder(e) {
-  if (!altsOn || !alts?.boxes?.length) return -1;
+  if (!gripsShown || !altsOn || !alts?.boxes?.length) return -1;
   // clientX against the canvas's own rect, not offsetX: the same reading
   // interaction.js takes for the stage, and the only one a synthetic event carries.
   const r = fretboardEl.getBoundingClientRect();
@@ -2029,8 +2161,33 @@ export function init_fretboard() {
     fretboardAuto.blur();
     drawFretboard();
   });
+  fretboardEl.addEventListener("pointerdown", (e) => {
+    dragged = false;
+    if (e.button !== 0 || !boardEditable()) return;
+    const mark = markUnder(e);
+    if (!mark) return;
+    noteDrag = { note: mark.note, from: { string: mark.string, fret: mark.fret }, to: null };
+    fretboardEl.setPointerCapture(e.pointerId);
+  });
+  fretboardEl.addEventListener("pointermove", (e) => {
+    if (!noteDrag) return;
+    const to = placeUnder(e), { from } = noteDrag;
+    noteDrag.to = to && (to.string !== from.string || to.fret !== from.fret) ? to : null;
+    fretboardEl.style.cursor = "grabbing";
+    drawFretboard();
+  });
+  fretboardEl.addEventListener("pointerup", () => {
+    if (!noteDrag) return;
+    const { note, to } = noteDrag;
+    noteDrag = null; fretboardEl.style.cursor = "";
+    if (to) dragged = true;
+    if (to && !stringTaken(to.string, note)) moveNoteOnBoard(note, to.string, to.fret);
+    drawFretboard();
+  });
+  fretboardEl.addEventListener("pointercancel", () => { noteDrag = null; drawFretboard(); });
+  fretboardEl.addEventListener("dblclick", addNoteHere);
   fretboardEl.addEventListener("mousemove", e => {
-    if (!editing || transportPlaying() || fretboardPanel.hasAttribute("data-edit-blocked")) return;
+    if (noteDrag || !editing || transportPlaying() || fretboardPanel.hasAttribute("data-edit-blocked")) return;
     const spot = spots ? spots.indexOf(spotUnder(e)) : -1;
     const i = spot >= 0 || shaping || fingering ? -1 : boxUnder(e);
     // Hovering a ring or box browses to it; leaving them returns to the original.
@@ -2041,21 +2198,18 @@ export function init_fretboard() {
     }
     hoverAt = over;
     spotHover = spot;
-    const r = fretboardEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-    const hand = spot >= 0 || i >= 0 || fingering ? -1 : pickBox(handSpots, x, y);
-    handHover = hand; handHoverFret = hand >= 0 ? handSpots[hand].fret : 0;
-    fretboardEl.style.cursor = spot >= 0 || i >= 0 || hand >= 0 ? "pointer" : "";
+    const mark = boardEditable() ? markUnder(e) : null;
+    boardHover = boardEditable() ? { mark, place: mark ? null : placeUnder(e) } : null;
+    fretboardEl.style.cursor = spot >= 0 || i >= 0 ? "pointer" : mark ? "grab" : "";
     drawFretboard();
   });
   fretboardEl.addEventListener("mouseleave", () => {
-    fretboardEl.style.cursor = ""; spotHover = -1; hoverAt = -1; handHover = -1; handHoverFret = 0;
+    fretboardEl.style.cursor = ""; spotHover = -1; hoverAt = -1; boardHover = null;
     if (hoverPicked) { alternativeIndex = -1; previewAlternative = false; hoverPicked = false; }
     if (editing) drawFretboard();
   });
   $("fretboardVoiceUp").addEventListener("click", () => stepVoiceFocus(1));
   $("fretboardVoiceDown").addEventListener("click", () => stepVoiceFocus(-1));
-  $("fretboardAltPrev").addEventListener("click", () => stepAlternative(-1));
-  $("fretboardAltNext").addEventListener("click", () => stepAlternative(1));
   $("fretboardShapePrev").addEventListener("click", () => stepShapeNote(-1));
   $("fretboardShapeNext").addEventListener("click", () => stepShapeNote(1));
   $("fretboardChoose").addEventListener("click", () => {
@@ -2079,6 +2233,8 @@ export function init_fretboard() {
   // only off a candidate box: a box is a drawing of a place the notes could go, and
   // wanting the hand there is the commonest reason to be pointing at one.
   fretboardEl.addEventListener("click", (e) => {
+    if (dragged) { dragged = false; return; }
+    if (e.detail > 1) return;   // the second click of a double-click adds a note
     if (!editing || transportPlaying() || fretboardPanel.hasAttribute("data-edit-blocked")) return;
     const lane = currentLane();
     if (!lane) return;
@@ -2105,50 +2261,29 @@ export function init_fretboard() {
       layoutFretboard();          // Apply arrives or leaves with the last note
       return;
     }
-    // Rings place one note, candidate boxes place a whole shape, and bare wood
-    // sets the hand position. The smaller ring wins when the marks overlap.
+    // Rings place one note and candidate boxes a whole shape; the smaller ring wins
+    // when they overlap. The hand is set from the toolbar's Hand list only.
     // A ring is a complete single-note move; it needs no finished preview.
     const spot = spotUnder(e);
     if (spot) { previewAlternative = false; hoverPicked = false; setNotePosition(spot.note, spot.string, spot.fret); return; }
     const pick = alts?.boxes?.[boxUnder(e)];
     if (pick?.choice) { previewAlternative = false; hoverPicked = false; applyColumnAlternative(alts.notes, pick.choice, alts.influence); return; }
-    const r = fretboardEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-    const hand = handSpots[pickBox(handSpots, x, y)];
-    if (hand) { handHover = -1; handHoverFret = 0; setHandAnchor(lane, handTimeHere(lane), hand.fret, { create: true }); drawFretboard(); return; }
     drawFretboard();
   });
   // Capo, Hand, Fingering and Chord: shut, a list shows its value; a click there or on the chevron opens it,
   // choosing a value, the chevron again or a click elsewhere shuts it.
-  const toggles = ["Capo", "Hand"].map((name) => $(`fretboard${name}Toggle`));
-  const listOf = (toggle) => $(toggle.getAttribute("aria-controls"));
-  const setOpen = (toggle, open) => {
-    const list = listOf(toggle), up = list.classList.contains("fretboard-values--up");
-    const was = list.hasAttribute("data-open"), at = up && open && !was ? list.parentElement.getBoundingClientRect() : null;
-    list.toggleAttribute("data-open", open);
-    toggle.setAttribute("aria-expanded", String(open));
-    if (up && !open) list.style.left = list.style.top = list.style.maxHeight = list.parentElement.style.minWidth = "";
-    if (at) placeUp(list, at);
-  };
-  // An upward list sits over the board, its bottom 4 above the value it was opened
-  // from. Placed, then measured and moved by what is left over, so it lands there
-  // whichever box its fixed position turns out to be relative to.
-  const placeUp = (list, at) => {
-    list.parentElement.style.minWidth = `${at.width}px`;   // the bar keeps its layout
-    list.style.maxHeight = `${Math.max(80, at.top - fretboardPanel.getBoundingClientRect().top - 8)}px`;
-    list.style.left = "0px"; list.style.top = "0px";
-    const origin = list.getBoundingClientRect(), height = origin.height;
-    list.style.left = `${at.left - origin.left}px`;
-    list.style.top = `${at.top - 4 - height - origin.top}px`;
-  };
-  for (const toggle of toggles) toggle.addEventListener("click", () => setOpen(toggle, !listOf(toggle).hasAttribute("data-open")));
+  const lists = ["Capo", "Hand", "Grip"].map((name) => $(`fretboard${name}List`));
+  for (const list of lists) list.parentElement.addEventListener("click", (event) => {
+    if (event.target === list.parentElement) setValuesOpen(list, false);   // the value shown while open
+  });
   window.addEventListener("pointerdown", (event) => {
-    for (const toggle of toggles) if (!toggle.parentElement?.contains(event.target)) setOpen(toggle, false);
+    for (const list of lists) if (!list.parentElement.contains(event.target)) setValuesOpen(list, false);
   }, true);
   // A click on a shut list opens it instead of choosing; returns whether it did.
   const opened = (list) => {
-    if (list.hasAttribute("data-open")) { setOpen(toggles.find((t) => listOf(t) === list), false); return false; }
-    setOpen(toggles.find((t) => listOf(t) === list), true);
-    return true;
+    const open = list.hasAttribute("data-open");
+    setValuesOpen(list, !open);
+    return !open;
   };
   $("fretboardCapoList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-value]"), lane = currentLane();
@@ -2186,6 +2321,39 @@ export function init_fretboard() {
     });
     list.addEventListener("mouseleave", () => { if (listPeek) { listPeek = null; drawFretboard(); } });
   }
+  // The Grip list: hovering a grip previews it, a click selects it for Use position.
+  const gripList = $("fretboardGripList");
+  const gripValue = (event) => {
+    const button = event.target.closest("[data-value]");
+    return button && !button.disabled ? Number(button.dataset.value) : null;
+  };
+  gripList.addEventListener("mouseover", (event) => {
+    const value = gripValue(event);
+    if (!gripList.hasAttribute("data-open") || value == null || value === alternativeIndex) return;
+    if (gripPeekFrom == null) gripPeekFrom = alternativeIndex;
+    alternativeIndex = value; previewAlternative = value >= 0; hoverPicked = false;
+    drawFretboard();
+  });
+  gripList.addEventListener("mouseleave", () => {
+    if (gripPeekFrom == null) return;
+    alternativeIndex = gripPeekFrom; previewAlternative = alternativeIndex >= 0; gripPeekFrom = null;
+    drawFretboard();
+  });
+  gripList.addEventListener("click", (event) => {
+    const value = gripValue(event);
+    if (value == null || opened(gripList)) return;
+    gripPeekFrom = null;
+    alternativeIndex = value; previewAlternative = value >= 0; hoverPicked = false;
+    drawFretboard();
+  });
+  const gripsButton = $("fretboardGripsShown");
+  gripsButton.checked = gripsShown;
+  gripsButton.addEventListener("change", () => {
+    gripsShown = gripsButton.checked;
+    rememberPref("cw.fretboardGrips", gripsShown ? "1" : "0");
+    gripsButton.blur();
+    drawFretboard();
+  });
   $("fretboardHandList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-value]"), lane = currentLane();
     if (!button || button.disabled || opened(event.currentTarget) || !editing || !canEditLane(lane) || transportPlaying() || selectedPositions(lane).multiple) return;

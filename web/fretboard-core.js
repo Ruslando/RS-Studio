@@ -528,6 +528,18 @@ export function stringContactAt(now, string) {
 // `only` narrows which marks get offers without narrowing which strings are spoken
 // for: selecting one note of a chord asks where THAT note could go, and the other
 // three are still being held while it moves.
+// The string and fret at `mm` from the nut and pixel row `py` (yOf(i) is string i's
+// row there): fret 0 is open, behind the nut or capo. Null off the strings.
+export function placeAt(mm, py, yOf, s, frets) {
+  const capo = s.capo || 0;
+  if (s.strings < 2 || mm < -s.nutDepth - 2 || mm > fretDistance(capo + frets, s.scale)) return null;
+  let fret = 0;
+  if (mm > fretDistance(capo, s.scale)) { fret = 1; while (fret < frets && fretDistance(capo + fret, s.scale) < mm) fret++; }
+  const ys = Array.from({ length: s.strings }, (_, i) => yOf(i));
+  const string = ys.reduce((best, y, i) => (Math.abs(y - py) < Math.abs(ys[best] - py) ? i : best), 0);
+  return Math.abs(ys[string] - py) <= Math.abs(ys[1] - ys[0]) / 2 ? { string, fret } : null;
+}
+
 export function notePlacements(marks, tuning, frets, only = null) {
   const taken = new Set(marks.map((m) => m.string));
   const out = [];

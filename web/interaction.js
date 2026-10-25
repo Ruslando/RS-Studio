@@ -13,7 +13,7 @@ import { draw } from "./repaint.js";
 import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
-import { NoteLengthMemory } from './note-length.js';
+import { noteLength } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
 import { commentAt, commentCursorAt, commentMouseDown, openCommentPop } from "./comments.js";
 import { updateProjectStartAt } from "./project-position.js";
@@ -35,7 +35,6 @@ import { coastViewport, manualViewportNavigation } from "./viewport-motion.js";
 import { createPanTracker } from './pan-momentum.js';
 
 let sliceHeld = false;
-const noteLength = new NoteLengthMemory();
 
 // A note whose pitch moves (a bend, or a slide's ribbon onto the next note) is
 // drawn along that curve, several rows away from its base pitch and, for a slide,
