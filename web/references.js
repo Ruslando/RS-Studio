@@ -197,6 +197,16 @@ export function boxOfNote(note) {
   return hit;
 }
 
+// The box whose notes are exactly `notes`, or null. Only a whole occurrence can be
+// pasted as that reference: a part of it would be a second, different view of it.
+export function wholeBoxOf(notes) {
+  const b = notes.length ? boxOfNote(notes[0]) : null;
+  if (!b) return null;
+  const inside = notesInBox(boxRect(b.group, b.i, laneClock(b.lane)), b.lane.notes);
+  const picked = new Set(notes);
+  return inside.length === picked.size && inside.every((n) => picked.has(n)) ? b : null;
+}
+
 // Canonical signature of a note's written notation/fingering metadata.
 export { effectSig } from "./reference-core.js";
 

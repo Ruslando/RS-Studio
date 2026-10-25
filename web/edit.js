@@ -25,7 +25,7 @@ import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, tog
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock } from "./references.js";
+import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { beginArtifactRename } from "./artifact-names.js";
 import { beginChordRename } from "./chord-rename.js";
@@ -305,14 +305,10 @@ export function doCopy() {
   if (!S.selection.size) return;
   S.clipboardSrc = [...S.selection];
   S.clipboard = clipOf(S.clipboardSrc);
-  // Remember the source occurrence when the whole copy sits inside one reference
-  // box — that's when Paste offers the copy-vs-reference choice.
-  S.clipboardRef = null;
-  if (S.clipboardSrc.length) {
-    const b0 = boxOfNote(S.clipboardSrc[0]);
-    if (b0 && S.clipboardSrc.every((n) => { const b = boxOfNote(n); return b && b.lane === b0.lane && b.ref === b0.ref && b.i === b0.i; }))
-      S.clipboardRef = { lane: b0.lane, ref: b0.ref };
-  }
+  // Remember the source occurrence when the copy is one whole reference box —
+  // that's when Paste offers the copy-vs-reference choice.
+  const b = wholeBoxOf(S.clipboardSrc);
+  S.clipboardRef = b ? { lane: b.lane, ref: b.ref } : null;
 }
 
 // Modal choice when pasting notes copied wholesale from a reference. Resolves
@@ -362,6 +358,9 @@ function pasteHitsReference(lane, at, shift, asReference = false, refShift = 0) 
 export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
   if (!S.clipboard.length || !S.state) return;
   const pasteAt = at ?? playbackTime();
+  // The source box may have changed since the copy; only a still-whole box pastes as it.
+  const whole = S.clipboardRef && wholeBoxOf(S.clipboardSrc.filter((n) => laneOf(n)?.notes.includes(n)));
+  if (!whole || whole.lane !== S.clipboardRef.lane || whole.ref !== S.clipboardRef.ref) S.clipboardRef = null;
   if (mode == null) {
     // Pasted notes become part of the destination reference. A nested reference
     // is not an available choice, so there is nothing to ask here.

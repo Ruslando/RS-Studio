@@ -56,3 +56,17 @@ for (const shifted of [false, true]) {
 }
 
 console.log('reference position preview: commit propagation, transposition and isolated ids passed');
+
+{
+  // Only a whole box counts as its reference: a part of it pastes as a copy.
+  const start = source.indexOf('export function wholeBoxOf(');
+  const body = source.slice(start + 7, source.indexOf('\n}', start) + 2);
+  const lane = { notes: [{ start: 0, end: .8, pitch: 52 }, { start: .5, end: .9, pitch: 55 }, { start: 4, end: 4.8, pitch: 52 }] };
+  const group = { rt0: 0, rt1: 1, pLo: 52, pHi: 55, anchors: [0, 4] };
+  const boxOfNote = n => (n.start < 1 ? { lane, ref: 'a', group, i: 0 } : null);
+  const wholeBoxOf = new Function('deps', `const { boxOfNote, notesInBox, boxRect, laneClock } = deps; ${body} return wholeBoxOf;`)({
+    boxOfNote, laneClock: () => clock, boxRect: occurrenceBox, notesInBox: (box, notes) => notes.filter(n => inRefBox(n, box, .1)) });
+  assert.equal(wholeBoxOf(lane.notes.slice(0, 2))?.ref, 'a', 'every note of the box is that box');
+  assert.equal(wholeBoxOf(lane.notes.slice(0, 1)), null, 'part of a box is not');
+  assert.equal(wholeBoxOf(lane.notes), null, 'notes beyond the box are not');
+}

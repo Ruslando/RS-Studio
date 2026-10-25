@@ -6,7 +6,7 @@ import { similarScores } from "./similar-core.js";
 import { audio, scroll, sctx, stage, traceRangeSel, traceSnapInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { clipOf, commit, copyEffects, placeClip, snapshotEdit } from "./edit.js";
-import { boxOfNote, laneClock } from "./references.js";
+import { laneClock, wholeBoxOf } from "./references.js";
 import { normalizeTraceRange } from './drawing-options.js';
 import { contentH, pitchAt, songWidth, timeAt, xOf, yOf } from "./geometry.js";
 import { gridOffset, gridStep } from "./grid.js";
@@ -431,11 +431,8 @@ async function previewSimilarMatch(i, opts = {}) {
 function computeSimilarMatches(selNotes, fillLane = targetLane()) {
   if (!S.state || !S.spectImg || !S.spectPixels || !selNotes.length) return [];
   const iw = S.spectImg.width, ih = S.spectImg.height;
-  const firstBox = boxOfNote(selNotes[0]);
-  const sourceReference = firstBox && selNotes.every((note) => {
-    const box = boxOfNote(note);
-    return box && box.lane === firstBox.lane && box.ref === firstBox.ref && box.i === firstBox.i;
-  }) ? { lane: firstBox.lane, ref: firstBox.ref, group: firstBox.group, anchor: firstBox.group.anchors[firstBox.i] } : null;
+  const firstBox = wholeBoxOf(selNotes);
+  const sourceReference = firstBox ? { lane: firstBox.lane, ref: firstBox.ref, group: firstBox.group, anchor: firstBox.group.anchors[firstBox.i] } : null;
   const t0 = Math.min(...selNotes.map((n) => n.start));
   const t1 = Math.max(...selNotes.map((n) => n.end));
   if (t1 - t0 < MIN_DUR) return [];

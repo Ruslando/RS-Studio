@@ -18,13 +18,13 @@ try {
     './store.js': { S, setSelection: value => { S.selection = value; } },
     './dom.js': { pasteBackdrop: backdrop, pasteCopyBtn: copy, pasteAsRefBtn: reference, pasteCancelBtn: cancel, undoMI: {}, redoMI: {} },
     './grid.js': { snap: t => t, snapNote: (start, end) => ({ start, end }), currentGridState: noop, gridOffset: () => 0, snapStrayNotes: noop },
-    './references.js': { laneClock: () => clock, noteBounds: bounds, spanAt, lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null,
+    './references.js': { wholeBoxOf: () => ({ lane, ref: 1 }), laneClock: () => clock, noteBounds: bounds, spanAt, lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null,
       reconcileReferences: noop,
       overlapsRefBox: (target, box) => Object.values(target.refBoxes).some(g => g.anchors.some((_, i) => {
         const b = occurrenceBox(g, i, clock);
         return box.t0 < b.t1 && box.t1 > b.t0 && box.pLo <= b.pHi && box.pHi >= b.pLo;
       })) },
-    './lanes.js': { targetLane: () => lane, activeLane: () => lane, editLanes: () => [lane], renderLanes: noop, refreshCounts: noop },
+    './lanes.js': { laneOf: () => lane, targetLane: () => lane, activeLane: () => lane, editLanes: () => [lane], renderLanes: noop, refreshCounts: noop },
     './timing.js': { timingSnapshot: noop, eachTiming: noop },
     './note-effects.js': { copyEffects: (source, target) => target, FX_KEYS: [], FX_LABELS: {} }, './ids.js': { nid: () => ++id },
     './note-motion.js': { animateNoteChanges: noop }, './repaint.js': { draw: noop },

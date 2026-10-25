@@ -18,7 +18,7 @@ try {
     './store.js': { S, setSelection: noop }, './ids.js': { nid: () => 'n' }, './dom.js': { scroll, sctx: ctx, traceThresholdInput: new Element(), traceRangeSel: null, traceSnapInput: null },
     './repaint.js': { draw: () => tracing.drawMatches() },
     './lanes.js': { laneOf: () => lane, targetLane: () => lane, renderLanes: noop, refreshCounts: noop },
-    './references.js': { boxOfNote: () => refHit, laneClock: () => ({ beatAt: t => t * 2, timeAt: b => b / 2 }) },
+    './references.js': { wholeBoxOf: () => refHit, laneClock: () => ({ beatAt: t => t * 2, timeAt: b => b / 2 }) },
     './geometry.js': { xOf: t => t * 100, yOf: p => (72 - p) * 10, contentH: () => 120,
       songWidth: () => 2000, timeAt: x => x / 100 },
     './similar-core.js': { similarScores: () => { const scores = new Float64Array(20); if (hasResults) { scores[5] = .99; scores[12] = .98; } return scores; } },
