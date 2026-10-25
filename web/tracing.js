@@ -527,7 +527,7 @@ function placeGhosts(matches, mode) {
   const prev = snapshotEdit();
   const added = [], clock = laneClock(lane);
   for (const match of matches) {
-    const placed = placeClip(match.clip, lane, match.t0, mode === "reference");
+    const placed = placeClip(match.clip, lane, match.t0);
     match.notes.forEach((g, k) => {
       const nn = copyEffects(g, { id: nid(), start: placed[k].start, end: placed[k].end, pitch: g.pitch });
       lane.notes.push(nn); added.push(nn);

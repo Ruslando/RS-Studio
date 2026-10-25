@@ -13,7 +13,7 @@ import { icon } from "./icons.js";
 import { $, inTourCard, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopyBtn, redoMI, scroll, stage, undoMI } from "./dom.js";
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
-import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapNote, snapStrayNotes } from "./grid.js";
+import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapStrayNotes } from "./grid.js";
 import { nid, motifId } from "./ids.js";
 import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
@@ -286,9 +286,11 @@ export function clipOf(notes) {
 }
 
 // Where a clip lands when its first note goes to time `at` on `lane`: each note
-// at its beat distance from the first, on that layer's grid. A reference paste
-// keeps its shape exactly; a plain paste pulls each note onto the grid.
-export function placeClip(clip, lane, at, asReference) {
+// at its beat distance from the first, on that layer's grid. Only the landing
+// point snaps; the notes keep their rhythm exactly. Snapping each note to the
+// visible grid moved notes off it whenever the view was zoomed out past the
+// copy's finest note. One still off the grid is pulled on at commit (snapStrayNotes).
+export function placeClip(clip, lane, at) {
   const clock = laneClock(lane);
   const beats = clip.every((c) => Number.isFinite(c.beat0));
   const first = beats ? Math.min(...clip.map((c) => c.beat0)) : Math.min(...clip.map((c) => c.start));
@@ -297,7 +299,7 @@ export function placeClip(clip, lane, at, asReference) {
   return clip.map((c) => {
     const start = beats ? clock.timeAt(b + c.beat0 - first) : target + c.start - first;
     const end = beats ? clock.timeAt(b + c.beat1 - first) : target + c.end - first;
-    return asReference ? { start, end } : snapNote(start, end);
+    return { start, end };
   });
 }
 
@@ -343,7 +345,7 @@ export function confirmPasteMode({ signal } = {}) {
 
 function pasteHitsReference(lane, at, shift, asReference = false, refShift = 0) {
   if (!lane || !Object.keys(lane.refBoxes || {}).length) return false;
-  const placed = placeClip(S.clipboard, lane, at, asReference);
+  const placed = placeClip(S.clipboard, lane, at);
   let bounds = noteBounds(placed.map((times, i) => ({ ...times, pitch: S.clipboard[i].pitch + shift })));
   const source = S.clipboardRef;
   const group = asReference && source?.lane === lane && lane.refBoxes[source.ref];
@@ -385,7 +387,7 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
   const prev = snapshotEdit();
   // Anchor the paste at the current time: the clipboard's earliest note starts at
   // the playhead, the rest at their beat distance from it (see placeClip).
-  const placed = placeClip(S.clipboard, lane, pasteAt, asReference);
+  const placed = placeClip(S.clipboard, lane, pasteAt);
   // Preserve copied motifs, but mint new ids so the paste is independent from
   // the original. A partial copy keeps its annotation, including a single note.
   const pastedMotifIds = new Map();

@@ -1,7 +1,7 @@
 // Project references, indexed directly from their persisted capture boxes.
 import { $, audio, scroll } from "./dom.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
-import { snap, snapNote } from "./grid.js";
+import { snap } from "./grid.js";
 import { localXY } from "./interaction.js";
 import { activateLane, activeLane, canEditLane, renderLanes } from "./lanes.js";
 import { seekPlayback } from "./playback.js";
@@ -240,7 +240,7 @@ function showDropPreview(item, x, y) {
   const key = `${item.kind}:${item.laneId}:${item.ref}:${item.position}:${dt}:${shift}`;
   if (S.dropPreview?.key === key) return;
   // Exactly as doPaste will place them: in beats on this layer's grid.
-  const placed = placeClip(clipOf(notes), lane, dropPlacement(item, notes, x, y, lane).t, item.kind === 'reference');
+  const placed = placeClip(clipOf(notes), lane, dropPlacement(item, notes, x, y, lane).t);
   const moved = notes.map((n, k) => ({ start: placed[k].start, end: placed[k].end, pitch: n.pitch + shift }));
   // A reference's new box is anchored at its earliest note, as linkPasteAsReference does.
   const group = item.kind === 'reference' && lane.refBoxes?.[item.ref];
