@@ -1717,6 +1717,11 @@ export function init_edit() {
     if (!mod && !e.altKey && (e.key === "a" || e.key === "A") && S.matches.length) { e.preventDefault(); acceptAllMatches(e.shiftKey ? "reference" : "copy"); return; }
     if (mod && (e.key === "z" || e.key === "Z")) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
+    else if (mod && !e.altKey && !e.shiftKey && (e.key === "a" || e.key === "A")) {
+      e.preventDefault();
+      const lane = activeLane();
+      if (lane && canEditLane(lane)) { setSelection(new Set(lane.notes)); draw(); }
+    }
     else if (mod && (e.key === "c" || e.key === "C")) { e.preventDefault(); doCopy(); }
     else if (mod && (e.key === "x" || e.key === "X")) { e.preventDefault(); doCut(); }
     else if (mod && (e.key === "v" || e.key === "V")) { e.preventDefault(); doPaste({ mode: e.shiftKey ? "reference" : undefined }); }

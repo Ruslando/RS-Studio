@@ -20,7 +20,7 @@ import { updateProjectStartAt } from "./project-position.js";
 import { projectStart } from "./project-position-core.js";
 import { markerRails, railsBottom } from "./marker-rails.js";
 import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes, setLaneNotePitch, targetLane } from "./lanes.js";
-import { auditionNote, previewNotes, seekPlayback } from "./playback.js";
+import { auditionNote, playbackTime, previewNotes, seekPlayback } from "./playback.js";
 import { toast } from "./notify.js";
 import { beginArtifactRename } from "./artifact-names.js";
 import { beginChordRename } from "./chord-rename.js";
@@ -467,7 +467,8 @@ export function init_interaction() {
     // for looping and detection. A click (no drag)
     // clears the frame.
     if (wantFrame) {
-      S.drag = { mode: "region", x0: x };
+      // A click with no drag on empty space spans playhead → click instead.
+      S.drag = { mode: "region", x0: x, from: e.altKey && !pickNote(t, pitch, pitchAtExact(y)) ? playbackTime() : null };
       const time = clamp(timeAt(x), 0, S.state.duration);
       S.detectRegion = { t0: time, t1: time };
       draw();
@@ -492,7 +493,7 @@ export function init_interaction() {
   
     // Marquee (Shift-drag) = box selection.
     if (wantMarquee) {
-      S.drag = { mode: "marquee", x0: x, y0: y };
+      S.drag = { mode: "marquee", x0: x, y0: y, from: e.shiftKey && !pickNote(t, pitch, pitchAtExact(y)) ? playbackTime() : null };
       S.marquee = { x0: x, y0: y, x1: x, y1: y };
       return;
     }
@@ -780,8 +781,16 @@ export function init_interaction() {
       }
     } else if (S.drag.mode === "marquee") {
       const lane = activeLane();
+      const click = S.drag.from != null && Math.abs(S.marquee.x1 - S.marquee.x0) < 3 && Math.abs(S.marquee.y1 - S.marquee.y0) < 3;
+      // Shift-click on empty space: select the layer's notes starting between the playhead and the click, then move the playhead there.
+      if (click) {
+        const to = clamp(timeAt(S.marquee.x0), 0, S.state.duration);
+        const a = Math.min(S.drag.from, to), b = Math.max(S.drag.from, to);
+        if (canEditLane(lane)) setSelection(new Set(lane.notes.filter((n) => n.start >= a && n.start <= b)));
+        seekPlayback(to);
+      }
       // A hidden / locked lane is disabled — don't marquee-select into it.
-      if (canEditLane(lane)) {
+      else if (canEditLane(lane)) {
         const x0 = Math.min(S.marquee.x0, S.marquee.x1), x1 = Math.max(S.marquee.x0, S.marquee.x1);
         const p1 = pitchAt(Math.min(S.marquee.y0, S.marquee.y1));
         const p0 = pitchAt(Math.max(S.marquee.y0, S.marquee.y1));
@@ -794,7 +803,8 @@ export function init_interaction() {
     } else if (S.drag.mode === "region") {
       let { t0, t1 } = S.detectRegion;
       if (t1 < t0) [t0, t1] = [t1, t0];
-      // A too-narrow band (e.g. an Alt-click) just clears the frame.
+      // An Alt-click on empty space loops playhead → click; on a note it clears the frame.
+      if (t1 - t0 < MIN_REGION && S.drag.from != null) [t0, t1] = [Math.min(S.drag.from, t0), Math.max(S.drag.from, t0)];
       if (t1 - t0 < MIN_REGION) { S.detectRegion = null; }
       else S.detectRegion = { t0, t1: Math.min(t1, S.state.duration) };
       updateDetectStatus();
