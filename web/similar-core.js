@@ -45,6 +45,14 @@ export function similarScores(band, iw, H, c0, pw, stride = 1) {
     loud[c] = hi - lo;   // how clearly anything stands out in this column
     level[c] = mean;     // how much sound there is at all
   }
+  // Take out what every column shares, too: over a wide band a mix's lows are always
+  // louder than its highs, and that slope alone made any two spots look 85% alike.
+  for (let r = 0; r < H; r++) {
+    let m = 0;
+    for (let c = 0; c < iw; c++) m += norm[r * iw + c];
+    m /= iw;
+    for (let c = 0; c < iw; c++) norm[r * iw + c] -= m;
+  }
 
   const lastCs = iw - pw, out = new Float64Array(Math.max(0, lastCs + 1)).fill(-1);
   const w = new Float64Array(pw);
