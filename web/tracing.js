@@ -3,7 +3,7 @@
 
 import { MIN_DUR, stageMono, SIMILAR_MAX_MATCHES, SIMILAR_PITCH_MARGIN, SIMILAR_THRESHOLD, TRACE_FALLBACK_STEP, TRACE_POINT_GAP } from "./constants.js";
 import { similarScores } from "./similar-core.js";
-import { audio, scroll, sctx, stage, traceRangeSel, traceSnapInput } from "./dom.js";
+import { audio, scroll, sctx, traceRangeSel, traceSnapInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { clipOf, commit, copyEffects, placeClip, snapshotEdit } from "./edit.js";
 import { laneClock, wholeBoxOf } from "./references.js";
@@ -269,7 +269,7 @@ export function drawTraceRange(points) {
 // their pitch band + time span, slide it (pitch-locked) across the whole song,
 // and surface the time-shifted copies that correlate best. Each hit shows as a
 // dashed "ghost" of the selection with a confidence %; the focused one carries
-// its own Paste as copy / as reference buttons.
+// Paste as copy / as reference in the navigator.
 let hoverPreviewGeneration = 0;
 let hoverPlaybackToken = null;
 
@@ -288,23 +288,13 @@ function referenceValid(m) {
   return !!s && s.lane.refBoxes?.[s.ref] === s.group;
 }
 
-// The paste buttons sit right under the focused match box (above it when the
-// box reaches the bottom of the stage), and hide while it is scrolled away.
+// The paste buttons live in the navigator, next to ‹ 2 / 4 ›.
 function updateMatchActions() {
-  const box = document.getElementById('matchActions');
-  if (!box) return;
-  const m = S.matches[S.matchFocus];
-  const onScreen = m && xOf(m.t1) > scroll.scrollLeft && xOf(m.t0) < scroll.scrollLeft + scroll.clientWidth;
-  box.hidden = !onScreen;
-  if (!onScreen) return;
-  document.getElementById('matchAsRef').hidden = !referenceValid(m);
-  document.getElementById('matchAsCopy').textContent = m.pull ? 'Copy into range' : 'Paste as copy';
-  const r = stage.getBoundingClientRect(), gap = 4;
-  const below = yOf(m.pBot) + S.state.rowH - scroll.scrollTop + r.top + gap;
-  const above = yOf(m.pTop) - scroll.scrollTop + r.top - box.offsetHeight - gap;
-  const top = below + box.offsetHeight <= r.bottom ? below : Math.max(r.top, above);
-  const left = clamp(xOf(m.t0) - scroll.scrollLeft + r.left, r.left, r.right - box.offsetWidth);
-  box.style.left = `${left}px`; box.style.top = `${top}px`;
+  const m = S.matches[S.matchFocus], copy = document.getElementById('matchAsCopy'), ref = document.getElementById('matchAsRef');
+  if (!copy || !ref) return;
+  copy.hidden = !m;
+  ref.hidden = !referenceValid(m);
+  if (m) copy.textContent = m.pull ? 'Copy into range' : 'Paste as copy';
 }
 
 export function clearMatches() {

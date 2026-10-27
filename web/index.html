@@ -407,6 +407,8 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <button type="button" id="matchPrevious" aria-label="Previous similar passage" title="Previous similar passage (←)">‹</button>
               <output id="matchPosition" aria-live="polite">0 / 0</output>
               <button type="button" id="matchNext" aria-label="Next similar passage" title="Next similar passage (→)">›</button>
+              <button type="button" id="matchAsCopy" class="btn--compact" title="Paste as copy (Enter)" hidden>Paste as copy</button>
+              <button type="button" id="matchAsRef" class="btn--compact primary" title="Paste as reference (Shift+Enter)" hidden>Paste as reference</button>
             </nav>
             <canvas id="rulerRight" aria-label="Right pitch scale"></canvas>
             <button type="button" id="projectStartHandle" class="splitter splitter--x timeline-start" aria-label="Project start: move entire project" hidden>
@@ -1497,10 +1499,6 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
     </div>
   </div>
 
-  <div id="matchActions" role="group" aria-label="Place similar passage" hidden>
-    <button type="button" id="matchAsCopy" class="btn--compact" title="Paste as copy (Enter)">Paste as copy</button>
-    <button type="button" id="matchAsRef" class="btn--compact primary" title="Paste as reference (Shift+Enter)">Paste as reference</button>
-  </div>
   <div id="pasteBackdrop" hidden>
     <div id="pasteModal" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
       <div class="dialog-header"><h2 class="dialog-title" id="pasteTitle">Paste reference</h2><button type="button" id="pasteCancel" class="sp-x" aria-label="Close" title="Close (Esc)"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button></div>
