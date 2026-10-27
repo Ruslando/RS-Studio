@@ -12,12 +12,12 @@ import { contentH, pitchAt, songWidth, timeAt, xOf, yOf } from "./geometry.js";
 import { gridOffset, gridStep } from "./grid.js";
 import { nid } from "./ids.js";
 import { laneOf, refreshCounts, renderLanes, targetLane } from "./lanes.js";
-import { cancelPassagePreview, clearPreview, ensureTone, passagePreviewToken, rate, seekPlayback } from "./playback.js";
+import { cancelPassagePreview, clearPreview, ensureTone, passagePreviewToken, previewNotes, rate, seekPlayback } from "./playback.js";
 import { toast } from "./notify.js";
 import { PAINT, WASH } from "./stage-paint.js";
 import { S, setSelection } from "./store.js";
 import { projectStart } from "./project-position-core.js";
-import { clamp, hexA } from "./util.js";
+import { clamp, fmtTime, hexA } from "./util.js";
 
 export let spectSampleCanvas = document.createElement("canvas");
 
@@ -298,6 +298,7 @@ function updateMatchActions() {
   box.hidden = !onScreen;
   if (!onScreen) return;
   document.getElementById('matchAsRef').hidden = !referenceValid(m);
+  document.getElementById('matchAsCopy').textContent = m.pull ? 'Copy into range' : 'Paste as copy';
   const r = stage.getBoundingClientRect(), gap = 4;
   const below = yOf(m.pBot) + S.state.rowH - scroll.scrollTop + r.top + gap;
   const above = yOf(m.pTop) - scroll.scrollTop + r.top - box.offsetHeight - gap;
@@ -411,6 +412,9 @@ async function previewSimilarMatch(i, opts = {}) {
     return;
   }
   if (token !== passagePreviewToken) return;
+  // A pull overlay plays along with the range's audio (time scaled to the playback speed).
+  const lane = m.pull && targetLane();
+  if (lane) previewNotes(m.notes.map((n) => ({ ...n, start: m.t0 + (n.start - m.t0) / r, end: m.t0 + (n.end - m.t0) / r })), lane, { start: m.t0 });
   const ms = Math.max(80, ((m.t1 - m.t0) / r) * 1000 + 80);
   S.passagePreviewTimer = setTimeout(() => {
     if (token !== passagePreviewToken) return;
@@ -428,18 +432,22 @@ async function previewSimilarMatch(i, opts = {}) {
 // non-overlapping peaks above threshold that aren't already transcribed. The band
 // is the selection's own pitch range; the notes decide where to look, the audio
 // under them is what gets compared.
-function computeSimilarMatches(selNotes, fillLane = targetLane()) {
-  if (!S.state || !S.spectImg || !S.spectPixels || !selNotes.length) return [];
+// With no notes but a `range` ({ t0, t1, loP, hiP }), the search runs the other way:
+// it looks for passages that ARE transcribed and offers to copy their notes into
+// the range ("pull" matches).
+function computeSimilarMatches(selNotes, fillLane = targetLane(), range = null) {
+  if (!S.state || !S.spectImg || !S.spectPixels || (!selNotes.length && !range)) return [];
   const iw = S.spectImg.width, ih = S.spectImg.height;
-  const firstBox = wholeBoxOf(selNotes);
+  const firstBox = range ? null : wholeBoxOf(selNotes);
   const sourceReference = firstBox ? { lane: firstBox.lane, ref: firstBox.ref, group: firstBox.group, anchor: firstBox.group.anchors[firstBox.i] } : null;
-  const t0 = Math.min(...selNotes.map((n) => n.start));
-  const t1 = Math.max(...selNotes.map((n) => n.end));
+  const t0 = range ? range.t0 : Math.min(...selNotes.map((n) => n.start));
+  const t1 = range ? range.t1 : Math.max(...selNotes.map((n) => n.end));
   if (t1 - t0 < MIN_DUR) return [];
-  const loP = Math.min(...selNotes.map((n) => n.pitch));
-  const hiP = Math.max(...selNotes.map((n) => n.pitch));
-  const pTop = Math.min(S.state.spec.midi_high, hiP + SIMILAR_PITCH_MARGIN);
-  const pBot = Math.max(S.state.spec.midi_low, loP - SIMILAR_PITCH_MARGIN);
+  const loP = range ? range.loP : Math.min(...selNotes.map((n) => n.pitch));
+  const hiP = range ? range.hiP : Math.max(...selNotes.map((n) => n.pitch));
+  const margin = range ? 0 : SIMILAR_PITCH_MARGIN;
+  const pTop = Math.min(S.state.spec.midi_high, hiP + margin);
+  const pBot = Math.max(S.state.spec.midi_low, loP - margin);
 
   // Image-space patch: columns [c0,c1), rows [rTop,rBot] (higher pitch = lower index).
   const c0 = Math.floor(imageXForTime(t0));
@@ -449,7 +457,7 @@ function computeSimilarMatches(selNotes, fillLane = targetLane()) {
   const rBot = clamp(Math.floor(imageYForPitch(pBot)), 0, ih - 1);
   const H = rBot - rTop + 1;
   if (patchW < 1 || H < 2 || c0 + patchW > iw) return [];
-  const clip = clipOf(selNotes);   // beat shape, so a placed match follows the local tempo
+  const clip = range ? null : clipOf(selNotes);   // beat shape, so a placed match follows the local tempo
 
   const band = new Float64Array(H * iw);
   for (let ri = 0; ri < H; ri++) {
@@ -475,13 +483,26 @@ function computeSimilarMatches(selNotes, fillLane = targetLane()) {
     if (Math.abs(cs - c0) < minSep) continue;   // the selection itself, or a slice of it
     if (picked.some((p) => Math.abs(p - cs) < minSep)) continue;
     const dt = (cs - c0) * dtPerCol;
+    if (range) {
+      // Pull: the notes already sitting in the match are what gets copied over.
+      const found = fillLane ? fillLane.notes.filter((n) => n.start >= t0 + dt && n.start < t1 + dt) : [];
+      if (!found.length) continue;
+      picked.push(cs);
+      // The box stays on the range; the found notes are shown where they would land.
+      const clip = clipOf(found), at = Math.min(...found.map((n) => n.start)) - dt;
+      const placed = placeClip(clip, fillLane, at);
+      out.push({ score, dt, t0, t1, pTop, pBot, from: t0 + dt, clip, at, pull: true, sourceReference: null,
+        notes: found.map((n, k) => copyEffects(n, { start: placed[k].start, end: placed[k].end, pitch: n.pitch })) });
+      if (out.length >= SIMILAR_MAX_MATCHES) break;
+      continue;
+    }
     const ghosts = selNotes.map((nn) => copyEffects(nn, { start: nn.start + dt, end: nn.end + dt, pitch: nn.pitch }));
     if (passageFilled(ghosts, fillLane)) continue;   // already transcribed in the target lane
     picked.push(cs);
     out.push({ score, dt, t0: t0 + dt, t1: t1 + dt, pTop, pBot, notes: ghosts, clip, sourceReference });
     if (out.length >= SIMILAR_MAX_MATCHES) break;
   }
-  out.sort((a, b) => a.t0 - b.t0);   // left-to-right along the timeline
+  out.sort(range ? (a, b) => b.score - a.score : (a, b) => a.t0 - b.t0);   // best first / left to right
   return out;
 }
 
@@ -498,14 +519,20 @@ function passageFilled(ghosts, lane) {
 export function runFindSimilar() {
   if (!S.state) return;
   const selNotes = [...S.selection].filter((n) => laneOf(n));
-  if (!selNotes.length) { toast("Select notes in a note layer first"); return; }
+  const region = S.detectRegion;
+  if (!selNotes.length && !region) { toast("Select notes, or Alt-drag a range, first"); return; }
   if (!S.spectPixels) { toast("Spectrogram not ready yet"); return; }
   const lane = targetLane();
   if (!lane) { toast("Add an edit lane first"); return; }
+  // No notes selected: search with the range, over the pitches on screen.
+  const range = selNotes.length ? null : {
+    t0: Math.min(region.t0, region.t1), t1: Math.max(region.t0, region.t1),
+    loP: Math.ceil(pitchAt(scroll.scrollTop + scroll.clientHeight)), hiP: Math.floor(pitchAt(scroll.scrollTop)),
+  };
   ensureTone(); // unlock audio from the Find Similar gesture so hover previews can play
   clearMatches();
-  S.matches = computeSimilarMatches(selNotes, lane);
-  if (!S.matches.length) { toast("No similar passages found"); draw(); return; }
+  S.matches = computeSimilarMatches(selNotes, lane, range);
+  if (!S.matches.length) { toast(range ? "No similar transcribed passages found" : "No similar passages found"); draw(); return; }
   toast(`Found ${S.matches.length} similar passage${S.matches.length === 1 ? "" : "s"}`);
   focusMatch(0);
 }
@@ -527,7 +554,7 @@ function placeGhosts(matches, mode) {
   const prev = snapshotEdit();
   const added = [], clock = laneClock(lane);
   for (const match of matches) {
-    const placed = placeClip(match.clip, lane, match.t0);
+    const placed = placeClip(match.clip, lane, match.at ?? match.t0);
     match.notes.forEach((g, k) => {
       const nn = copyEffects(g, { id: nid(), start: placed[k].start, end: placed[k].end, pitch: g.pitch });
       lane.notes.push(nn); added.push(nn);
@@ -554,7 +581,8 @@ export function acceptMatch(i, mode = "copy") {
   clearPreview();
   const res = placeGhosts([m], mode);
   if (!res) return;
-  S.matches.splice(i, 1);
+  if (m.pull) S.matches = [];   // the range is filled; the other candidates had the same job
+  else S.matches.splice(i, 1);
   S.matchHover = -1;
   S.matchFocus = -1;
   setSelection(new Set(res.added));   // float them like a paste
@@ -564,7 +592,7 @@ export function acceptMatch(i, mode = "copy") {
 }
 
 export function acceptAllMatches(mode = "copy") {
-  if (!S.matches.length || (mode === "reference" && !referenceValid(S.matches[0]))) return;
+  if (!S.matches.length || S.matches[0].pull || (mode === "reference" && !referenceValid(S.matches[0]))) return;
   cancelHoverPreview();
   cancelPassagePreview({ pauseAudio: true });
   clearPreview();
@@ -577,7 +605,10 @@ export function acceptAllMatches(mode = "copy") {
 }
 
 export function matchAt(x, y) {
+  // Pull matches all share the range's box; only the focused one is on show.
+  const pull = S.matches[0]?.pull;
   for (let i = 0; i < S.matches.length; i++) {
+    if (pull && i !== Math.max(0, S.matchFocus)) continue;
     const m = S.matches[i];
     const bx0 = xOf(m.t0), bx1 = xOf(m.t1);
     const byTop = yOf(m.pTop), byBot = yOf(m.pBot) + S.state.rowH;
@@ -596,6 +627,7 @@ export function drawMatches() {
   sctx.font = stageMono();   // a confidence %, ranked against every other match
   for (let i = 0; i < S.matches.length; i++) {
     const m = S.matches[i];
+    if (m.pull && i !== Math.max(0, S.matchFocus)) continue;   // one overlay at a time on the range
     const bx = xOf(m.t0), bw = xOf(m.t1) - bx;
     if (bx > vx1 || bx + bw < vx0) continue;   // off-screen
     const byTop = yOf(m.pTop), byBot = yOf(m.pBot) + S.state.rowH;
@@ -605,8 +637,11 @@ export function drawMatches() {
     const a = 0.25 + 0.55 * clamp((m.score - SIMILAR_THRESHOLD) / (1 - SIMILAR_THRESHOLD), 0, 1);
     for (const g of m.notes) {
       const gx = xOf(g.start), gw = Math.max(2, xOf(g.end) - gx);
-      sctx.fillStyle = hexA(PAINT.trace, a);   // one hue for suggestions, distinct from the edit lanes
+      // One hue for suggestions, distinct from the edit lanes. A pull overlay is read
+      // against the audio under it, so it is drawn solid and outlined.
+      sctx.fillStyle = hexA(PAINT.trace, m.pull ? 0.75 : a);
       sctx.fillRect(gx, yOf(g.pitch), gw, S.state.rowH);
+      if (m.pull) { sctx.strokeStyle = PAINT.ground; sctx.strokeRect(gx + 0.5, yOf(g.pitch) + 0.5, gw - 1, S.state.rowH - 1); }
     }
     sctx.save();
     sctx.setLineDash([5, 3]);
@@ -617,7 +652,7 @@ export function drawMatches() {
     sctx.strokeRect(bx + 0.5, byTop + 0.5, bw - 1, byBot - byTop - 1);
     sctx.restore();
     // "2/5 · 84%": which one this is (left to right), of how many, and how close.
-    const pct = `${i + 1}/${S.matches.length} · ${Math.round(m.score * 100)}%`;
+    const pct = `${i + 1}/${S.matches.length} · ${Math.round(m.score * 100)}%${m.pull ? ` · from ${fmtTime(m.from)}` : ""}`;
     const tw = sctx.measureText(pct).width;
     const ly = clamp(byTop, vy0, vy0 + S.stageHeight - 13);
     sctx.fillStyle = active ? PAINT.trace : hexA(PAINT.trace, 0.85);

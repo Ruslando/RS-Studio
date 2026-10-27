@@ -1264,6 +1264,7 @@ export function openCanvasMenu(clientX, clientY, atTime) {
   ];
   const entries = [
     { label: "Detect notes…", fn: () => openDetectPanel(clientX, clientY) },
+    ...(S.detectRegion ? [{ label: "Find similar to range", kw: "search match repeat", fn: runFindSimilar }] : []),
     ...addMarker,
     { label: "Add comment", kw: "note annotation", fn: () => addCommentAt(clientX, clientY) },
     { sep: true },

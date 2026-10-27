@@ -49,7 +49,7 @@ export const EDITOR_COMMAND_HANDLERS = {
   rangeStart: () => goTo(S.detectRegion?.t0),
   clearRange: () => { S.detectRegion = null; updateDetectStatus(); draw(); },
   detectNotes: () => { const rect = stage.getBoundingClientRect(); openDetectPanel(rect.left + 40, rect.top + 40); },
-  findSimilar: () => withSelection(runFindSimilar),
+  findSimilar: () => S.selection.size ? withSelection(runFindSimilar) : runFindSimilar(),
   groupReference: () => withSelection(notes => refMenuEntry(notes)?.fn()),
   detachReference: () => withSelection(detachSelection),
   markMotif: () => withSelection(markSelectionAsMotif), selectMotif: () => withSelection(selectEntireMotif),
