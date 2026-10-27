@@ -296,7 +296,8 @@ function positionsForLabels(lane) {
   let entry = labelPositions.get(lane);
   if (entry?.key !== key) {
     entry?.controller.abort();
-    entry = { key, controller: new AbortController(), voiced: new Map() };
+    // Keep showing the last labels until the new ones arrive (a drag defers them).
+    entry = { key, controller: new AbortController(), voiced: entry?.voiced || new Map() };
     labelPositions.set(lane, entry);
     laneFingering(lane, entry.controller.signal).then(({ notes, voiced }) => {
       if (labelPositions.get(lane) !== entry) return;

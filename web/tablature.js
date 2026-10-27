@@ -218,32 +218,58 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
     return { voiced, fingers, seats };
   }
 
+  // Nothing new starts mid-drag: the notes are still moving, so every answer would
+  // be stale by the time it arrives. The release redraws and asks again.
+  if (S.drag) {
+    await afterDrag();
+    if (signal?.aborted || laneFingeringKey(lane, tuning) !== key) throw aborted();
+  }
+  // One worker per lane at a time. The labels, the tab and the fretboard all ask
+  // on every frame of a drag, each with a new key; a worker per ask piled up
+  // hundreds of them until the renderer ran out of memory. A caller with a newer
+  // key waits for the running job, then only the still-current key starts one.
+  let job;
+  while ((job = laneVoicingJobs.get(lane)) && job.key !== key) {
+    await job.promise.catch(() => {});
+    if (signal?.aborted || laneFingeringKey(lane, tuning) !== key) throw aborted();
+    const done = laneVoicingCache.get(lane);
+    if (done?.key === key && done.positions.length === notes.length) return handedMap(notes, done);
+  }
+  if (!job) {
+    job = { key, promise: voiceInWorker(lane, notes, tuning) };
+    laneVoicingJobs.set(lane, job);
+    job.promise.then(got => laneVoicingCache.set(lane, { key, ...got }), () => {})
+      .finally(() => { if (laneVoicingJobs.get(lane) === job) laneVoicingJobs.delete(lane); });
+  }
   const got = await new Promise((resolve, reject) => {
-    let settled = false;
-    const worker = new Worker(new URL("./voicing-worker.js", import.meta.url), { type: "module" });
-    const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      signal?.removeEventListener("abort", onAbort);
-      worker.terminate();
-      fn(value);
-    };
-    const onAbort = () => finish(reject, aborted());
+    const onAbort = () => reject(aborted());
+    if (signal?.aborted) return onAbort();
     signal?.addEventListener("abort", onAbort, { once: true });
+    job.promise.then(resolve, reject).finally(() => signal?.removeEventListener("abort", onAbort));
+  });
+  if (signal?.aborted || laneFingeringKey(lane, tuning) !== key) throw aborted();
+  return handedMap(notes, got);
+}
+
+const laneVoicingJobs = new WeakMap();
+// One shared wait for the pointer to let go, however many askers pile up mid-drag.
+// ponytail: polls S.drag every 50 ms; an event from interaction.js if that ever shows.
+let dragEnd = null;
+const afterDrag = () => dragEnd ||= new Promise(resolve => {
+  const timer = setInterval(() => { if (!S.drag) { clearInterval(timer); dragEnd = null; resolve(); } }, 50);
+});
+function voiceInWorker(lane, notes, tuning) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./voicing-worker.js", import.meta.url), { type: "module" });
     worker.onmessage = (ev) => {
       if (ev.data.task !== "voice") return;
-      finish(resolve, {
-        positions: ev.data.positions || [],
-        fingers: ev.data.fingers || [], seats: ev.data.seats || [],
-      });
+      worker.terminate();
+      resolve({ positions: ev.data.positions || [], fingers: ev.data.fingers || [], seats: ev.data.seats || [] });
     };
-    worker.onerror = () => finish(reject, new Error("automatic fingering worker failed"));
+    worker.onerror = () => { worker.terminate(); reject(new Error("automatic fingering worker failed")); };
     worker.postMessage({ task: "voice", notes, tuning, bars: laneBars(lane),
       instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
   });
-  if (signal?.aborted || laneFingeringKey(lane, tuning) !== key) throw aborted();
-  laneVoicingCache.set(lane, { key, ...got });
-  return handedMap(notes, got);
 }
 
 // The three index-aligned arrays back into maps on the caller's own note objects.
