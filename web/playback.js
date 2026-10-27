@@ -169,7 +169,8 @@ export function cancelPassagePreview(opts = {}) {
 
 export function previewNotes(notes, lane, { start } = {}) {
   if (!window.Tone || !S.toneReady) return;
-  if (!laneAudible(lane)) return; // muted means silent, auditions included
+  // A muted layer still auditions, at its own volume (applyLaneVolume ignores mute).
+  if (normLayerVolume(lane.volume) * busLevel("notes") <= 0) return;
   const synth = laneSynth(lane);
   if (!synth) return;
   setSynthsMuted(false); // auditioning is an explicit request for sound — lift any pause mute
