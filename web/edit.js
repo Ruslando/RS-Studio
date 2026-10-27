@@ -6,7 +6,7 @@ import { automaticHandSeat } from './hand-anchor-core.js';
 
 import { wireContextSubmenu } from "./context-submenu.js";
 import { hoveredStageNote } from "./interaction.js";
-import { MAX_POINTS, SLIDES_TO_NEXT, SLIDE_START_MAX, bendAt, bendCurve, normalizeCurve } from "./bend.js";
+import { MAX_POINTS, SLIDE_END_MIN, SLIDE_IN, SLIDE_OUT, SLIDE_START_MAX, bendAt, slideReach, bendCurve, normalizeCurve } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
 import { icon } from "./icons.js";
@@ -547,18 +547,31 @@ function setSlideOnSelection(kind) {
   const prev = snapshotEdit();
   let cleared = false;
   for (const n of notes) {
+    // Timing and reach belong to one kind of slide; a new kind starts from its defaults.
+    if (n.slide !== kind) { delete n.slideStart; delete n.slideEnd; delete n.slideFrets; }
     if (kind) { cleared = clearConflicts(n, "slide") || cleared; n.slide = kind; } else delete n.slide;
-    if (!SLIDES_TO_NEXT.has(n.slide)) delete n.slideStart;   // only a slide onto the next note has one
   }
   commit(prev); draw();
   if (cleared) toast("Cleared conflicting effects");
 }
 
-// Where a slide onto the next note leaves its fret, as a fraction of the note.
-// The pick (0) is the default and is stored as no field at all.
+// Where a slide onto the next note leaves its fret, as a fraction of the note. The pick (0) is the default and is stored as no field at
+// all. For a slide into the note, where it lands; 0 puts back the default (bend.js).
 export function setSlideStart(n, fraction) {
+  if (SLIDE_IN.has(n.slide)) {
+    if (fraction > 1e-3) n.slideEnd = Math.max(SLIDE_END_MIN, Math.min(SLIDE_START_MAX, fraction));
+    else delete n.slideEnd;
+    return;
+  }
   const s = Math.max(0, Math.min(SLIDE_START_MAX, fraction));
   if (s > 1e-3) n.slideStart = s; else delete n.slideStart;
+}
+
+// How many frets a slide into or out of the note spans: at least one, at most
+// what Rocksmith reaches from the note's `fret` (bend.js slideReach).
+export function setSlideFrets(n, frets, fret) {
+  if (!(SLIDE_IN.has(n.slide) || SLIDE_OUT.has(n.slide))) return;
+  n.slideFrets = Math.max(1, Math.min(Math.round(frets), slideReach(n.slide, fret)));
 }
 
 // The same for where vibrato sets in.
@@ -651,7 +664,7 @@ function dropEffect(n, name) {
   } else if (n[name] != null) {
     delete n[name];
     if (name === "bend") delete n.bendPoints;   // the curve is meaningless without it
-    if (name === "slide") delete n.slideStart;
+    if (name === "slide") { delete n.slideStart; delete n.slideEnd; delete n.slideFrets; }
   }
 }
 // Strip every effect conflicting with the one being turned on; returns whether any
@@ -1141,7 +1154,7 @@ const EFFECT_MENU = [
     ] },
     { field: "slide", label: "Slide", kw: "glide glissando", set: setSlideOnSelection, variants: [
       [null, "None"], ["shift", "Shift → next"], ["legato", "Legato → next"],
-      ["inBelow", "In from below ↗", "absent"], ["inAbove", "In from above ↘", "absent"],
+      ["inBelow", "In from below ↗", "simulated"], ["inAbove", "In from above ↘", "simulated"],
       ["outDown", "Out downward ↓"], ["outUp", "Out upward ↑"],
     ] },
     { field: "whammy", rs: "absent", label: "Whammy bar", kw: "tremolo arm dive bar", set: (v) => setChoiceOnSelection("whammy", v), variants: [

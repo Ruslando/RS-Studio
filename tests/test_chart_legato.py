@@ -179,3 +179,45 @@ class BendContinuationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _one(note):
+    track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40],
+             "notes": [{"string": 5, "start": 1.0, "end": 2.0, **note}]}
+    compiled = compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+    return compiled.sng.levels[0].notes, compiled
+
+
+class EdgeSlideTest(unittest.TestCase):
+    def test_slide_out_reaches_its_frets(self):
+        (n,), _ = _one({"fret": 9, "pitch": 54, "slide": "outDown", "slideFrets": 3})
+        self.assertTrue(n.mask & S.UNPITCHEDSLIDE)
+        self.assertEqual(n.slide_unpitch_to, 6)
+
+    def test_slide_out_is_never_cut(self):
+        (n,), _ = _one({"fret": 9, "pitch": 54, "slide": "outUp", "slideStart": 0.5})
+        self.assertTrue(n.mask & S.UNPITCHEDSLIDE)
+        self.assertFalse(n.mask & S.PARENT)
+
+    def test_open_string_slide_out_is_dropped(self):
+        (n,), compiled = _one({"fret": 0, "pitch": 45, "slide": "outDown"})
+        self.assertFalse(n.mask & S.UNPITCHEDSLIDE)
+        self.assertIn("slide-open", [code for code, _ in compiled.fixes])
+
+    def test_slide_in_is_a_lead_in_note_sliding_into_it(self):
+        (lead, main), _ = _one({"fret": 7, "pitch": 52, "slide": "inBelow", "slideFrets": 2,
+                                "slideEnd": 0.25, "fx": {"accent": True, "vibrato": True}})
+        self.assertEqual(lead.fret, 5)
+        self.assertAlmostEqual(lead.time, 1.0)
+        self.assertTrue(lead.mask & S.SLIDE and lead.mask & S.PARENT and lead.mask & S.ACCENT)
+        self.assertFalse(lead.mask & S.VIBRATO)
+        self.assertEqual(lead.slide_to, 7)
+        self.assertAlmostEqual(main.time, 1.25)
+        self.assertEqual(main.fret, 7)
+        self.assertTrue(main.mask & S.CHILD and main.mask & S.VIBRATO)
+        self.assertFalse(main.mask & S.ACCENT)
+
+    def test_slide_in_from_below_fret_one_is_left_out(self):
+        (n,), compiled = _one({"fret": 1, "pitch": 46, "slide": "inBelow"})
+        self.assertEqual(n.fret, 1)
+        self.assertIn("slide-in", [code for code, _ in compiled.fixes])

@@ -17,7 +17,7 @@ import { hammerDirections } from "./articulations.js";
 import { stackClusters, stackedBends } from "./note-issues.js";
 import { paintNoteBar } from "./canvas-components.js";
 import { graceBefore } from "./grace.js";
-import { bendCurve, easedCurveAt, slideRibbon, slideStartOf, slideTargets, vibratoStartOf } from "./bend.js";
+import { SLIDES_TO_NEXT, SLIDE_IN, SLIDE_OUT, bendCurve, easedCurveAt, slideRibbon, slideStartOf, slideTargets, vibratoStartOf } from "./bend.js";
 import { REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
 import { laneFingering, laneFingeringKey } from "./tablature.js";
@@ -160,24 +160,36 @@ export function bendHandles(n) {
   return pts.map(([t, v], i) => ({ i, note: n, x: x + w * t, y: ym - v * rowH }));
 }
 
-// Where a selected note's slide onto the next note leaves its fret: the handle
-// that drags that moment along the note. A bent note draws its bend instead of
-// the slide ribbon, so it has no such handle. It sits just outside the note's
-// row, on the side the slide does not go to, so it never covers the resize edge
-// at the note's start or the ribbon. `bar` is the row edge its stem starts from.
+// Where a selected note's slide onto the next note leaves its fret or, for a
+// slide into it, lands: the handle that drags that moment along
+// the note. A bent note draws its bend instead of the slide ribbon, so it has no
+// such handle. It sits just outside the note's row, on the side the slide does
+// not go to, so it never covers the resize edge at the note's start or the
+// ribbon. `bar` is the row edge its stem starts from.
 export const SLIDE_HANDLE_GAP = 11;
 export function slideStartHandle(n, lane) {
-  const target = !bendCurve(n) && lane ? laneSlides(lane).get(n) : null;
-  if (!slideRibbon(n, target)) return null;
-  const t = n.start + slideStartOf(n) * (n.end - n.start), rowH = S.state.rowH;
-  const below = target.pitch >= n.pitch, bar = yOf(n.pitch) + (below ? rowH : 0);
+  const ribbon = !bendCurve(n) && lane && !SLIDE_OUT.has(n.slide) ? noteRibbon(lane, n) : null;
+  if (!ribbon) return null;
+  const into = SLIDE_IN.has(n.slide);
+  const t = n.start + (into ? ribbon.points[1][0] : slideStartOf(n)) * (n.end - n.start), rowH = S.state.rowH;
+  const below = (into ? ribbon.points[0][1] : ribbon.points.at(-1)[1]) >= 0, bar = yOf(n.pitch) + (below ? rowH : 0);
   return { note: n, kind: "slide", x: xOf(t), bar, y: bar + (below ? SLIDE_HANDLE_GAP : -SLIDE_HANDLE_GAP) };
+}
+
+// The far end of a selected note's slide into or out of it: dragged up or down,
+// it sets how many frets the slide spans.
+export function slideFretsHandle(n, lane) {
+  if (!(SLIDE_IN.has(n.slide) || SLIDE_OUT.has(n.slide)) || bendCurve(n) || !lane) return null;
+  const ribbon = noteRibbon(lane, n);
+  if (!ribbon) return null;
+  const into = SLIDE_IN.has(n.slide), span = into ? ribbon.points[0][1] : ribbon.points.at(-1)[1];
+  return { note: n, x: xOf(into ? n.start : n.end), y: yOf(n.pitch + span) + S.state.rowH / 2 };
 }
 
 // The drawn centre line of a note at time t, in stage px: its bend, or its slide
 // ribbon, or its row. What the vibrato wave and handle sit on.
 function noteCentreAt(n, lane, t) {
-  const ribbon = lane ? slideRibbon(n, laneSlides(lane).get(n)) : null;
+  const ribbon = lane ? noteRibbon(lane, n) : null;
   const curve = bendCurve(n) || ribbon?.points, end = !bendCurve(n) && ribbon ? ribbon.end : n.end;
   const semi = curve ? easedCurveAt(curve, (t - n.start) / Math.max(1e-6, end - n.start)) : 0;
   return yOf(n.pitch) + S.state.rowH / 2 - semi * S.state.rowH;
@@ -273,6 +285,17 @@ const hammerTagCache = new WeakMap();
 const slideTargetCache = new WeakMap();
 // Paired by the strings the voicer chose (the same ones the labels show), so a
 // slide's ribbon follows the string the finger actually runs along.
+// The fret a note is played on, as the labels show it: what limits how far a
+// slide into or out of it reaches (bend.js slideReach).
+export const slideFretOf = (lane, n) => positionsForLabels(lane).get(n)?.fret ?? n.pos?.fret;
+
+// A note's slide ribbon as the stage draws it, or null.
+export function noteRibbon(lane, n) {
+  if (!n.slide) return null;
+  if (SLIDES_TO_NEXT.has(n.slide)) return slideRibbon(n, laneSlides(lane).get(n));
+  return slideRibbon(n, null, { fret: slideFretOf(lane, n), eighth: 30 / (gridAt(n.start)?.bpm || 120) });
+}
+
 export function laneSlides(lane) {
   const positions = positionsForLabels(lane);
   const hit = slideTargetCache.get(lane);
@@ -321,7 +344,7 @@ export function drawNoteFx() {
     if (!lane.active || lane.locked) sctx.globalAlpha = 0.5;
     for (const n of lane.notes) {
       const x = xOf(n.start), x1 = xOf(n.end);
-      const onto = slides.get(n), ribbon = slideRibbon(n, onto);
+      const onto = slides.get(n), ribbon = noteRibbon(lane, n);
       const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
       if ((grace ? xOf(grace.start) : x) > vx1 || Math.max(x1, ribbon ? xOf(ribbon.end) : x1) < vx0) continue;
       const { mode, effects } = resolveNoteAppearance(options, S.hoverNote === n);
@@ -331,12 +354,14 @@ export function drawNoteFx() {
       const label = spectrogramLabel(n, positions?.get(n), mode, tags, capo);
       const curve = bendCurve(n);
       if (ribbon && !curve) {
-        centeredLabel(label, x, 0, n.pitch, x1 - x);
-        const arrow = onto.pitch < n.pitch ? "\u2198" : "\u2197";
-        // Over the sliding part: a late start holds flat first (bend.js).
-        const xs = x + (xOf(ribbon.end) - x) * ribbon.points.at(-2)[0];
+        // The sliding part: after a late start, or before a slide-in lands (bend.js).
+        const into = SLIDE_IN.has(n.slide), [p0, p1] = into ? ribbon.points.slice(0, 2) : ribbon.points.slice(-2);
+        const w = xOf(ribbon.end) - x, xs = x + w * p0[0], xe = x + w * p1[0];
+        if (into) centeredLabel(label, xe, x1 - xe, n.pitch);
+        else centeredLabel(label, x, 0, n.pitch, x1 - x);
+        const arrow = p1[1] < p0[1] ? "\u2198" : "\u2197";
         if (effects) centeredLabel((n.slide === "legato" ? "\u2312" : "") + arrow,
-          xs, xOf(ribbon.end) - xs, (n.pitch + onto.pitch) / 2);
+          xs, xe - xs, n.pitch + (p0[1] + p1[1]) / 2);
         if (n.slide === "shift") {
           const ax = xOf(onto.start) + 1, ay = yOf(onto.pitch), h = S.state.rowH;
           sctx.save(); sctx.lineCap = "round";
@@ -351,7 +376,7 @@ export function drawNoteFx() {
         const baseLabel = spectrogramLabel(n, positions?.get(n), mode === 'both' ? 'positions' : mode === 'notes' ? 'none' : mode, tags, capo);
         if (baseLabel) centeredLabel(baseLabel, x, x1 - x, n.pitch);
       } else if (label) centeredLabel(label, x, x1 - x, n.pitch);
-      if (effects) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2, S.state.rowH);
+      if (effects && !ribbon) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2, S.state.rowH);
       if (effects && n.fx?.vibrato) paintVibratoWave(n, lane);
       if (grace) {
         const gx = xOf(grace.start), width = Math.max(2, x - gx), pitch = n.pitch + grace.offset;

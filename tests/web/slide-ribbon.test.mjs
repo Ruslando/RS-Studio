@@ -15,7 +15,13 @@ for (const slide of ["shift", "legato"]) {
     "descending slides reach the lower pitch");
   assert.equal(slideRibbon(source, null), null, "no invented target");
 }
-assert.equal(slideRibbon({ start: 0, slide: "outUp" }, { start: 1, pitch: 65 }), null);
+assert.deepEqual(slideRibbon({ start: 0, end: 1, slide: "outUp" }, { start: 1, pitch: 65 }), { end: 1, points: [[0, 0], [1, 5]] },
+  "a slide-out stays within its note");
+assert.deepEqual(slideRibbon({ start: 0, end: 1, slide: "outDown", slideFrets: 3 }, null, { fret: 7 }).points,
+  [[0, 0], [1, -3]]);
+assert.deepEqual(slideRibbon({ start: 0, end: 1, slide: "inAbove", slideEnd: 0.25, slideFrets: 2 }, null).points,
+  [[0, 2], [0.25, 0], [1, 0]], "a slide-in comes from its far end");
+assert.equal(slideRibbon({ start: 0, end: 1, slide: "outDown" }, null, { fret: 1 }), null, "nowhere to go from fret 1");
 assert.equal(slideRibbon({ start: 1, slide: "shift" }, { start: 1, pitch: 65 }), null);
 
 // A late slide start holds the ribbon flat, then slides over the rest.
@@ -27,7 +33,8 @@ assert.equal(slideRibbon({ start: 1, slide: "shift" }, { start: 1, pitch: 65 }),
   assert.equal(slideAt(source, 0.4, 1, { to: 7 }), 0, "held before the slide start");
   assert.equal(slideAt(source, 0.75, 1, { to: 7 }), 4, "halfway through the slide part");
   assert.equal(slideAt(source, 1, 1, { to: 7 }), 7);
-  assert.equal(slideStartOf({ slide: "outUp", slideStart: 0.5 }), 0, "only slides onto the next note");
+  assert.equal(slideStartOf({ slide: "outUp", slideStart: 0.5 }), 0, "a slide-out spans the whole note");
+  assert.equal(slideStartOf({ slide: "inBelow", slideStart: 0.5 }), 0, "a slide-in starts at the pick");
   assert.equal(slideStartOf({ slide: "shift", slideStart: 2 }), 0.95, "never leaves the slide no time");
 }
 

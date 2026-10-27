@@ -72,51 +72,81 @@ export const trillOffsetAt = (n, sec, bpm = 120) => sec >= 0
 // slide clicks through.
 //
 // Onto the next note (shift/legato) the slide runs from `slideStart` (the pick,
-// unless moved later) to the note's end, as Rocksmith plays it: slideTo is a target
-// fret and the note's sustain is the slide (rocksmith/chart.py).
-// Into and out of a note it is as quick as a player makes it, the same both ways:
-// an eighth note at the song's tempo there (`eighth`, in seconds), never more than
-// half the note — at the start for a slide-in, at the end for a slide-out. Neither
-// format stores how long these take (Rocksmith draws a slide-out over the sustain;
-// it has no slide-in, Guitar Pro has both, untimed), so the editor does not either.
-// A slide-out goes SLIDE.out frets, as the export writes it, and never below fret 1
-// (the game cannot land one on the open string); a slide-in comes from SLIDE.into.
+// unless moved later) to the note's end, as Rocksmith plays it: the note's
+// sustain is the slide (rocksmith/chart.py). Out of a note (outDown/outUp) it
+// always runs over the whole note: Rocksmith's unpitched slide spans the sustain,
+// and a late start would need a linked note carrying it, untried in the game.
+// Into a note (inBelow/inAbove) it runs from the pick to `slideEnd`, by default an
+// eighth note at the song's tempo there (`eighth`, in seconds), never more than
+// half the note. Rocksmith has no slide-in: the export plays it as a short note
+// a few frets away with a legato slide into this one.
+//
+// A slide into or out of a note spans `slideFrets` frets (SLIDE_FRETS unless
+// set), as far as Rocksmith reaches from the note's fret: see slideReach.
 //
 // `sec` is the time since the onset and `dur` the note's own length, both in the
 // same seconds; past `dur` (a legato note carried into its target) it stays landed.
 // `to` is a shift/legato target in semitones. `steps: false` is the finger's own
 // path, which glides between the frets the pitch steps across.
-export const SLIDE = { into: 4, out: 5, eighth: 0.25 };   // eighth: 120 BPM, when no tempo is known
+export const SLIDE = { eighth: 0.25 };   // 120 BPM, when no tempo is known
 export const SLIDES_TO_NEXT = new Set(["shift", "legato"]);
 export const SLIDE_IN = new Set(["inBelow", "inAbove"]);
 export const SLIDE_OUT = new Set(["outDown", "outUp"]);
+export const SLIDE_FRETS = { inBelow: 4, inAbove: 4, outDown: 5, outUp: 5 };
+const SLIDE_SIGN = { inBelow: -1, inAbove: 1, outDown: -1, outUp: 1 };   // where the far end sits
+// ponytail: Rocksmith's neck, not the lane's; a shorter neck is clamped by the export.
+export const MAX_FRET = 24;
 
-// Where a shift/legato slide leaves its fret, as a fraction of the note: the note
-// is held until then and slides over the rest. `slideStart` is absent for a slide
-// over the whole note. Rocksmith has no such field; the export holds the note and
-// links it to a second one that slides (rocksmith/chart.py).
+// How many frets a slide into or out of a note on `fret` can span in Rocksmith.
+// A slide-out ends on fret 1 at the lowest (the game draws one onto the open
+// string wrong) and 24 at the highest; a slide-in's lead-in note (chart.py) sits
+// on the same frets. An open string slides nowhere. An unknown fret is unlimited.
+export function slideReach(kind, fret) {
+  if (!SLIDE_SIGN[kind]) return 0;
+  if (fret == null) return Infinity;
+  if (fret <= 0) return 0;
+  return Math.max(0, SLIDE_SIGN[kind] < 0 ? fret - 1 : MAX_FRET - fret);
+}
+
+// Semitones from the note to its slide's far end (where a slide-in comes from,
+// where a slide-out goes): signed, 0 when the slide cannot go anywhere.
+export function edgeSlideSpan(n, fret = n?.pos?.fret) {
+  const kind = n?.slide;
+  if (!SLIDE_SIGN[kind]) return 0;
+  const frets = Math.max(1, Math.round(Number(n.slideFrets) || SLIDE_FRETS[kind]));
+  return SLIDE_SIGN[kind] * Math.min(frets, slideReach(kind, fret)) || 0;
+}
+
+// Where a shift/legato slide leaves its fret, as a fraction of the note: the
+// note is held until then and slides over the rest. `slideStart` is absent for a
+// slide over the whole note. Rocksmith has no such field; the export holds the
+// note and links it to a second one that slides (rocksmith/chart.py).
 export const SLIDE_START_MAX = 0.95;
 export const slideStartOf = (n) => SLIDES_TO_NEXT.has(n?.slide)
   ? Math.max(0, Math.min(SLIDE_START_MAX, Number(n.slideStart) || 0)) : 0;
 
-// How long a slide takes, in the seconds `dur` is in.
-export const slideSeconds = (n, dur, eighth = SLIDE.eighth) =>
-  SLIDE_IN.has(n.slide) || SLIDE_OUT.has(n.slide) ? Math.min(eighth, dur / 2) : dur * (1 - slideStartOf(n));
+// Where a slide-in lands, as a fraction of the note.
+export const SLIDE_END_MIN = 0.05;
+export function slideEndOf(n, dur, eighth = SLIDE.eighth) {
+  if (!SLIDE_IN.has(n?.slide)) return 0;
+  const set = Number(n.slideEnd);
+  if (set > 0) return Math.max(SLIDE_END_MIN, Math.min(SLIDE_START_MAX, set));
+  return dur > 0 ? Math.min(eighth, dur / 2) / dur : 0.5;
+}
 
-export function slideAt(n, sec, dur, { to = 0, steps = true, eighth = SLIDE.eighth } = {}) {
+export function slideAt(n, sec, dur, { to = 0, steps = true, eighth = SLIDE.eighth, fret = n?.pos?.fret } = {}) {
   const round = steps ? Math.round : (v) => v;
   const kind = n?.slide;
   if (!kind) return 0;
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
-  const len = slideSeconds(n, dur, eighth);
   if (SLIDE_IN.has(kind)) {
+    const len = dur * slideEndOf(n, dur, eighth);
     const p = len > 0 ? clamp01(sec / len) : 1;
-    return round((kind === "inBelow" ? -1 : 1) * SLIDE.into * (1 - p)) || 0;
+    return round(edgeSlideSpan(n, fret) * (1 - p)) || 0;
   }
+  const len = dur * (1 - slideStartOf(n));
   const p = len > 0 ? clamp01((sec - (dur - len)) / len) : 1;
-  const fret = n.pos?.fret;
-  const down = fret > 0 ? -Math.min(SLIDE.out, fret - 1) : -SLIDE.out;
-  const span = kind === "outDown" ? down : kind === "outUp" ? SLIDE.out : to;
+  const span = SLIDE_OUT.has(kind) ? edgeSlideSpan(n, fret) : to;
   return round(span * p) || 0;   // never -0
 }
 
@@ -163,7 +193,18 @@ export function slideTargets(notes, positionOf = (n) => n.pos) {
 // A slide joins its source to the next attack's position, even across a rest.
 // The renderer uses the same ribbon geometry as bends; playback stays separate.
 // A late slide start holds the ribbon flat until the note's own fraction of it.
-export function slideRibbon(note, target) {
+// A slide into or out of the note stays within it, from or to its far end;
+// `fret` and `eighth` are what slideAt takes.
+export function slideRibbon(note, target, { fret = note?.pos?.fret, eighth = SLIDE.eighth } = {}) {
+  if (SLIDE_IN.has(note.slide) || SLIDE_OUT.has(note.slide)) {
+    const span = edgeSlideSpan(note, fret);
+    if (!span) return null;
+    if (SLIDE_IN.has(note.slide)) {
+      const e = slideEndOf(note, note.end - note.start, eighth);
+      return { end: note.end, points: [[0, span], [e, 0], [1, 0]] };
+    }
+    return { end: note.end, points: [[0, 0], [1, span]] };
+  }
   if (!SLIDES_TO_NEXT.has(note.slide) || !target || target.start <= note.start) return null;
   const to = target.pitch - note.pitch, s = slideStartOf(note);
   const hold = s * (note.end - note.start) / (target.start - note.start);

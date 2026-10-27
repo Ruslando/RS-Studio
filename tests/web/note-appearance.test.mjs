@@ -20,7 +20,7 @@ try {
     './store.js': { S }, './dom.js': { scroll: { scrollLeft: 0, clientWidth: 500 }, sctx: ctx },
     './tablature.js': { laneFingeringKey: () => 'one', laneFingering: async () => ({ notes: [note], voiced: new Map([[note, { string: 1, fret: 5 }]]) }) },
     './repaint.js': { draw: noop }, './articulations.js': { hammerDirections: () => new Map() },
-    './bend.js': { slideTargets: () => new Map(), slideRibbon: () => null, bendCurve: () => null },
+    './bend.js': { slideTargets: () => new Map(), slideRibbon: () => null, bendCurve: () => null, SLIDES_TO_NEXT: new Set(), SLIDE_IN: new Set(), SLIDE_OUT: new Set() },
     './geometry.js': { xOf: time => time * 100, yOf: () => 0 }, './grid.js': { gridAt: () => ({ bpm: 120 }) },
     './grace.js': { graceBefore: () => null }, './note-effects.js': { noteMarks: () => ['PM'], FX_GLYPHS: {}, HARMONIC_TAG: {} },
     './note-label-paint.js': painter,

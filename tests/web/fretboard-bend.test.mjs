@@ -87,16 +87,22 @@ import { voiceNotesFingered } from "../../web/voicing-core.js";
   console.log("voicer slide fingers ok");
 }
 
-// A slide-out goes five frets in the note's last eighth, and not below fret 1; a
-// slide-in takes the first eighth. Never more than half the note.
-import { slideAt } from "../../web/bend.js";
+// A slide-out goes five frets over the whole note, and not
+// below fret 1; a slide-in takes the first eighth, never more than half the note.
+// `slideFrets` sets the reach, within what Rocksmith can play from the fret.
+import { slideAt, slideReach } from "../../web/bend.js";
 assert.equal(slideAt({ slide: "outDown", pos: { fret: 9 } }, 1, 1), -5);
-assert.equal(slideAt({ slide: "outDown", pos: { fret: 9 } }, 0.7, 1), 0, "held until the last eighth");
-assert.equal(slideAt({ slide: "outDown", pos: { fret: 9 } }, 0.9, 1), -3, "on the way, a whole fret at a time");
-assert.equal(slideAt({ slide: "outDown", pos: { fret: 9 } }, 0.6, 1, { eighth: 0.5 }), -1, "a slower tempo starts sliding earlier");
+assert.equal(slideAt({ slide: "outDown", pos: { fret: 9 } }, 0.5, 1), -2, "on the way, a whole fret at a time");
+assert.equal(slideAt({ slide: "outDown", slideStart: 0.6, pos: { fret: 9 } }, 0.5, 1), -2, "never starts late");
 assert.equal(slideAt({ slide: "inBelow" }, 0.1, 0.2, { eighth: 0.5 }), 0, "at most half the note");
+assert.equal(slideAt({ slide: "inBelow", slideEnd: 0.5, slideFrets: 2 }, 0, 1), -2, "starts its own frets away");
+assert.equal(slideAt({ slide: "inBelow", slideEnd: 0.5 }, 0.5, 1), 0, "lands where set");
 assert.equal(slideAt({ slide: "outDown", pos: { fret: 3 } }, 1, 1), -2, "lands on fret 1");
-assert.equal(slideAt({ slide: "outUp" }, 1, 1), 5);
+assert.equal(slideAt({ slide: "outDown", slideFrets: 7, pos: { fret: 2 } }, 1, 1), -1, "fret 2 reaches one fret down");
+assert.equal(slideAt({ slide: "outUp", slideFrets: 3 }, 1, 1), 3);
+assert.equal(slideAt({ slide: "outUp", slideFrets: 9 }, 1, 1, { fret: 20 }), 4, "never past fret 24");
+assert.equal(slideAt({ slide: "inBelow" }, 0, 1, { fret: 0 }), 0, "an open string slides nowhere");
+assert.equal(slideReach("inBelow", 1), 0, "nothing below fret 1 to come from");
 console.log("slide-outs ok");
 
 

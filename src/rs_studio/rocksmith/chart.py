@@ -153,6 +153,57 @@ def _add_grace_notes(notes: list, grid: dict, fixes: list) -> list:
     return out
 
 
+def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
+    """A slide into a note as Rocksmith charts one, having no slide-in: a short
+    note `slideFrets` away that the player picks and slides from, a legato slide
+    into the note, which is not picked again.
+
+    Timed and reached as web/bend.js slideEndOf and slideReach: by default an
+    eighth note at the local tempo, at most half the note, from fret 1 to 24.
+    """
+    segments = _tempo_segments(grid)
+    by_string: dict = {}
+    for n in notes:
+        by_string.setdefault(n.get("string"), []).append(n)
+    out = []
+    for n in notes:
+        kind = n.get("slide")
+        if kind not in ("inBelow", "inAbove") or n.get("string") is None or n.get("fret") is None:
+            out.append(n)
+            continue
+        start, end, fret = _f(n.get("start")), _f(n.get("end")), int(n["fret"])
+        frac = _f(n.get("slideEnd"))
+        if frac > 0:
+            frac = min(max(frac, 0.05), 0.95)
+        elif end > start:
+            bpm = next((b for t0, b, _ in reversed(segments) if t0 <= start + 1e-4), segments[0][1])
+            frac = min(30.0 / bpm, (end - start) / 2) / (end - start)
+        cut = start + frac * (end - start)
+        reach = fret - 1 if kind == "inBelow" else MAX_FRET - capo - fret
+        step = min(max(1, round(_f(n.get("slideFrets")) or 4)), reach) if fret > 0 else 0
+        plain = {k: v for k, v in n.items() if k not in ("slide", "slideEnd", "slideFrets")}
+        if step <= 0 or cut <= start + 1e-4 or any(
+                m is not n and _f(m.get("start")) < cut - _LINK_EPS and _f(m.get("end")) > start + _LINK_EPS
+                for m in by_string[n.get("string")]):
+            fixes.append(("slide-in", start))
+            out.append(plain)
+            continue
+        sign = -1 if kind == "inBelow" else 1
+        fx = {k: v for k, v in (n.get("fx") or {}).items() if k != "vibrato"}
+        lead = {k: v for k, v in plain.items() if k not in ("bend", "bendPoints", "slideStart", "vibratoStart", "fx")}
+        lead.update(start=start, end=cut, fret=fret + sign * step, pitch=_f(n.get("pitch")) + sign * step, slide="legato")
+        if fx:
+            lead["fx"] = fx
+        main = {k: v for k, v in plain.items() if k not in _ATTACK_ONLY}
+        main_fx = {k: v for k, v in (n.get("fx") or {}).items() if k not in _ATTACK_FX}
+        main.pop("fx", None)
+        if main_fx:
+            main["fx"] = main_fx
+        main["start"] = cut
+        out += [lead, main]
+    return out
+
+
 def _link_bend_continuations(notes: list) -> list:
     """A bend carried into the next note on its string — the same fret, starting
     at once, already bent as far as the first note ended — is one string held
@@ -408,7 +459,6 @@ class _Voicing:
     entities: list[_Entity]
     chord_templates: list          # S.ChordTemplate, indexed by _Entity.chord_id
     shape_info: dict               # shapeId -> {chord_id, start, end, frets}
-    slide_ins: int                 # slide-ins seen; they have no RS equivalent
     first_t: float
     last_end: float
     dead_left_out: list = field(default_factory=list)   # chord times that lost a dead note (I29)
@@ -435,7 +485,7 @@ class _Notes:
     arr_props: dict
     per_pi: list                   # note count per phrase iteration
     ignored_per_pi: list           # of which ignored (_ignored)
-    dropped_slides: list           # times of connected slides with no fretted target
+    dropped_slides: list           # (fix code, time) of slides the game cannot play
 
 
 # Both lookups walk backwards from the end because callers ask in time order and
@@ -604,8 +654,6 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         entities=entities,
         chord_templates=chord_templates,
         shape_info=shape_info,
-        slide_ins=sum(1 for _, _, _, note in voiced
-                      if note.get("slide") in ("inBelow", "inAbove")),
         first_t=entities[0].time,
         last_end=max(e.time + e.sustain for e in entities),
         dead_left_out=dead_left_out,
@@ -935,7 +983,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         "bends", "tapping", "vibrato", "fretHandMutes", "slapPop", "sustain"), False)
     last_fret_on_string: dict[int, int] = {}
     prev_note: S.Note | None = None
-    dropped_connected_slides = []
+    dropped_slides_fx = []
 
     # string -> index of a legato Parent still waiting for its Child. The index
     # is the note's own: one SNG note per entity, so it equals `idx`.
@@ -992,7 +1040,9 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                     mask |= S.PARENT
                     link_parents[string] = idx
             else:
-                dropped_connected_slides.append(time)
+                dropped_slides_fx.append(("slide", time))
+        elif slide in ("outDown", "outUp") and fret == 0:
+            dropped_slides_fx.append(("slide-open", time))
         elif slide in ("outDown", "outUp"):
             sustain = max(sustain, SUSTAIN_MIN)
             mask |= S.UNPITCHEDSLIDE | S.SUSTAIN
@@ -1001,7 +1051,8 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             # it) and renders wrong in-game, so floor at fret 1 instead. The high
             # end has the mirror issue (exceeding the neck's fret limit), so it
             # stays clamped at MAX_FRET.
-            unpitch_to = max(1, fret - 5) if slide == "outDown" else min(MAX_FRET, fret + 5)
+            span = max(1, round(_f(n.get("slideFrets")) or 5))   # web/bend.js SLIDE_FRETS
+            unpitch_to = max(1, fret - span) if slide == "outDown" else min(MAX_FRET, fret + span)
             arr_props["unpitchedSlides"] = True
             # An anchor where the slide ends may not show in the game (I23), and
             # anchors sit on note onsets and phrase starts. End a little before.
@@ -1180,7 +1231,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
 
     return _Notes(notes=notes, chord_notes=chord_notes_list, anchor_extensions=anchor_exts,
                   arr_props=arr_props, per_pi=notes_per_pi, ignored_per_pi=ignored_per_pi,
-                  dropped_slides=dropped_connected_slides)
+                  dropped_slides=dropped_slides_fx)
 
 
 def compile_track(track: dict, grid: dict, song_length: float,
@@ -1205,6 +1256,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
 
     capo = max(0, int(track.get("capo") or 0))
     notes = _add_grace_notes(track.get("notes") or [], grid, fixes)
+    notes = _add_slide_ins(notes, grid, fixes, capo)
     notes = _link_bend_continuations(_split_late_effects(notes, fixes))
     track = {**track, "notes": notes}
     voicing = _voiced_entities(track, n_str, tuning_low, warnings, fixes,
@@ -1279,4 +1331,4 @@ def compile_track(track: dict, grid: dict, song_length: float,
     return Compiled(sng=sng_obj, note_count=len(notes), arr_props=emitted.arr_props,
                     average_tempo=average_tempo, warnings=warnings,
                     fixes=sorted(dict.fromkeys(fixes + [("I29", t) for t in voicing.dead_left_out]
-                                               + [("slide", t) for t in emitted.dropped_slides]), key=lambda f: f[1]))
+                                               + emitted.dropped_slides), key=lambda f: f[1]))

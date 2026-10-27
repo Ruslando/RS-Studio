@@ -4,13 +4,13 @@ import { makeResizeRoom } from "./note-merge.js";
 // the sidebar drag-to-resize / collapse.
 
 import { graceBefore } from "./grace.js";
-import { SLIDES_TO_NEXT, SNAP_SEMI, SNAP_T, bendCurve, clampSemi, easedCurveAt, slideRibbon, snapTo } from "./bend.js";
+import { SLIDE_IN, SNAP_SEMI, SNAP_T, bendCurve, slideEndOf, slideStartOf, clampSemi, easedCurveAt, snapTo } from "./bend.js";
 import { AUTOSCROLL_MAX, AUTOSCROLL_ZONE, BEND_HANDLE_R, EDGE_PX, MIN_DUR, MIN_REGION, ZOOM_STEP } from "./constants.js";
 import { updateDetectStatus } from "./detect.js";
-import { bendHandles, effectStartHandles, laneSlides, regionEdgeAt } from "./note-render.js";
+import { bendHandles, effectStartHandles, noteRibbon, slideFretOf, slideFretsHandle, regionEdgeAt } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
-import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, sliceNoteCuts, snapshotEdit } from "./edit.js";
+import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
 import { noteLength } from './note-length.js';
@@ -43,10 +43,9 @@ let sliceHeld = false;
 // unrounded pitch under the pointer; a plain note only needs its row.
 function noteAt(lane, t, pitch, exact = pitch) {
   if (!lane) return null;
-  const slides = laneSlides(lane);
   for (let i = lane.notes.length - 1; i >= 0; i--) {
     const n = lane.notes[i];
-    const ribbon = slideRibbon(n, slides.get(n));
+    const ribbon = noteRibbon(lane, n);
     const curve = bendCurve(n) || ribbon?.points;
     const end = !bendCurve(n) && ribbon ? ribbon.end : n.end;
     if (t < n.start || t > end) continue;
@@ -99,11 +98,23 @@ function bendHandleAt(x, y) {
 // editable note.
 function effectStartAt(x, y) {
   for (const n of S.selection) {
-    if (!SLIDES_TO_NEXT.has(n.slide) && !n.fx?.vibrato) continue;
+    if (!n.slide && !n.fx?.vibrato) continue;
     const lane = laneOf(n);
     if (!canEditLane(lane) || boxOfNote(n)?.group.locked) continue;
     const h = effectStartHandles(n, lane).find((h) => Math.abs(x - h.x) <= 7 && Math.abs(y - h.y) <= 9);
     if (h) return h;
+  }
+  return null;
+}
+
+// The far end of a selected note's slide into or out of it, under the cursor.
+function slideFretsAt(x, y) {
+  const grab = BEND_HANDLE_R + 3;
+  for (const n of S.selection) {
+    const lane = laneOf(n);
+    if (!canEditLane(lane) || boxOfNote(n)?.group.locked) continue;
+    const h = slideFretsHandle(n, lane);
+    if (h && Math.abs(x - h.x) <= grab && Math.abs(y - h.y) <= grab) return h;
   }
   return null;
 }
@@ -228,7 +239,13 @@ function updateDrag(x, y) {
     // Drag one edge; every selected note's matching edge shifts by the same
     // delta (so a multi-note selection resizes together). Each note is clamped
     // so it can't invert past its own opposite edge.
-    const o = S.drag.orig.get(S.drag.note);
+    const o = S.drag.orig.get(S.drag.note), slide = S.drag.slide;
+    if (slide) {
+      const n = S.drag.note;
+      setSlideFrets(n, Math.abs(pitchAtExact(y) - n.pitch), slideFretOf(laneOf(n), n));
+      // A few pixels sideways before the edge moves, so a drag up or down leaves it alone.
+      if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 4) { draw(); return; }
+    }
     if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 1) return;
     S.drag.resizeMoved = true;
     const minimum = Math.min(MIN_DUR, minDur());
@@ -247,6 +264,13 @@ function updateDrag(x, y) {
         const oo = S.drag.orig.get(n);
         n.start = Math.min(oo.end - minimum, Math.max(projectStart(S.state), oo.start + dt));
       }
+    }
+    if (slide?.knee != null) {
+      // The slide's knee stays where it was in time; the edge cannot pass it.
+      const n = S.drag.note, k = slide.knee;
+      if (S.drag.edge === "r") n.end = Math.max(n.end, k + minimum);
+      else n.start = Math.min(n.start, k - minimum);
+      EFFECT_START_SETTERS.slide(n, (k - n.start) / (n.end - n.start));
     }
     S.drag.lane.notes = makeResizeRoom(S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig,
       S.drag.edge, minimum, note => !!boxOfNote(note)?.group.locked);
@@ -413,6 +437,22 @@ export function init_interaction() {
       const start = effectStartAt(x, y);
       if (start) {
         S.drag = { mode: "effectStart", note: start.note, kind: start.kind, free: e.altKey, prev: snapshotEdit() };
+        return;
+      }
+      // The far end of a slide into or out of a note: up and down sets how many
+      // frets it spans, left and right moves that edge of the note. A slide-out
+      // spans the whole note, so it grows with it; a slide-in keeps where it lands.
+      const far = slideFretsAt(x, y);
+      if (far) {
+        const n = far.note, lane = laneOf(n), into = SLIDE_IN.has(n.slide), dur = n.end - n.start;
+        const knee = n.start + dur * (into ? slideEndOf(n, dur, 30 / (gridAt(n.start)?.bpm || 120)) : slideStartOf(n));
+        S.drag = {
+          mode: "resize", edge: into ? "l" : "r", note: n, notes: [n], prev: snapshotEdit(),
+          startX: x, resizeGrab: 0, freeResize: !!e.altKey, lane, resizeLaneNotes: [...lane.notes],
+          orig: new Map(lane.notes.map((m) => [m, { start: m.start, end: m.end }])),
+          slide: { knee: n.start < knee - 1e-6 ? knee : null },
+        };
+        beginNoteGesture(S.state, lane, S.drag.notes, "resize");
         return;
       }
     }
@@ -606,7 +646,7 @@ export function init_interaction() {
     if (handle) { removeBendPoint(handle.note, handle.i); return; }
     // Right-click a slide- or vibrato-start handle moves it back to the pick.
     const start = effectStartAt(x, y);
-    if (start && start.note[`${start.kind}Start`] != null) {
+    if (start && (start.note[`${start.kind}Start`] ?? (start.kind === "slide" ? start.note.slideEnd : null)) != null) {
       const prev = snapshotEdit();
       EFFECT_START_SETTERS[start.kind](start.note, 0); commit(prev); draw(); return;
     }
@@ -664,6 +704,7 @@ export function init_interaction() {
     // Reference labels and edges set their own cursor in draw.js's handler.
     if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (refLockAt(x, y) || refBadgeAt(x, y) || refBoxEdgeAt(x, y))) return;
     if (!e.ctrlKey && !e.metaKey && !e.shiftKey && effectStartAt(x, y)) { stage.style.cursor = "ew-resize"; return; }
+    if (!e.ctrlKey && !e.metaKey && !e.shiftKey && slideFretsAt(x, y)) { stage.style.cursor = "move"; return; }
     const hit = pickNote(timeAt(x), pitchAt(y), pitchAtExact(y));
     stage.style.cursor = e.ctrlKey || e.metaKey ? 'crosshair' : hit
       ? (!hit.grace && edgeOf(hit.note, x) ? "ew-resize" : "move")

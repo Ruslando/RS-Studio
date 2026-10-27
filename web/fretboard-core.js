@@ -424,7 +424,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
       if (note?.slide && f.fret > 0) {
         const onto = SLIDES_TO_NEXT.has(note.slide) && next?.fingers.find((g) => g.string === f.string);
         const semi = slideAt(note, t - note.start, note.end - note.start,
-          { to: onto ? onto.fret - f.fret : 0, steps: false, eighth: cur.eighth });
+          { to: onto ? onto.fret - f.fret : 0, steps: false, eighth: cur.eighth, fret: f.fret });
         if (semi) {
           m.x = fretCentre(Math.max(1, f.fret + semi), s);
           anchorSlide ||= semi;

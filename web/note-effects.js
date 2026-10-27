@@ -6,7 +6,7 @@ import { WHAMMY_TAG } from "./whammy.js";
 // Everything copy/paste, references and undo carry along with a note.
 export const EFFECT_FIELDS = [
   "slide", "fx", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick", "slap",
-  "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart",
+  "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart", "slideEnd", "slideFrets",
 ];
 
 // The subset that goes into a change-detection signature — EFFECT_FIELDS minus
@@ -30,7 +30,7 @@ export const SIGNATURE_EFFECT_FIELDS = [
 ];
 // Fields added after projects already stored signatures. They join the signature
 // only when set, so a note without them hashes as it always did.
-export const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart"];
+export const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart", "slideEnd", "slideFrets"];
 
 // `{ slide: …, bend: …, … }` with an explicit null for anything absent, so a
 // removed effect changes the signature as surely as an added one does. Three

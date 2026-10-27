@@ -10,9 +10,9 @@ import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGho
 // Canvas rendering: the main spectrogram + notes draw loop, the overview minimap
 // (whole-song strip with a viewport window), and the hover highlight / cursor line.
 
-import { bendCurve, bendPeak, slideRibbon } from "./bend.js";
+import { bendCurve, bendPeak } from "./bend.js";
 import { BEND_HANDLE_R, MM_HEAD, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
-import { bendHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, regionEdgeAt } from "./note-render.js";
+import { bendHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, noteRibbon, slideFretsHandle, regionEdgeAt } from "./note-render.js";
 import { editorEl, minimap, mmctx, overviewRuler, overviewRulerCtx, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
@@ -174,6 +174,15 @@ function drawBendHandles() {
       sctx.lineWidth = 1.5; sctx.strokeStyle = PAINT.accent; sctx.stroke();
       sctx.lineWidth = 1.5; sctx.strokeStyle = halo(); sctx.fillStyle = PAINT.accent;
       sctx.beginPath(); sctx.roundRect(slide.x - 4, slide.y - 7, 8, 14, 4);
+      sctx.fill(); sctx.stroke();
+      sctx.restore();
+    }
+    // How far a slide into or out of the note reaches: a dot at its far end.
+    const far = slideFretsHandle(n, laneOf(n));
+    if (far) {
+      sctx.save();
+      sctx.lineWidth = 1.5; sctx.strokeStyle = halo(); sctx.fillStyle = PAINT.accent;
+      sctx.beginPath(); sctx.arc(far.x, far.y, BEND_HANDLE_R, 0, Math.PI * 2);
       sctx.fill(); sctx.stroke();
       sctx.restore();
     }
@@ -410,11 +419,10 @@ function paintFrame() {
     // turning the draw loop into a quadratic search on imported arrangements.
     const edgeKey = (pitch, time) => `${pitch}|${Number(time).toFixed(5)}`;
     const reattackEdges = new Set(lane.notes.map((note) => edgeKey(note.pitch, note.end)));
-    const slides = laneSlides(lane);
     sctx.globalAlpha = laneAlpha;
     for (const n of lane.notes) {
       const motion = noteMotion(lane, n);
-      const ribbon = slideRibbon(n, slides.get(n));
+      const ribbon = noteRibbon(lane, n);
       const x = xOf(motion.start), w = Math.max(2, xOf(ribbon?.end ?? motion.end) - x), y = yOf(n.pitch);
       if (x > vx1 || x + w < vx0) continue; // off-screen
       const rowH = S.state.rowH;

@@ -64,6 +64,9 @@ export function splitNote(note, at, minDuration, newId) {
     right.slide = note.slide; delete left.slide;
     if (slideAt - at > 1e-9) right.slideStart = (slideAt - at) / (note.end - at);
   } else if (slideAt != null) left.slideStart = (slideAt - note.start) / (at - note.start);
+  // Where a slide-in lands stays at its moment too, within the left half.
+  if (note.slideEnd != null) left.slideEnd = Math.min(0.95, note.slideEnd * (note.end - note.start) / (at - note.start));
+  for (const half of [left, right]) if (!half.slide) { delete half.slideEnd; delete half.slideFrets; }
 
   // Late vibrato likewise: cut before it, the left half is plain.
   const vibratoAt = note.fx?.vibrato && note.vibratoStart != null

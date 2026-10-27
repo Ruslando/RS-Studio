@@ -126,6 +126,10 @@ FIXED = {
                 "The note is bent, and a bend cannot be cut, so Rocksmith plays the effect "
                 "from the start of the note."),
     "grace": ("Grace note left out", "There is no room before its note on that string."),
+    "slide-in": ("Slide-in left out",
+                 "Rocksmith plays a slide-in as a short note before this one, sliding into it, but there is "
+                 "no room for it on that string or no fret to start it from."),
+    "slide-open": ("Slide dropped: open string", "An open string cannot slide. Fret the note to keep the slide."),
     "fret": ("Note moved down to fret 24", "Rocksmith has no frets above 24."),
     "unvoiced": ("Note skipped", "The note has no string or fret."),
     "finger": ("Chord without fingering", "Some fretted notes of this grip have no finger; Rocksmith shows them without one."),
