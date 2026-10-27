@@ -19,9 +19,9 @@ import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addCommentAt } from "./comments.js";
 import { addMarkerAtTime } from "./markers.js";
-import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, targetLane, toggleLaneMute } from "./lanes.js";
+import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, setLaneNotePitch, targetLane, toggleLaneMute } from "./lanes.js";
 import { FX_KEYS, FX_LABELS, copyEffects } from "./note-effects.js";
-import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, togglePlay } from "./playback.js";
+import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, previewNotes, togglePlay } from "./playback.js";
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
@@ -84,6 +84,20 @@ export const STATE_RESTORED = "cw-state-restored";
 // each lane's show/hide, mute, and tablature role, plus the stem backdrop). Restoring that context is
 // what keeps undo from appearing to apply another lane's change to the lane you're
 // currently looking at.
+// Ctrl+↑/↓: the selection jumps an octave, as a whole or not at all.
+function shiftSelectionOctave(delta) {
+  const lane = activeLane();
+  if (!canEditLane(lane)) return;
+  const notes = lane.notes.filter((n) => S.selection.has(n));
+  const { midi_low, midi_high } = S.state.spec;
+  if (!notes.length || notes.some((n) => n.pitch + delta < midi_low || n.pitch + delta > midi_high)) return;
+  const prev = snapshotEdit();
+  for (const n of notes) setLaneNotePitch(lane, n, n.pitch + delta);
+  commit(prev);
+  previewNotes(notes, lane);
+  draw();
+}
+
 export function snapshotEdit() {
   const a = activeLane();
   const snap = {
@@ -1675,6 +1689,9 @@ export function init_edit() {
     if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && !e.target.isContentEditable && !modalOpen()) {
       if (mod && !e.altKey && !e.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault(); navigateMarker(e.key === 'ArrowLeft' ? -1 : 1); return;
+      }
+      if (mod && !e.altKey && !e.shiftKey && ['ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault(); shiftSelectionOctave(e.key === 'ArrowUp' ? 12 : -12); return;
       }
       if (runEditorShortcut(e)) { e.preventDefault(); return; }
     }

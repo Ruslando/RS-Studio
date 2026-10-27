@@ -79,6 +79,7 @@ export const FIXED_SHORTCUTS = [
   { keys: "Hold S + drag", key: "S", label: "Slice notes along a line" },
   { keys: "← / →", reserved: ['ArrowLeft', 'ArrowRight'], label: "Previous / next chord — or match, while find-similar is live" },
   { keys: "Ctrl+← / Ctrl+→", label: "Previous / next marker of the active layer" },
+  { keys: "Ctrl+↑ / Ctrl+↓", label: "Move selected notes an octave up / down" },
   { keys: "↑ / ↓", reserved: ['ArrowUp', 'ArrowDown'], label: "Between simultaneous notes" },
   { keys: "P", key: "P", label: "Preview focused match (find similar)" },
   { keys: "A / Shift+A", key: "A", label: "Accept all matches as copies / references (find similar)" },
