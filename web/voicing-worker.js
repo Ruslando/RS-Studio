@@ -1,6 +1,6 @@
 // Expensive chord-arrangement enumeration and phrase scoring live in a worker
 // so opening and using the chord preview never blocks the browser's UI thread.
-import { diverseShapes, enumerateShapes, gripCostBreakdown, handProfileForTuning, overrideEffectKinds, scoreShapesAsDecided, shapeCost, shapeKey, voiceNotesFingered, voicingReviewMarks } from "./voicing-core.js";
+import { diverseShapes, enumerateShapes, gripCostBreakdown, handProfileForTuning, scoreShapesAsDecided, shapeCost, shapeKey, voiceNotesFingered } from "./voicing-core.js";
 // Also exported by voicing-core, and imported again when the re-voicing block
 // below comes back: arrangementVoiceCounts, chordArrangementChoices.
 
@@ -39,19 +39,6 @@ self.onmessage = (ev) => {
       positions: notes.map((note) => voiced.get(note) || null),
       fingers: notes.map((note) => fingers.get(note) ?? null),
       seats: notes.map((note) => seats.get(note) ?? null),
-    });
-    return;
-  }
-  if (task === "overrideEffects") {
-    const notes = ev.data.notes || [];
-    // Both marks a lane's notes can carry that need a whole-lane voicing pass to
-    // know about, answered by one job: which fingerings an override moved, and
-    // which ones the voicer reused out of its memory while a better shape was on
-    // offer. Two jobs would mean two passes over the same lane.
-    self.postMessage({
-      task,
-      kinds: overrideEffectKinds(notes, tuning, { bars, instrument, capo, holds }),
-      review: voicingReviewMarks(notes, tuning, { bars, instrument, capo, holds }),
     });
     return;
   }

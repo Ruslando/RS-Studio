@@ -28,7 +28,6 @@ import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";
 import { motifGroups, motifName } from "./motifs.js";
 import { laneChords } from "./chord-names.js";
-import { songBarStarts } from "./song-bars.js";
 import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
@@ -38,83 +37,10 @@ import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
 import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
 
-const overrideEffectCache = new WeakMap();
-const overrideEffectJobs = new WeakMap();
 const omittedArrangementCache = new WeakMap();
 let warningMarks = [];   // last frame's warning marks: { x0, x1, y0, y1, tip }
 let overviewTime = null;
 const BEND_STACK_TIP = { title: ISSUE_TEXT.bendStack[0], body: ISSUE_TEXT.bendStack[1], tone: "warning" };
-
-function overrideEffectKey(lane, tuning) {
-  return `${S.voicingRevision}:${tuning.join(",")}:${songBarStarts().join(",")}`;
-}
-
-// Indirect override effects need two whole-lane voicing passes, and the recall
-// review needs another. Keep that work out of the animation-frame paint path and
-// reuse it until the edit revision or layer preferences change. Direct markers do
-// not wait for this result.
-//
-// It used to skip the job entirely for a lane carrying no overrides, which is
-// most lanes. The review has no such exemption — every automatic column is one
-// the voicer may have answered out of its memory — so the only lane with nothing
-// to say is one where every note is already pinned.
-function overrideEffectsForLane(lane) {
-  if (!lane.notes.length || lane.notes.every((note) => note.pos || note.arrangement)) {
-    overrideEffectJobs.get(lane)?.worker.terminate();
-    overrideEffectJobs.delete(lane);
-    overrideEffectCache.delete(lane);
-    return null;
-  }
-  const tuning = laneFretTuning(lane), key = overrideEffectKey(lane, tuning);
-  const cached = overrideEffectCache.get(lane);
-  if (cached?.key === key) return cached;
-  const pending = overrideEffectJobs.get(lane);
-  if (pending?.key === key) return null;
-  pending?.worker.terminate();
-
-  const sourceNotes = lane.notes;
-  let worker;
-  try {
-    worker = new Worker(new URL("./voicing-worker.js", import.meta.url), { type: "module" });
-    overrideEffectJobs.set(lane, { key, worker });
-    worker.onmessage = (event) => {
-      if (event.data.task !== "overrideEffects") return;
-      worker.terminate();
-      if (overrideEffectJobs.get(lane)?.worker !== worker) return;
-      overrideEffectJobs.delete(lane);
-      if (lane.notes !== sourceNotes || overrideEffectKey(lane, laneFretTuning(lane)) !== key) return;
-      const effects = new Map(), review = new Map();
-      (event.data.kinds || []).forEach((kind, index) => {
-        if (kind && sourceNotes[index]) effects.set(sourceNotes[index], kind);
-      });
-      (event.data.review || []).forEach((gap, index) => {
-        if (gap != null && sourceNotes[index]) review.set(sourceNotes[index], gap);
-      });
-      overrideEffectCache.set(lane, { key, effects, review });
-      draw();
-    };
-    worker.onerror = () => {
-      worker.terminate();
-      if (overrideEffectJobs.get(lane)?.worker !== worker) return;
-      overrideEffectJobs.delete(lane);
-      if (overrideEffectKey(lane, laneFretTuning(lane)) === key)
-        overrideEffectCache.set(lane, { key, effects: new Map(), review: new Map() });
-    };
-    worker.postMessage({
-      task: "overrideEffects",
-      notes: sourceNotes,
-      tuning,
-      bars: songBarStarts(),
-      instrument: lane.instrument, capo: lane.capo,
-      holds: lane.handHolds,
-    });
-  } catch {
-    worker?.terminate();
-    overrideEffectJobs.delete(lane);
-    overrideEffectCache.set(lane, { key, effects: new Map(), review: new Map() });
-  }
-  return null;
-}
 
 // A legacy `arrangement` both drops notes and adds them. Cross out what it drops,
 // ghost what it adds — showing only the crosses made every swap read as a
@@ -469,7 +395,6 @@ function paintFrame() {
   const ghostNotes = [];
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
-    const voicingMarks = overrideEffectsForLane(lane);
     const { omitted: omittedNotes, added: addedNotes } = arrangementMarksForLane(lane);
     // Every lane has a tuning and the fretboard will voice against it, whether
     // or not the tab view happens to render this lane — so the range warning is
@@ -580,23 +505,6 @@ function paintFrame() {
         sctx.strokeText("*", x, py - 1);           // dark halo for legibility over the spectrogram
         sctx.lineWidth = 1; sctx.fillStyle = PAINT.error;
         sctx.fillText("*", x, py - 1);
-        sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
-      }
-      if (voicingMarks?.review.has(n)) {   // memory reused where a better shape was on offer
-        // The voicer hands every later occurrence of a note the grip its first
-        // occurrence was given, without weighing the alternatives again. This is
-        // where that memory has gone measurably stale: the comparison was run
-        // anyway, and a different shape came out significantly cheaper here.
-        //
-        // Above-RIGHT, where the override asterisk is above-left, so the two can
-        // never land on each other. Same warn tier: neither is an error, and both
-        // say "the automatic answer here is not the plain automatic answer".
-        const py = curve ? y - curve[curve.length - 1][1] * rowH : y;
-        sctx.font = stageUi(11, 700); sctx.textAlign = "right"; sctx.textBaseline = "alphabetic";
-        sctx.lineWidth = 2.5; sctx.strokeStyle = halo();
-        sctx.strokeText("!", x + w, py - 1);
-        sctx.lineWidth = 1; sctx.fillStyle = PAINT.warn;
-        sctx.fillText("!", x + w, py - 1);
         sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
       }
       if (omittedNotes.has(n)) {

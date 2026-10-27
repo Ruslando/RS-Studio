@@ -1499,51 +1499,6 @@ function cloneRealization(shape, targetColumn, shift = 0) {
 }
 
 
-// ONE ANSWER PER NOTE, PER SONG — and a second opinion on every time it is
-// reused. The memo above never reconsiders a grip it has already given out,
-// which is the whole point of it, so the reconsidering happens here instead and
-// only produces a mark: every candidate for the column is priced through the
-// same window the memo's answer was, and the column is flagged when the field
-// says the memory has gone stale.
-//
-// "Significantly better" is two tests, because one number cannot tell the two
-// failures apart. Costs here are the engine's own currency, where 1.0 is
-// roughly one fret of hand travel (COST_W.mfret), 0.45 a glide and 1.5 a
-// re-grip.
-//
-//   gap      = what the remembered grip costs over the best alternative. Below
-//              MARK_GAP the saving is not worth a player's attention: it is
-//              less than moving the hand one fret.
-//   standout = how far that best alternative sits below the MIDDLE of the
-//              field. This is the test that reads a flat pile correctly. Four
-//              shapes at 1.1, 1.1, 1.1 and a memory at 1.2 are all the same
-//              answer with rounding on top; the same four at 1.1, 1.1, 0.5 are
-//              not, and only the second is worth looking at. Without it, any
-//              column whose alternatives happen to sit a fret apart marks
-//              every time it repeats.
-//
-// A FIELD OF ONE HAS NO PACK, AND THE STANDOUT TEST MUST THEN ABSTAIN rather
-// than answer 0. It reported `pack = best` when there was nothing left after
-// the winner, which makes standout exactly 0 and fails the threshold no matter
-// how large the saving — so a note with exactly TWO placements could never be
-// marked at all. On a four-string bass that is most of the bottom octave: A#1
-// is fret 1 of the A string or fret 6 of the E string and nothing else, and
-// nineteen of one lane's A#1s were being silently passed over while the memo
-// paid four to eight times the best alternative. A lone alternative is the
-// whole field; it stands out by definition, and the gap decides on its own.
-//
-// Both are knobs, deliberately. Nothing derives them — they are where "a
-// player would notice" falls on a cost axis, which is a question for a player.
-export const MARK_GAP = 1.0;
-export const MARK_STANDOUT = 0.5;
-
-
-// The verdict is measured for every reuse and the threshold is applied here, at
-// the point that draws it — pricing the field is the expensive half and it has
-// already happened, so filtering earlier would save nothing and would throw away
-// the numbers the thresholds are supposed to be chosen against.
-export const significantRecall = (verdict, gapMin = MARK_GAP, standoutMin = MARK_STANDOUT) =>
-  !!verdict && verdict.gap >= gapMin && (verdict.standout == null || verdict.standout >= standoutMin);
 
 
 // Voice a list of columns → the chosen shape per column. New overrides carry
@@ -1956,29 +1911,6 @@ export function scoreShapesAsDecided(shapes, columns, focusIdx, tuning, options 
   });
 }
 
-// Which notes took a grip out of the memory above while a visibly better one
-// was on offer here. One entry per source note, like overrideEffectKinds, so
-// the result is cheap to hand back from the worker and simple for the canvas
-// to draw; the value is the cost the memory is paying (recallReview's `gap`),
-// which is what a threshold would be dialled against.
-export function voicingReviewMarks(notes, tuning, options = {}) {
-  const source = Array.isArray(notes) ? notes : [];
-  const columns = chordColumns(source);
-  const review = [];
-  voiceColumns(columns, tuning, { ...options, review });
-  const marks = new Array(source.length).fill(null);
-  if (!review.length) return marks;
-  const indexes = new Map(source.map((note, index) => [note, index]));
-  for (const entry of review) {
-    if (!significantRecall(entry)) continue;
-    for (const note of columns[entry.index]?.notes || []) {
-      const index = indexes.get(note);
-      if (index != null) marks[index] = Math.round(entry.gap * 100) / 100;
-    }
-  }
-  return marks;
-}
-
 // voiceNotes, plus the physical hand that plays it. The register walk determines
 // positions; handForShape chooses finger contacts and their actual anchor as one
 // pose. Slide continuations then carry compatible fingers into the next grip.
@@ -2038,60 +1970,6 @@ function carrySlideFingers(chosen, fingers, seats, profile) {
       if (hand.fingers.has(note)) fingers.set(note, hand.fingers.get(note));
     }
   }
-}
-
-// Classify the visible source notes whose exported fingering is no longer the
-// untouched automatic choice. "direct" is an authored position/arrangement
-// override; "indirect" is an otherwise-automatic column whose chosen
-// string/fret changed because those fixed neighbours participate in the passage
-// optimization. Returning one entry per source note keeps the result cheap to
-// transfer from the voicing worker and simple for the canvas to consume.
-export function overrideEffectKinds(notes, tuning, options = {}) {
-  const source = Array.isArray(notes) ? notes : [];
-  const sourceColumns = chordColumns(source);
-  const kinds = new Array(source.length).fill(null);
-  if (!sourceColumns.some((column) =>
-    column.notes.some((note) => note.pos || note.arrangement))) return kinds;
-
-  const noteIndexes = new Map(source.map((note, index) => [note, index]));
-  const directColumns = sourceColumns.map((column) =>
-    column.notes.some((note) => note.pos || note.arrangement));
-  if (directColumns.every(Boolean)) {
-    sourceColumns.forEach((column) => {
-      for (const note of column.notes) kinds[noteIndexes.get(note)] = "direct";
-    });
-    return kinds;
-  }
-  const baselineNotes = source.map((note) => {
-    const copy = { ...note };
-    delete copy.pos;
-    delete copy.arrangement;
-    return copy;
-  });
-  const performedNotes = arrangedNotes(source);
-  const baselineColumns = chordColumns(baselineNotes);
-  const performedColumns = chordColumns(performedNotes);
-  // Both passes see the same bar plan, or the difference between them is the plan
-  // rather than the override, and every note in the lane comes back marked.
-  const baselineVoiced = voiceNotes(baselineNotes, tuning, Infinity, options);
-  const performedVoiced = voiceNotes(performedNotes, tuning, Infinity, options);
-  const realizationKey = (column, voiced) => (column?.notes || []).map((note) => {
-    const position = voiced.get(note);
-    return `${note.pitch}@${position ? `${position.string}:${position.fret}` : "-"}`;
-  }).sort().join("|");
-
-  sourceColumns.forEach((column, index) => {
-    const direct = directColumns[index];
-    const changed = direct || realizationKey(performedColumns[index], performedVoiced)
-      !== realizationKey(baselineColumns[index], baselineVoiced);
-    if (!changed) return;
-    const kind = direct ? "direct" : "indirect";
-    for (const note of column.notes) {
-      const sourceIndex = noteIndexes.get(note);
-      if (sourceIndex !== undefined) kinds[sourceIndex] = kind;
-    }
-  });
-  return kinds;
 }
 
 // MIDI -> tab, in one idea: the fretting hand is a four-fret window, and inside
