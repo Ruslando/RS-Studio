@@ -305,7 +305,7 @@ class ExporterFixes(unittest.TestCase):
                  {"start": 3.0, "end": 3.5, "pitch": 28, "string": 4, "fret": 5},
                  {"start": 3.0, "end": 3.5, "pitch": 35, "string": 3, "fret": 7}]
         built = _built(notes, kind="bass", tuning=b_std)
-        self.assertEqual(built.compiled.sng.metadata.tuning, (7, 7, 7, 7, 0, 0))
+        self.assertEqual(built.compiled.sng.metadata.tuning, (7,) * 6)
         self.assertEqual(built.cent_offset, -1200.0)
         self.assertEqual([i for i in built.issues() if i.code not in ("hand", "finger")], [])
         # Template pitches follow the reported tuning, as DLC Builder writes them.
@@ -316,6 +316,15 @@ class ExporterFixes(unittest.TestCase):
         [attrs] = [next(iter(json.loads(blob)["Entries"].values()))["Attributes"]
                    for path, blob in read_psarc(files).items() if path.endswith(".json")]
         self.assertEqual(attrs["CentOffset"], -1200.0)
+
+    def test_bass_names_its_tuning_by_all_six_strings(self):
+        """The missing 5th and 6th string take the 4th's offset, as DLC Builder sets them."""
+        eb = [42, 37, 32, 27]
+        notes = [{"start": 2.0, "end": 2.5, "pitch": 27, "string": 4, "fret": 0}]
+        self.assertEqual(_built(notes, kind="bass", tuning=eb).compiled.sng.metadata.tuning, (-1,) * 6)
+        drop_d = [43, 38, 33, 26]
+        notes = [{"start": 2.0, "end": 2.5, "pitch": 26, "string": 4, "fret": 0}]
+        self.assertEqual(_built(notes, kind="bass", tuning=drop_d).compiled.sng.metadata.tuning, (-2, 0, 0, 0, 0, 0))
 
 
 def _song(notes=(), chords=(), anchors=(), handshapes=(), phrases=("COUNT", "p1", "END"),

@@ -184,7 +184,10 @@ def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[
         offsets = [off + 12 for off in offsets]
         cents = LOW_BASS_CENTS
         warnings.append("Low bass tuning: exported an octave up at a 220 Hz reference so Rocksmith detects it")
-    return offsets + [0] * (6 - len(offsets)), is_bass, cents
+    # A bass has no 5th and 6th string, but the game names a tuning by all six
+    # offsets: they take the 4th string's, as DLC Builder sets them (Eb Standard
+    # is six -1s, not -1,-1,-1,-1,0,0).
+    return offsets + offsets[-1:] * (6 - len(offsets)), is_bass, cents
 
 
 def _concert_pitch(spec: dict) -> tuple[float, float]:
