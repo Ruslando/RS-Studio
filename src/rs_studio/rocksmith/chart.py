@@ -1480,7 +1480,12 @@ def compile_track(track: dict, grid: dict, song_length: float,
     entities = voicing.entities
     _leave_note_gaps(entities, grid)
     audio_end = song_length
-    song_length = max(song_length, voicing.last_end + 0.5)
+    # The song ends with the audio, never after it: EOF writes the shorter of
+    # audio and chart, or the chart does not reach an end in the game. Notes past
+    # the audio are reported (I39), not covered. Only without a known audio length
+    # (the live check before any audio) does the chart set it.
+    if audio_end <= voicing.first_t:
+        song_length = voicing.last_end + 0.5
 
     arr = _beats_phrases_sections(grid, song_length, section_markers, phrase_boundaries,
                                   voicing.first_t, voicing.last_end, warnings,

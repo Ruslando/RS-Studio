@@ -326,6 +326,11 @@ class ExporterFixes(unittest.TestCase):
         notes = [{"start": 2.0, "end": 2.5, "pitch": 26, "string": 4, "fret": 0}]
         self.assertEqual(_built(notes, kind="bass", tuning=drop_d).compiled.sng.metadata.tuning, (-2, 0, 0, 0, 0, 0))
 
+    def test_song_never_outlasts_its_audio(self):
+        """EOF: a song longer than its audio never reaches an end in the game."""
+        notes = [_note(2.0, 2.5, 3, 7), _note(19.8, 19.9, 3, 7)]   # ends 0.1 s before the 20 s of audio
+        self.assertAlmostEqual(_compiled(notes).metadata.song_length, 25.0, "20 s of audio behind 5 s of silence")
+
 
 def _song(notes=(), chords=(), anchors=(), handshapes=(), phrases=("COUNT", "p1", "END"),
           iterations=(0.0, 1.0, 10.0), templates=(), tuning=(0,) * 6):
