@@ -673,6 +673,16 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
     )
 
 
+def phrase_name(raw) -> str:
+    """A phrase name Rocksmith takes: ASCII letters and digits, at most 32, as EOF
+    writes it. COUNT, END and EOF's moveR names are the export's own: ''."""
+    name = "".join(ch for ch in str(raw or "") if ch.isascii() and ch.isalnum())[:32]
+    low = name.lower()
+    if low in ("count", "end") or (low.startswith("mover") and low[5:6].isdigit()):
+        return ""
+    return name
+
+
 def _beats_phrases_sections(grid: dict, song_length: float, section_markers: list | None,
                             phrase_boundaries: list | None, first_t: float, last_end: float,
                             warnings: list, song_end: float | None = None) -> _Arrangement:
@@ -754,7 +764,8 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
 
     # Phrase boundaries are arrangement-specific phrase-iteration starts.
     # They refine Riff Repeater ranges without creating or renaming sections.
-    authored_phrase_starts: set[float] = set()
+    # A boundary on a section's start names that section's phrase.
+    authored_phrase_starts: dict[float, dict] = {}
     for raw in phrase_boundaries or []:
         time = _f(raw.get("t") if isinstance(raw, dict) else raw, -1.0)
         if time < 0:
@@ -765,21 +776,46 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
         if abs(boundary - time) > 0.02:
             warnings.append(
                 f"Phrase boundary at {time:.3f}s was snapped to the nearest beat")
-        authored_phrase_starts.add(boundary)
+        prev = authored_phrase_starts.get(boundary, {})
+        raw = raw if isinstance(raw, dict) else {}
+        authored_phrase_starts[boundary] = {
+            "name": phrase_name(raw.get("name")) or prev.get("name", ""),
+            "solo": bool(raw.get("solo")) or prev.get("solo", False)}
 
-    phrase_starts = sorted(set(section_boundaries) | authored_phrase_starts)
+    phrase_starts = sorted(set(section_boundaries) | set(authored_phrase_starts))
 
     has_count = phrase_starts[0] > beats[0][0] + 1e-4
     pi_times = ([beats[0][0]] if has_count else []) + phrase_starts + [end_t]
-    phrases = []
+    # Phrases the user named alike are one phrase played several times, as in EOF
+    # (names compare ignoring case). An unnamed phrase is its own, named p1, p2 ...
+    phrases, pi_phrase, by_name = [], [], {}
+    taken = {info["name"].lower() for info in authored_phrase_starts.values()}
     if has_count:
+        pi_phrase.append(len(phrases))
         phrases.append(S.Phrase(name="COUNT"))
-    phrases += [S.Phrase(name=f"p{k + 1}") for k in range(len(phrase_starts))]
+    for k, t in enumerate(phrase_starts):
+        info = authored_phrase_starts.get(t, {})
+        name, solo = info.get("name", ""), int(info.get("solo", False))
+        if name and name.lower() in by_name:
+            phrase = phrases[by_name[name.lower()]]
+            phrase.iteration_count += 1
+            phrase.solo |= solo
+            pi_phrase.append(by_name[name.lower()])
+            continue
+        if not name:
+            name = f"p{k + 1}"
+            while name.lower() in taken:
+                name += "x"
+        else:
+            by_name[name.lower()] = len(phrases)
+        pi_phrase.append(len(phrases))
+        phrases.append(S.Phrase(name=name, solo=solo))
+    pi_phrase.append(len(phrases))
     phrases.append(S.Phrase(name="END"))
 
     phrase_iterations = [
         S.PhraseIteration(
-            phrase_id=k, start_time=t,
+            phrase_id=pi_phrase[k], start_time=t,
             end_time=pi_times[k + 1] if k + 1 < len(pi_times) else song_length)
         for k, t in enumerate(pi_times)
     ]
@@ -834,6 +870,41 @@ def _count_in(beats: list, song_start) -> list[tuple[float, str]]:
     if not measure or measure[0][1] != 0:
         return []
     return [(t, "B0" if b == 0 else "B1") for t, b in measure]
+
+
+def _average_notes(arr: _Arrangement, per_pi: list) -> list:
+    """Per phrase: the notes of its iterations, averaged over them."""
+    total = [0.0] * len(arr.phrases)
+    for pi, count in zip(arr.phrase_iterations, per_pi):
+        total[pi.phrase_id] += count
+    return [n / max(1, p.iteration_count) for n, p in zip(total, arr.phrases)]
+
+
+def _phrase_differences(arr: _Arrangement, notes: list, fixes: list) -> None:
+    """Phrases named alike should play alike: each iteration whose notes differ
+    from the phrase's first is reported at its start ("phrase-differs").
+    Compared in beats, so a tempo map that drifts does not count."""
+    beat_times = [b[0] for b in arr.beats]
+
+    def beat_of(t: float) -> float:
+        k = max(0, min(len(beat_times) - 2, bisect.bisect_right(beat_times, t) - 1))
+        span = beat_times[k + 1] - beat_times[k] if len(beat_times) > 1 else 1.0
+        return k + (t - beat_times[k]) / (span or 1.0)
+
+    played: dict[int, list] = {}
+    for n in notes:
+        played.setdefault(n.phrase_iteration_id, []).append(n)
+    first: dict[int, tuple] = {}
+    for k, pi in enumerate(arr.phrase_iterations):
+        if arr.phrases[pi.phrase_id].iteration_count < 2:
+            continue
+        start = beat_of(pi.start_time)
+        heard = tuple(sorted((round(beat_of(n.time) - start, 2), n.string, n.fret, n.chord_id)
+                             for n in played.get(k, [])))
+        if pi.phrase_id not in first:
+            first[pi.phrase_id] = heard
+        elif heard != first[pi.phrase_id]:
+            fixes.append(("phrase-differs", pi.start_time))
 
 
 def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, fixes: list) -> list:
@@ -1346,6 +1417,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
     fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)
     emitted = _emit_notes(entities, voicing.chord_templates, arr)
     notes = emitted.notes
+    _phrase_differences(arr, notes, fixes)
 
     sng_anchors = []
     for k, (t, fret, width) in enumerate(anchors_raw):
@@ -1369,7 +1441,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
         handshapes=fingerprints,
         arpeggios=arpeggios,
         notes=notes,
-        average_notes_per_iteration=[float(emitted.per_pi[k]) for k in range(len(arr.phrases))],
+        average_notes_per_iteration=_average_notes(arr, emitted.per_pi),
         notes_in_pi_excl_ignored=[a - b for a, b in zip(emitted.per_pi, emitted.ignored_per_pi)],
         notes_in_pi_all=list(emitted.per_pi),
     )

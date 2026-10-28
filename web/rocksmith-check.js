@@ -44,7 +44,7 @@ function checkKey() {
   return JSON.stringify([S.voicingRevision, S.state.duration, rsLeadIn(), S.state.grid, S.state.tempoMap,
     S.state.timings, marks(S.state.sectionMarkers),
     checkedLanes().map(lane => [lane.id, lane.rocksmithArrangement, lane.tuning, lane.customTuning, lane.capo,
-      lane.notes.length, marks(lane.toneMarkers), marks(lane.phraseBoundaries), lane.timing ?? null])]);
+      lane.notes.length, marks(lane.toneMarkers), (lane.phraseBoundaries || []).map(b => [b.t, b.name ?? null, !!b.solo]), lane.timing ?? null])]);
 }
 
 async function runCheck() {

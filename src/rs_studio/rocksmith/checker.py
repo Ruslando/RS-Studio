@@ -140,6 +140,9 @@ FIXED = {
     "shape-mixed": ("Arpeggio or handshape exported as plain notes",
                     "A note outside the shape is played while the shape is held. Every note between its first "
                     "and last note belongs to it: add that note to the shape, or move it out."),
+    "phrase-differs": ("Phrase plays other notes than the first of its name",
+                       "Phrases with the same name are one phrase in Rocksmith, which levels and scores them "
+                       "together. Make the notes match, or give this phrase its own name."),
     "shape-hand": ("Hand position change inside an arpeggio or handshape",
                    "The hand holds the grip for the whole shape, so the export keeps it where the shape begins "
                    "and ignores this change. Move the hand anchor before or after the shape, or change the fingering."),

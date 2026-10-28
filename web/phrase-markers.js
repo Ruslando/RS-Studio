@@ -5,14 +5,14 @@ import { placeFloating } from "./floating-position.js";
 // no equivalent and intentionally ignores them.
 
 import { stageUi } from "./constants.js";
-import { inTourCard, mmctx as minimapCtx, phraseMarkerDelete, phraseMarkerPop, phraseMarkerPopClose, phraseMarkerTime, scroll, sctx, stage } from "./dom.js";
+import { inTourCard, mmctx as minimapCtx, phraseMarkerDelete, phraseMarkerName, phraseMarkerPop, phraseMarkerPopClose, phraseMarkerSolo, phraseMarkerTime, scroll, sctx, stage } from "./dom.js";
 import { draw } from "./repaint.js";
-import { STATE_RESTORED } from "./edit.js";
+import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
-import { normalizePhraseBoundaries } from "./section-marker-core.js";
+import { normalizePhraseBoundaries, phraseName } from "./section-marker-core.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { timingIdOf, withTiming } from "./timing.js";
@@ -25,6 +25,17 @@ let markerRects = [];
 let editBoundary = null;
 let editLaneId = null;
 const editingLane = () => S.state?.editLanes.find(lane => lane.id === editLaneId);
+
+// One popover session is one undo step, as on the section rail: snapshot before
+// its first change, commit when it closes. Undo closing it clears the snapshot
+// first, so the state being reverted is not pushed back.
+let popSnapshot = null;
+const beginPopEdit = () => { if (!popSnapshot) popSnapshot = snapshotEdit(); };
+function endPopEdit() {
+  const prev = popSnapshot;
+  popSnapshot = null;
+  if (prev) commitStructure(prev);
+}
 
 function activePhraseLane() {
   const lanes = S.state?.editLanes || [];
@@ -58,14 +69,18 @@ function changed(lane = activePhraseLane()) {
 }
 
 export function openPhraseMarkerPop(clientX, clientY, boundary, lane = activePhraseLane()) {
+  endPopEdit();   // the previous boundary's session is its own undo step
   editLaneId = lane?.id;
   editBoundary = boundary;
   phraseMarkerTime.value = String(+Number(boundary.t).toFixed(3));
+  phraseMarkerName.value = boundary.name || "";
+  phraseMarkerSolo.checked = !!boundary.solo;
   phraseMarkerPop.hidden = false;
   placeFloating(phraseMarkerPop, clientX, clientY);
 }
 
 export function closePhraseMarkerPop() {
+  endPopEdit();
   phraseMarkerPop.hidden = true;
   editBoundary = null;
 }
@@ -74,9 +89,25 @@ function applyTime() {
   if (!editBoundary) return;
   const lane = editingLane();
   if (!lane) return;
+  beginPopEdit();
   editBoundary.t = withTiming(timingIdOf(lane), () => snapPhraseTime(phraseMarkerTime.value));
   phraseMarkerTime.value = String(+editBoundary.t.toFixed(3));
   changed(lane);
+}
+
+function applyName() {
+  const lane = editingLane();
+  if (!editBoundary || !lane) return;
+  beginPopEdit();
+  editBoundary.name = phraseName(phraseMarkerName.value);
+  phraseMarkerName.value = editBoundary.name;
+  editBoundary.solo = phraseMarkerSolo.checked;
+  changed(lane);
+}
+
+// What the flag and the Artifacts list call a boundary.
+export function phraseLabel(boundary, fallback = "Phrase") {
+  return `${boundary.name || fallback}${boundary.solo ? " · Solo" : ""}`;
 }
 
 export function snapPhraseTime(value) {
@@ -93,12 +124,14 @@ export function addPhraseBoundaryAtTime(time, clientX, clientY) {
   const existing = boundaries(lane).find((boundary) =>
     Math.abs(Number(boundary.t) - snapped) < 1e-5);
   if (existing) return openPhraseMarkerPop(clientX, clientY, existing);
+  const prev = snapshotEdit();
   const boundary = {
     id: `phrase_${Date.now()}_${Math.round(snapped * 1000)}`,
     t: snapped,
   };
   boundaries(lane).push(boundary);
   changed(lane);
+  commitStructure(prev);
   openPhraseMarkerPop(clientX, clientY,
     boundaries(lane).find((item) => item.id === boundary.id) || boundary);
 }
@@ -122,17 +155,17 @@ export function phraseMarkerMouseDown(event) {
   event.preventDefault();
   const { boundary, lane } = hit;
   const grabDelta = timeAt(x) - Number(boundary.t);
-  let moved = false;
+  let moved = null;   // the pre-drag snapshot, taken lazily: a click must not pay for one
   const onMove = (moveEvent) => {
+    if (!moved) moved = snapshotEdit();
     const [moveX] = toCanvas(moveEvent.clientX, moveEvent.clientY);
     boundary.t = snapPhraseTime(timeAt(moveX) - grabDelta);
-    moved = true;
     draw();
   };
   const onUp = (upEvent) => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
-    if (moved) changed(lane);
+    if (moved) { changed(lane); commitStructure(moved); }
     else openPhraseMarkerPop(upEvent.clientX, upEvent.clientY, boundary);   // a click (no drag) edits
   };
   window.addEventListener("mousemove", onMove);
@@ -157,7 +190,8 @@ export function drawPhraseMarkers() {
     // The width is measured, not the 58 that used to be assumed — rule 13, and
     // the reason "Phrase" sat left in its pill while "Crunch" looked centred.
     sctx.font = stageUi(11, 600);
-    const width = Math.max(52, Math.ceil(sctx.measureText("Phrase").width) + 18);
+    const label = phraseLabel(boundary);
+    const width = Math.max(52, Math.ceil(sctx.measureText(label).width) + 18);
     const rect = {
       boundary, lane, x0: x, x1: x + width,
       y0: top + 2, y1: top + PHRASE_MARK_H - 2,
@@ -167,7 +201,7 @@ export function drawPhraseMarkers() {
     paintMarkerFlag(sctx, rect, PAINT.phrase);
     sctx.fillStyle = PAINT.text;
     sctx.textBaseline = "middle";
-    sctx.fillText("Phrase", x + 9, top + PHRASE_MARK_H / 2);
+    sctx.fillText(label, x + 9, top + PHRASE_MARK_H / 2);
   }
   sctx.restore();
 }
@@ -184,7 +218,7 @@ export function drawMinimapPhraseMarkers(at, mmctx = minimapCtx) {
 }
 
 export function init_phrase_markers() {
-  window.addEventListener(STATE_RESTORED, closePhraseMarkerPop);   // undo replaced the marker it holds
+  window.addEventListener(STATE_RESTORED, () => { popSnapshot = null; closePhraseMarkerPop(); });   // undo replaced the marker it holds
   registerMarkerRail({
     id: "phrase",
     height: PHRASE_MARK_H,
@@ -203,6 +237,8 @@ export function init_phrase_markers() {
     aliases: ["practiceBoundaries"],
   });
   phraseMarkerTime.addEventListener("change", applyTime);
+  phraseMarkerName.addEventListener("change", applyName);
+  phraseMarkerSolo.addEventListener("change", applyName);
   // Deleting was a double-click on the flag, which is not a thing the app does
   // anywhere else and which nothing on screen said. It is the popover's bin now,
   // where the section and tone rails keep theirs.
@@ -210,6 +246,7 @@ export function init_phrase_markers() {
     if (!editBoundary) return;
     const lane = editingLane();
     if (!lane) return;
+    beginPopEdit();
     lane.phraseBoundaries = boundaries(lane).filter((boundary) => boundary !== editBoundary);
     closePhraseMarkerPop();
     changed(lane);

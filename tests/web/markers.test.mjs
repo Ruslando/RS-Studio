@@ -1,7 +1,7 @@
 // Run: node tests/web/markers.test.mjs
 // Section, phrase and tone markers: what is kept on load, and where sections land on export.
 import assert from "node:assert/strict";
-import { SECTION_GROUPS, SECTION_HELP, assignSectionsToBars, beatStartsFromScoreBars, normalizePhraseBoundaries, normalizeSectionMarkers, sectionMarkersForExport, sectionMarkersFromScoreBars, sectionTypeLabel, validSectionType, withEndSection } from "../../web/section-marker-core.js";
+import { SECTION_GROUPS, SECTION_HELP, assignSectionsToBars, beatStartsFromScoreBars, normalizePhraseBoundaries, normalizeSectionMarkers, phraseName, sectionMarkersForExport, sectionMarkersFromScoreBars, sectionTypeLabel, validSectionType, withEndSection } from "../../web/section-marker-core.js";
 import { normalizeToneMarkers, startTone, withStartTone, tonePresetMissing, tonePresetLabel } from "../../web/tone-marker-core.js";
 
 import { SOUND_BASES } from "../../web/sound-presets-core.js";
@@ -66,6 +66,11 @@ assert.ok(SECTION_HELP.end);
 // ---- phrase boundaries ----------------------------------------------------
 assert.deepEqual(normalizePhraseBoundaries([{ t: 5 }, 2, { seconds: 2 }, { t: "x" }, { t: 80 }], 60).map((b) => b.t), [2, 5, 60],
   "sorted, clamped, two at the same time are one");
+assert.equal(phraseName("Riff A-1"), "RiffA1", "letters and digits only");
+for (const reserved of ["COUNT", "end", "mover2"]) assert.equal(phraseName(reserved), "", `${reserved} is the export's`);
+assert.equal(phraseName("movers"), "movers");
+assert.deepEqual(normalizePhraseBoundaries([{ id: "a", t: 1, name: "riff 1", solo: 1 }, { id: "b", t: 2, name: "END" }]),
+  [{ id: "a", t: 1, name: "riff1", solo: true }, { id: "b", t: 2 }], "name and solo kept, cleaned");
 
 // ---- tone markers ---------------------------------------------------------
 {

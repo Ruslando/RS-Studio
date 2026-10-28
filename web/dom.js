@@ -78,6 +78,7 @@ export const sectionMarkerDelete = $("sectionMarkerDelete");
 export const sectionMarkerHelpIcon = $("sectionMarkerHelpIcon");
 export const phraseMarkerPop = $("phraseMarkerPop"), phraseMarkerPopClose = $("phraseMarkerPopClose");
 export const phraseMarkerTime = $("phraseMarkerTime"), phraseMarkerDelete = $("phraseMarkerDelete");
+export const phraseMarkerName = $("phraseMarkerName"), phraseMarkerSolo = $("phraseMarkerSolo");
 export const toneMarkerPop = $("toneMarkerPop"), toneMarkerPopClose = $("toneMarkerPopClose");
 export const toneMarkerPreset = $("toneMarkerPreset"), toneMarkerTime = $("toneMarkerTime");
 export const toneMarkerDelete = $("toneMarkerDelete");

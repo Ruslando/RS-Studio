@@ -7,7 +7,7 @@ import { timingSegments } from './grid.js';
 import { activateLane, canEditLane, renderLanes } from './lanes.js';
 import { openMarkerPop, closeMarkerPop } from './markers.js';
 import { openSectionMarkerPop, closeSectionMarkerPop } from './section-markers.js';
-import { openPhraseMarkerPop, closePhraseMarkerPop } from './phrase-markers.js';
+import { openPhraseMarkerPop, closePhraseMarkerPop, phraseLabel } from './phrase-markers.js';
 import { openToneMarkerPop, closeToneMarkerPop } from './tone-markers.js';
 import { openHandAnchorPop, closeHandAnchorPop } from './hand-anchors.js';
 import { handColumnAt, laneHandColumns } from './tablature.js';
@@ -66,7 +66,7 @@ export function markerArtifacts() {
     });
     [...lane.phraseBoundaries || []].sort((a, b) => a.t - b.t).forEach((marker, index) => entries.push({
       key: `phrase:${lane.id}:${marker.id}`, kind: 'phrase', lane, owner: lane.name,
-      marker, t: marker.t, name: `Phrase ${index + 1}`,
+      marker, t: marker.t, name: phraseLabel(marker, `Phrase ${index + 1}`),
     }));
     for (const marker of lane.toneMarkers || []) {
       const missing = tonePresetMissing(marker.tone, undefined, marker.toneData), label = tonePresetLabel(marker.tone, marker.toneData);

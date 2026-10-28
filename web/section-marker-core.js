@@ -154,6 +154,14 @@ export function withEndSection(markers, time, duration = Infinity) {
   }], duration);
 }
 
+// A phrase name Rocksmith takes, as the export cleans it (chart.phrase_name):
+// ASCII letters and digits, at most 32. COUNT, END and EOF's moveR names belong
+// to the export, so they come back empty. Phrases named alike are one phrase.
+export function phraseName(value) {
+  const name = String(value ?? "").replace(/[^A-Za-z0-9]/g, "").slice(0, 32);
+  return /^(count|end|mover\d.*)$/i.test(name) ? "" : name;
+}
+
 export function normalizePhraseBoundaries(boundaries, duration = Infinity) {
   const limit = Number.isFinite(Number(duration)) ? Math.max(0, Number(duration)) : Infinity;
   const out = [];
@@ -163,6 +171,8 @@ export function normalizePhraseBoundaries(boundaries, duration = Infinity) {
     out.push({
       id: String(raw?.id || `phrase_${index}_${Math.round(Math.max(0, t) * 1000)}`),
       t: Math.max(0, Math.min(limit, t)),
+      ...(phraseName(raw?.name) ? { name: phraseName(raw.name) } : {}),
+      ...(raw?.solo ? { solo: true } : {}),
     });
   }
   out.sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));

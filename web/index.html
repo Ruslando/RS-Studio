@@ -683,6 +683,10 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
       <label class="field-group block"><span class="label">Position <span class="info" role="img" tabindex="0" title="A phrase boundary is per note layer and snaps to the note grid." aria-label="A phrase boundary is per note layer and snaps to the note grid.">i</span></span>
         <span class="pop-field"><input type="number" id="phraseMarkerTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
       </label>
+      <label class="field-group block"><span class="label">Name <span class="info" role="img" tabindex="0" title="Phrases with the same name are one phrase in Rocksmith, leveled and scored together. Letters and digits only. Empty: the phrase is its own (p1, p2 …). A boundary on a section's start names that section's phrase." aria-label="Phrases with the same name are one phrase in Rocksmith, leveled and scored together. Letters and digits only. Empty: the phrase is its own. A boundary on a section's start names that section's phrase.">i</span></span>
+        <input type="text" id="phraseMarkerName" maxlength="32" placeholder="Own phrase" spellcheck="false" autocomplete="off" />
+      </label>
+      <label class="chk" title="Written into the Rocksmith file. Whether the game shows it is not confirmed."><input type="checkbox" id="phraseMarkerSolo" /> Solo phrase</label>
     </div>
   </div>
 
