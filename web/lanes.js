@@ -11,13 +11,13 @@ import { emptyLaneFields } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
 import { S, setSelection } from "./store.js";
 import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, tuningToNames } from "./tablature.js";
-import { closeLayerSettings, layerArrangement, layerCapo, layerOwnTiming, layerScrollSpeed, layerColor, layerDeleteBtn, layerInstr, layerName, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
+import { closeLayerSettings, layerArrangement, layerCapo, layerOwnSections, layerOwnTempo, layerScrollSpeed, layerColor, layerDeleteBtn, layerInstr, layerName, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
 import { layerVolumePercent, normLayerVolume, notesLowToHigh, volumeToDb } from "./util.js";
 import { busLevel, mountBus, volumeControl } from "./volume.js";
 import { withStartTone } from "./tone-marker-core.js";
 import { RS_KIND_OPTIONS, assignRsKinds, isTablatureLane, laneScrollSpeed, rsKindFits } from "./layer-role.js";
 import { moveCapo } from "./voicing-core.js";
-import { SONG, joinSongTiming, splitTiming, syncTiming, timingIdOf } from "./timing.js";
+import { ownsSections, ownsTempo, setOwnTiming, syncTiming } from "./timing.js";
 
 // ---- lane / stem helpers ----
 // Edit lanes are the only lanes and are GLOBAL (shared across every stem view).
@@ -148,9 +148,10 @@ export function renderLayerSettings() {
     layerArrangement.value = lane.rocksmithArrangement || "none";
   }
   if (layerScrollSpeed && document.activeElement !== layerScrollSpeed) layerScrollSpeed.value = laneScrollSpeed(lane).toFixed(1);
-  if (layerOwnTiming) {
-    layerOwnTiming.checked = timingIdOf(lane) !== SONG;
-    layerOwnTiming.disabled = !!newLaneDraft;   // a layer joins a timing once it exists
+  for (const [box, owns] of [[layerOwnTempo, ownsTempo], [layerOwnSections, ownsSections]]) {
+    if (!box) continue;
+    box.checked = owns(lane);
+    box.disabled = !!newLaneDraft;   // a layer joins a timing once it exists
   }
 }
 
@@ -225,6 +226,7 @@ export function renderLanes() {
   lanesEl.innerHTML = "";
   for (const lane of editLanes()) {
     const row = document.createElement("div");
+    row.dataset.lane = lane.id;
     row.className = "lane-row arriving" + (lane.active ? " active" : "") + (lane.locked ? " locked" : "")
       + (lane.muted ? " muted" : "") + (lane.visible ? "" : " hiddenLane");
     // Clicking the row (anywhere but a control) makes it the active edit target.
@@ -472,20 +474,27 @@ function removeLane(lane) {
   refreshSaveState();
 }
 
+// The one way a note layer is deleted: the settings button and Delete over its row.
+// `still` says whether the request still stands once the confirmation is answered.
+export async function confirmRemoveLane(lane, still = () => editLanes().includes(lane)) {
+  if (!lane || editLanes().length <= 1) return false;   // a project keeps one note layer
+  const ok = await confirmAction({
+    title: "Delete note layer",
+    message: `“${lane.name}” and every note on it are removed. This cannot be undone.`,
+    confirmLabel: "Delete note layer", danger: true,
+  });
+  if (!ok || !still()) return false;
+  removeLane(lane);
+  return true;
+}
+
 export function init_lanes() {
   // A destructive action inside an editor opens a confirmation; it never fires
   // from the editor. The two buttons are one mis-aimed click apart in the footer
   // and only one of them is reversible.
   if (layerDeleteBtn) layerDeleteBtn.addEventListener("click", async () => {
-    const lane = activeLane(); if (!lane) return;
-    const ok = await confirmAction({
-      title: "Delete note layer",
-      message: `“${lane.name}” and every note on it are removed. This cannot be undone.`,
-      confirmLabel: "Delete note layer", danger: true,
-    });
-    if (!ok || activeLane() !== lane) return;
-    removeLane(lane);
-    closeLayerSettings();
+    const lane = activeLane();
+    if (await confirmRemoveLane(lane, () => activeLane() === lane)) closeLayerSettings();
   });
   if (layerInstr) {
     if (layerName) {
@@ -544,11 +553,10 @@ export function init_lanes() {
     if (layerScrollSpeed) layerScrollSpeed.addEventListener("change", () => {
       layerScrollSpeed.value = laneScrollSpeed(settingsLane()).toFixed(1);
     });
-    if (layerOwnTiming) layerOwnTiming.addEventListener("change", () => {
+    for (const box of [layerOwnTempo, layerOwnSections]) if (box) box.addEventListener("change", () => {
       const lane = settingsLane(); if (!lane || newLaneDraft) return;
       const prev = snapshotEdit();
-      if (layerOwnTiming.checked) splitTiming(lane);
-      else joinSongTiming(lane);
+      setOwnTiming(lane, { tempo: layerOwnTempo.checked, sections: layerOwnSections.checked });
       commitStructure(prev);   // one undo step; leaving its own timing snaps the notes to the song's grid
       renderLayerSettings(); renderLanes(); refreshCounts(); draw(); refreshTabIfOpen();
     });

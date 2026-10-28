@@ -19,11 +19,12 @@ import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addCommentAt } from "./comments.js";
 import { addMarkerAtTime } from "./markers.js";
-import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, setLaneNotePitch, targetLane, toggleLaneMute } from "./lanes.js";
+import { activeLane, applyLaneVolume, canEditLane, confirmRemoveLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, setLaneNotePitch, targetLane, toggleLaneMute } from "./lanes.js";
 import { FX_KEYS, FX_LABELS, copyEffects, fxOn, fxValue } from "./note-effects.js";
 import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, previewNotes, togglePlay } from "./playback.js";
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
+import { confirmStemRemoval } from "./stem-settings.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
 import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
@@ -1759,7 +1760,17 @@ export function init_edit() {
     else if (mod && (e.key === "c" || e.key === "C")) { e.preventDefault(); doCopy(); }
     else if (mod && (e.key === "x" || e.key === "X")) { e.preventDefault(); doCut(); }
     else if (mod && (e.key === "v" || e.key === "V")) { e.preventDefault(); doPaste({ mode: e.shiftKey ? "reference" : undefined }); }
-    else if (matchKey(e, "delete")) { e.preventDefault(); doDelete({ hovered: true }); }
+    else if (matchKey(e, "delete")) {
+      e.preventDefault();
+      // Over a layer row it deletes that layer, through the same confirmation as its button.
+      const laneRow = document.querySelector("#lanes .lane-row:hover");
+      const stemRow = document.querySelector("#stemTabs .stem-row:hover");
+      const lane = laneRow && editLanes().find((l) => String(l.id) === laneRow.dataset.lane);
+      const stem = stemRow && S.state.stems.find((s) => String(s.id) === stemRow.dataset.stem);
+      if (lane) confirmRemoveLane(lane);
+      else if (stem) { if (!isMasterStem(stem)) confirmStemRemoval(stem); }
+      else doDelete({ hovered: true });
+    }
     else if (e.key === "Escape" && (S.selection.size || S.detectRegion)) {
       if (S.selection.size) setSelection(new Set());            // clear the selection
       if (S.detectRegion) { S.detectRegion = null; updateDetectStatus(); }

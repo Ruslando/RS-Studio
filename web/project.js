@@ -91,7 +91,7 @@ function projectBody() {
     scoreBars: (song.scoreBars || []).map((bar) => ({ ...bar })),
     timings: timingsForSave(),
     scoreDuration: Number(S.state.scoreDuration) || Number(S.state.duration) || 1,
-    view: { intensity: S.state.viewIntensity || [0, 100], stem: S.state.curStem, zoomX: S.zoomX, zoomY: S.zoomY, speed: speedSel.value },
+    view: { intensity: S.state.viewIntensity || [0, 100], spectrogram: S.state.specView || 'fine', sharp: !!S.state.specSharp, stem: S.state.curStem, zoomX: S.zoomX, zoomY: S.zoomY, speed: speedSel.value },
     grid: {
       bpm: song.grid.bpm, offset: song.grid.offset, subdiv: song.grid.subdiv,
       snap: true, showGrid: true,
@@ -402,6 +402,8 @@ export async function applyProject(data) {
   // Where you left it last time, over what the file saved (see project-view.js).
   const v = { ...(data.view || {}), ...(savedView(data.job) || {}) };
   S.state.viewIntensity = Array.isArray(v.intensity) ? v.intensity : [0, 100];
+  S.state.specView = typeof v.spectrogram === 'string' ? v.spectrogram : 'fine';
+  S.state.specSharp = !!v.sharp;
   S.zoomX = clamp(+v.zoomX || 1, ZOOM_MIN_X, ZOOM_MAX_X);
   S.zoomY = clamp(+v.zoomY || 1, ZOOM_MIN_Y, ZOOM_MAX_Y);
   S.pxPerSec = PX_PER_SEC * S.zoomX;
@@ -551,7 +553,6 @@ export async function setTuning(change) {
 // The edit lanes are global, so they stay put across stems.
 let stemViewGeneration = 0;
 const channelRequests = new WeakMap();
-// ponytail: spectrogram view is session-only while testing, persist it in the project if it stays.
 function spectrogramUrl(stem, channel) {
   const url = new URL(stem.spec.url, location.href);
   url.searchParams.set('channel', channel);
@@ -696,6 +697,7 @@ export function renderStemTabs() {
     const master = isMasterStem(stem);
     const viewing = stem.id === S.state.curStem;
     const row = document.createElement("div");
+    row.dataset.stem = stem.id;
     row.className = "stem-row arriving" + (master ? " stem-master" : "")
       + (viewing ? " viewing" : "")
       + (stem.muted ? " muted" : "");
@@ -1029,7 +1031,7 @@ async function renameStem(stem, name) {
 // drops the whole editor out of spectrogram view. True on success.
 export async function removeStem(stem) {
   const state = S.state;
-  if (!stem || !state) return false;
+  if (!stem || !state || isMasterStem(stem)) return false;   // the full song is the project's clock
   try {
     const res = await fetch(`/api/projects/${state.job}/stems/${stem.id}`, { method: "DELETE" });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "remove failed");

@@ -13,7 +13,7 @@ import { refOccurrences } from "./reference-core.js";
 import { boxMinIn, laneClock } from "./references.js";
 import { songBarStarts } from "./song-bars.js";
 import { fretboardHandKey } from "./fretboard-cache.js";
-import { onLiveTiming, timingData, timingIdOf } from "./timing.js";
+import { onLiveSections, onLiveTiming, timingData, timingIdOf } from "./timing.js";
 
 // A layer's bar lines come from its own timing (web/timing.js).
 const laneBars = (lane) => (onLiveTiming(lane) ? songBarStarts() : songBarStarts(timingData(timingIdOf(lane))));
@@ -282,11 +282,10 @@ const handedMap = (notes, got) => ({
 // A track on another timing than the spec's (the live one) carries its own grid
 // and sections; the Rocksmith builder charts each arrangement on its own beat grid.
 function ownTimingFields(lane) {
-  if (onLiveTiming(lane)) return {};
   const t = timingData(timingIdOf(lane));
   return {
-    sections: sectionMarkersForExport(t.sectionMarkers || []),
-    grid: { ...t.grid, tempoMap: (t.tempoMap || []).map((m) => ({ t: +m.t, bpm: +m.bpm, tsNum: +m.tsNum, tsDen: +m.tsDen, subdiv: +m.subdiv || t.grid.subdiv })) },
+    ...(onLiveSections(lane) ? {} : { sections: sectionMarkersForExport(t.sectionMarkers || []) }),
+    ...(onLiveTiming(lane) ? {} : { grid: { ...t.grid, tempoMap: (t.tempoMap || []).map((m) => ({ t: +m.t, bpm: +m.bpm, tsNum: +m.tsNum, tsDen: +m.tsDen, subdiv: +m.subdiv || t.grid.subdiv })) } }),
   };
 }
 

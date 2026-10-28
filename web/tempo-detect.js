@@ -13,7 +13,7 @@ import { refreshSaveState } from "./project.js";
 import { draw } from "./repaint.js";
 import { S } from "./store.js";
 import { refreshTabIfOpen } from "./tablature.js";
-import { SONG, onLiveTiming, withTiming } from "./timing.js";
+import { SONG, onLiveTiming, sectionsOnLiveTempo, withTiming } from "./timing.js";
 
 export function applyTempoMap(grid) {
   const prev = snapshotEdit();
@@ -24,7 +24,7 @@ export function applyTempoMap(grid) {
     const subdiv = gridSubdiv();
     S.state.tempoMap = (grid.tempoMap || []).map((m) => ({ t: +m.t, bpm: +m.bpm, tsNum: +m.tsNum, tsDen: +m.tsDen, subdiv }));
     // As retimeTempoSpan: with audio, the End section is the audio's and stays.
-    const sections = (S.state.sectionMarkers || []).filter((m) => !S.state.stems?.length || m.sectionType !== "end");
+    const sections = sectionsOnLiveTempo().filter((m) => !S.state.stems?.length || m.sectionType !== "end");
     warpTimes(editLanes().filter(onLiveTiming), sections, end, minDur(), beatWarp(before, beatLines(gridSegments(), end)), projectStart(S.state));
   });
   commitStructure(prev);

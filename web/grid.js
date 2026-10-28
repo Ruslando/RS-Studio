@@ -7,7 +7,7 @@ import { bpmInput, markerBpm, offsetInput, subdivCustom, subdivCustomWrap, subdi
 import { draw } from "./repaint.js";
 import { commit, snapshotEdit } from "./edit.js";
 import { editLanes, refreshCounts, renderLanes } from "./lanes.js";
-import { onLiveTiming } from "./timing.js";
+import { onLiveTiming, sectionsOnLiveTempo } from "./timing.js";
 
 // The layers the live grid belongs to; a layer with its own timing is not moved by it.
 const timedLanes = () => editLanes().filter(onLiveTiming);
@@ -288,7 +288,7 @@ function hasGridContent() {
 // A tempo marker's BPM changed: re-time what sits under it (see retimeSpan).
 export function retimeTempoSpan(t0, t1, oldBpm, newBpm) {
   if (!S.state) return 0;
-  const sections = (S.state.sectionMarkers || []).filter(marker => !S.state.stems?.length || marker.sectionType !== 'end');
+  const sections = sectionsOnLiveTempo().filter(marker => !S.state.stems?.length || marker.sectionType !== 'end');
   return retimeSpan(timedLanes(), sections, S.state.duration, minDur(), t0, t1, oldBpm, newBpm);
 }
 
@@ -317,16 +317,6 @@ export function init_grid() {
   // Prevent the mouse wheel from silently changing number fields on hover/scroll.
   document.querySelectorAll('input[type="number"]').forEach((el) =>
     el.addEventListener("wheel", (e) => { if (document.activeElement !== el) e.preventDefault(); }, { passive: false }));
-  // x2 / /2: beat trackers often find twice or half the tempo. Through the
-  // popover's own live-edit/undo path, like a typed value.
-  for (const [id, factor] of [["markerHalve", 0.5], ["markerDouble", 2]]) {
-    document.getElementById(id)?.addEventListener("click", () => {
-      const bpm = parseFloat(markerBpm.value);
-      if (!(bpm > 0)) return;
-      markerBpm.value = String(Math.max(20, Math.min(320, Math.round(bpm * factor * 1000) / 1000)));
-      markerBpm.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  }
   tapBtn.addEventListener("click", () => {
     const now = performance.now() / 1000;
     // Restart the tap session after a pause.

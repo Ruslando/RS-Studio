@@ -90,6 +90,7 @@ function renderStemSettings() {
   const pct = Math.round(normLayerVolume(stemEditTarget.volume) * 100);
   $("stemVolume").value = String(pct);
   $("stemVolumeValue").textContent = `${pct}%`;
+  $("stemRemove").hidden = stemEditIsMaster;   // the full song stays
   renderStemEditCard();
   syncStemApply();
 }
@@ -239,7 +240,12 @@ function wireStemEditCard() {
 // actually happened, so a failed delete leaves it open with its toast.
 async function requestStemRemoval() {
   const stem = stemEditTarget;
-  if (!stem) return;
+  if (stem && !stemEditIsMaster && await confirmStemRemoval(stem, () => stemEditTarget === stem)) closeStemSettings();
+}
+
+// The one way an audio layer is removed: the panel's button and Delete over its row.
+// Callers keep the full song out; `still` says whether the request still stands.
+export async function confirmStemRemoval(stem, still = () => !!S.state?.stems.includes(stem)) {
   const confirmed = await confirmAction({
     title: "Remove audio",
     message: `The audio and spectrogram for “${stem.name}” are deleted.`,
@@ -247,8 +253,7 @@ async function requestStemRemoval() {
     danger: true,
   });
   // The panel or project may have changed while the confirmation was open.
-  if (!confirmed || stemEditTarget !== stem) return;
-  if (await onRemoveStem(stem)) closeStemSettings();
+  return confirmed && still() && onRemoveStem(stem);
 }
 
 function renderStemEditPreviewBtn() {

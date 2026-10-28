@@ -99,6 +99,8 @@ export function initSpectrogramControls() {
     S.state.viewIntensity = normalizeIntensityRange(lo, hi);
     sync(); draw();
   });
+  // Remembered per project (project-view.js) once a slider is let go.
+  for (const control of [min, max]) control.addEventListener('change', () => window.dispatchEvent(new Event('cw-stem-view-changed')));
   panel.addEventListener('keydown', event => {
     // Space operates the focused checkbox / button without starting playback.
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', ' '].includes(event.key)) event.stopPropagation();

@@ -398,7 +398,7 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
         m["mix"] = payload["mix"]
     if isinstance(payload.get("view"), dict):
         view = payload["view"]
-        m["view"] = {key: view[key] for key in ("stem", "zoomX", "zoomY", "speed", "intensity") if key in view}
+        m["view"] = {key: view[key] for key in ("stem", "zoomX", "zoomY", "speed", "intensity", "spectrogram", "sharp") if key in view}
     if "scoreDuration" in payload:
         try:
             score_duration = float(payload["scoreDuration"])

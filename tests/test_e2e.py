@@ -5096,16 +5096,20 @@ class EndToEndTests(unittest.TestCase):
         expect(rows).to_have_count(2)
         self.loaded()
         self.assertEqual(own(), 1)
-        # Following the song again is a Layer settings switch, and one undo step.
+        # Following the song again is two Layer settings switches, one undo step each.
         guitar = page.locator("#lanes .lane-row").filter(has_not_text="Layer 1").first
         guitar.click()
         guitar.hover()
         guitar.locator(".edit-btn").click()
-        page.uncheck("#layerOwnTiming")
+        page.uncheck("#layerOwnTempo")
+        self.assertAlmostEqual(float(page.input_value("#offset")), song_offset, places=3)   # the song's tempo...
+        self.assertNotIn("song_verse", state("S.state.sectionMarkers.map((m) => m.id)"))  # ...its own sections
+        page.uncheck("#layerOwnSections")
         page.click("#layerSave"); expect(page.locator("#layerSettingsBackdrop")).to_be_visible(); expect(page.locator("#layerSave")).to_be_hidden(); page.click("#settingsClose")
         expect(page.locator("#layerSettingsBackdrop")).to_be_hidden()
         self.assertEqual(own(), 0)
         self.assertAlmostEqual(float(page.input_value("#offset")), song_offset, places=3)
+        page.keyboard.press("Control+z")
         page.keyboard.press("Control+z")
         self.assertEqual(own(), 1)
         self.assertEqual(float(page.input_value("#offset")), 0)

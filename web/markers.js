@@ -18,7 +18,7 @@ import { S } from "./store.js";
 import { projectStart } from "./project-position-core.js";
 import { railScale, railsHidden, timedLaneMarkers } from "./marker-rails.js";
 import { editLanes } from "./lanes.js";
-import { onLiveTiming, SONG, withTiming } from "./timing.js";
+import { onLiveTiming, sectionsOnLiveTempo, SONG, withTiming } from "./timing.js";
 import { sectionMarkersChanged } from "./section-markers.js";
 import { gridDivLabelFor } from "./ui.js";
 import { refreshSaveState } from "./project.js";
@@ -156,7 +156,7 @@ function spanRiders(seg) {
   const inSpan = (t) => t >= seg.t - 1e-6 && t < t1 - 1e-6;
   const dur = S.state.duration, clamp = (t) => Math.max(projectStart(S.state), Math.min(dur, t));
   const lanes = editLanes().filter(onLiveTiming), riders = [];   // a layer with its own timing stays
-  const sections = (S.state.sectionMarkers || []).filter(marker => !S.state.stems?.length || marker.sectionType !== 'end');
+  const sections = sectionsOnLiveTempo().filter(marker => !S.state.stems?.length || marker.sectionType !== 'end');
   const marks = [...sections, ...timedLaneMarkers(lanes), ...lanes.flatMap((l) => l.handHolds || [])];
   for (const m of marks) {
     const t = +m.t;
@@ -375,10 +375,11 @@ function applyMarkerTime() {
 }
 
 // DAW-style scrub: press on a number field and drag sideways to change it —
-// 10 ms per pixel, 1 ms with Shift. A press without a drag still focuses it for typing.
+// 10 ms per pixel, 1 ms with Shift. A press without a drag still focuses it for typing,
+// and once focused a drag selects text instead.
 function scrubField(input, apply, { step = 0.01, min = 0, max = Infinity, decimals = 3 } = {}) {
   input.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || document.activeElement === input) return;
     const x0 = e.clientX, v0 = parseFloat(input.value) || 0;
     let scrubbing = false;
     const onMove = (ev) => {

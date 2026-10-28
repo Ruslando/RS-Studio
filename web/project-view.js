@@ -1,4 +1,4 @@
-// Where you were in a project: zoom, scroll, playhead, stem and speed. Kept per
+// Where you were in a project: zoom, scroll, playhead, stem, speed and the View panel. Kept per
 // project in the preferences (synced to the server, see index.html) whenever it
 // changes, so reopening a project lands there whether or not it was saved since.
 import { audio, scroll, speedSel } from "./dom.js";
@@ -21,6 +21,7 @@ function save() {
     localStorage.setItem(keyOf(S.state.job), JSON.stringify({
       zoomX: S.zoomX, zoomY: S.zoomY, left: scroll.scrollLeft, top: scroll.scrollTop,
       time: playbackTime(), stem: S.state.curStem, speed: speedSel.value,
+      intensity: S.state.viewIntensity, spectrogram: S.state.specView || 'fine', sharp: !!S.state.specSharp,
     }));
   } catch { /* storage blocked: the project still opens, just at the start */ }
 }

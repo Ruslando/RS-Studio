@@ -2,7 +2,7 @@
 // object before every action, so normalization, undo and retiming cannot stale it.
 import { $, scroll } from './dom.js';
 import { S } from './store.js';
-import { SONG, timingData, timingIdOf } from './timing.js';
+import { ownsSections, ownsTempo, timingData, timingIdOf } from './timing.js';
 import { timingSegments } from './grid.js';
 import { activateLane, canEditLane, renderLanes } from './lanes.js';
 import { openMarkerPop, closeMarkerPop } from './markers.js';
@@ -35,14 +35,14 @@ export function markerArtifacts() {
   if (!active) return [];
   const entries = [], lanes = [active];
   for (const [timing, lane] of [[timingIdOf(active), active]]) {
-    const data = timingData(timing), owner = timing === SONG ? 'Song' : lane.name;
+    const data = timingData(timing), name = owns => (owns(lane) ? lane.name : 'Song'), owner = name(ownsTempo);
     timingSegments(data).forEach((segment, index) => entries.push({
       key: `tempo:${timing}:${index}`, kind: 'tempo', timing, lane, owner,
       marker: segment, t: segment.t,
       name: `${+Number(segment.bpm).toFixed(2)} BPM · ${segment.tsNum}/${segment.tsDen}${segment.seg0 ? ' · Start' : ''}`,
     }));
     for (const marker of data.sectionMarkers || []) entries.push({
-      key: `section:${timing}:${marker.id}`, kind: 'section', timing, lane, owner,
+      key: `section:${timing}:${marker.id}`, kind: 'section', timing, lane, owner: name(ownsSections),
       marker, t: marker.t, name: marker.text || sectionTypeLabel(marker.sectionType),
     });
   }
