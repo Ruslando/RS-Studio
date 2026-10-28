@@ -317,6 +317,15 @@ class ExporterFixes(unittest.TestCase):
                    for path, blob in read_psarc(files).items() if path.endswith(".json")]
         self.assertEqual(attrs["CentOffset"], -1200.0)
 
+    def test_section_carries_the_next_sections_strings(self):
+        """processStringMasks: one step forward only, as DLC Builder walks the sections."""
+        sections = [{"t": 2.0, "sectionType": "intro"}, {"t": 4.0, "sectionType": "verse"},
+                    {"t": 6.0, "sectionType": "chorus"}]
+        notes = [_note(2.0, 2.2, 6, 3), _note(4.0, 4.2, 5, 3), _note(6.0, 6.2, 1, 3)]
+        masks = [s.string_mask[0] for s in _compiled(notes, sections=sections).sections]
+        low_e, a, high_e = 1 << 0, 1 << 1, 1 << 5
+        self.assertEqual(masks[:3], [low_e | a, a | high_e, high_e])
+
     def test_bass_names_its_tuning_by_all_six_strings(self):
         """The missing 5th and 6th string take the 4th's offset, as DLC Builder sets them."""
         eb = [42, 37, 32, 27]

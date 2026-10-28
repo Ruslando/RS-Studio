@@ -1553,6 +1553,10 @@ def compile_track(track: dict, grid: dict, song_length: float,
     emitted = _emit_notes(entities, voicing.chord_templates, arr, is_bass=n_str == 4)
     notes = emitted.notes
     _phrase_differences(arr, notes, fixes)
+    # DLC Builder's processStringMasks: "for whatever reason" each section also
+    # carries the strings of the section after it (one step, as it walks forward).
+    for k in range(len(arr.sections) - 1):
+        arr.sections[k].string_mask[0] |= arr.sections[k + 1].string_mask[0]
 
     sng_anchors = []
     for k, (t, fret, width) in enumerate(anchors_raw):
