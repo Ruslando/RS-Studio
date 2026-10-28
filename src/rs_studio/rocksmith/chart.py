@@ -358,14 +358,24 @@ def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
         t, beat_in = t0, 0
         # A marker a hair after a beat (placed by hand, float drift) must not leave
         # a sliver measure before it: EOF reads a 1 ms measure as 60000 BPM.
-        while t < t_end - step / 4:
+        # The last stretch runs a beat past the song, as EOF's beat map does, for
+        # the trim below.
+        last = i + 1 == len(segments)
+        while t < (t_end + step if last else t_end - step / 4):
             if beat_in == 0:
                 measure += 1
             beats.append((t, measure, beat_in))
             beat_in = (beat_in + 1) % ts
             t += step
-    if len(beats) < 2:
+    # DLC Builder's ExtraBeatRemover: no beat after the audio, and the last one on
+    # its end, whichever of the two beats around it is closer.
+    while len(beats) > 2 and beats[-2][0] > song_length:
+        beats.pop()
+    if len(beats) > 2 and song_length - beats[-2][0] <= beats[-1][0] - song_length:
+        beats.pop()
+    if len(beats) < 2 or beats[-2][0] >= song_length:
         raise ValueError("Song too short for the beat grid")
+    beats[-1] = (song_length, *beats[-1][1:])
     return beats
 
 

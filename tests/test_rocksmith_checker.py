@@ -317,6 +317,16 @@ class ExporterFixes(unittest.TestCase):
                    for path, blob in read_psarc(files).items() if path.endswith(".json")]
         self.assertEqual(attrs["CentOffset"], -1200.0)
 
+    def test_last_beat_lands_on_the_audio_end(self):
+        """ExtraBeatRemover: of the beats around the end, the closer one moves onto it."""
+        def beats(length):
+            spec = builder._with_lead_in(_spec([_note(2.0, 2.5, 3, 7)], 5), 5)
+            built = builder._compile_arrangement(spec, spec["tracks"][0], {"kind": "lead"}, length, "KEY", [])
+            return [round(b.time, 3) for b in built.compiled.sng.beats[-2:]]
+        self.assertEqual(beats(25.3), [25.0, 25.3], "the beat after the end moves back")
+        self.assertEqual(beats(25.2), [24.5, 25.2], "the beat before the end moves on")
+        self.assertEqual(beats(25.0), [24.5, 25.0])
+
     def test_handshapes_keep_a_32nd_apart(self):
         """shortenHandshapes: a chord held into the next ends a 32nd note (at 120 bpm) before it."""
         song = _compiled(_chord(2.0, 3.0, "x02210") + _chord(3.0, 3.4, "x32010"))
