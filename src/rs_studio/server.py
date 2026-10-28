@@ -666,6 +666,9 @@ def _blank_manifest(job_id: str) -> dict:
     """
     return {
         "job": job_id, "name": "", "filename": None,
+        # Seeds this project's Rocksmith key (rocksmith/builder.py package_key), so
+        # two projects of one song never become one song in the game.
+        "rocksmithKeySeed": job_id,
         "created_at": _now(), "saved_at": _now(), "draft": True,
         "duration": None, "tempo": None, "separated": False, "separator": None,
         "metadata": _normalize_metadata({}),
@@ -1964,6 +1967,12 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
         cover_path = None
 
     spec = {**(payload or {}), "tuning": _tuning(m)}
+    # The key is the project's, never the browser's: kept from the first export,
+    # else made from the project's seed (old projects: from artist and title).
+    rs = {k: v for k, v in (spec.get("rocksmith") or {}).items() if k not in ("dlcKey", "keySeed")}
+    rs.update(dlcKey=m.get("rocksmithKey"), keySeed=m.get("rocksmithKeySeed"))
+    spec["rocksmith"] = rs
+    rs["dlcKey"] = rs_builder.package_key(spec)
     try:
         data, warnings, filename = rs_builder.build_cdlc(
             spec, source_audio, cover_art_path=cover_path)
@@ -1973,6 +1982,11 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"CDLC build failed: {exc}") from exc
+    if not m.get("rocksmithKey"):
+        # Fixed from now on: renaming the song keeps its key, ids and progress.
+        current = _read_manifest(job)
+        current["rocksmithKey"] = rs["dlcKey"]
+        _write_manifest(job, current)
     return Response(
         content=data,
         media_type="application/octet-stream",

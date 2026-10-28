@@ -111,7 +111,7 @@ def _song_meta(spec: dict) -> tuple[str, str, str, int]:
     return artist or "Unknown Artist", name, album, year
 
 
-def _dlc_key(artist: str, title: str) -> str:
+def _dlc_key(artist: str, title: str, seed: str | None = None) -> str:
     """The package's internal identifier, derived from the song title.
 
     Alphanumerics only, and that is load-bearing well beyond tidiness: this key
@@ -120,10 +120,30 @@ def _dlc_key(artist: str, title: str) -> str:
     that safe, so manifest.py asserts the shape rather than trusting it from a
     distance. A user-supplied title reaches here verbatim.
     """
-    import hashlib
     stem = re.sub(r"[^A-Za-z0-9]", "", title.title())[:14] or "Song"
+    if seed:
+        # A project's own seed: two projects of one song never share a key.
+        return f"MTT{stem}{hashlib.md5(seed.encode()).hexdigest()[:6]}"
+    # Projects from before there was a seed keep the key they were exported with.
     suffix = hashlib.md5(f"{artist}-{title}".encode()).hexdigest()[:4]
     return f"MTT{stem}{suffix}"
+
+
+def package_key(spec: dict) -> str:
+    """The DLC key a package is built with: the one the project keeps (fixed at
+    its first export, as DLC Builder keeps it in the project), else one made
+    from the project's seed, else the old one from artist and title.
+
+    Every id in the package is derived from it, so it must not change once a
+    song is in the game: renaming the song keeps its key, ids and progress.
+    """
+    rs = spec.get("rocksmith") or {}
+    stored = rs.get("dlcKey")
+    if isinstance(stored, str) and re.fullmatch(r"[A-Za-z0-9]{5,64}", stored):
+        return stored
+    artist, title, _, _ = _song_meta(spec)
+    seed = rs.get("keySeed")
+    return _dlc_key(artist, title, seed if isinstance(seed, str) and seed else None)
 
 
 def _latin_names(spec: dict, artist: str, title: str, album: str) -> dict[str, str]:
@@ -688,8 +708,7 @@ def check_spec(spec: dict) -> list[dict]:
         if isinstance(item.get("track"), int) and 0 <= item["track"] < count}))
     spec = _with_lead_in(spec, lead)
     tracks = spec.get("tracks") or []
-    artist, title, _, _ = _song_meta(spec)
-    key = _dlc_key(artist, title)
+    key = package_key(spec)
     out = []
     for item in (spec.get("rocksmith") or {}).get("arrangements") or []:
         index = item.get("track")
@@ -738,7 +757,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
     spec = _with_lead_in(spec, lead)
     tracks = spec.get("tracks") or []
     artist, title, album, year = _song_meta(spec)
-    key = _dlc_key(artist, title)
+    key = package_key(spec)
     latin = _latin_names(spec, artist, title, album)
     low = key.lower()
 
