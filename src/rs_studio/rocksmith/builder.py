@@ -647,6 +647,8 @@ def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: f
         song_end=_song_end(spec, song_length))
     warnings.extend(compiled.warnings)
     compiled.sng.metadata.tuning = tuple(offsets)
+    # EOF: a power chord with the low string dropped to D and the rest standard.
+    compiled.arr_props["dropDPower"] = compiled.arr_props["powerChords"] and offsets == [-2, 0, 0, 0, 0, 0]
     compiled.sng.metadata.part = 3 if is_bass else (2 if arr["path"] == "rhythm" else 1)
     _template_midi(compiled.sng.chords, offsets, max(0, int(track.get("capo") or 0)), is_bass)
     base_tone, tone_slots, tone_events = _arrangement_tones(

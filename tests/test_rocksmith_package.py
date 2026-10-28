@@ -148,6 +148,77 @@ class RocksmithPackageTests(unittest.TestCase):
                 _build(_spec(tracks, arrangements))
 
 
+def _chords(tuning, *grips, name="X"):
+    """One chord per second; a grip lists frets from the lowest string up, None = unplayed."""
+    n = len(tuning)
+    notes = []
+    for k, grip in enumerate(grips):
+        fretted = [f for f in grip if f]
+        for low, fret in enumerate(grip):
+            if fret is not None:
+                notes.append({"start": 1 + k, "end": 1.2 + k, "pitch": tuning[n - 1 - low] + fret,
+                              "string": n - low, "fret": fret, "hand": min(fretted, default=1),
+                              "chordName": name})
+    return notes
+
+
+def _properties(tuning, kind, *grips, name="X"):
+    """(arrangement properties, manifest attributes) of one arrangement of these chords."""
+    track = {"name": "L", "tuning": tuning, "notes": _chords(tuning, *grips, name=name)}
+    _, songs, _, _ = _build(_spec([track], [{"track": 0, "kind": kind}]))
+    attrs = next(iter(songs.values()))
+    return attrs["ArrangementProperties"], attrs
+
+
+class ArrangementPropertyTests(unittest.TestCase):
+    """Chord properties as EOF writes them into the XML DLC Builder reads."""
+
+    def test_power_chord_on_two_neighbouring_strings(self):
+        props, _ = _properties(GUITAR, "lead", [0, 2, None, None, None, None])        # E5
+        self.assertEqual((props["powerChords"], props["doubleStops"], props["barreChords"],
+                          props["dropDPower"], props["openChords"]), (1, 1, 0, 0, 1))
+
+    def test_power_chord_with_its_octave(self):
+        props, _ = _properties(GUITAR, "lead", [3, 5, 5, None, None, None])           # G5 with octave
+        self.assertEqual((props["powerChords"], props["doubleStops"]), (1, 0))
+
+    def test_major_chord_is_no_power_chord(self):
+        props, _ = _properties(GUITAR, "lead", [None, 3, 2, 0, 1, 0])                 # C
+        self.assertEqual((props["powerChords"], props["barreChords"], props["openChords"]), (0, 0, 1))
+
+    def test_barre_chord(self):
+        props, _ = _properties(GUITAR, "lead", [1, 3, 3, 2, 1, 1])                    # F barre
+        self.assertEqual(props["barreChords"], 1)
+
+    def test_open_string_after_the_barre_fret_is_no_barre(self):
+        props, _ = _properties(GUITAR, "lead", [2, 0, 4, 4, 2, None])
+        self.assertEqual(props["barreChords"], 0)
+
+    def test_drop_d_power_chord(self):
+        props, attrs = _properties(DROP_D, "lead", [0, 0, 0, None, None, None])       # D5 in drop D
+        self.assertEqual((props["powerChords"], props["dropDPower"]), (1, 1))
+        self.assertEqual(attrs["Tuning"]["string0"], -2)
+
+    def test_unnamed_chord_is_non_standard(self):
+        props, _ = _properties(GUITAR, "lead", [None, 3, 2, 0, 1, 0], name="")
+        self.assertEqual(props["nonStandardChords"], 1)
+        props, _ = _properties(GUITAR, "lead", [None, 3, 2, 0, 1, 0], name="C")
+        self.assertEqual(props["nonStandardChords"], 0)
+
+    def test_bass_reports_octaves_and_double_stops_as_fifths_and_octaves(self):
+        props, _ = _properties(BASS, "bass", [3, None, 5, None])                      # G octave
+        self.assertEqual((props["fifthsAndOctaves"], props["doubleStops"]), (1, 0))
+        props, _ = _properties(BASS, "bass", [3, 5, None, None])                      # G5 double stop
+        self.assertEqual((props["fifthsAndOctaves"], props["doubleStops"]), (1, 0))
+
+    def test_difficulty_counts_as_dlc_builder(self):
+        """Barre (3) and nothing else; at most 5 gets 4 more, as calculateDifficulties does."""
+        props, attrs = _properties(GUITAR, "lead", [1, 3, 3, 2, 1, 1], [1, 3, 3, 2, 1, 1])
+        self.assertEqual([k for k, v in props.items() if v and not k.startswith(("represent", "path", "route", "standard"))],
+                         ["barreChords"])
+        self.assertAlmostEqual(attrs["SongDiffHard"], round(7 * 2 / attrs["SongLength"] / 100, 9), places=6)
+
+
 class ContainerTests(unittest.TestCase):
     def test_archive_returns_what_was_put_in(self):
         # Larger than one compression block, incompressible, and tiny.

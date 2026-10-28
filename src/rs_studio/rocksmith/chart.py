@@ -1168,7 +1168,41 @@ def _ignored(e: _Entity, note: S.Note) -> bool:
     return any(unscorable(fret, n) for _, fret, n in e.notes)
 
 
-def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _Notes:
+# Arrangement properties of a chord, as EOF writes them into the XML that DLC
+# Builder reads (rs.c, the arrangementProperties pass; note.c, tuning.c). A
+# fret-hand-muted string still counts as used, as there.
+
+def _is_barre(e: _Entity) -> bool:
+    """EOF's barre chord: the lowest fret again on a later string, with a higher
+    fret between and no open string before that (eof_pro_guitar_note_is_barre_chord)."""
+    frets = {s: (None if (n.get("fx") or {}).get("dead") else f) for s, f, n in e.notes}
+    fretted = [f for s, f, _ in e.notes if f != 0]
+    if len(fretted) < 2:
+        return False
+    lowest = min(fretted)
+    strings = sorted(frets)
+    k = next((i for i, s in enumerate(strings) if frets[s] == lowest), len(strings))
+    while k < len(strings) and frets[strings[k]] == lowest:
+        k += 1
+    if k < len(strings) and frets[strings[k]] == 0:
+        return False   # EOF: an open string right after the barre fret
+    return any(frets[s] == lowest for s in strings[k:])
+
+
+def _is_power_chord(template) -> bool:
+    """Root and fifth, any octave or inversion: EOF's "5" chord, formula 1,5.
+
+    EOF means this (rs.c: "the index of the power chord formula"), but checks
+    index 27, which its chord table has long since moved to Maj7; the "5" is 36.
+    """
+    classes = {m % 12 for m in template.notes if m >= 0}
+    if len(classes) != 2:
+        return False
+    a, b = sorted(classes)
+    return b - a in (5, 7)
+
+
+def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bass: bool = False) -> _Notes:
     """Entities -> SNG notes: masks, techniques, chord notes, arrangement flags.
 
     The longest stage, and the one that reads the most: anchors and fingerprints
@@ -1183,7 +1217,9 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
     arr_props = dict.fromkeys((
         "powerChords", "openChords", "doubleStops", "palmMutes", "harmonics",
         "pinchHarmonics", "hopo", "tremolo", "slides", "unpitchedSlides",
-        "bends", "tapping", "vibrato", "fretHandMutes", "slapPop", "sustain"), False)
+        "bends", "tapping", "vibrato", "fretHandMutes", "slapPop", "sustain",
+        "nonStandardChords", "barreChords", "fifthsAndOctaves"), False)
+    octaves = False   # bass: a chord of one pitch class (EOF's fifths and octaves)
     prev_note: S.Note | None = None
     dropped_slides_fx = []
 
@@ -1374,7 +1410,18 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             mask = S.CHORD
             if sum(1 for f in template.frets if f != -1) == 2:
                 mask |= S.DOUBLESTOP
+            # EOF's chord properties (see _is_barre). Its double stop is two
+            # neighbouring strings; DLC Builder's mask above takes any two.
+            strings = sorted(s for s, _, _ in e.notes)
+            if len(strings) == 2 and strings[1] - strings[0] == 1:
                 arr_props["doubleStops"] = True
+            if not template.name:
+                arr_props["nonStandardChords"] = True
+            arr_props["barreChords"] |= _is_barre(e)
+            arr_props["powerChords"] |= _is_power_chord(template)
+            sounding = {template.notes[s] % 12 for s, _, n in e.notes
+                        if template.notes[s] >= 0 and not (n.get("fx") or {}).get("dead")}
+            octaves |= is_bass and len(sounding) == 1
             if sustain > 0:
                 mask |= S.SUSTAIN
             if cn_id != -1:
@@ -1393,7 +1440,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 mask |= S.FRETHANDMUTE
             if any((n.get("fx") or {}).get("accent") for _, _, n in e.notes):
                 mask |= S.ACCENT
-            if any(f == 0 for _, f, _ in e.notes):
+            if any(f == 0 and not (n.get("fx") or {}).get("dead") for _, f, n in e.notes):
                 arr_props["openChords"] = True
 
             note = S.Note(
@@ -1411,13 +1458,18 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             note.mask |= S.IGNORE
             ignored_per_pi[pi_id] += 1
         m = note.mask
+        if note.chord_id != -1:
+            # A chord plays its strings' techniques too, as EOF counts them.
+            for s, fret, n in e.notes:
+                m |= _base_note_mask(n, fret, 0.0)[0] & ~(S.OPEN | S.MUTE)
         arr_props["palmMutes"] |= bool(m & S.PALMMUTE)
         arr_props["fretHandMutes"] |= bool(m & (S.MUTE | S.FRETHANDMUTE))
         arr_props["harmonics"] |= bool(m & S.HARMONIC)
         arr_props["pinchHarmonics"] |= bool(m & S.PINCHHARMONIC)
         arr_props["tremolo"] |= bool(m & S.TREMOLO)
         arr_props["vibrato"] |= bool(m & S.VIBRATO)
-        arr_props["sustain"] |= bool(m & S.SUSTAIN)
+        # EOF: a sustained single note; a chord's sustain does not count.
+        arr_props["sustain"] |= bool(note.chord_id == -1 and m & S.SUSTAIN)
 
         # numbered-fret flag: on first note and on anchor changes (never on opens)
         if note.fret != 0 and (prev_note is None or prev_note.anchor_fret != note.anchor_fret):
@@ -1442,6 +1494,11 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             note.prev_iter_note = k - 1
         if k + 1 < len(notes) and notes[k + 1].phrase_iteration_id == note.phrase_iteration_id:
             note.next_iter_note = k + 1
+
+    if is_bass:
+        # EOF: on bass, double stops and octaves are reported as one property.
+        arr_props["fifthsAndOctaves"] = arr_props["doubleStops"] or octaves
+        arr_props["doubleStops"] = False
 
     return _Notes(notes=notes, chord_notes=chord_notes_list, anchor_extensions=anchor_exts,
                   arr_props=arr_props, per_pi=notes_per_pi, ignored_per_pi=ignored_per_pi,
@@ -1493,7 +1550,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
 
     anchors_raw = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, fixes)
     fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)
-    emitted = _emit_notes(entities, voicing.chord_templates, arr)
+    emitted = _emit_notes(entities, voicing.chord_templates, arr, is_bass=n_str == 4)
     notes = emitted.notes
     _phrase_differences(arr, notes, fixes)
 

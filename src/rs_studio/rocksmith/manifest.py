@@ -88,16 +88,18 @@ def build_attributes(ctx, header: bool) -> dict:
     file_tag = arr["tag"]
     route = arr["route"]
 
-    # calculateDifficulties (techCoeff heuristic from AttributesCreation.fs)
+    # calculateDifficulties (AttributesCreation.fs), term for term; fingerPicking,
+    # twoFingerPicking and syncopation are always 0 here, as in EOF.
+    def on(name: str) -> int:
+        return 1 if props.get(name) else 0
     tech = (
-        (1 if props["doubleStops"] else 0) + (1 if props["palmMutes"] else 0)
-        + 2 * (1 if props["harmonics"] else 0) + 3 * (1 if props["pinchHarmonics"] else 0)
-        + (1 if props["hopo"] else 0) + (1 if props["tremolo"] else 0)
-        + (4 if ctx.is_bass else 1) * (1 if props["slides"] else 0)
-        + (1 if props["unpitchedSlides"] else 0) + 3 * (1 if props["bends"] else 0)
-        + 4 * (1 if props["tapping"] else 0) + 2 * (1 if props["vibrato"] else 0)
-        + (1 if props["slapPop"] else 0) + (1 if props["sustain"] else 0)
-        + 2 * (1 if props["openChords"] else 0)
+        on("nonStandardChords") + 3 * on("barreChords")
+        + (on("powerChords") | on("doubleStops")) + on("dropDPower")
+        + 2 * on("openChords") + on("palmMutes") + 2 * on("harmonics")
+        + 3 * on("pinchHarmonics") + on("hopo") + on("tremolo")
+        + (4 if ctx.is_bass else 1) * on("slides") + on("unpitchedSlides")
+        + 3 * on("bends") + 4 * on("tapping") + 2 * on("vibrato")
+        + on("fretHandMutes") + on("slapPop") + on("sustain") + on("fifthsAndOctaves")
     )
     if tech <= 5:
         tech += 4
@@ -164,8 +166,8 @@ def build_attributes(ctx, header: bool) -> dict:
             "represent": 1 if ctx.representative else 0,
             "bonusArr": 1 if arr["priority"] == "bonus" else 0,
             "standardTuning": 1 if all(v == 0 for v in sng.metadata.tuning) else 0,
-            "nonStandardChords": 0, "barreChords": 0,
-            "powerChords": 1 if props["powerChords"] else 0, "dropDPower": 0,
+            "nonStandardChords": on("nonStandardChords"), "barreChords": on("barreChords"),
+            "powerChords": on("powerChords"), "dropDPower": on("dropDPower"),
             "openChords": 1 if props["openChords"] else 0,
             "fingerPicking": 0, "pickDirection": 0,
             "doubleStops": 1 if props["doubleStops"] else 0,
@@ -181,7 +183,7 @@ def build_attributes(ctx, header: bool) -> dict:
             "vibrato": 1 if props["vibrato"] else 0,
             "fretHandMutes": 1 if props["fretHandMutes"] else 0,
             "slapPop": 1 if props["slapPop"] else 0,
-            "twoFingerPicking": 0, "fifthsAndOctaves": 0, "syncopation": 0,
+            "twoFingerPicking": 0, "fifthsAndOctaves": on("fifthsAndOctaves"), "syncopation": 0,
             "bassPick": 0, "sustain": 1 if props["sustain"] else 0,
             "pathLead": 1 if arr["path"] == "lead" else 0,
             "pathRhythm": 1 if arr["path"] == "rhythm" else 0,
