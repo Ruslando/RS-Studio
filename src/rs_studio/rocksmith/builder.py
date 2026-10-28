@@ -59,6 +59,7 @@ class SongContext:
     cent_offset: float = 0.0
     scroll_speed: float = 1.3  # lower is faster, as DLC Builder sets it
     partition: int = 1
+    file_name: str = ""   # lead, lead2 …: the name its files carry (DLC Builder, Toolkit)
 
 
 # "type" is the RS ArrangementType ordinal (Rocksmith2014.XML ArrangementName
@@ -773,11 +774,15 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             sng_packed = sng.pack(sng.serialize(built.compiled.sng))
             representative = arr["priority"] == "main"
 
+            # Files are named as DLC Builder and the Toolkit name them (lead, lead2 …).
+            # The ids stay derived from the internal tag, so a song exported before
+            # keeps its ids and the game keeps its progress.
+            file_name = arr["name"].lower() + (str(partition) if partition > 1 else "")
             ctx = SongContext(
                 dlc_key=key, title=title, artist=artist, album=album, latin=latin, year=year,
                 is_bass=built.is_bass, arrangement=arr, representative=representative,
-                arrangement_sort=sort_idx,
-                partition=partition,
+                arrangement_sort=0,   # always 0, in DLC Builder and the Toolkit
+                partition=partition, file_name=file_name,
                 persistent_id=manifest.stable_uuid(key, arr["tag"]),
                 master_id=manifest.stable_id32(key, arr["tag"]),
                 tone=built.base_tone,
@@ -788,8 +793,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             )
             contexts.append(ctx)
             arrangement_entries.extend([
-                (f"songs/bin/generic/{low}_{arr['tag']}.sng", sng_packed),
-                (f"manifests/songs_dlc_{low}/{low}_{arr['tag']}.json",
+                (f"songs/bin/generic/{low}_{file_name}.sng", sng_packed),
+                (f"manifests/songs_dlc_{low}/{low}_{file_name}.json",
                  manifest.manifest_json(manifest.build_attributes(ctx, header=False))),
             ])
 
@@ -822,7 +827,10 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
              b"Toolkit version: rs-studio rocksmith-export\n"
              b"Package Author: RS Studio\n"
              + f"Package Version: {version}\n".encode()
-             + b"Package Comment: Experimental in-app export"),
+             # "Remastered", as DLC Builder and the Toolkit write it: CustomsForge
+             # Song Manager reads this line, and without it lists the package as
+             # not repaired and rebuilds it (new ids) when asked to repair all.
+             + b"Package Comment: Remastered"),
             ("appid.appid", b"248750"),
         ]
         # Named by the sort values, as DLC Builder names a release ("Beatles_…").

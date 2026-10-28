@@ -85,7 +85,7 @@ def build_attributes(ctx, header: bool) -> dict:
     low = key.lower()
     arr = ctx.arrangement
     arr_name = arr["name"]
-    file_tag = arr["tag"]
+    file_tag = ctx.file_name or arr["tag"]
     route = arr["route"]
 
     # calculateDifficulties (AttributesCreation.fs), term for term; fingerPicking,
@@ -159,7 +159,7 @@ def build_attributes(ctx, header: bool) -> dict:
     tones = []
     for tone in [ctx.tone, *ctx.tone_slots]:
         if tone["Key"] not in {item["Key"] for item in tones}:
-            tones.append(tone)
+            tones.append({**tone, "IsCustom": True})   # as DLC Builder and the Toolkit mark every tone
 
     attrs.update({
         "ArrangementProperties": {
@@ -202,7 +202,7 @@ def build_attributes(ctx, header: bool) -> dict:
         # One entry per difficulty level the game may show. We emit a single level, so
         # every entry is the arrangement's scroll speed (DLC Builder does the same).
         "DynamicVisualDensity": [ctx.scroll_speed] * 20,
-        "FullName": f"{key}_{arr['full_name']}",
+        "FullName": f"{key}_{arr_name}",   # Key_Lead for every Lead, as DLC Builder and the Toolkit
         "LastConversionDateTime": sng.metadata.last_conversion_date_time,
         "MasterID_PS3": -1,
         "MasterID_XBox360": -1,
@@ -521,7 +521,7 @@ def aggregate_graph(ctx) -> bytes:
                     f"{man}/songs_dlc_{low}.hsan"),
     ]
     for c in contexts:
-        tag = c.arrangement["tag"]
+        tag = c.file_name or c.arrangement["tag"]
         items.extend([
             _graph_item(f"{low}_{tag}", man, ["database", "json-db"],
                         f"{man}/{low}_{tag}.json"),
@@ -546,7 +546,7 @@ def xblock(ctx) -> bytes:
     entity_xml = []
     for c in contexts:
         arr = c.arrangement
-        tag = arr["tag"]
+        tag = c.file_name or arr["tag"]
         props = [
             ("Header", f"urn:database:hsan-db:songs_dlc_{low}"),
             ("Manifest", f"urn:database:json-db:{low}_{tag}"),
@@ -565,7 +565,7 @@ def xblock(ctx) -> bytes:
             f'        </property>' for name, value in props)
         entity_xml.append(
             f'    <entity id="{c.persistent_id.hex}" modelName="RSEnumerable_Song" '
-            f'name="{key}_{arr["full_name"]}" iterations="0">\n'
+            f'name="{key}_{arr["name"]}" iterations="0">\n'
             "      <properties>\n"
             f"{prop_xml}\n"
             "      </properties>\n"
@@ -579,7 +579,7 @@ def xblock(ctx) -> bytes:
         "  </entitySet>\n"
         "</game>"
     )
-    return doc.encode("utf-8")
+    return doc.encode("utf-8-sig")   # with a byte order mark, as DLC Builder writes it
 
 
 def showlights(compiled) -> bytes:

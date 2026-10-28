@@ -92,8 +92,29 @@ class RocksmithPackageTests(unittest.TestCase):
                 plain = sng.unpack(files[f"songs/bin/generic/{stem}.sng"])
                 # MetaData ends: part int16, song length, tuning count + 6 int16, first note twice, max difficulty.
                 part = int.from_bytes(plain[-(2 + 4 + 4 + 12 + 12):-(4 + 4 + 12 + 12)], "little")
-                parts[attrs["FullName"].split("_", 1)[1]] = (attrs["SongPartition"], part)
-        self.assertEqual(parts, {"Lead": (1, 1), "BonusLead": (2, 2), "Bass": (1, 1)})
+                parts[stem.split("_", 1)[1]] = (attrs["SongPartition"], part)
+        self.assertEqual(parts, {"lead": (1, 1), "lead2": (2, 2), "bass": (1, 1)})
+
+    def test_package_details_as_dlc_builder_and_the_toolkit_write_them(self):
+        """File names lead, lead2; FullName Key_Lead; ArrangementSort 0; IsCustom tones;
+        an xblock with a byte order mark; and "Remastered", which CFSM looks for."""
+        spec = _spec([_track("Gtr", GUITAR, [0, 3]), _track("Gtr2", GUITAR, [5, 7])],
+                     [{"track": 0, "kind": "lead"}, {"track": 1, "kind": "alt_lead"}])
+        files, _, _, _ = _build(spec)
+        key = next(p for p in files if p.endswith(".xblock")).rsplit("/", 1)[1].removesuffix(".xblock")
+        self.assertEqual(sorted(p for p in files if p.endswith(".sng")),
+                         [f"songs/bin/generic/{key}_lead.sng", f"songs/bin/generic/{key}_lead2.sng"])
+        attrs = [next(iter(json.loads(b)["Entries"].values()))["Attributes"] for p, b in files.items() if p.endswith(".json")]
+        self.assertEqual({a["FullName"].split("_", 1)[1] for a in attrs}, {"Lead"})
+        self.assertEqual({a["ArrangementSort"] for a in attrs}, {0})
+        self.assertTrue(all(t["IsCustom"] is True for a in attrs for t in a["Tones"]))
+        self.assertTrue(files[f"gamexblocks/nsongs/{key}.xblock"].startswith(b"\xef\xbb\xbf<?xml"))
+        self.assertTrue(files["toolkit.version"].endswith(b"Package Comment: Remastered"))
+        self.assertIn(f"{key}_lead2.json".encode(), files[f"{key}_aggregategraph.nt"])
+        # The ids still come from the internal tags: songs exported before keep their progress.
+        dlc_key = attrs[0]["DLCKey"]
+        self.assertEqual({a["PersistentID"] for a in attrs},
+                         {manifest.stable_uuid(dlc_key, tag).hex.upper() for tag in ("lead", "alt_lead")})
 
     def test_capo_chosen_for_the_export_replaces_the_layers_own(self):
         tracks = [_track("Gtr", GUITAR, [0, 3], capo=2)]
