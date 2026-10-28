@@ -3,17 +3,18 @@ import { hammerLink, letRingEnd, strumOffset, tremoloStep } from "./articulation
 import { noteOffsetAt, slideTargets, trillOffsetAt } from "./bend.js";
 
 import { whammyAt } from "./whammy.js";
+import { fxOn } from "./note-effects.js";
 
 import { graceBefore } from "./grace.js";
 export function articulation(n) {
   const fx = n.fx || {};
   let velocity = fx.accent ? 1 : 0.72;
   if (fx.ghost) velocity *= 0.35;
-  if (fx.hammer || n.slap === "tap") velocity *= 0.75;
+  if (fxOn(n, "hammer") || n.slap === "tap") velocity *= 0.75;
   if (n.slap === "slap") velocity = 0.95;
   if (n.slap === "pop") velocity = 1;
   return { velocity, release: fx.dead ? 0.012 : fx.palmMute ? 0.22 : fx.staccato ? 0.025 : 0.15,
-    attack: fx.hammer || n.slap === "tap" ? 0.012 : 0,
+    attack: fxOn(n, "hammer") || n.slap === "tap" ? 0.012 : 0,
     filter: fx.dead ? ["bandpass", 1200, 0.5] : fx.palmMute ? ["lowpass", 900, 0.7]
       : n.harmonic ? ["bandpass", 0, 5] : n.slap === "slap" || n.slap === "pop" ? ["highpass", 650, 0.7] : null };
 }

@@ -221,3 +221,29 @@ class EdgeSlideTest(unittest.TestCase):
         (n,), compiled = _one({"fret": 1, "pitch": 46, "slide": "inBelow"})
         self.assertEqual(n.fret, 1)
         self.assertIn("slide-in", [code for code, _ in compiled.fixes])
+
+
+def _run(notes):
+    track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40],
+             "notes": [{"string": 5, "end": n["start"] + 0.25, **n} for n in notes]}
+    return compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0).sng.levels[0].notes
+
+
+class HammerTest(unittest.TestCase):
+    def test_imported_hammer_flags_only_the_note_it_lands_on(self):
+        # Guitar Pro marks a hammer-on on the note it starts from; that one is picked.
+        start, land = _run([{"fret": 11, "start": 1.0, "pitch": 56, "fx": {"hammer": "origin"}},
+                            {"fret": 13, "start": 1.25, "pitch": 58, "fx": {"hammer": "dest"}}])
+        self.assertFalse(start.mask & (S.HAMMERON | S.PULLOFF))
+        self.assertTrue(land.mask & S.HAMMERON)
+
+    def test_an_old_higher_note_does_not_make_a_pull_off(self):
+        notes = _run([{"fret": 13, "start": 1.0, "pitch": 58},
+                      {"fret": 11, "start": 3.0, "pitch": 56, "fx": {"hammer": True}}])
+        self.assertTrue(notes[1].mask & S.HAMMERON)
+        self.assertFalse(notes[1].mask & S.PULLOFF)
+
+    def test_pull_off_from_the_note_sounding_right_before(self):
+        notes = _run([{"fret": 13, "start": 1.0, "pitch": 58},
+                      {"fret": 11, "start": 1.25, "pitch": 56, "fx": {"hammer": True}}])
+        self.assertTrue(notes[1].mask & S.PULLOFF)

@@ -68,9 +68,20 @@ export const SLAP_TAG = { tap: "tap", slap: "slap", pop: "pop" };
 
 // The compact text marks drawn above a note. Slide, bend and harmonic have their
 // own shape renderers; everything else appears here as a tag.
+// Whether a note shows and plays an fx flag. A Guitar Pro hammer "origin" is the
+// note a hammer-on starts from: it is played normally, so it shows no hammer. The
+// role stays stored for the voicer and the Guitar Pro export.
+export const fxOn = (n, key) => key === "hammer"
+  ? !!n?.fx?.hammer && n.fx.hammer !== "origin" : !!n?.fx?.[key];
+
+// The value a flag gets switched on or off: a hammer keeps an imported origin role.
+export const fxValue = (n, key, on) => key !== "hammer" ? (on || undefined)
+  : on ? (n.fx?.hammer === "origin" ? "both" : n.fx?.hammer || true)
+  : (n.fx?.hammer === "origin" || n.fx?.hammer === "both" ? "origin" : undefined);
+
 export function noteMarks(n) {
   const m = [];
-  if (n.fx) for (const k of FX_KEYS) if (n.fx[k]) m.push(FX_GLYPHS[k]);
+  if (n.fx) for (const k of FX_KEYS) if (fxOn(n, k)) m.push(FX_GLYPHS[k]);
   if (n.grace) m.push("Grace note");
   if (n.trill) m.push("Trill");
   if (n.tremPick) m.push("≣");

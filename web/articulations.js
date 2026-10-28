@@ -30,7 +30,6 @@ export function hammerDirections(notes) {
     if (origin) {
       const tag = n.pitch < origin.pitch ? "P" : "H";
       map.set(n, tag);
-      if (!map.has(origin)) map.set(origin, tag);
     }
     column.push(n);
   }

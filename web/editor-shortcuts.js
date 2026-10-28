@@ -9,6 +9,7 @@ import { draw } from './repaint.js';
 import { openDetectPanel, updateDetectStatus } from './detect.js';
 import { refMenuEntry, detachSelection } from './references.js';
 import { markSelectionAsMotif, selectEntireMotif, unmarkSelectedMotifs, setFxOnSelection } from './edit.js';
+import { fxOn } from './note-effects.js';
 import { runFindSimilar } from './tracing.js';
 import { xOf } from './geometry.js';
 import { moveViewportTo } from './viewport-motion.js';
@@ -57,7 +58,7 @@ export const EDITOR_COMMAND_HANDLERS = {
   fretboardShape: () => click('fretboardShape'), applyFretboardShape: () => click('fretboardApply'),
   chooseFretboardAlternative: () => click('fretboardChoose'), autoFretboard: () => click('fretboardAuto'),
   ...Object.fromEntries(['palmMute', 'hammer', 'vibrato', 'dead', 'accent', 'letRing'].map(key =>
-    [key, () => withSelection(notes => setFxOnSelection(key, !notes.every(note => note.fx?.[key])))])),
+    [key, () => withSelection(notes => setFxOnSelection(key, !notes.every(note => fxOn(note, key))))])),
   previousLayer: () => stepLayer(-1), nextLayer: () => stepLayer(1), addLayer: () => click('addLane'),
   layerSettings: () => layerControl('.edit-btn'), layerVisible: () => layerControl('.vis-btn'),
   layerLock: () => layerControl('.lock-btn'),

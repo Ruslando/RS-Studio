@@ -373,8 +373,8 @@ def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
 # functions:
 #   fx.palmMute -> PalmMute   fx.accent -> Accent   fx.vibrato -> Vibrato
 #   fx.dead     -> Mute (single/chord-note) / FretHandMute (whole-chord, below)
-#   fx.hammer   -> HammerOn or PullOff, direction from the previous fret on
-#                  that string (see `techniques()` in compile_track)
+#   fx.hammer   -> HammerOn or PullOff on the note it lands on, direction from
+#                  the note sounding right before it on that string (`techniques()`)
 #   tremPick    -> Tremolo    harmonic -> Harmonic / PinchHarmonic ("pinch")
 #   slide       -> Slide / UnpitchedSlide     bend -> Bend
 #   slap        -> Slap / Pluck / Tap
@@ -981,7 +981,6 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         "powerChords", "openChords", "doubleStops", "palmMutes", "harmonics",
         "pinchHarmonics", "hopo", "tremolo", "slides", "unpitchedSlides",
         "bends", "tapping", "vibrato", "fretHandMutes", "slapPop", "sustain"), False)
-    last_fret_on_string: dict[int, int] = {}
     prev_note: S.Note | None = None
     dropped_slides_fx = []
 
@@ -997,6 +996,14 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                     return f, e2.time, len(e2.notes) > 1
         return None
 
+    def prev_on_string(idx: int, string: int) -> tuple[int, float] | None:
+        """(fret, editor end time) of the previous note on the string."""
+        for e2 in reversed(entities[:idx]):
+            for s, f, n2 in e2.notes:
+                if s == string:
+                    return f, _f(n2.get("end"), e2.time)
+        return None
+
     def techniques(n: dict, string: int, fret: int, sustain: float, time: float, idx: int) -> tuple:
         """HammerOn/PullOff/Slide/Bend/Slap/Pluck/Tap — shared by single notes and
         per-string chord notes (XmlToSngNote.fs applies this same set to both;
@@ -1010,9 +1017,15 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
         tap = slap = pluck = -1
         fx = n.get("fx") or {}
 
-        if fx.get("hammer"):
-            prev_fret = last_fret_on_string.get(string)
-            mask |= S.PULLOFF if (prev_fret is not None and prev_fret > fret) else S.HAMMERON
+        # The note a hammer-on or pull-off lands on carries the flag; the one it
+        # starts from is picked (a Guitar Pro "origin", web/guitar-pro-core.js).
+        # A pull-off comes from a higher fret sounding right up to it on this
+        # string, as the editor reads it (web/articulations.js hammerLink);
+        # anything else is a hammer-on, from nowhere if nothing precedes it.
+        if fx.get("hammer") and fx["hammer"] != "origin":
+            prev = prev_on_string(idx, string)
+            mask |= S.PULLOFF if (prev is not None and prev[0] > fret
+                                  and abs(time - prev[1]) < 0.03) else S.HAMMERON
             arr_props["hopo"] = True
         linked = False
         if n.get("linkNext"):
@@ -1116,7 +1129,6 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 finger_print_id=(-1, e.arpeggio_print),
             )
             sec.string_mask[0] |= 1 << string
-            last_fret_on_string[string] = fret
         else:
             # chord: template-level mask + optional per-string chord notes
             sustain = e.sustain
@@ -1191,7 +1203,6 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
             )
             for s, fret, _ in e.notes:
                 sec.string_mask[0] |= 1 << s
-                last_fret_on_string[s] = fret
 
         if _ignored(e, note):
             note.mask |= S.IGNORE

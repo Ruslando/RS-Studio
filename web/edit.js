@@ -20,7 +20,7 @@ import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addCommentAt } from "./comments.js";
 import { addMarkerAtTime } from "./markers.js";
 import { activeLane, applyLaneVolume, canEditLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, setLaneNotePitch, targetLane, toggleLaneMute } from "./lanes.js";
-import { FX_KEYS, FX_LABELS, copyEffects } from "./note-effects.js";
+import { FX_KEYS, FX_LABELS, copyEffects, fxOn, fxValue } from "./note-effects.js";
 import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, previewNotes, togglePlay } from "./playback.js";
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
@@ -654,11 +654,12 @@ export { EFFECT_FIELDS, FX_GLYPHS, FX_KEYS, FX_LABELS, HARMONIC_TAG, SLAP_TAG, c
 // so a note can't be e.g. both a dead/muted "X" and bent. Minimal by design —
 // only physically-null combos, not musical taste.
 const FX_SET = new Set(FX_KEYS);
-const hasEffect = (n, name) => (FX_SET.has(name) ? !!(n.fx && n.fx[name]) : n[name] != null);
+const hasEffect = (n, name) => (FX_SET.has(name) ? fxOn(n, name) : n[name] != null);
 function dropEffect(n, name) {
   if (FX_SET.has(name)) {
-    if (!n.fx || !n.fx[name]) return;
-    const fx = { ...n.fx }; delete fx[name];
+    if (!fxOn(n, name)) return;
+    const fx = { ...n.fx }, value = fxValue(n, name, false);
+    if (value) fx[name] = value; else delete fx[name];
     if (Object.keys(fx).length) n.fx = fx; else delete n.fx;
     if (name === "vibrato") delete n.vibratoStart;
   } else if (n[name] != null) {
@@ -684,8 +685,8 @@ export function setFxOnSelection(key, on) {
   let cleared = false;
   for (const n of notes) {
     if (on) cleared = clearConflicts(n, key) || cleared;
-    const fx = { ...n.fx };
-    if (on) fx[key] = true; else delete fx[key];
+    const fx = { ...n.fx }, value = fxValue(n, key, on);
+    if (value) fx[key] = value; else delete fx[key];
     if (Object.keys(fx).length) n.fx = fx; else delete n.fx;
     if (!n.fx?.vibrato) delete n.vibratoStart;
   }
@@ -1347,7 +1348,7 @@ const CHOICE_NAME = { whammy: "Whammy bar", trill: "Trill", grace: "Grace note",
 // the whole selection — powers the right-click quick-remove strip.
 function appliedEffects(sel) {
   const any = (f) => sel.some(f), out = [];
-  for (const k of FX_KEYS) if (any((n) => n.fx && n.fx[k]))
+  for (const k of FX_KEYS) if (any((n) => fxOn(n, k)))
     out.push({ label: FX_LABELS[k], clear: () => setFxOnSelection(k, false) });
   if (any((n) => n.bend)) out.push({ label: "Bend", clear: () => setBendOnSelection(null) });
   if (any((n) => n.slide)) out.push({ label: "Slide", clear: () => setSlideOnSelection(null) });
@@ -1394,7 +1395,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // One on/off note flag as a menu toggle. ✓ when every selected note already
   // carries it; clicking toggles them all off. `kw` adds search-only synonyms.
   const fxItem = (key, kw, rs) => {
-    const on = sel.every((n) => n.fx && n.fx[key]);
+    const on = sel.every((n) => fxOn(n, key));
     return { label: (on ? "✓ " : "") + FX_LABELS[key], kw, note: RS_NOTE[rs], fn: () => setFxOnSelection(key, !on) };
   };
   // The variant every selected note shares for `field` (null if they differ / none).

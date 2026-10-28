@@ -185,3 +185,16 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
   assert.equal(analyzeChord([]), null);
 }
 console.log("note-tools: ok");
+
+// A Guitar Pro hammer origin is played normally: it shows no hammer, and turning
+// the hammer on or off keeps that role for the voicer and the Guitar Pro export.
+{
+  const { fxOn, fxValue } = await import("../../web/note-effects.js");
+  const origin = { fx: { hammer: "origin" } };
+  assert.equal(fxOn(origin, "hammer"), false);
+  assert.equal(fxValue(origin, "hammer", true), "both");
+  assert.equal(fxValue({ fx: { hammer: "both" } }, "hammer", false), "origin");
+  assert.equal(fxValue({ fx: { hammer: "dest" } }, "hammer", false), undefined);
+  assert.equal(fxValue({}, "hammer", true), true);
+  assert.equal(fxOn({ fx: { hammer: "dest" } }, "hammer"), true);
+}
