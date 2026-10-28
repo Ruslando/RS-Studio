@@ -123,6 +123,33 @@ def _enable_page_context_menu(window) -> None:
     view.setContextMenuPolicy(Qt.CustomContextMenu)
 
 
+def _disable_browser_extras(window) -> None:
+    """Turn off WebView2's (Edge's) autofill, password saving and page zoom.
+
+    Edge's suggestion popup grabs focus and keys over the app's own inputs and
+    can leave the editor stuck. pywebview leaves both at Edge's default (on).
+    Windows only: Qt WebEngine has no autofill.
+    """
+    browser = getattr(window.native, "browser", None)
+    view = getattr(browser, "webview", None)
+    if view is None or not hasattr(view, "CoreWebView2InitializationCompleted"):
+        return
+
+    def ready(sender, args):
+        if not args.IsSuccess:
+            return
+        settings = sender.CoreWebView2.Settings
+        settings.IsGeneralAutofillEnabled = False
+        settings.IsPasswordAutosaveEnabled = False
+        # Page zoom (Ctrl+wheel, Ctrl+/-, pinch) scales the whole UI; the page
+        # still receives those wheel and key events for its own use.
+        settings.IsZoomControlEnabled = False
+        settings.IsPinchZoomEnabled = False
+
+    # Fires after pywebview's own handler, which is subscribed first.
+    view.CoreWebView2InitializationCompleted += ready
+
+
 def _open_window(url: str) -> bool:
     """Show the UI in a native window. False if no webview backend is usable.
 
@@ -151,6 +178,7 @@ def _open_window(url: str) -> bool:
         shell._window = window
         window.events.closing += shell._on_closing
         window.events.before_show += lambda: _enable_page_context_menu(window)
+        window.events.before_show += lambda: _disable_browser_extras(window)
         # Not private: pywebview's default forgets the page's storage (theme, keys)
         # on every start.
         webview.start(icon=str(_app_icon()), private_mode=False,
