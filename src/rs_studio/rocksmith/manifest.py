@@ -116,10 +116,10 @@ def build_attributes(ctx, header: bool) -> dict:
     attrs = {
         "AlbumArt": f"urn:image:dds:album_{low}",
         "AlbumName": ctx.album,
-        "AlbumNameSort": _sort_field(ctx.latin["album"], ctx.dlc_key),
+        "AlbumNameSort": sort_name(ctx.latin["album"], "album", ctx.dlc_key),
         "ArrangementName": arr_name,
         "ArtistName": ctx.artist,
-        "ArtistNameSort": _sort_field(ctx.latin["artist"], ctx.dlc_key),
+        "ArtistNameSort": sort_name(ctx.latin["artist"], "artist", ctx.dlc_key),
         "CentOffset": ctx.cent_offset,
         "DLC": True,
         "DLCKey": key,
@@ -144,7 +144,7 @@ def build_attributes(ctx, header: bool) -> dict:
         "SongKey": key,
         "SongLength": round(song_len, 3),
         "SongName": ctx.title,
-        "SongNameSort": _sort_field(ctx.latin["title"], ctx.dlc_key),
+        "SongNameSort": sort_name(ctx.latin["title"], "title", ctx.dlc_key),
         "SongYear": ctx.year,
         "Tuning": {f"string{i}": int(v) for i, v in enumerate(sng.metadata.tuning)},
     }
@@ -288,6 +288,46 @@ def hsan_json(header_attrs: dict | list[dict]) -> bytes:
         "InsertRoot": "Static.Songs.Headers",
     }
     return _dump(doc)
+
+
+# Sort values official files use for these artists (StringValidator.fs
+# tryGetOfficialArtistNameSortValue), keyed by the name in lower case.
+_OFFICIAL_ARTIST_SORT = {
+    "a day to remember": "A Day To Remember",
+    "a flock of seagulls": "A Flock of Seagulls",
+    "b.b. king": "BB King",
+    "blink-182": "Blink 182",
+    "blue öyster cult": "Blue Oyster Cult",
+    "booker t. & the m.g.'s": "Booker T & The MGs",
+    'bobby "blue" bland': "Bobby Blue Bland",
+    "brooks & dunn": "Brooks Dunn",
+    "foster the people": "Foster People",
+    "grace potter & the nocturnals": "Grace Potter and The Nocturnals",
+    "hail the sun": "Hail Sun",
+    "the mamas & the papas": "Mamas and The Papas",
+    "motörhead": "Motorhead",
+    "mötley crüe": "Motley Crue",
+    "t. rex": "T Rex",
+}
+
+
+def _without_article(value: str) -> str:
+    """StringValidator.removeArticles: a leading The, A or An, in any case."""
+    for article in ("the ", "a ", "an "):
+        if value.lower().startswith(article):
+            return value[len(article):]
+    return value
+
+
+def sort_name(value: str, kind: str, fallback: str) -> str:
+    """The sort value DLC Builder makes of a name (convertToSortField): an artist
+    by the official table or without its article, a title without its article,
+    an album as it is."""
+    if kind == "artist":
+        value = _OFFICIAL_ARTIST_SORT.get(value.lower()) or _without_article(value)
+    elif kind == "title":
+        value = _without_article(value)
+    return _sort_field(value, fallback)
 
 
 def _sort_field(value: str, fallback: str) -> str:

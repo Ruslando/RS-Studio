@@ -64,6 +64,21 @@ class RocksmithPackageTests(unittest.TestCase):
             if path.endswith(".sng"):
                 self.assertGreater(len(sng.unpack(blob)), len(blob), path)
 
+    def test_sort_names_and_file_name_as_dlc_builder(self):
+        """convertToSortField: articles go, official artist names apply, the album stays."""
+        for artist, title, album, sorts, name in [
+                ("The Beatles", "A Day in the Life", "The White Album",
+                 ("Beatles", "Day in the Life", "The White Album"), "Beatles_Day-in-the-Life_v1_p.psarc"),
+                ("Mötley Crüe", "An Ode", "Dr. Feelgood", ("Motley Crue", "Ode", "Dr. Feelgood"), "Motley-Crue_Ode_v1_p.psarc"),
+                ("Theory", "Andromeda", "Anthology", ("Theory", "Andromeda", "Anthology"), "Theory_Andromeda_v1_p.psarc")]:
+            with self.subTest(artist):
+                spec = _spec([_track("Gtr", GUITAR, [0, 3])], [{"track": 0, "kind": "lead"}])
+                spec["metadata"].update(artist=artist, title=title, album=album)
+                _, songs, _, file_name = _build(spec)
+                lead = songs["Lead"]
+                self.assertEqual((lead["ArtistNameSort"], lead["SongNameSort"], lead["AlbumNameSort"]), sorts)
+                self.assertEqual(file_name, name)
+
     def test_partition_counts_arrangements_of_one_name(self):
         """DLC Builder's Partitioner: Lead 1, Lead 2 …, in the SNG and the manifest alike."""
         spec = _spec([_track("Gtr", GUITAR, [0, 3]), _track("Gtr2", GUITAR, [5, 7]), _track("Bass", BASS, [0, 3])],

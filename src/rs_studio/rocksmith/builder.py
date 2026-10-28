@@ -825,4 +825,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
              + b"Package Comment: Experimental in-app export"),
             ("appid.appid", b"248750"),
         ]
-        return psarc.build_psarc(entries), warnings, _cdlc_filename(latin["artist"], latin["title"], key, version)
+        # Named by the sort values, as DLC Builder names a release ("Beatles_…").
+        name = _cdlc_filename(manifest.sort_name(latin["artist"], "artist", ""),
+                              manifest.sort_name(latin["title"], "title", ""), key, version)
+        return psarc.build_psarc(entries), warnings, name
