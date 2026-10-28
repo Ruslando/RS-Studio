@@ -250,6 +250,36 @@ class ArrangementPropertyTests(unittest.TestCase):
         self.assertAlmostEqual(attrs["SongDiffHard"], round(7 * 2 / attrs["SongLength"] / 100, 9), places=6)
 
 
+class TechniqueMapTests(unittest.TestCase):
+    """createTechniqueMap / Techniques.fs: technique ids per phrase iteration."""
+
+    def _map(self, notes, tuning=GUITAR):
+        _, songs, _, _ = _build(_spec([{"name": "L", "tuning": tuning, "notes": notes}], [{"track": 0, "kind": "lead"}]))
+        return songs["Lead"]["Techniques"]
+
+    def test_techniques_of_notes_and_chords(self):
+        g = lambda start, string, fret, **fx: {"start": start, "end": start + 0.2, "pitch": GUITAR[string - 1] + fret,
+                                               "string": string, "fret": fret, "hand": 1, **fx}
+        barre = [g(4.0, 6 - i, f, finger=n, chordName="F") for i, (f, n) in enumerate(zip([1, 3, 3, 2, 1, 1], [1, 3, 4, 2, 1, 1]))]
+        notes = [g(1.0, 3, 5, fx={"palmMute": True}), g(1.5, 3, 7, fx={"hammer": True}),
+                 g(2.0, 2, 8, bend="full"), g(3.0, 6, 3, chordName="G5"), g(3.0, 5, 5, chordName="G5"), *barre]
+        techniques = self._map(notes)
+        self.assertEqual(list(techniques), ["0"])
+        ids = set().union(*techniques["0"].values())
+        # 7 palm mute, 3 + 6 hammer-on, 1 bend, 35 power chord, 37 barre, 38 chord
+        self.assertTrue({1, 3, 6, 7, 35, 37, 38} <= ids, ids)
+        self.assertNotIn(33, ids, "a power chord is not counted as a double stop too")
+        self.assertTrue(all(v == sorted(v) for v in techniques["0"].values()))
+
+    def test_a_note_on_a_phrase_start_counts_for_the_phrase_before(self):
+        """DLC Builder's division: start < time <= end, and the last phrase is left out."""
+        pis = [sng.PhraseIteration(0, 0.0, 1.0), sng.PhraseIteration(1, 1.0, 5.0), sng.PhraseIteration(2, 5.0, 6.0)]
+        notes = [sng.Note(mask=sng.SINGLE | sng.PALMMUTE, time=t) for t in (1.0, 3.0)]
+        notes += [sng.Note(mask=sng.SINGLE | sng.TAP, time=t) for t in (5.0, 5.5)]
+        song = sng.SNG(phrase_iterations=pis, levels=[sng.Level(notes=notes)])
+        self.assertEqual(manifest._technique_map(song), {"0": {"0": [7], "1": [7, 14]}})
+
+
 class ContainerTests(unittest.TestCase):
     def test_archive_returns_what_was_put_in(self):
         # Larger than one compression block, incompressible, and tiny.

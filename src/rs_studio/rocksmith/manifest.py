@@ -240,7 +240,7 @@ def build_attributes(ctx, header: bool) -> dict:
         "SongPartition": ctx.partition,
         "SongXml": f"urn:application:xml:{low}_{file_tag}",
         "TargetScore": 100_000,
-        "Techniques": {},  # Limitation: stats-only map; fill via Techniques.fs port if wanted
+        "Techniques": _technique_map(sng),
         "Tone_A": ctx.tone_slots[0]["Key"] if len(ctx.tone_slots) > 0 else "",
         "Tone_B": ctx.tone_slots[1]["Key"] if len(ctx.tone_slots) > 1 else "",
         "Tone_Base": ctx.tone["Key"],
@@ -250,6 +250,112 @@ def build_attributes(ctx, header: bool) -> dict:
         "Tones": tones,
     })
     return attrs
+
+
+# ---- technique map ---------------------------------------------------------
+# Rocksmith2014.NET Manifest/Techniques.fs, rule for rule. The numbers are the
+# game's technique ids; DLC Builder's comments there note where they disagree
+# with the game's own technique database.
+
+def _has(note, flag: int) -> bool:
+    return note.mask & flag == flag
+
+
+def _chord_strings(sng, note) -> tuple:
+    """(lowest string, highest string, its fret there, its fret there) of a chord."""
+    frets = sng.chords[note.chord_id].frets
+    used = [s for s, f in enumerate(frets) if f >= 0]
+    return used[0], used[-1], frets[used[0]], frets[used[-1]]
+
+
+def _techniques(sng, note) -> set:
+    single = S.SINGLE
+    if note.mask in (0, single, single | S.OPEN):
+        return set()
+    chord_notes = sng.chord_notes[note.chord_notes_id] if _has(note, S.CHORDNOTES) else None
+    hopo = bool(note.mask & (S.HAMMERON | S.PULLOFF))
+    power = False
+    adjacent = False
+    if _has(note, S.DOUBLESTOP):
+        s1, s2, f1, f2 = _chord_strings(sng, note)
+        power = s1 <= 2 and s1 + 1 == s2 and f1 + 2 == f2   # root on the D string or lower
+        adjacent = s1 + 1 == s2
+    tuning = sng.metadata.tuning
+    drop_tuning = tuning[0] == tuning[1] - 2 and tuning[0] == tuning[2] - 2
+    chord_only = note.mask & (S.CHORDNOTES | S.DOUBLESTOP) == S.CHORDNOTES
+    double_stop_notes = _has(note, S.CHORDNOTES | S.DOUBLESTOP)
+    slides = chord_notes is not None and any(t != -1 for t in chord_notes.slide_to)
+    tremolos = chord_notes is not None and any(m & S.TREMOLO for m in chord_notes.mask)
+    bends_used = [len(b) for b in chord_notes.bend_data] if chord_notes is not None else []
+    out = set()
+    for number, flag in ((0, S.ACCENT), (1, S.BEND), (2, S.FRETHANDMUTE), (3, S.HAMMERON), (4, S.HARMONIC),
+                         (5, S.PINCHHARMONIC), (7, S.PALMMUTE), (8, S.PLUCK), (9, S.PULLOFF), (10, S.SLAP),
+                         (11, S.SLIDE), (12, S.UNPITCHEDSLIDE), (14, S.TAP), (15, S.TREMOLO), (16, S.VIBRATO),
+                         (17, S.PALMMUTE | S.ACCENT), (18, S.PALMMUTE | S.HARMONIC), (19, S.PALMMUTE | S.HAMMERON),
+                         (20, S.PALMMUTE | S.PULLOFF), (21, S.FRETHANDMUTE | S.ACCENT), (26, S.BEND | S.TREMOLO),
+                         (27, S.TREMOLO | S.SLIDE), (28, S.TREMOLO | S.VIBRATO)):
+        if _has(note, flag):
+            out.add(number)
+    if hopo:
+        out.add(6)
+    if _has(note, S.SINGLE) and _has(note, S.SUSTAIN):
+        out.add(13)
+    bend = note.bend_values
+    if _has(note, S.BEND) and bend and bend[0].time == note.time and bend[0].step > 0:
+        out.add(29)   # pre-bend
+    if chord_notes is not None and sum(1 for n in bends_used if n) == 1:
+        out.add(30)   # oblique bend
+    if (_has(note, S.BEND) and len(bend) >= 3
+            and bend[0].step != bend[1].step and bend[1].step != bend[2].step):
+        out.add(31)   # compound bend
+    if _has(note, S.DOUBLESTOP) and not power:
+        out.add(33 if adjacent else 34)
+    if power:
+        out.add(35)
+    if _has(note, S.CHORD) and drop_tuning:
+        frets = sng.chords[note.chord_id].frets
+        if frets[0] != -1 and frets[0] == frets[1] == frets[2]:
+            out.add(36)   # drop-D power chord
+    if note.mask & (S.CHORD | S.DOUBLESTOP) == S.CHORD:
+        fingers = [f for f in sng.chords[note.chord_id].fingers if f != -1]
+        if any(fingers.count(f) >= 3 for f in set(fingers)):
+            out.add(37)   # barre
+    if note.mask & (S.CHORD | S.SUSTAIN | S.DOUBLESTOP) == S.CHORD:
+        out.add(38)
+    if hopo and note.finger_print_id[0] != -1:
+        out.add(40)   # hammer-on or pull-off inside a handshape
+    if chord_only and slides:
+        out.add(41)
+    if chord_only and tremolos:
+        out.add(42)
+    if chord_notes is not None and any(m & S.HAMMERON for m in chord_notes.mask):
+        out.add(43)
+    if double_stop_notes and slides:
+        out.add(44)
+    if double_stop_notes and tremolos:
+        out.add(45)
+    if double_stop_notes and any(bends_used):
+        out.add(46)
+    return out
+
+
+def _technique_map(sng) -> dict:
+    """Difficulty -> phrase iteration -> technique ids (createTechniqueMap).
+
+    A note belongs to a phrase from just after its start up to and including its
+    end, and the last phrase is left out: DLC Builder does both on purpose, as
+    official files do.
+    """
+    per_pi: dict[str, list] = {}
+    notes = sng.levels[0].notes
+    for k, pi in enumerate(sng.phrase_iterations[:-1]):
+        ids = set()
+        for note in notes:
+            if pi.start_time < note.time <= pi.end_time:
+                ids |= _techniques(sng, note)
+        if ids:
+            per_pi[str(k)] = sorted(ids)
+    return {"0": per_pi} if per_pi else {}
 
 
 def _chord_map(sng) -> dict:
