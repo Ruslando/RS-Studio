@@ -301,6 +301,38 @@ class TechniqueMapTests(unittest.TestCase):
         self.assertEqual(manifest._technique_map(song), {"0": {"0": [7], "1": [7, 14]}})
 
 
+class ShowlightTests(unittest.TestCase):
+    """ShowLightGenerator: fog per section name, beams by pitch, lasers, a last fog."""
+
+    def test_showlights_as_dlc_builder_makes_them(self):
+        import re
+        spec = _spec([_track("B", BASS, [0, 3]), _track("G", GUITAR, [0, 3, 5, 0, 0, 2])],
+                     [{"track": 0, "kind": "bass"}, {"track": 1, "kind": "lead"}])
+        spec["sections"] = [{"t": 1, "sectionType": "verse"}, {"t": 5, "sectionType": "solo"},
+                            {"t": 9, "sectionType": "verse"}]
+        files, songs, _, _ = _build(spec)
+        xml = next(b for p, b in files.items() if p.endswith("showlights.xml")).decode()
+        lights = [(int(t), int(n)) for t, n in re.findall(r'time="(\d+)" note="(\d+)"', xml)]
+        self.assertIn(f'count="{len(lights)}"', xml)
+        self.assertEqual(lights, sorted(lights, key=lambda light: light[0]))
+        fogs = [n for _, n in lights if 24 <= n <= 35]
+        beams = [(t, n) for t, n in lights if 48 <= n <= 59]
+        # The Lead's notes, not the Bass listed first: E G A E E F# on the low E string;
+        # the repeated E gets no new beam.
+        self.assertEqual([n for _, n in beams], [52, 55, 57, 52, 54])
+        self.assertTrue(all(b - a >= 350 for (a, _), (b, _) in zip(beams, beams[1:])))
+        self.assertEqual(fogs[0], fogs[2], "both verses share a fog colour")
+        self.assertNotEqual(fogs[0], fogs[1])
+        length = round(songs["Lead"]["SongLength"] * 1000)
+        solo = next(t for t, n in lights if 24 <= n <= 35 and n == fogs[1])
+        self.assertIn((solo, 67), lights, "lasers on at the solo")
+        self.assertIn((length - 5000, 66), lights, "lasers off 5 s before the end")
+        self.assertEqual(lights[-1], (length, 35), "a last fog at the end")
+        files2, _, _, _ = _build(spec)
+        self.assertEqual(xml.encode(), next(b for p, b in files2.items() if p.endswith("showlights.xml")),
+                         "the same song gets the same lights")
+
+
 class ContainerTests(unittest.TestCase):
     def test_archive_returns_what_was_put_in(self):
         # Larger than one compression block, incompressible, and tiny.

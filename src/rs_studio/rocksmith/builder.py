@@ -807,7 +807,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         res = resources.files(__package__).joinpath("res")
 
         entries = arrangement_entries + [
-            (f"songs/arr/{low}_showlights.xml", manifest.showlights(contexts[0].compiled)),
+            (f"songs/arr/{low}_showlights.xml", manifest.showlights(contexts)),
             (f"manifests/songs_dlc_{low}/songs_dlc_{low}.hsan",
              manifest.hsan_json([manifest.build_attributes(ctx, header=True) for ctx in contexts])),
             (f"gfxassets/album_art/album_{low}_64.dds", art[64]),

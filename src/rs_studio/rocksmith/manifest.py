@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import uuid
+import zlib
 from importlib import resources
 
 from . import sng as S
@@ -582,32 +583,75 @@ def xblock(ctx) -> bytes:
     return doc.encode("utf-8-sig")   # with a byte order mark, as DLC Builder writes it
 
 
-def showlights(compiled) -> bytes:
-    """Fog colour per section, plus a beam at most every 2 seconds.
+_FOG_MIN, _FOG_MAX, _BEAM_MIN, _LASERS_OFF, _LASERS_ON = 24, 35, 48, 66, 67
+_STANDARD_MIDI = (40, 45, 50, 55, 59, 64)
 
-    The beam colour comes from the note's FRET, not its pitch: `n.fret % 12`
-    happens to spread colours across the fretboard about as well as pitch would,
-    and the SNG note record does not carry a MIDI pitch to use instead. Nothing
-    musical depends on it -- these drive the stage lights, and the game is
-    perfectly happy with any note value in range.
+
+def _showlight_source(contexts: list):
+    """The Lead arrangement, else the first, in DLC Builder's order (route, then Main, Alt, Bonus)."""
+    order = {"main": 0, "alt": 1, "bonus": 2}
+    ranked = sorted(contexts, key=lambda c: (c.arrangement["route"], order[c.arrangement["priority"]]))
+    return next((c for c in ranked if c.arrangement["route"] == 1), ranked[0]).compiled.sng
+
+
+def _midi(sng, note) -> int:
+    """Midi.toMidiNote for a note; a chord's first sounding template note (ShowLightGenerator)."""
+    if note.chord_id != -1:
+        return next((m for m in sng.chords[note.chord_id].notes if m > 0), 0)
+    capo = sng.metadata.capo_fret_id
+    fret = capo if capo > 0 and note.fret == 0 else note.fret
+    return _STANDARD_MIDI[note.string] + sng.metadata.tuning[note.string] + fret
+
+
+def showlights(contexts) -> bytes:
+    """Stage lights as DLC Builder's ShowLightGenerator makes them.
+
+    Fog per section (one colour per section name), a beam in the colour of each
+    note's pitch class at most every 0.35 s when the colour changes, lasers on at
+    the first solo (else 60 % into the song) and off 5 s before the end, and a
+    last fog at the end against a glitch there. DLC Builder picks fog colours at
+    random; here a name always gets the same one, so a package builds the same twice.
     """
-    sng = compiled.sng
-    events = []
-    for k, sec in enumerate(sng.sections):
-        events.append((sec.start_time, 24 + (k % 12)))
-    last_beam = -10.0
-    notes = sng.levels[0].notes
-    for n in notes:
-        if n.time - last_beam < 2.0:
+    sng = _showlight_source(_ctx_list(contexts))
+    song_length = sng.metadata.song_length
+    ms = lambda t: int(t * 1000)  # noqa: E731
+    lights: list[tuple[int, int]] = []
+
+    fog_of: dict[str, int] = {}
+    previous_name, previous_fog = "", 0
+    for section in sng.sections:
+        if section.name == previous_name:
             continue
-        midi = n.fret if n.fret >= 0 else 0
-        events.append((n.time, 48 + (midi % 12)))
-        last_beam = n.time
-    events.sort()
-    lines = "\n".join(
-        f'  <showlight time="{int(t * 1000)}" note="{note}" />' for t, note in events)
+        previous_name = section.name
+        if section.name not in fog_of:
+            fog = _FOG_MIN + zlib.crc32(section.name.encode()) % 12
+            if fog == previous_fog:
+                fog = _FOG_MIN + (fog - _FOG_MIN + 1) % 12
+            fog_of[section.name] = fog
+        previous_fog = fog_of[section.name]
+        lights.append((ms(section.start_time), previous_fog))
+
+    notes = [n for pi in sng.phrase_iterations for n in sng.levels[0].notes
+             if pi.start_time <= n.time < pi.end_time]
+    last = None
+    for n in notes:
+        beam = _BEAM_MIN + _midi(sng, n) % 12
+        if last is None or (n.time - last[0] >= 0.35 and beam != last[1]):
+            last = (n.time, beam)
+            lights.append((ms(n.time), beam))
+
+    solo = next((sec.start_time for sec in sng.sections if sec.name.startswith("solo")), song_length * 0.6)
+    lights += [(ms(solo), _LASERS_ON), (ms(song_length - 5.0), _LASERS_OFF)]
+    if not any(_BEAM_MIN <= note <= _BEAM_MIN + 11 or note == 42 for _, note in lights):
+        lights.append((0, _BEAM_MIN))
+    if not any(_FOG_MIN <= note <= _FOG_MAX for _, note in lights):
+        lights.append((0, _FOG_MIN))
+    lights.append((ms(song_length), _FOG_MAX))
+    lights.sort(key=lambda light: light[0])
+
+    body = "\n".join(f'  <showlight time="{t}" note="{note}" />' for t, note in lights)
     doc = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
-        f'<showlights count="{len(events)}">\n{lines}\n</showlights>'
+        f'<showlights count="{len(lights)}">\n{body}\n</showlights>'
     )
     return doc.encode("utf-8")
