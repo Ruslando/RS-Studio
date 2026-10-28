@@ -7,10 +7,12 @@ import { WHAMMY_TAG } from "./whammy.js";
 export const EFFECT_FIELDS = [
   "slide", "fx", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick", "slap",
   "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart", "slideEnd", "slideFrets",
-  // How Rocksmith draws the chord the note is in: "full" or "repeat" (chart._chord_display).
-  // Not in the signatures below: Guitar Pro has no such thing, so changing it must
-  // not take a note off the source-preserving Guitar Pro path.
-  "chordDisplay",
+  // Rocksmith only: how the chord the note is in is drawn ("full" or "repeat",
+  // chart._chord_display), a note left out of the score (`ignore`), a chord shown
+  // without fingers (`fingerless`). Not in the signatures below: Guitar Pro has no
+  // such thing, so changing them must not take a note off the source-preserving
+  // Guitar Pro path.
+  "chordDisplay", "ignore", "fingerless",
 ];
 
 // The subset that goes into a change-detection signature — EFFECT_FIELDS minus
@@ -92,6 +94,8 @@ export function noteMarks(n) {
   if (n.slap) m.push(SLAP_TAG[n.slap]);
   if (n.stroke) m.push(n.stroke === "up" ? "⤴" : "⤵");
   if (WHAMMY_TAG[n.whammy]) m.push(WHAMMY_TAG[n.whammy]);
+  if (n.ignore) m.push("Not scored");
+  if (n.fingerless) m.push("No fingers");
   return m;
 }
 

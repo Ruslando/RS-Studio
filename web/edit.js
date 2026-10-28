@@ -1,4 +1,5 @@
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
+import { isTablatureLane } from "./layer-role.js";
 import { automaticHandSeat } from './hand-anchor-core.js';
 // Note editing: undo/redo across all edit lanes, clipboard (incl. paste-as-reference),
 // the per-note effects (bend / harmonic / articulations / slide), the fingering
@@ -1497,35 +1498,60 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     ...(selectedShapeIds.length === 1 ? [{ label: "Select entire shape", fn: selectEntireShape }] : []),
     ...(selectedShapeIds.length ? [{ label: "Remove shape (keep notes)", fn: unmarkSelectedShapes }] : []),
   ];
-  // How Rocksmith draws the selected chords. The export decides by itself, as EOF
-  // does; the two overrides keep EOF's names for those who know them.
+  // Rocksmith-only settings of the selected notes. The export decides how chords
+  // are drawn by itself, as EOF does; these override it, and keep EOF's names in
+  // brackets for those who know them.
   const selLane = oneLane ? laneOf(sel[0]) : null;
-  const inChord = (n) => selLane.notes.some((m) => m !== n && Math.abs(m.start - n.start) < 0.002);
-  const chordNotes = selLane && canEditLane(selLane) ? sel.filter(inChord) : [];
-  const displayNow = new Set(chordNotes.map((n) => n.chordDisplay || ""));
-  const setDisplay = (value) => {
+  // Only on a layer the Rocksmith export plays: a melody or vocal layer has no frets.
+  const editable = selLane && canEditLane(selLane) && isTablatureLane(selLane);
+  const sameOnset = (a, b) => Math.abs(a.start - b.start) < 0.002;
+  const inChord = (n) => selLane.notes.some((m) => m !== n && sameOnset(m, n));
+  const chordNotes = editable ? sel.filter(inChord) : [];
+  // A chord setting goes on the whole chord, not only its selected notes: the export reads any.
+  const wholeChords = () => selLane.notes.filter((n) => chordNotes.some((c) => sameOnset(c, n)));
+  const setField = (notes, key, value) => {
     const prev = snapshotEdit();
-    const onsets = new Set(chordNotes.map((n) => n.start));
-    // The whole chord, not only the selected notes of it: the export reads any.
-    for (const n of selLane.notes) if ([...onsets].some((t) => Math.abs(n.start - t) < 0.002)) {
-      if (value) n.chordDisplay = value; else delete n.chordDisplay;
-    }
+    for (const n of notes) { if (value) n[key] = value; else delete n[key]; }
     commitStructure(prev);
   };
+  const tick = (on, label) => `${on ? "✓ " : ""}${label}`;
+  const displayNow = new Set(chordNotes.map((n) => n.chordDisplay || ""));
   const displayItem = (value, label, tip) => ({
-    label: `${displayNow.size === 1 && displayNow.has(value) ? "✓ " : ""}${label}`, tip, fn: () => setDisplay(value),
+    label: tick(displayNow.size === 1 && displayNow.has(value), label), tip,
+    fn: () => setField(wholeChords(), "chordDisplay", value),
   });
-  const displayActions = chordNotes.length ? [{
-    label: "Chord display", kw: "rocksmith high density crazy repeat full chord",
-    tip: "How Rocksmith draws these chords: in full, or as a short repeat of the chord before.",
+  const allIgnored = editable && sel.every((n) => n.ignore);
+  // Fingerless is about a grip: a chord's, or an arpeggio's or handshape's.
+  const gripNotes = () => [...new Set([...wholeChords(),
+    ...selLane.notes.filter((n) => selectedShapeIds.includes(n.shapeId))])];
+  const hasGrip = chordNotes.length > 0 || (editable && selectedShapeIds.length > 0);
+  const allFingerless = hasGrip && gripNotes().every((n) => n.fingerless);
+  const rocksmithActions = editable ? [{
+    label: "Rocksmith", kw: "rocksmith ignore score fingerless fingers high density crazy chord display",
     children: [
-      displayItem("", "Automatic", "A chord is drawn in full when it is new, starts a phrase, changes its mute "
-        + "or plays a technique of its own. A chord repeated right after itself is drawn as a repeat (a frame "
-        + "without frets), as in EOF."),
-      displayItem("full", "Always in full (Crazy)", "Draw this chord with all its frets and fingers even when it "
-        + "repeats the chord before, e.g. after a pause. EOF calls this Crazy."),
-      displayItem("repeat", "Always as repeat (High density)", "Draw this chord as a repeat frame without frets "
-        + "even where it would be drawn in full. Techniques on it are kept. EOF calls this High Density."),
+      { label: tick(allIgnored, "Not scored (Ignore)"), kw: "ignore score",
+        tip: "Rocksmith shows the note but does not score it: for a note the game cannot hear well. "
+          + "In a chord, the whole chord is not scored. Notes on frets 23 and 24 are never scored anyway.",
+        fn: () => setField(sel, "ignore", !allIgnored) },
+      ...(hasGrip ? [
+        { label: tick(allFingerless, "No finger numbers (Fingerless)"), kw: "fingerless fingers",
+          tip: "Rocksmith shows the chord, arpeggio or handshape without finger numbers, on purpose: for a grip "
+            + "any fingering plays. The fretboard keeps its fingers.",
+          fn: () => setField(gripNotes(), "fingerless", !allFingerless) },
+      ] : []),
+      ...(chordNotes.length ? [
+        { label: "Chord display", kw: "high density crazy repeat full chord",
+          tip: "How Rocksmith draws these chords: in full, or as a short repeat of the chord before.",
+          children: [
+            displayItem("", "Automatic", "A chord is drawn in full when it is new, starts a phrase, changes its mute "
+              + "or plays a technique of its own. A chord repeated right after itself is drawn as a repeat (a frame "
+              + "without frets), as in EOF."),
+            displayItem("full", "Always in full (Crazy)", "Draw this chord with all its frets and fingers even when it "
+              + "repeats the chord before, e.g. after a pause. EOF calls this Crazy."),
+            displayItem("repeat", "Always as repeat (High density)", "Draw this chord as a repeat frame without frets "
+              + "even where it would be drawn in full. Techniques on it are kept. EOF calls this High Density."),
+          ] },
+      ] : []),
     ],
   }] : [];
   // The selection is (part of) one chord: it can be renamed from here too, which
@@ -1564,7 +1590,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
       : motifActions.length > 1
         ? [{ label: "Motif", kw: "group phrase label", children: motifActions }]
         : []),
-    ...displayActions,
+    ...rocksmithActions,
     ...(shapeActions.length
       ? [{ label: "Arpeggio / handshape", kw: "arpeggio handshape grip frame rocksmith", children: shapeActions }]
       : []),

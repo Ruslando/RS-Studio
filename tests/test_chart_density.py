@@ -36,5 +36,25 @@ class ChordDensityTest(unittest.TestCase):
         self.assertEqual(drawn[1], ("repeat", True), "a forced repeat still carries its technique")
 
 
+class NoteStatusTest(unittest.TestCase):
+    def _level(self, notes):
+        return compile_track({"name": "L", "tuning": TUNING, "notes": notes},
+                             {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+
+    def test_ignore_leaves_a_note_and_its_chord_out_of_the_score(self):
+        single = [{"string": 6, "fret": 3, "pitch": 43, "start": 3.0, "end": 3.2, "hand": 1, "ignore": True}]
+        level = self._level(_chord(1.0, ignore=True) + single).sng.levels[0]
+        self.assertTrue(all(n.mask & S.IGNORE for n in level.notes))
+        self.assertEqual(sum(level.notes_in_pi_excl_ignored), 0)
+
+    def test_fingerless_chord_has_no_fingers_and_no_warning(self):
+        notes = [{**n, "finger": 1} for n in _chord(1.0, fingerless=True)]
+        compiled = self._level(notes)
+        self.assertEqual(compiled.sng.chords[0].fingers, [-1] * 6)
+        unfingered = self._level(_chord(1.0))   # no finger from the fretboard: a warning
+        self.assertIn("finger", [code for code, _ in unfingered.fixes])
+        self.assertNotIn("finger", [code for code, _ in self._level(_chord(1.0, fingerless=True)).fixes])
+
+
 if __name__ == "__main__":
     unittest.main()

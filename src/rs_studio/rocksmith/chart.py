@@ -544,16 +544,20 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
     chord_templates: list[S.ChordTemplate] = []
     chord_ids: dict[tuple, int] = {}
 
-    def ensure_chord_template(frets: list, midi: list, fingers: list, name: str, t: float, *, arpeggio: bool = False) -> int:
+    def ensure_chord_template(frets: list, midi: list, fingers: list, name: str, t: float, *,
+                              arpeggio: bool = False, fingerless: bool = False) -> int:
         """One template per grip, fingering and name: the same grip fingered or named two ways is two.
 
         The name is the editor's (web/chords.js, or the user's own), sent on the notes.
+        A fingerless grip (EOF's Fingerless status) goes out with no fingers on purpose.
         """
         mask = S.CHORD_MASK_ARPEGGIO if arpeggio else 0
+        if fingerless:
+            fingers = [-1] * 6
         key = (tuple(frets), tuple(fingers), name, mask)
         if key not in chord_ids:
             chord_ids[key] = len(chord_templates)
-            if any(f > 0 and g == -1 for f, g in zip(frets, fingers)):
+            if not fingerless and any(f > 0 and g == -1 for f, g in zip(frets, fingers)):
                 fixes.append(("finger", t))   # where the grip is first played
             chord_templates.append(S.ChordTemplate(
                 frets=frets, fingers=fingers, notes=midi,
@@ -613,7 +617,8 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         name = next((str(m[3]["shapeName"]) for m in members if m[3].get("shapeName")), "") \
             or _chord_name(m[3] for m in members)
         shape_info[shape_id] = {
-            "chord_id": ensure_chord_template(frets, midi, fingers, name, start, arpeggio=kind == "arpeggio"),
+            "chord_id": ensure_chord_template(frets, midi, fingers, name, start, arpeggio=kind == "arpeggio",
+                                              fingerless=any(m[3].get("fingerless") for m in members)),
             "kind": kind, "start": start, "end": end, "frets": list(by_string.values()),
         }
 
@@ -659,7 +664,8 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
                     frets[s] = fret
                     midi[s] = tuning_low[s] + (fret or capo)
                     fingers[s] = _finger(n, fret)
-                ent.chord_id = ensure_chord_template(frets, midi, fingers, _chord_name(n for _, _, n in notes), t)
+                ent.chord_id = ensure_chord_template(frets, midi, fingers, _chord_name(n for _, _, n in notes), t,
+                                                     fingerless=any(n.get("fingerless") for _, _, n in notes))
             entities.append(ent)
         i = j
 
@@ -1141,12 +1147,13 @@ def _ignored(e: _Entity, note: S.Note) -> bool:
     """BasicFixes.addIgnores: notes the game cannot score, left out of the score.
 
     Frets 23 and 24 are not detected reliably, nor is a 7th fret natural
-    harmonic held on (DLC Builder's I13). A chord is ignored when any of its
-    notes is; its chord notes carry no flag of their own.
+    harmonic held on (DLC Builder's I13); and the user can leave out any note
+    (EOF's Ignore status). A chord is ignored when any of its notes is; its
+    chord notes carry no flag of their own.
     """
     def unscorable(fret: int, n: dict) -> bool:
         harmonic = n.get("harmonic") and n.get("harmonic") != "pinch"
-        return fret >= 23 or (fret == 7 and harmonic and note.sustain > 0)
+        return bool(n.get("ignore")) or fret >= 23 or (fret == 7 and harmonic and note.sustain > 0)
     return any(unscorable(fret, n) for _, fret, n in e.notes)
 
 
