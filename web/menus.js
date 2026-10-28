@@ -19,6 +19,15 @@ export function wireMenuAnchors(root, onOpen = () => {}) {
     // A fixed popup must not remain behind when its project row moves.
     document.addEventListener('scroll', closeFloating, true);
     window.addEventListener('resize', closeFloating);
+    // Menu buttons keep no focus (modal-focus.js), so ↑ ↓ enter an open list from anywhere.
+    window.addEventListener('keydown', (event) => {
+      if (!['ArrowDown', 'ArrowUp'].includes(event.key) || document.activeElement.closest?.('.menu-list')) return;
+      const list = [...document.querySelectorAll('.menu-anchor .menu-list')].find((l) => !l.hidden);
+      const items = list ? [...list.querySelectorAll('.menu-item')].filter((item) => !item.disabled && !item.hidden) : [];
+      if (!items.length) return;
+      event.preventDefault(); event.stopPropagation();
+      (event.key === 'ArrowDown' ? items[0] : items.at(-1)).focus();
+    }, true);
   }
   for (const menu of root.querySelectorAll('.menu-anchor')) {
     const button = menu.querySelector('.menu-btn'), list = menu.querySelector('.menu-list');

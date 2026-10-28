@@ -45,6 +45,11 @@ jumps also work with the overview focused or the pointer over the fretboard.
 Ctrl/Cmd with plus or minus remains available to the browser. The new action
 bindings and marker jumps do not run while typing or while a modal dialog is open.
 
+Controls on the editor page never keep keyboard focus, and Tab does not walk
+through them, so Space and the arrows always reach the editor after a click.
+Text fields, open menus, the note menu, marker popovers and dialogs keep focus
+for their own keys.
+
 The Fixed tab also documents the existing file/clipboard shortcuts and local
 keyboard or mouse controls for the overview, project start, fretboard, note menu,
 Tone Designer, Artifacts previews, selection, scrolling and zooming.
@@ -52,8 +57,7 @@ Tone Designer, Artifacts previews, selection, scrolling and zooming.
 ## Drawing quick settings
 
 The overview playhead always shows its position as `mm:ss.sss`, adding hours as
-`h:mm:ss.sss` once needed. Double-click its time label (or focus it and press Enter)
-to enter a position. Use `mm:ss` or `h:mm:ss`, optionally followed by `.sss`
+`h:mm:ss.sss` once needed. Double-click its time label to enter a position. Use `mm:ss` or `h:mm:ss`, optionally followed by `.sss`
 milliseconds. Enter seeks, Escape cancels, and a valid edit also applies when
 focus leaves the field. Times beyond the song duration are rejected.
 
@@ -69,7 +73,7 @@ Snap to pitch and a search range of ±1, ±2 or ±3 semitones. Changes persist
 immediately and stay synchronized with Editor settings. Turning snap off
 disables Range. A former saved ±5 range is migrated to ±3.
 
-H opens the popover and focuses Snap. Escape or an outside click closes it. Both
+H opens the popover. Escape or an outside click closes it. Both
 H and T are editable commands, with the same conflict checking, removal, staged
 Apply/cancel and persistence as other bindings. The button hints follow the
 current bindings.
@@ -110,6 +114,5 @@ Channel selection is saved per audio layer and applies to playback and analysis.
 Audio layer speaker controls retain click to mute and sideways volume dragging.
 
 The spectrogram controls collapse to a compact channel/range summary. Use its
-chevron to expand, or drag its grip to dock along any spectrogram edge. With
-the grip focused, arrow keys choose an edge. Dock position and collapsed state
+chevron to expand, or drag its grip to dock along any spectrogram edge. Dock position and collapsed state
 are remembered on this device. Channel choices use the app's menu controls.

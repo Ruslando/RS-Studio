@@ -53,10 +53,7 @@ export function initModalFocus() {
     if (top && returnTarget && roots.some((root) => root.contains(returnTarget)) && visible(returnTarget)) {
       returnTarget.focus({ preventScroll: true });
     }
-    if (top && !roots.some((root) => root.contains(document.activeElement)) && !opened.includes(top)) {
-      // Focus was lost in a dialog already in use: back to the dialog, not to its first field.
-      top.focus({ preventScroll: true });
-    } else if (top && !roots.some((root) => root.contains(document.activeElement))) {
+    if (top && opened.includes(top) && !roots.some((root) => root.contains(document.activeElement))) {
       const controls = focusable(top);
       // Confirmations start on Cancel; ordinary forms start in their first field.
       const target = top.getAttribute('role') === 'alertdialog'
@@ -73,6 +70,19 @@ export function initModalFocus() {
       explicitOpeners.delete(dialog);
     }
   }
+  // Focus lost in a dialog already in use (its control hidden or removed, a click on
+  // the backdrop) goes back to the dialog, not to its first field. This answers focus
+  // leaving, never page changes: those also happen mid-click (a tooltip hides on
+  // mousedown) and refocusing then cancelled the click's own focus.
+  document.addEventListener('focusout', (event) => {
+    const top = open.at(-1);
+    if (!top || !interactionRoots(top).some((root) => root.contains(event.target))) return;
+    setTimeout(() => {   // after the event that moved focus has finished
+      if (open.at(-1) === top && !interactionRoots(top).some((root) => root.contains(document.activeElement))) {
+        top.focus({ preventScroll: true });
+      }
+    });
+  });
   document.addEventListener('keydown', (event) => {
     const top = open.at(-1);
     if (!top || event.key !== 'Tab') return;
@@ -85,6 +95,22 @@ export function initModalFocus() {
       event.preventDefault(); controls[0].focus();
     }
   }, true);
+  // The editor page runs on shortcuts, not focus: a control there that gains focus
+  // (a click, a closing menu or dialog handing it back) drops it again, so Space and
+  // the arrows always reach the editor. Menus, the note menu, popovers and the tour
+  // keep focus for their own keys; text fields keep it for typing.
+  const ownKeys = '.ctxmenu, .menu-list, .live-editor, .tour-card, [aria-modal="true"]';
+  const typing = 'input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, [contenteditable]';
+  document.addEventListener('focusin', (event) => {
+    const el = event.target;
+    // A dropdown or slider closes or stops if blurred mid-use; it lets go on change.
+    if (open.length || el.closest(ownKeys) || el.matches(`${typing}, select, input[type="range"]`)) return;
+    el.blur();
+  });
+  document.addEventListener('change', (event) => {
+    const el = event.target;
+    if (!open.length && el.matches('select, input[type="range"]') && !el.closest(ownKeys)) el.blur();
+  });
   // A popover that closes with focus inside hands it back to where it came from;
   // left on a hidden button, focus would swallow the editor's keys (Ctrl+Z).
   const popOpeners = new Map();
