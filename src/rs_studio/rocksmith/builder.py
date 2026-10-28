@@ -274,6 +274,9 @@ def _grid_lead_in(grid, lead: float, moved) -> None:
         moved(marker)
     placed = _lead_grid(grid, lead)
     if placed is not None:
+        # Where the song's own grid starts, behind the silence: the count-in
+        # measure ends there (chart._count_in).
+        grid["songStart"] = max(0.0, float(grid.get("offset") or 0.0)) + lead
         grid["offset"] = placed[0]
 
 
@@ -674,7 +677,9 @@ def check_spec(spec: dict) -> list[dict]:
         arr = ARRANGEMENTS.get(item.get("kind") or "lead")
         if not isinstance(index, int) or not 0 <= index < len(tracks) or arr is None:
             continue
-        found = {"track": index, "arrangement": arr["full_name"], "issues": [], "warnings": [], "error": None}
+        # leadIn: the silence the package will start with, which the editor can show.
+        found = {"track": index, "arrangement": arr["full_name"], "issues": [], "warnings": [], "error": None,
+                 "leadIn": lead}
         out.append(found)
         warnings: list[str] = []
         try:
@@ -685,6 +690,11 @@ def check_spec(spec: dict) -> list[dict]:
             found["error"] = str(exc)
             continue
         found["warnings"] = list(dict.fromkeys(warnings))
+        # The COUNT phrase and the events, in editor time, for the editor to show.
+        song = built.compiled.sng
+        found["count"] = next((pi.start_time - lead for pi in song.phrase_iterations
+                               if song.phrases[pi.phrase_id].name == "COUNT"), None)
+        found["events"] = [{"t": t - lead, "code": code} for t, code in song.events]
         issues = [issue.in_editor(lead) for issue in built.issues()]
         found["issues"] = [{"code": i.code, "time": i.time, "title": i.title, "help": i.help,
                             "important": i.important} for i in issues]

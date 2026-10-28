@@ -361,13 +361,14 @@ function paintFrame() {
   if (S.spectImg) {
     // Draw only the visible time-slice of the spectrogram, not the whole image.
     const iw = S.spectImg.width;
-    const t0 = Math.max(0, vx0 / S.pxPerSec), t1 = Math.min(S.state.duration, vx1 / S.pxPerSec);
+    const t0 = timeAt(vx0), t1 = Math.min(S.state.duration, timeAt(vx1));
     if (t1 > t0) {
       paintIntensity(sctx, S.spectImg,
         (t0 / S.state.duration) * iw, 0, ((t1 - t0) / S.state.duration) * iw, S.spectImg.height,
-        t0 * S.pxPerSec, 0, (t1 - t0) * S.pxPerSec, contentH(), ...(S.state.viewIntensity || [0, 100]));
+        xOf(t0), 0, (t1 - t0) * S.pxPerSec, contentH(), ...(S.state.viewIntensity || [0, 100]));
     }
   }
+  drawLeadSilence(vy0);
   drawRuler();   // depends on rowH + vertical scroll, so repaint alongside the stage
 
   sctx.strokeStyle = PAINT.gridSub;
@@ -665,32 +666,45 @@ function paintFrame() {
   overview?.draw();
 }
 
+// The export's leading silence, before the song (S.leadView, lead-view.js):
+// no audio there, only the grid the export runs back into it.
+function drawLeadSilence(vy0) {
+  const x = xOf(0);
+  if (!S.leadView || x <= 0) return;
+  sctx.fillStyle = veil(); sctx.fillRect(0, vy0, x, S.stageHeight);
+  sctx.strokeStyle = PAINT.line; sctx.lineWidth = 1;
+  sctx.beginPath(); sctx.moveTo(x - .5, vy0); sctx.lineTo(x - .5, vy0 + S.stageHeight); sctx.stroke();
+  sctx.font = stageUi(11); sctx.fillStyle = PAINT.hint; sctx.textAlign = "left"; sctx.textBaseline = "bottom";
+  sctx.fillText(`Leading silence ${+S.leadView.toFixed(2)} s`, 8, vy0 + S.stageHeight - 8, Math.max(0, x - 16));
+  sctx.textBaseline = "alphabetic";
+}
+
 // ---- overview: the whole song with the visible frame as its window ----
 // Its body drag recenters the main viewport; ruler and headroom scrub.
 let overview = null;
 
 function createEditorOverview() {
-  const follow = (t) => followViewportTo(t * S.pxPerSec - scroll.clientWidth / 2);
+  const follow = (t) => followViewportTo(xOf(t) - scroll.clientWidth / 2);
   return createOverview({
     ruler: overviewRuler, map: minimap,
     time: { root: document.getElementById('overviewTime'), button: document.getElementById('overviewTimeLabel'),
       input: document.getElementById('overviewTimeInput') },
-    getTime: playbackTime,
+    getTime: playbackTime, getLead: () => S.leadView,
     seek: (t, phase) => {
       if (phase === "end") return;
       setPlaybackCursor(t);
-      if (phase === "jump") moveViewportTo(t * S.pxPerSec - scroll.clientWidth / 2);
+      if (phase === "jump") moveViewportTo(xOf(t) - scroll.clientWidth / 2);
       else follow(t);
       draw();
     },
     frame: () => {
-      const t0 = scroll.scrollLeft / S.pxPerSec, y0 = scroll.scrollTop / contentH();
+      const t0 = scroll.scrollLeft / S.pxPerSec - S.leadView, y0 = scroll.scrollTop / contentH();
       return { t0, t1: t0 + scroll.clientWidth / S.pxPerSec, y0, y1: y0 + S.stageHeight / contentH() };
     },
     bodyDown: (t) => {
       const go = (time) => {
         const max = scroll.scrollWidth - scroll.clientWidth;
-        followViewportTo(Math.max(0, Math.min(max, time * S.pxPerSec - scroll.clientWidth / 2)));
+        followViewportTo(Math.max(0, Math.min(max, xOf(time) - scroll.clientWidth / 2)));
       };
       go(t);
       return { move: go, up: () => {} };

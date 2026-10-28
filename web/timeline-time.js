@@ -1,6 +1,9 @@
 export function formatTimelineTime(value, milliseconds = false) {
   const scale = milliseconds ? 1000 : 1;
-  const time = Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+  const raw = Number.isFinite(Number(value)) ? Number(value) : 0;
+  // Before 0 lies the leading silence, counted with a minus sign.
+  if (Math.floor((-raw + 1e-9) * scale) > 0) return '-' + formatTimelineTime(-raw, milliseconds);
+  const time = Math.max(0, raw);
   const ticks = Math.floor((time + 1e-9) * scale);
   const whole = Math.floor(ticks / scale);
   const hours = Math.floor(whole / 3600);
@@ -10,11 +13,12 @@ export function formatTimelineTime(value, milliseconds = false) {
 }
 
 export function parseTimelineTime(value) {
-  const match = /^(?:(\d+):)?([0-5]?\d):([0-5]\d)(?:\.(\d{1,3}))?$/.exec(String(value).trim());
+  // A leading minus is a time in the leading silence; the seek clamps it to what is shown.
+  const match = /^(-)?(?:(\d+):)?([0-5]?\d):([0-5]\d)(?:\.(\d{1,3}))?$/.exec(String(value).trim());
   if (!match) return null;
-  const seconds = Number(match[1] || 0) * 3600 + Number(match[2]) * 60 + Number(match[3])
-    + (match[4] ? Number('0.' + match[4]) : 0);
-  return Number.isFinite(seconds) ? seconds : null;
+  const seconds = Number(match[2] || 0) * 3600 + Number(match[3]) * 60 + Number(match[4])
+    + (match[5] ? Number('0.' + match[5]) : 0);
+  return Number.isFinite(seconds) ? (match[1] ? -seconds : seconds) : null;
 }
 
 // The editor freezes in place while typing; playback may continue behind it.
@@ -28,14 +32,15 @@ export function createOverviewTime({ root, button, input, getProject, getTime, o
     input.blur();
     sync(getTime(), currentDuration, currentWidth);
   }
-  function sync(time, duration, width) {
+  // x: where `time` is on the overview, when it does not start at 0.
+  function sync(time, duration, width, x = time / duration * width) {
     currentTime = time; currentDuration = duration; currentWidth = width;
     if (editing && getProject() !== project) close();
     root.hidden = !(duration > 0 && width > 0);
     if (root.hidden || editing) return;
     const label = formatTimelineTime(time, true);
     if (button.textContent !== label) button.textContent = label;
-    const left = Math.max(0, Math.min(width - root.offsetWidth, time / duration * width + 5));
+    const left = Math.max(0, Math.min(width - root.offsetWidth, x + 5));
     root.style.left = `${left}px`;
     button.setAttribute('aria-label', `Current time ${label}. Double-click or press Enter to enter a time.`);
   }

@@ -10,7 +10,11 @@ assert.equal(formatTimelineTime(Infinity), '00:00');
 assert.equal(parseTimelineTime('01:05'), 65);
 assert.equal(parseTimelineTime('1:02:03.456'), 3723.456);
 assert.equal(parseTimelineTime(' 00:01.5 '), 1.5);
-for (const invalid of ['', '65', '-01:00', '00:60', '60:00', '1:60:00', '1:00:60', '00:01.1234', 'hello'])
+// Before 0 lies the leading silence, with a minus sign both ways.
+assert.equal(formatTimelineTime(-1.6474, true), '-00:01.647');
+assert.equal(formatTimelineTime(-0.0004, true), '00:00.000');
+assert.equal(parseTimelineTime('-01:00'), -60);
+for (const invalid of ['', '65', '--01:00', '00:60', '60:00', '1:60:00', '1:00:60', '00:01.1234', 'hello'])
   assert.equal(parseTimelineTime(invalid), null, invalid);
 
 class Element {

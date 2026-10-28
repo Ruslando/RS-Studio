@@ -9,6 +9,7 @@ import { gridAt, gridSegments, segBeatSec } from "./grid.js";
 import { applyLaneVolume, disposeLaneSynth, editLanes, releaseLaneSynth, targetLane } from "./lanes.js";
 import { refreshSaveState, renderStemTabs } from "./project.js";
 import { S } from "./store.js";
+import { xOf } from "./geometry.js";
 import { clamp, fmtTime, followerTrim, normLayerVolume, onsetSec, playheadScrollLeft, schedWindow } from "./util.js";
 import { followViewportTo, stopViewportMotion, viewportFollowing, viewportMoving } from "./viewport-motion.js";
 import { busLevel } from "./volume.js";
@@ -45,13 +46,37 @@ window.addEventListener("cw-viewport-manual", () => {
 scroll.addEventListener("scroll", () => {
   if (scrollingSuspended) scrollingResumeSince = null;
 }, { passive: true });
-window.addEventListener("cw-project-opened", () => { scrollingSuspended = false; });
-window.addEventListener("cw-project-closed", () => { scrollingSuspended = false; });
+window.addEventListener("cw-project-opened", () => { scrollingSuspended = false; stopPreroll(); leadCursor = 0; });
+window.addEventListener("cw-project-closed", () => { scrollingSuspended = false; stopPreroll(); leadCursor = 0; });
 
 function hasAudioTransport() { return !!S.state?.stems?.length; }
 
 export function transportPlaying() {
-  return hasAudioTransport() ? !audio.paused : !!S.scorePlaying;
+  return !!preroll || (hasAudioTransport() ? !audio.paused : !!S.scorePlaying);
+}
+
+// ---- before the song: the leading silence (lead-view.js) ----
+// Nothing plays before 0, so the playhead crosses the silence on a clock of its
+// own and hands over to the song at 0. Paused there, it stays (leadCursor).
+let leadCursor = 0;     // < 0: paused inside the silence
+let preroll = null;     // { from, clock, timer } while crossing it
+const prerollTime = () => Math.min(0, preroll.from + (performance.now() / 1000 - preroll.clock) * rate());
+
+function startPreroll(from) {
+  stopPreroll();
+  leadCursor = 0;
+  preroll = { from, clock: performance.now() / 1000 };
+  preroll.timer = setTimeout(() => { stopPreroll(); seekPlayback(0); playTransport().catch(() => {}); },
+    (-from / rate()) * 1000);
+  scrollingSuspended = false;
+  playBtn.innerHTML = PAUSE_ICON; playBtn.title = shortcutTitle("Pause", "playPause");
+  window.dispatchEvent(new CustomEvent("cw-transport", { detail: "play" }));
+  tick();
+}
+
+function stopPreroll() {
+  if (preroll) clearTimeout(preroll.timer);
+  preroll = null;
 }
 
 function scorePauseCleanup() {
@@ -62,6 +87,12 @@ function scorePauseCleanup() {
 }
 
 export function pauseTransport() {
+  if (preroll) {
+    leadCursor = prerollTime(); stopPreroll();
+    playBtn.innerHTML = PLAY_ICON; playBtn.title = shortcutTitle("Play", "playPause");
+    window.dispatchEvent(new CustomEvent("cw-transport", { detail: "pause" }));
+    draw(); return;
+  }
   if (hasAudioTransport()) { audio.pause(); return; }
   if (!S.scorePlaying) return;
   S.scoreTime = playbackTime(); S.scorePlaying = false;
@@ -71,6 +102,7 @@ export function pauseTransport() {
 
 export function playTransport() {
   if (!S.state) return Promise.resolve();
+  if (leadCursor < 0) { startPreroll(leadCursor); return Promise.resolve(); }
   if (hasAudioTransport()) return audio.play();
   if (S.scorePlaying) return Promise.resolve();
   regionLoop.reset();
@@ -564,6 +596,8 @@ export function applyPreservePitch() {
 // where the sound actually is, not where the decoder is. Paused/scrubbing
 // falls back to the element's reported time.
 export function playbackTime() {
+  if (preroll) return prerollTime();
+  if (leadCursor < 0) return leadCursor;
   if (S.state && !hasAudioTransport()) {
     const elapsed = S.scorePlaying ? (performance.now() / 1000 - (S.scoreAnchorClock || 0)) * rate() : 0;
     const base = (S.scorePlaying ? S.scoreAnchorSong : S.scoreTime) || 0;
@@ -585,9 +619,25 @@ export function playbackTime() {
 export function seekPlayback(t) {
   regionLoop.reset();
   if (viewportFollowing("playback")) stopViewportMotion();
-  const fallback = Number.isFinite(t) ? Math.max(0, t) : 0;
+  const lower = -(S.leadView || 0);   // the shown silence, before the song
+  const fallback = Number.isFinite(t) ? Math.max(lower, t) : 0;
   const limit = S.state?.duration || (Number.isFinite(audio.duration) ? audio.duration : fallback);
-  const next = clamp(fallback, 0, Math.max(0, limit));
+  const next = clamp(fallback, lower, Math.max(0, limit));
+  const playing = transportPlaying(), crossing = !!preroll;
+  if (next < 0) {
+    // Into the silence: the song waits at 0; playing, the playhead crosses to it.
+    stopPreroll();
+    if (hasAudioTransport()) { if (!audio.paused) audio.pause(); try { audio.currentTime = 0; } catch { /* not ready */ } }
+    else if (S.scorePlaying) { S.scoreTime = 0; S.scorePlaying = false; scorePauseCleanup(); }
+    else S.scoreTime = 0;
+    if (playing) startPreroll(next); else leadCursor = next;
+    timeEl.textContent = `${fmtTime(next)} / ${fmtTime(S.state?.duration || audio.duration || 0)}`;
+    window.dispatchEvent(new CustomEvent("cw-transport", { detail: "seek" }));
+    draw(); return next;
+  }
+  // Out of the silence while crossing it: the song plays on from there.
+  stopPreroll(); leadCursor = 0;
+  if (crossing) queueMicrotask(() => playTransport().catch(() => {}));
   // Prime the new range before the scheduler runs. Even a very short loop must
   // cap its first lookahead window immediately after a seek / loop restart.
   if (!S.passagePreviewActive && !["region", "regionEdge"].includes(S.drag?.mode))
@@ -613,7 +663,7 @@ export function seekPlayback(t) {
 // margin and keeps retargeting as the transport moves, even during the catch-up.
 export function revealPlaybackPosition({ center = false, redraw = true } = {}) {
   if (scrollingSuspended && transportPlaying() && !center) {
-    const head = playbackTime() * S.pxPerSec;
+    const head = xOf(playbackTime());
     const inFrame = scroll.clientWidth > 0 && head >= scroll.scrollLeft && head <= scroll.scrollLeft + scroll.clientWidth;
     if (!inFrame || viewportMoving() || S.mmSeeking || S.mmDragging) {
       scrollingResumeSince = null;
@@ -630,7 +680,7 @@ export function revealPlaybackPosition({ center = false, redraw = true } = {}) {
   if ((viewportMoving() && !viewportFollowing("playback")) || S.mmSeeking || S.mmDragging) return;
   if (!S.state || !scroll.clientWidth) return;
   const target = playheadScrollLeft(
-    playbackTime(), S.pxPerSec, scroll.clientWidth, scroll.scrollWidth,
+    playbackTime() + S.leadView, S.pxPerSec, scroll.clientWidth, scroll.scrollWidth,
     scroll.scrollLeft, center, mode,
   );
   if (mode === "follow" && !center) followViewportTo(target, scroll.scrollTop, "playback");
@@ -644,7 +694,7 @@ export function revealPlaybackPosition({ center = false, redraw = true } = {}) {
 // stems (fire-and-forget media elements) played on. A worker's setInterval is
 // exempt from both, so this runs a steady ~20Hz whatever the page is doing.
 function schedulerTick() {
-  if (!S.state || !transportPlaying()) return;
+  if (!S.state || !transportPlaying() || preroll) return;   // no notes before the song
   updateClock();
   updateRegionLoop();
   scheduleNotes();
@@ -721,9 +771,10 @@ export function init_playback() {
     cancelPassagePreview();
     clearPreview();
     pauseFollowers();
-    playBtn.innerHTML = PLAY_ICON; syncPlayHint();
     if (S.state) for (const l of S.state.lanes) releaseLaneSynth(l);
     setSynthsMuted(true); // silence notes already scheduled in the LOOKAHEAD window (releaseAll can't recall them)
+    if (preroll) return;  // paused for a seek into the silence: the playhead plays on there
+    playBtn.innerHTML = PLAY_ICON; syncPlayHint();
     window.dispatchEvent(new CustomEvent("cw-transport", { detail: "pause" }));
     draw();
   });

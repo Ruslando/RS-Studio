@@ -58,7 +58,7 @@ export function updateProjectStartAt(x) {
   if (!gesture || S.state !== gesture.state) return;
   if (!gesture.prev && Math.abs(x - gesture.x0) < 3) return;
   if (!gesture.prev) gesture.prev = snapshotEdit();
-  applyPosition(gesture, Math.round(timeAt(x - gesture.x0) * 1000) / 1000);
+  applyPosition(gesture, Math.round((x - gesture.x0) / S.pxPerSec * 1000) / 1000);   // a distance, not a place
 }
 
 function finish(cancel = false) {

@@ -172,12 +172,12 @@ export function drawPhraseMarkers() {
   sctx.restore();
 }
 
-export function drawMinimapPhraseMarkers(scale, mmctx = minimapCtx) {
+export function drawMinimapPhraseMarkers(at, mmctx = minimapCtx) {
   if (!S.state) return;
   const lane = activePhraseLane();
   if (!lane) return;
   for (const boundary of normalizePhraseBoundaries(boundaries(lane))) {
-    const x = xOf(boundary.t) * scale;
+    const x = at(boundary.t);
     mmctx.fillStyle = PAINT.phrase;
     mmctx.fillRect(x - 1, 15, 3, 9);
   }

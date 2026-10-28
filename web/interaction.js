@@ -11,7 +11,7 @@ import { bendHandles, effectStartHandles, noteRibbon, slideFretOf, slideFretsHan
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
 import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts, snapshotEdit } from "./edit.js";
-import { pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
+import { cursorTimeAt, pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
 import { noteLength } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
@@ -181,7 +181,7 @@ function updateDrag(x, y) {
     draw(); return;
   }
   if (S.drag.mode === "scrub") {
-    seekPlayback(timeAt(x)); return;
+    seekPlayback(cursorTimeAt(x)); return;
   }
   if (S.drag.mode === "tracePending") {
     if (Math.hypot(x - S.drag.x0, y - S.drag.y0) < 4) return;
@@ -583,7 +583,7 @@ export function init_interaction() {
     } else {
       // Wait for the gesture: a click seeks, a drag moves only the viewport.
       e.preventDefault();
-      S.drag = { mode: 'panPending', time: t, clientX: e.clientX, clientY: e.clientY,
+      S.drag = { mode: 'panPending', time: cursorTimeAt(x), clientX: e.clientX, clientY: e.clientY,
         scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop,
         tracker: createPanTracker(scroll.scrollLeft, scroll.scrollTop, performance.now()) };
     }
@@ -778,7 +778,7 @@ export function init_interaction() {
           if (selection.has(hit.note)) selection.delete(hit.note); else selection.add(hit.note);
           setSelection(selection);
         }
-      } else if (!toggleSelection) seekPlayback(timeAt(x));
+      } else if (!toggleSelection) seekPlayback(cursorTimeAt(x));
     } else if (S.drag.mode === 'panPending') {
       setSelection(new Set()); seekPlayback(S.drag.time);
     } else if (S.drag.mode === 'pan') {

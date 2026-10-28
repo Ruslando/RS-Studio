@@ -74,6 +74,7 @@ async function runCheck() {
     results = new Map(); draw();
     console.warn('Rocksmith check failed:', error);
   }
+  window.dispatchEvent(new Event('cw-rocksmith-checked'));
 }
 
 // Called on every paint pass: starts a check once the chart has stopped changing.
@@ -84,6 +85,21 @@ function scheduleCheck() {
   lastKey = key;
   clearTimeout(timer);
   timer = setTimeout(runCheck, SETTLE_MS);
+}
+
+// The silence the export will put in front, which it raises past the setting
+// for an early first note; null until a check has measured it.
+export function rocksmithLeadIn() {
+  const lead = [...results.values()][0]?.leadIn;
+  return Number.isFinite(lead) ? lead : null;
+}
+
+// What the export adds in front of a layer, in editor time: the COUNT phrase's
+// start and the count-in events (B0 / B1 ticks). The active layer's when it has
+// been checked, else the first checked one; null before any check.
+export function rocksmithCountIn(lane) {
+  const found = results.get(lane?.id) || [...results.values()][0];
+  return found && Array.isArray(found.events) ? { count: found.count, events: found.events } : null;
 }
 
 // The issues of one layer that sit on its notes, with those notes: what the stage frames.

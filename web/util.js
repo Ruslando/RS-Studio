@@ -57,7 +57,9 @@ export function hexA(hex, a) {
 
 export function fmtTime(s) {
   if (!isFinite(s)) s = 0;
-  return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
+  const sign = s <= -0.5 ? "-" : "";   // the leading silence counts down to 0
+  s = Math.abs(s);
+  return `${sign}${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 }
 export function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));

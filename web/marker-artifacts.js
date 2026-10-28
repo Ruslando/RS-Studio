@@ -21,12 +21,15 @@ import { moveViewportTo, stopViewportMotion } from './viewport-motion.js';
 import { stopArtifactPreview } from './artifact-preview.js';
 import { draw } from './repaint.js';
 import { icon } from './icons.js';
+import { rocksmithEventItems } from './rocksmith-events.js';
 
-const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['anchor', 'Hand anchors'], ['comment', 'Comments']];
+const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['anchor', 'Hand anchors'], ['comment', 'Comments'], ['rocksmith', 'Rocksmith export']];
+// The export's own marks (rocksmith-events.js): listed and visited, never edited.
+const EXPORT_NAMES = { COUNT: 'COUNT phrase', B0: 'B0 · high tick', B1: 'B1 · low tick' };
 const sections = new Map(), rows = new Map();
 const chevron = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
-const markerTime = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, '0')}`;
+const markerTime = t => `${t < 0 ? '-' : ''}${Math.floor(Math.abs(t) / 60)}:${(Math.abs(t) % 60).toFixed(3).padStart(6, '0')}`;
 
 export function markerArtifacts() {
   if (!S.state) return [];
@@ -80,6 +83,10 @@ export function markerArtifacts() {
     key: `comment:${marker.id}`, kind: 'comment', owner: 'Song',
     marker, t: marker.t, name: marker.text.split('\n')[0] || 'Comment',
   });
+  rocksmithEventItems().forEach((item, index) => entries.push({
+    key: `rocksmith:${index}:${item.code}`, kind: 'rocksmith', owner: 'Export', readOnly: true,
+    code: item.code, t: item.t, name: EXPORT_NAMES[item.code] || item.code,
+  }));
   return entries.sort((a, b) => a.t - b.t || a.key.localeCompare(b.key));
 }
 
@@ -88,7 +95,7 @@ function actOnMarker(key, edit, target, event) {
   // Commit an open editor while its original timing and layer still own it.
   closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeToneMarkerPop(); closeHandAnchorPop(); closeCommentPop();
   const entry = markerArtifacts().find(item => item.key === key);
-  if (!entry || (edit && ['tone', 'phrase', 'anchor'].includes(entry.kind) && !canEditLane(entry.lane))) return;
+  if (!entry || (edit && entry.readOnly) || (edit && ['tone', 'phrase', 'anchor'].includes(entry.kind) && !canEditLane(entry.lane))) return;
   const { lane, kind, marker, timing, t } = entry;
   if (lane) { lane.visible = true; activateLane(lane); renderLanes(); }
   if (!edit) {
@@ -112,7 +119,7 @@ export function navigateMarker(direction) {
   if (!S.state) return;
   // Closing a marker editor commits its draft before resolving the live list.
   closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeToneMarkerPop(); closeHandAnchorPop();
-  const time = adjacentMarkerTime(markerArtifacts(), playbackTime(), direction, S.state.duration);
+  const time = adjacentMarkerTime(markerArtifacts(), playbackTime(), direction, S.state.duration, -S.leadView);
   if (time === null) return;
   stopArtifactPreview(); stopViewportMotion();
   seekPlayback(time);
@@ -152,7 +159,7 @@ export function renderMarkerArtifacts() {
   if (!sections.size) return;
   const entries = markerArtifacts(), live = new Set(entries.map(entry => entry.key));
   for (const [id, direction] of [['previousMarker', -1], ['nextMarker', 1]])
-    $(id).disabled = !S.state || adjacentMarkerTime(entries, playbackTime(), direction, S.state.duration) === null;
+    $(id).disabled = !S.state || adjacentMarkerTime(entries, playbackTime(), direction, S.state.duration, -S.leadView) === null;
   for (const [key, row] of rows) if (!live.has(key)) { row.remove(); rows.delete(key); }
   for (const [kind, {list, count, head, body}] of sections) {
     const group = entries.filter(entry => entry.kind === kind);
@@ -186,6 +193,9 @@ export function renderMarkerArtifacts() {
       setText(row.querySelector('.artifact-name'), entry.name);
       setText(row.querySelector('.artifact-detail'), markerTime(entry.t));
       if (entry.kind === 'anchor') row.style.setProperty('--mark', entry.lane.color);
+      // As on the rail: COUNT is a phrase, the ticks keep time like the tempo flags.
+      if (entry.kind === 'rocksmith') row.style.setProperty('--mark', `var(${entry.code === 'COUNT' ? '--stage-phrase' : '--stage-marker'})`);
+      row.querySelector('.artifact-marker-edit').hidden = !!entry.readOnly;
       row.querySelector('.artifact-marker-edit').disabled = ['tone', 'phrase', 'anchor'].includes(entry.kind) && !canEditLane(entry.lane);
       if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
     });

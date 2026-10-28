@@ -259,10 +259,10 @@ function drawSectionMarkers() {
   sctx.restore();
 }
 
-function drawMinimapSectionMarkers(scale, mmctx = minimapCtx) {
+function drawMinimapSectionMarkers(at, mmctx = minimapCtx) {
   if (!S.state) return;
   for (const marker of normalizedMarkers().list) {
-    const x = xOf(marker.t) * scale;
+    const x = at(marker.t);
     mmctx.fillStyle = PAINT.section;
     mmctx.beginPath();
     mmctx.moveTo(x - 4, 13); mmctx.lineTo(x + 4, 13); mmctx.lineTo(x, 3); mmctx.closePath();

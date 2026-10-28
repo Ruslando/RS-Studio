@@ -208,6 +208,27 @@ class ExporterFixes(unittest.TestCase):
         self.assertEqual(len(rest), 5, "the chord's five notes, one by one")
         self.assertEqual([n.parent_prev_note for n in rest].count(0), 1)
 
+    def test_the_check_reports_the_silence_the_package_starts_with(self):
+        # The editor shows it: the setting, or more when the first note comes early.
+        [found] = builder.check_spec(_spec([_note(12.0, 12.5, 3, 5)], lead=5))
+        self.assertEqual(found["leadIn"], 5.0)
+        [found] = builder.check_spec(_spec([_note(2.0, 2.5, 3, 5)], lead=5))
+        self.assertEqual(found["leadIn"], 8.0)    # first note at 10 s
+
+    def test_the_silence_ends_with_a_count_in_measure(self):
+        # As EOF's Add silence: a high tick on the downbeat of the measure before
+        # the song's first beat, low ticks on the rest; COUNT on the first beat.
+        [found] = builder.check_spec(_spec([_note(12.0, 12.5, 3, 5)], lead=10))
+        self.assertEqual(found["count"], -10.0)
+        self.assertEqual(found["events"], [{"t": -2.0, "code": "B0"}, {"t": -1.5, "code": "B1"},
+                                           {"t": -1.0, "code": "B1"}, {"t": -0.5, "code": "B1"}])
+        song = _compiled([_note(12.0, 12.5, 3, 5)], lead=10)
+        self.assertEqual([code for _, code in song.events], ["B0", "B1", "B1", "B1"])
+
+    def test_no_count_in_without_silence(self):
+        [found] = builder.check_spec(_spec([_note(12.0, 12.5, 3, 5)], lead=0))
+        self.assertEqual(found["events"], [])
+
     def test_a_slide_off_its_string_is_shown_where_it_is(self):
         notes = [_note(2.0, 2.5, 3, 5, slide="shift"), _note(2.5, 3.0, 2, 7)]
         [found] = builder.check_spec(_spec(notes, lead=5))

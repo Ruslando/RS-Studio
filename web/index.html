@@ -393,6 +393,9 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 <div class="stage-channel-row" title="Time-frequency reassignment: moves energy to where it actually comes from, so lines get thinner. Available for CQT and HPS."><span id="stageSharpLabel" class="menu-item-text">Reassignment<small class="menu-item-desc">Thinner lines: bends, vibrato, slides</small></span>
                   <input type="checkbox" id="stageSharp" aria-labelledby="stageSharpLabel" />
                 </div>
+                <div class="stage-channel-row" title="The silence the Rocksmith export puts in front of the song, shown before its start. It follows the export's Leading silence, and is longer when the export needs more room before the first note."><span id="stageLeadInLabel" class="menu-item-text">Leading silence<small class="menu-item-desc">Rocksmith export, before the song</small></span>
+                  <input type="checkbox" id="stageLeadIn" aria-labelledby="stageLeadInLabel" />
+                </div>
                 <label>Intensity min <input id="stageIntensityMin" type="range" min="0" max="100" step="1" value="0" aria-label="Minimum spectrogram intensity" /><output id="stageIntensityMinValue" for="stageIntensityMin">0%</output></label>
                 <label>Intensity max <input id="stageIntensityMax" type="range" min="0" max="100" step="1" value="100" aria-label="Maximum spectrogram intensity" /><output id="stageIntensityMaxValue" for="stageIntensityMax">100%</output></label>
                 </div>

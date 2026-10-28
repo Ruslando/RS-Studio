@@ -193,10 +193,10 @@ export function init_hand_anchors() {
       if (!hit) return false;
       openHandAnchorPop(event.clientX, event.clientY, hit.anchor, hit.lane); return true;
     },
-    drawMinimap: (scale, mmctx = minimapCtx) => {
+    drawMinimap: (at, mmctx = minimapCtx) => {
       const lane = shownLane();
       for (const anchor of lane?.handHolds || []) {
-        mmctx.fillStyle = lane.color || PAINT.accent; mmctx.fillRect(xOf(anchor.t) * scale - 1, 36, 3, 5);
+        mmctx.fillStyle = lane.color || PAINT.accent; mmctx.fillRect(at(anchor.t) - 1, 36, 3, 5);
       }
     },
   });

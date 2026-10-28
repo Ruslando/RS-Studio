@@ -177,12 +177,12 @@ export function drawToneMarkers() {
   sctx.restore();
 }
 
-export function drawMinimapToneMarkers(scale, mmctx = minimapCtx) {
+export function drawMinimapToneMarkers(at, mmctx = minimapCtx) {
   const lane = activeToneLane();
   if (!S.state || !lane) return;
   const presets = readAvailableSoundPresets();
   for (const marker of normalizeToneMarkers(markers(lane))) {
-    const x = xOf(marker.t) * scale;
+    const x = at(marker.t);
     mmctx.fillStyle = tonePresetMissing(marker.tone, presets, marker.toneData) ? PAINT.warn : PAINT.tone;
     mmctx.fillRect(x - 1, 26, 3, 8);
   }

@@ -250,10 +250,10 @@ export function addMarkerAtTime(t, clientX, clientY) {
 }
 
 // Little flags in the minimap headroom so tempo/meter changes show at a glance.
-export function drawMinimapMarkers(sx, mmctx = minimapCtx) {
+export function drawMinimapMarkers(at, mmctx = minimapCtx) {
   if (!S.state) return;
   for (const seg of gridSegments()) {
-    const x = xOf(seg.t) * sx;
+    const x = at(seg.t);
     mmctx.fillStyle = seg.seg0 ? PAINT.markerIdle : PAINT.marker;
     mmctx.beginPath();
     mmctx.moveTo(x, 1); mmctx.lineTo(x + 5, 1); mmctx.lineTo(x, MM_HEAD - 2); mmctx.closePath();

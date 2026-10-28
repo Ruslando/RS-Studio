@@ -219,6 +219,7 @@ class SNG:
     chords: list = field(default_factory=list)  # ChordTemplate
     chord_notes: list = field(default_factory=list)  # ChordNotes
     phrase_iterations: list = field(default_factory=list)
+    events: list = field(default_factory=list)  # (time, code), e.g. B0 / B1 count-in ticks
     tones: list = field(default_factory=list)  # (time, tone_id)
     dnas: list = field(default_factory=list)  # (time, dna_id)
     sections: list = field(default_factory=list)
@@ -278,7 +279,9 @@ def serialize(sng: SNG) -> bytes:
     out += struct.pack("<i", 0)  # phrase extra info
     out += struct.pack("<i", 0)  # new linked difficulties
     out += struct.pack("<i", 0)  # actions
-    out += struct.pack("<i", 0)  # events
+    out += struct.pack("<i", len(sng.events))
+    for time, code in sng.events:   # Rocksmith2014.NET SNG/Types/Event.fs: float32, 256-byte name
+        out += struct.pack("<f", time) + _name32(code, 256)
 
     out += struct.pack("<i", len(sng.tones))
     for time, tone_id in sng.tones:

@@ -94,7 +94,11 @@ export function drawGrid() {
     const seg = segs[si], step = displayGridStep(seg);
     if (!step) continue;
     const segEnd = si + 1 < segs.length ? segs[si + 1].t : dur + 1e-6;
-    for (let i = Math.max(0, Math.floor((vx0 / S.pxPerSec - seg.t) / step)); ; i++) {
+    // Into the leading silence, the first segment's grid runs back as the
+    // export extends it (builder.py _grid_lead_in).
+    const lead = S.leadView || 0;
+    const first = si === 0 ? -Math.floor((seg.t + lead) / step + 1e-9) : 0;
+    for (let i = Math.max(first, Math.floor((vx0 / S.pxPerSec - lead - seg.t) / step)); ; i++) {
       const t = seg.t + i * step;
       if (t > segEnd + 1e-6 || t > dur + 1e-6) break;
       const x = xOf(t);

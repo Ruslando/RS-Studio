@@ -474,6 +474,7 @@ class _Arrangement:
     pi_times: list                 # phrase-iteration start times, then end_t
     sections: list                 # S.Section
     end_t: float                   # where the playable part stops
+    events: list = field(default_factory=list)   # (time, code): the count-in ticks
 
 
 @dataclass
@@ -803,7 +804,24 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
 
     return _Arrangement(beats=beats, sng_beats=sng_beats, phrases=phrases,
                         phrase_iterations=phrase_iterations, pi_times=pi_times,
-                        sections=sections, end_t=end_t)
+                        sections=sections, end_t=end_t,
+                        events=_count_in(beats, grid.get("songStart")))
+
+
+def _count_in(beats: list, song_start) -> list[tuple[float, str]]:
+    """EOF's count-in: the measure before the song's first beat, a high tick (B0)
+    on its downbeat and low ticks (B1) on the rest (EOF menu/song.c, Add silence).
+
+    Only in the leading silence the export puts in front (builder._grid_lead_in
+    sets songStart); without it there is no measure before the song to tick in.
+    """
+    if not isinstance(song_start, (int, float)):
+        return []
+    at = next((m for t, m, b in beats if b == 0 and abs(t - song_start) < 1e-3), None)
+    measure = [(t, b) for t, m, b in beats if at is not None and m == at - 1]
+    if not measure or measure[0][1] != 0:
+        return []
+    return [(t, "B0" if b == 0 else "B1") for t, b in measure]
 
 
 def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, fixes: list) -> list:
@@ -1331,6 +1349,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
         chords=voicing.chord_templates,
         chord_notes=emitted.chord_notes,
         phrase_iterations=arr.phrase_iterations,
+        events=arr.events,
         dnas=[(voicing.first_t, S.DNA_RIFF), (arr.end_t, S.DNA_NONE)],
         sections=arr.sections,
         levels=[level],

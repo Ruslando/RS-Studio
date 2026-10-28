@@ -27,6 +27,7 @@ export const S = {
   zoomX: 1,
   zoomY: 1,
   pxPerSec: PX_PER_SEC,  // = PX_PER_SEC * zoomX, kept in sync by setZoomX()
+  leadView: 0,  // seconds shown before 0: the export's leading silence (lead-view.js)
   state: null,
   spectImg: null,
   spectPixels: null,

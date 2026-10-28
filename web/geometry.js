@@ -13,11 +13,19 @@ import { clamp, dpr } from "./util.js";
 // whole song. The stage canvas is only viewport-sized though, so draw() shifts
 // world space by -scrollLeft and clientToCanvas adds scrollLeft back — keeping
 // every other coordinate in world space exactly as before virtualization.
-export const xOf = (t) => t * S.pxPerSec;
+// With the leading silence shown (S.leadView), world x 0 is that much before
+// the song: time 0 sits at xOf(0) > 0, and the silence has no times of its own,
+// so timeAt never goes below 0.
+const lead = () => S.leadView || 0;
 
-export const timeAt = (x) => x / S.pxPerSec;
+export const xOf = (t) => (t + lead()) * S.pxPerSec;
 
-export const songWidth = () => Math.max(1, Math.ceil(S.state.duration * S.pxPerSec)); // full-song px width
+export const timeAt = (x) => Math.max(0, x / S.pxPerSec - lead());
+
+// Where the playhead goes for x: it alone may stand in the silence.
+export const cursorTimeAt = (x) => Math.max(-lead(), x / S.pxPerSec - lead());
+
+export const songWidth = () => Math.max(1, Math.ceil((S.state.duration + lead()) * S.pxPerSec)); // full-song px width
 
 export const contentH = () => S.stageHeight * S.zoomY;   // full pitch-range height (== rowH * rowCount)
 
