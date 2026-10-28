@@ -4,7 +4,7 @@ import { placeFloating } from "./floating-position.js";
 // retimes the grid or notes: it is an audio-time annotation that snaps to the
 // current note grid.
 
-import { inTourCard, mmctx, scroll, sctx, sectionMarkerDelete, sectionMarkerHelpIcon, sectionMarkerKind, sectionMarkerName, sectionMarkerNameWrap, sectionMarkerPop, sectionMarkerPopClose, sectionMarkerTime, sectionMarkerType, sectionMarkerTypeWrap, stage } from "./dom.js";
+import { inTourCard, mmctx as minimapCtx, scroll, sctx, sectionMarkerDelete, sectionMarkerHelpIcon, sectionMarkerKind, sectionMarkerName, sectionMarkerNameWrap, sectionMarkerPop, sectionMarkerPopClose, sectionMarkerTime, sectionMarkerType, sectionMarkerTypeWrap, stage } from "./dom.js";
 import { stageUi } from "./constants.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
@@ -259,7 +259,7 @@ function drawSectionMarkers() {
   sctx.restore();
 }
 
-function drawMinimapSectionMarkers(scale) {
+function drawMinimapSectionMarkers(scale, mmctx = minimapCtx) {
   if (!S.state) return;
   for (const marker of normalizedMarkers().list) {
     const x = xOf(marker.t) * scale;

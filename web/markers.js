@@ -6,7 +6,7 @@ import { placeFloating } from "./floating-position.js";
 // A marker starts a new bar at its own tempo/meter, tiling forward to the next.
 
 import { MM_HEAD, stageMono, stageUi } from "./constants.js";
-import { bpmInput, inTourCard, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
+import { bpmInput, inTourCard, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx as minimapCtx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
 import { addMarker, currentGridState, gridOffset, gridSegments, snap, removeMarker, retimeTempoSpan, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid.js";
@@ -250,7 +250,7 @@ export function addMarkerAtTime(t, clientX, clientY) {
 }
 
 // Little flags in the minimap headroom so tempo/meter changes show at a glance.
-export function drawMinimapMarkers(sx) {
+export function drawMinimapMarkers(sx, mmctx = minimapCtx) {
   if (!S.state) return;
   for (const seg of gridSegments()) {
     const x = xOf(seg.t) * sx;

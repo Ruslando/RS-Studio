@@ -5,7 +5,7 @@ import { placeFloating } from "./floating-position.js";
 // no equivalent and intentionally ignores them.
 
 import { stageUi } from "./constants.js";
-import { inTourCard, mmctx, phraseMarkerDelete, phraseMarkerPop, phraseMarkerPopClose, phraseMarkerTime, scroll, sctx, stage } from "./dom.js";
+import { inTourCard, mmctx as minimapCtx, phraseMarkerDelete, phraseMarkerPop, phraseMarkerPopClose, phraseMarkerTime, scroll, sctx, stage } from "./dom.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
@@ -172,7 +172,7 @@ export function drawPhraseMarkers() {
   sctx.restore();
 }
 
-export function drawMinimapPhraseMarkers(scale) {
+export function drawMinimapPhraseMarkers(scale, mmctx = minimapCtx) {
   if (!S.state) return;
   const lane = activePhraseLane();
   if (!lane) return;

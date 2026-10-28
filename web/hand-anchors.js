@@ -1,6 +1,6 @@
 // Explicit fretting-hand anchors. `handHolds` remains the persisted field used
 // by existing projects and the voicing engine; the UI calls them Hand anchors.
-import { $, scroll, stage, sctx, mmctx } from './dom.js';
+import { $, scroll, stage, sctx, mmctx as minimapCtx } from './dom.js';
 import { S } from './store.js';
 import { stageMono } from './constants.js';
 import { activeLane, canEditLane } from './lanes.js';
@@ -193,7 +193,7 @@ export function init_hand_anchors() {
       if (!hit) return false;
       openHandAnchorPop(event.clientX, event.clientY, hit.anchor, hit.lane); return true;
     },
-    drawMinimap: scale => {
+    drawMinimap: (scale, mmctx = minimapCtx) => {
       const lane = shownLane();
       for (const anchor of lane?.handHolds || []) {
         mmctx.fillStyle = lane.color || PAINT.accent; mmctx.fillRect(xOf(anchor.t) * scale - 1, 36, 3, 5);

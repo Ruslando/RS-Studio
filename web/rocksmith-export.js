@@ -13,6 +13,7 @@ import { jobRequest } from "./operation-progress.js";
 import { S } from "./store.js";
 import { markerArtifacts } from "./marker-artifacts.js";
 import { adjacentMarkerTime } from "./marker-navigation-core.js";
+import { createOverview } from "./overview.js";
 import { matchKey } from "./keymap.js";
 import { togglePlay, transportPlaying } from "./playback.js";
 import { rememberPref } from "./util.js";
@@ -182,17 +183,19 @@ function renderRsArrangements(lanes) {
 // A start in the song's audio and a length, like DLC Builder's preview (28 s,
 // 2.5 s fade-in, 3 s fade-out). The server clamps the same way.
 //
-// The strip is a small transport of its own: a playhead you click or drag to,
-// Play from there (Space too, while this window is open), and "Start here" to
-// put the clip at it.
+// The strip is the editor's overview (overview.js) with the clip as its window
+// and a playhead of its own: click, drag or type a time to move it, Play from
+// there (Space too, while this window is open), and "Start here" to put the
+// clip at it. Dragging the clip moves it.
 const PREVIEW_DEFAULT = 28, PREVIEW_MIN = 5, PREVIEW_MAX = 30, FADE_IN = 2.5, FADE_OUT = 3;
+const PREVIEW_MAP_H = 64;
 let clip = { start: 0, length: PREVIEW_DEFAULT }, songLength = 0, playT = 0;
-let previewAudio = null, previewFrame = 0;
+let previewAudio = null, previewFrame = 0, previewImage = null, previewOverview = null;
 
 const mixStem = () => S.state?.stems?.find((s) => s.id === "mix") || S.state?.stems?.[0] || null;
 const previewEnd = () => Math.min(songLength, clip.start + clip.length);
-const pct = (t) => `${(t / songLength) * 100}%`;
 const previewPlaying = () => !!previewAudio && !previewAudio.paused;
+const inClip = (t) => t >= clip.start && t <= previewEnd();
 
 // The playhead goes back to the clip's start with every change; playing, the
 // clip plays again from there. `live` (while dragging) only moves the playhead.
@@ -202,36 +205,22 @@ function setClip(start, length = clip.length, live = false) {
   clip = { start: Math.round(start * 10) / 10, length };
   $("rsPreviewStart").value = clip.start.toFixed(1);
   $("rsPreviewLength").value = String(clip.length);
-  const w = $("rsPreviewWindow").style;
-  w.left = pct(clip.start);
-  w.width = pct(previewEnd() - clip.start);
   if (live) setPlayhead(clip.start);
   else seekPreview(clip.start);
 }
 
 function setPlayhead(t) {
   playT = Math.max(0, Math.min(songLength, t));
-  $("rsPreviewHead").style.left = pct(playT);
+  previewOverview?.draw();
+  // As the editor's buttons (renderMarkerArtifacts): off with no marker that way.
+  const markers = previewMarkers();
+  $("rsPreviewPrev").disabled = adjacentMarkerTime(markers, playT, -1, songLength) === null;
+  $("rsPreviewNext").disabled = adjacentMarkerTime(markers, playT, 1, songLength) === null;
 }
 
 // Song sections, phrases, tone switches and tempo flags: places a preview tends
 // to start well. Hand anchors are left out; they mark the hand, not the music.
 const previewMarkers = () => markerArtifacts().filter((m) => m.kind !== "anchor" && m.t < songLength);
-
-// Only sections are drawn: they are what a preview is chosen by, and the song's
-// start needs no mark. The jumps still visit every marker.
-function renderPreviewMarkers() {
-  const strip = $("rsPreviewStrip");
-  strip.querySelectorAll(".rs-preview-tick").forEach((tick) => tick.remove());
-  for (const m of previewMarkers()) {
-    if (m.kind !== "section" || m.t < 0.5) continue;
-    const tick = document.createElement("span");
-    tick.className = "rs-preview-tick";
-    tick.style.left = pct(m.t);
-    tick.title = m.name;
-    strip.append(tick);
-  }
-}
 
 // DLC Builder's default: the first chorus, else the middle of the song.
 function defaultStart() {
@@ -255,98 +244,126 @@ function playPreview() {
     previewAudio = new Audio(stem.audioUrl);
     previewAudio.dataset.src = stem.audioUrl;
   }
-  const start = clip.start, end = previewEnd(), len = end - start;
-  const inClip = playT >= start && playT < end - 0.05;
-  const short = len < FADE_IN + FADE_OUT, fadeIn = short ? len / 2 : FADE_IN, fadeOut = short ? len / 2 : FADE_OUT;
-  const gain = (t) => inClip ? Math.max(0, Math.min(1, (t - start) / fadeIn, (end - t) / fadeOut)) : 1;
+  playsClip = startsClip(playT);
   previewAudio.currentTime = playT;
-  previewAudio.volume = gain(playT);
+  previewAudio.volume = previewGain(playT);
   previewAudio.play().catch(stopPreview);
   $("rsPreviewPlay").setAttribute("aria-pressed", "true");
   const tick = () => {
     const t = previewAudio.currentTime;
     if (previewAudio.paused || previewAudio.ended) { stopPreview(); return; }
-    if (inClip && t >= end) { stopPreview(); setPlayhead(start); return; }
-    previewAudio.volume = gain(t);
+    if (playsClip && t >= previewEnd()) { stopPreview(); setPlayhead(clip.start); return; }
+    previewAudio.volume = previewGain(t);
     setPlayhead(t);
     previewFrame = requestAnimationFrame(tick);
   };
   previewFrame = requestAnimationFrame(tick);
 }
 
-// Seeking while playing keeps playing, from the new place.
-function seekPreview(t) {
-  const playing = previewPlaying();
-  stopPreview();
-  setPlayhead(t);
-  if (playing) playPreview();
+// Started inside the clip, playback is the clip with its fades; outside, the song.
+let playsClip = false;
+const startsClip = (t) => t >= clip.start && t < previewEnd() - 0.05;
+function previewGain(t) {
+  if (!playsClip) return 1;
+  const start = clip.start, end = previewEnd(), len = end - start;
+  const short = len < FADE_IN + FADE_OUT, fadeIn = short ? len / 2 : FADE_IN, fadeOut = short ? len / 2 : FADE_OUT;
+  return Math.max(0, Math.min(1, (t - start) / fadeIn, (end - t) / fadeOut));
 }
 
+// Like the editor's seekPlayback: while playing, the audio moves with the
+// playhead and keeps playing from there, scrubbing included.
+function seekPreview(t) {
+  setPlayhead(t);
+  if (!previewPlaying()) return;
+  playsClip = startsClip(playT);
+  previewAudio.currentTime = playT;
+  previewAudio.volume = previewGain(playT);
+}
+
+// The editor's marker jump (marker-artifacts.js navigateMarker): from the
+// playhead to the next marker, and the clip starts there. The playhead stays on
+// the marker itself, so the next jump goes on from it even where the clip had
+// to be rounded or pulled back from the song's end.
 function jumpPreview(direction) {
-  const t = adjacentMarkerTime(previewMarkers(), clip.start, direction, songLength);
+  const t = adjacentMarkerTime(previewMarkers(), playT, direction, songLength);
   if (t === null) return;
-  setClip(t);
+  setClip(t, clip.length, true);
+  seekPreview(t);
 }
 
 function renderPreviewClip() {
   const stem = mixStem();
   songLength = Number(stem?.spec?.duration) || Number(S.state.duration) || 0;
   // A score without audio has no clip to choose; the export refuses it anyway.
-  $("rsPreviewStrip").closest(".section").hidden = !stem || songLength < PREVIEW_MIN;
+  $("rsPreviewOverview").closest(".section").hidden = !stem || songLength < PREVIEW_MIN;
   if (!stem || songLength < PREVIEW_MIN) return;
   if (transportPlaying()) togglePlay();     // one song playing at a time
-  $("rsPreviewStrip").style.backgroundImage = stem.spec?.url ? `url("${stem.spec.url}")` : "";
   $("rsPreviewStart").max = songLength.toFixed(1);
-  renderPreviewMarkers();
+  previewImage = null;
+  if (stem.spec?.url) {
+    previewImage = new Image();
+    previewImage.onload = () => previewOverview.draw();
+    previewImage.src = stem.spec.url;
+  }
   const saved = S.state.metadata?.rocksmith || {};
   setClip(Number.isFinite(saved.previewStart) ? saved.previewStart : defaultStart(),
     Number.isFinite(saved.previewLength) ? saved.previewLength : PREVIEW_DEFAULT);
 }
 
 function initPreviewClip() {
-  const strip = $("rsPreviewStrip");
-  strip.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || !songLength) return;
-    const rect = strip.getBoundingClientRect();
-    const at = (x) => ((x - rect.left) / rect.width) * songLength;
-    // Dragging the clip moves it; any other press seeks, and dragging scrubs.
-    const onClip = !!e.target.closest(".rs-preview-window");
-    const x0 = e.clientX, base = clip.start;
-    let moved = false, resume = false;
-    // pointerdown's default is cancelled below, so focus would stay in a field.
-    $("rocksmithExportModal").focus({ preventScroll: true });
-    if (!onClip) seekPreview(at(x0));
-    strip.setPointerCapture(e.pointerId);
-    const move = (ev) => {
-      moved ||= Math.abs(ev.clientX - x0) > 3;
-      if (!moved) return;
-      if (onClip && previewPlaying()) { resume = true; stopPreview(); }
-      if (onClip) setClip(base + at(ev.clientX) - at(x0), clip.length, true);
-      else setPlayhead(at(ev.clientX));
-    };
-    const up = () => {
-      strip.removeEventListener("pointermove", move); strip.removeEventListener("pointerup", up); strip.removeEventListener("pointercancel", up);
-      if (onClip && !moved) seekPreview(at(x0));
-      else if (onClip && resume) playPreview();
-      else if (!onClip && moved) seekPreview(playT);
-    };
-    strip.addEventListener("pointermove", move);
-    strip.addEventListener("pointerup", up);
-    strip.addEventListener("pointercancel", up);
-    e.preventDefault();
+  previewOverview = createOverview({
+    ruler: $("rsPreviewRuler"), map: $("rsPreviewMap"),
+    time: { root: $("rsPreviewTime"), button: $("rsPreviewTimeLabel"), input: $("rsPreviewTimeInput") },
+    getTime: () => playT, getDuration: () => songLength, getImage: () => previewImage,
+    seek: (t, phase) => { if (phase !== "end") seekPreview(t); },
+    frame: () => ({ t0: clip.start, t1: previewEnd(), y0: 0, y1: 1 }),
+    bodyCursor: (t) => (inClip(t) ? "grab" : "pointer"),
+    // Pressed on the clip, a drag moves it and a click seeks; elsewhere it scrubs.
+    bodyDown: (t0) => {
+      if (!inClip(t0)) return null;
+      const base = clip.start;
+      let resume = false;
+      return {
+        move: (t, moved) => {
+          if (!moved) return;
+          if (previewPlaying()) { resume = true; stopPreview(); }
+          setClip(base + t - t0, clip.length, true);
+        },
+        up: (t, moved) => {
+          if (!moved) seekPreview(t0);
+          else if (resume) playPreview();
+        },
+      };
+    },
   });
+  // The dialog is hidden until opened, so the canvases are sized once it shows.
+  new ResizeObserver(() => { previewOverview.fit(PREVIEW_MAP_H); previewOverview.draw(); }).observe($("rsPreviewOverview"));
+  window.addEventListener("cw-intensity-status", () => previewOverview.draw());
   $("rsPreviewStart").addEventListener("change", () => setClip(Number($("rsPreviewStart").value) || 0));
   $("rsPreviewLength").addEventListener("change", () => setClip(clip.start, Number($("rsPreviewLength").value) || PREVIEW_DEFAULT));
-  $("rsPreviewPrev").addEventListener("click", () => jumpPreview(-1));
-  $("rsPreviewNext").addEventListener("click", () => jumpPreview(1));
+  // The editor's buttons give the focus up after a jump, so Space plays rather
+  // than jumping again; here it goes back to the window, whose Space plays.
+  for (const [id, direction] of [["rsPreviewPrev", -1], ["rsPreviewNext", 1]]) {
+    $(id).addEventListener("click", () => {
+      jumpPreview(direction);
+      $("rocksmithExportModal").focus({ preventScroll: true });
+    });
+  }
   $("rsPreviewHere").addEventListener("click", () => setClip(playT));
   $("rsPreviewPlay").addEventListener("click", playPreview);
   // This window's own Space: the preview, not the song behind it. A focused
   // button keeps Space as its click, and a text field keeps it as a character.
   $("rocksmithExportModal").addEventListener("keydown", (e) => {
+    // Ctrl+←/→ jumps between markers, as in the editor (edit.js), outside fields.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && ["ArrowLeft", "ArrowRight"].includes(e.key)
+        && !e.target.closest("input, select, textarea") && !$("rsPreviewOverview").closest(".section").hidden) {
+      e.preventDefault();
+      jumpPreview(e.key === "ArrowLeft" ? -1 : 1);
+      return;
+    }
     if (!matchKey(e, "playPause") || e.target.closest("button, select, textarea, input[type=text], input:not([type])")) return;
     e.preventDefault();
-    if ($("rsPreviewStrip").closest(".section").hidden) return;
+    if ($("rsPreviewOverview").closest(".section").hidden) return;
     playPreview();
   });
 }

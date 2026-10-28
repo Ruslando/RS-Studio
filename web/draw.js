@@ -1,6 +1,6 @@
-import { paintIntensity, intensityRevision } from './spectrogram-intensity.js';
+import { paintIntensity } from './spectrogram-intensity.js';
 import { paintNoteRow } from './timeline-paint.js';
-import { createOverviewTime, formatTimelineTime } from './timeline-time.js';
+import { createOverview } from './overview.js';
 import { ISSUE_TEXT, laneIssues } from "./note-issues.js";
 import { hideTooltip, showTooltip } from "./tooltip.js";
 import { rocksmithIssueNotes } from "./rocksmith-check.js";
@@ -11,24 +11,24 @@ import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGho
 // (whole-song strip with a viewport window), and the hover highlight / cursor line.
 
 import { bendCurve, bendPeak } from "./bend.js";
-import { BEND_HANDLE_R, MM_HEAD, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
+import { BEND_HANDLE_R, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
 import { bendHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, noteRibbon, slideFretsHandle, regionEdgeAt } from "./note-render.js";
-import { editorEl, minimap, mmctx, overviewRuler, overviewRulerCtx, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
+import { editorEl, minimap, overviewRuler, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
 import { drawFretboard, fretboardEditTargets } from "./fretboard.js";
-import { drawMarkers, drawMinimapMarkers, markerCursorAt } from "./markers.js";
+import { drawMarkers, markerCursorAt } from "./markers.js";
 import { commentCursorAt, drawComments } from "./comments.js";
 import { syncProjectStartHandle } from "./project-position.js";
-import { markerRails, overviewMarkerRails, railScale, railsBottom } from "./marker-rails.js";
-import { contentH, layout, pitchAt, pitchAtExact, songWidth, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
+import { markerRails, railScale, railsBottom } from "./marker-rails.js";
+import { contentH, layout, pitchAt, pitchAtExact, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
 import { edgeOf, hoveredStageNote, localXY, pickNote } from "./interaction.js";
 import { activeLane, canEditLane, laneOf } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";
 import { motifGroups, motifName } from "./motifs.js";
 import { laneChords } from "./chord-names.js";
-import { PAINT, UI_PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
+import { PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
 import { cancelHoverPreview, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
@@ -39,7 +39,6 @@ import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from
 
 const omittedArrangementCache = new WeakMap();
 let warningMarks = [];   // last frame's warning marks: { x0, x1, y0, y1, tip }
-let overviewTime = null;
 const BEND_STACK_TIP = { title: ISSUE_TEXT.bendStack[0], body: ISSUE_TEXT.bendStack[1], tone: "warning" };
 
 // A legacy `arrangement` both drops notes and adds them. Cross out what it drops,
@@ -329,7 +328,7 @@ function paintFrame() {
   // a project, and it has its own.
   drawFretboard();
   if (!S.state || !S.state.spec) {
-    overviewTime?.sync(0, 0, 0);
+    overview?.draw();
     return;
   }
   if (editorEl.hidden || viewer.clientWidth <= RULER_W || viewer.clientHeight < 1) return;
@@ -663,146 +662,41 @@ function paintFrame() {
   }
   sctx.restore();
   syncProjectStartHandle();
-  drawMinimap();
+  overview?.draw();
 }
 
-// ---- overview minimap: the whole song (spectrogram + notes) with a window ----
-// showing the visible frame; click/drag it to jump the main viewport anywhere.
-// The minimap's spectrogram backdrop is static (changes only on stem switch or
-// resize), but downscaling the full ~10k-px-wide spectrogram is expensive. Cache
-// that downscale into an offscreen canvas and rebuild only when its inputs
-// change; per frame we just blit the cache (cheap) and redraw the live notes +
-// playhead + viewport window on top. This removes the dominant per-frame cost.
-export let mmBackdrop = document.createElement("canvas");
+// ---- overview: the whole song with the visible frame as its window ----
+// Its body drag recenters the main viewport; ruler and headroom scrub.
+let overview = null;
 
-export let mmBackdropCtx = mmBackdrop.getContext("2d");
-
-let mmBackdropRange = "";
-export let mmBackdropImg = null;   // spectImg the current backdrop was built from
-
-function buildMinimapBackdrop(W, H) {
-  mmBackdrop.width = W; mmBackdrop.height = H;
-  mmBackdropCtx.fillStyle = PAINT.ground; mmBackdropCtx.fillRect(0, 0, W, H);
-  if (S.spectImg) {
-    paintIntensity(mmBackdropCtx, S.spectImg, 0, 0, S.spectImg.width, S.spectImg.height, 0, 0, W, H, ...(S.state.viewIntensity || [0, 100]));
-  }
-  mmBackdropImg = S.spectImg;
-  mmBackdropRange = `${S.state.viewIntensity || [0, 100]}:${intensityRevision()}`;
-}
-
-function overviewTimeLabel(time, fractional = false) {
-  return formatTimelineTime(time, fractional);
-}
-
-function drawOverviewRuler(width, dp) {
-  const PAINT = UI_PAINT;
-  const ctx = overviewRulerCtx;
-  const height = overviewRuler.height / dp;
-  const duration = S.state.duration || 1;
-  ctx.setTransform(dp, 0, 0, dp, 0, 0);
-  ctx.fillStyle = PAINT.toolbar; ctx.fillRect(0, 0, width, height);
-  // Labels remain readable as the panel width and song duration change.
-  const desired = duration / Math.max(1, Math.floor(width / 80));
-  const power = 10 ** Math.floor(Math.log10(desired));
-  const step = [1, 2, 5, 10].map(value => value * power).find(value => value >= desired);
-  ctx.font = stageMono(11); ctx.fillStyle = PAINT.label;
-  ctx.textBaseline = "top"; ctx.strokeStyle = PAINT.line; ctx.lineWidth = 1;
-  for (let i = 0; i * step / 5 <= duration; i++) {
-    const time = i * step / 5;
-    const x = time / duration * width;
-    const major = i % 5 === 0;
-    ctx.beginPath(); ctx.moveTo(x + .5, height); ctx.lineTo(x + .5, height - (major ? 4 : 2)); ctx.stroke();
-    if (major) {
-      const label = overviewTimeLabel(time, step < 1);
-      const labelWidth = ctx.measureText(label).width;
-      ctx.fillText(label, Math.max(2, Math.min(width - labelWidth - 2, x + 3)), 1);
-    }
-  }
-  const time = playbackTime();
-  const x = time / duration * width;
-  ctx.strokeStyle = PAINT.accent;
-  ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, height); ctx.stroke();
-  overviewTime?.sync(time, duration, width);
-  overviewRuler.setAttribute("aria-valuemax", String(duration));
-  overviewRuler.setAttribute("aria-valuenow", String(+time.toFixed(3)));
-  overviewRuler.setAttribute("aria-valuetext", overviewTimeLabel(time, true));
-}
-
-function drawMinimap() {
-  const dp = dpr();
-  const W = minimap.width / dp, H = minimap.height / dp;   // CSS px; store is HiDPI
-  if (W < 1 || H < 1) return;
-  drawOverviewRuler(W, dp);
-  mmctx.setTransform(dp, 0, 0, dp, 0, 0);
-  const OY = MM_HEAD;           // content sits below the headroom strip
-  const CH = H - OY;            // content (spectrogram) height
-  // The cached backdrop covers just the content band, blitted below the headroom.
-  // It's built at device resolution so the blit is 1:1 (no resample blur).
-  if (mmBackdrop.width !== minimap.width || mmBackdrop.height !== Math.round(CH * dp) || mmBackdropImg !== S.spectImg
-      || mmBackdropRange !== `${S.state.viewIntensity || [0, 100]}:${intensityRevision()}`) {
-    buildMinimapBackdrop(minimap.width, Math.round(CH * dp));
-  }
-  // Headroom strip (the playhead "ruler" you drag the pin along).
-  mmctx.fillStyle = UI_PAINT.toolbar; mmctx.fillRect(0, 0, W, OY);
-  mmctx.strokeStyle = PAINT.line; mmctx.lineWidth = 1;
-  mmctx.beginPath(); mmctx.moveTo(0, OY + 0.5); mmctx.lineTo(W, OY + 0.5); mmctx.stroke();
-  // Static backdrop (bg + downscaled spectrogram), device-res → CSS-px dest box.
-  mmctx.drawImage(mmBackdrop, 0, 0, mmBackdrop.width, mmBackdrop.height, 0, OY, W, CH);
-
-  const sx = W / Math.max(1, S.state.duration * S.pxPerSec);                                 // song px -> minimap px
-  const rows = S.state.spec.midi_high - S.state.spec.midi_low + 1;
-  const rh = CH / rows;
-  for (const lane of S.state.lanes) {
-    if (!lane.visible) continue;
-    mmctx.fillStyle = lane.color;
-    for (const n of lane.notes) {
-      const x = xOf(n.start) * sx;
-      const w = Math.max(1, (xOf(n.end) - xOf(n.start)) * sx);
-      const y = OY + (S.state.spec.midi_high - n.pitch) * rh;
-      mmctx.fillRect(x, y, w, Math.max(1, rh));
-    }
-  }
-
-  const rx = scroll.scrollLeft * sx;                          // visible-frame window
-  const rw = Math.min(W - rx, scroll.clientWidth * sx);
-  const sy = CH / contentH();                                 // content px -> minimap px (vertical)
-  const ry = OY + scroll.scrollTop * sy;
-  const rhWin = Math.min(H - ry, S.stageHeight * sy);          // == CH when not pitch-zoomed
-  mmctx.fillStyle = wash(PAINT.text);
-  mmctx.fillRect(rx, ry, rw, rhWin);
-  mmctx.strokeStyle = PAINT.text; mmctx.lineWidth = 1.5;
-  mmctx.strokeRect(rx + 0.75, ry + 0.75, Math.max(1, rw - 1.5), Math.max(1, rhWin - 1.5));
-  mmctx.lineWidth = 1;
-
-  drawMinimapMarkers(sx);   // tempo/meter flags in the headroom strip
-  for (const rail of overviewMarkerRails()) rail.drawMinimap?.(sx);
-
-  // Playhead: a full-height line plus a draggable pin head in the headroom strip.
-  const ph = xOf(playbackTime()) * sx;
-  mmctx.strokeStyle = PAINT.accent; mmctx.lineWidth = 1;
-  mmctx.beginPath(); mmctx.moveTo(ph, OY); mmctx.lineTo(ph, H); mmctx.stroke();
-  // Pin: downward triangle marker, the grab handle for scrubbing.
-  mmctx.fillStyle = S.mmSeeking ? PAINT.text : PAINT.accent;
-  mmctx.beginPath();
-  mmctx.moveTo(ph - 5, 1); mmctx.lineTo(ph + 5, 1); mmctx.lineTo(ph, OY - 1); mmctx.closePath();
-  mmctx.fill();
-}
-
-// Recenter the main viewport on the time under the minimap cursor.
-function minimapScrollTo(clientX) {
-  const r = minimap.getBoundingClientRect();
-  const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-  const max = scroll.scrollWidth - scroll.clientWidth;
-  followViewportTo(Math.max(0, Math.min(max, f * songWidth() - scroll.clientWidth / 2)));
-}
-
-// Move the playhead to the time under the cursor (scrub) — drives the headroom pin.
-function minimapSeekTo(clientX) {
-  const r = minimap.getBoundingClientRect();
-  const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-  setPlaybackCursor(f * (S.state.duration || 0));
-  followViewportTo(f * songWidth() - scroll.clientWidth / 2);
-  draw();
+function createEditorOverview() {
+  const follow = (t) => followViewportTo(t * S.pxPerSec - scroll.clientWidth / 2);
+  return createOverview({
+    ruler: overviewRuler, map: minimap,
+    time: { root: document.getElementById('overviewTime'), button: document.getElementById('overviewTimeLabel'),
+      input: document.getElementById('overviewTimeInput') },
+    getTime: playbackTime,
+    seek: (t, phase) => {
+      if (phase === "end") return;
+      setPlaybackCursor(t);
+      if (phase === "jump") moveViewportTo(t * S.pxPerSec - scroll.clientWidth / 2);
+      else follow(t);
+      draw();
+    },
+    frame: () => {
+      const t0 = scroll.scrollLeft / S.pxPerSec, y0 = scroll.scrollTop / contentH();
+      return { t0, t1: t0 + scroll.clientWidth / S.pxPerSec, y0, y1: y0 + S.stageHeight / contentH() };
+    },
+    bodyDown: (t) => {
+      const go = (time) => {
+        const max = scroll.scrollWidth - scroll.clientWidth;
+        followViewportTo(Math.max(0, Math.min(max, time * S.pxPerSec - scroll.clientWidth / 2)));
+      };
+      go(t);
+      return { move: go, up: () => {} };
+    },
+    onDrag: (seeking, dragging) => { S.mmSeeking = seeking; S.mmDragging = dragging; },
+  });
 }
 
 // The pitch ruler doubles as a click-to-preview keyboard: clicking a row plays
@@ -815,11 +709,7 @@ function rulerPitchAt(clientY) {
 }
 
 export function init_draw() {
-  overviewTime = createOverviewTime({
-    root: document.getElementById('overviewTime'), button: document.getElementById('overviewTimeLabel'),
-    input: document.getElementById('overviewTimeInput'), getProject: () => S.state, getTime: playbackTime,
-    onSeek: time => { setPlaybackCursor(time); moveViewportTo(time * S.pxPerSec - scroll.clientWidth / 2); draw(); },
-  });
+  overview = createEditorOverview();
   setPainter(paintFrame);
   // A canvas draws with whatever is loaded the instant fillText runs, and unlike
   // the DOM it is never re-laid-out when a webfont arrives. Both families are
@@ -828,42 +718,6 @@ export function init_draw() {
   // repaint when the fonts settle costs nothing and removes the whole class of
   // "the first frame is in Segoe UI" bug.
   document.fonts?.ready.then(draw);
-  overviewRuler.addEventListener("mousedown", (e) => {
-    if (!S.state || e.button !== 0) return;
-    e.preventDefault(); overviewRuler.focus();
-    S.mmSeeking = true; minimapSeekTo(e.clientX);
-  });
-  overviewRuler.addEventListener("keydown", (e) => {
-    if (!S.state || e.ctrlKey || e.metaKey || e.altKey) return;
-    const delta = e.shiftKey ? 1 : .1;
-    const time = playbackTime();
-    const target = e.key === "ArrowLeft" ? time - delta : e.key === "ArrowRight" ? time + delta : e.key === "Home" ? 0 : e.key === "End" ? S.state.duration : null;
-    if (target === null) return;
-    e.preventDefault(); e.stopPropagation();
-    const next = Math.max(0, Math.min(S.state.duration, target));
-    setPlaybackCursor(next); moveViewportTo(next * S.pxPerSec - scroll.clientWidth / 2); draw();
-  });
-  minimap.addEventListener("mousedown", (e) => {
-    if (!S.state) return;
-    e.preventDefault();         // don't start a text/drag selection
-    const r = minimap.getBoundingClientRect();
-    if (e.clientY - r.top < MM_HEAD) { S.mmSeeking = true; minimapSeekTo(e.clientX); }   // headroom → scrub
-    else { S.mmDragging = true; minimapScrollTo(e.clientX); }                            // body → navigate
-  });
-  window.addEventListener("mousemove", (e) => {
-    if (S.mmSeeking) minimapSeekTo(e.clientX);
-    else if (S.mmDragging) minimapScrollTo(e.clientX);
-  });
-  window.addEventListener("mouseup", () => {
-    if (S.mmSeeking) { S.mmSeeking = false; draw(); }   // repaint the pin back to its idle colour
-    S.mmDragging = false;
-  });
-  // Cursor hint: scrub cursor over the headroom pin strip, navigate cursor in the body.
-  minimap.addEventListener("mousemove", (e) => {
-    if (S.mmSeeking || S.mmDragging) return;
-    const r = minimap.getBoundingClientRect();
-    minimap.style.cursor = (e.clientY - r.top < MM_HEAD) ? "ew-resize" : "pointer";
-  });
   // Re-size + repaint whenever the parent viewport changes. Watching #viewer is
   // important: layout() writes an explicit height to #scroll, so observing the
   // child could miss a later startup height once an early measurement had locked

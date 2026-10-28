@@ -5,7 +5,7 @@ import { placeFloating } from "./floating-position.js";
 // to the current beat grid like phrase boundaries.
 
 import { stageUi } from "./constants.js";
-import { inTourCard, mmctx, scroll, sctx, stage, toneMarkerDelete, toneMarkerPop, toneMarkerPopClose, toneMarkerPreset, toneMarkerTime } from "./dom.js";
+import { inTourCard, mmctx as minimapCtx, scroll, sctx, stage, toneMarkerDelete, toneMarkerPop, toneMarkerPopClose, toneMarkerPreset, toneMarkerTime } from "./dom.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
@@ -177,7 +177,7 @@ export function drawToneMarkers() {
   sctx.restore();
 }
 
-export function drawMinimapToneMarkers(scale) {
+export function drawMinimapToneMarkers(scale, mmctx = minimapCtx) {
   const lane = activeToneLane();
   if (!S.state || !lane) return;
   const presets = readAvailableSoundPresets();

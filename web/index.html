@@ -330,13 +330,13 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
      minimap, which the handle below grows or folds away. -->
 <div id="playbackPanel" role="group" aria-label="Timeline overview">
 <div id="miniStrip">
-            <div id="overviewWrap" title="Overview">
-              <canvas id="overviewRuler" tabindex="0" role="slider" aria-label="Overview playhead, seconds" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" title="Click or drag to set the playhead; arrow keys adjust by 0.1 seconds"></canvas>
-              <div id="overviewTime" hidden>
-                <button type="button" id="overviewTimeLabel" title="Double-click to enter a time (mm:ss.sss or h:mm:ss.sss)">00:00.000</button>
-                <input id="overviewTimeInput" type="text" aria-label="Seek to time: mm:ss or h:mm:ss, optional .sss milliseconds" placeholder="mm:ss or h:mm:ss" title="mm:ss or h:mm:ss, optionally .sss milliseconds. Enter to seek; Escape to cancel." spellcheck="false" autocomplete="off" hidden />
+            <div id="overviewWrap" class="overview" title="Overview">
+              <canvas id="overviewRuler" class="overview-ruler" tabindex="0" role="slider" aria-label="Overview playhead, seconds" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" title="Click or drag to set the playhead; arrow keys adjust by 0.1 seconds"></canvas>
+              <div id="overviewTime" class="overview-time" hidden>
+                <button type="button" id="overviewTimeLabel" class="overview-time-label" title="Double-click to enter a time (mm:ss.sss or h:mm:ss.sss)">00:00.000</button>
+                <input id="overviewTimeInput" class="overview-time-input" type="text" aria-label="Seek to time: mm:ss or h:mm:ss, optional .sss milliseconds" placeholder="mm:ss or h:mm:ss" title="mm:ss or h:mm:ss, optionally .sss milliseconds. Enter to seek; Escape to cancel." spellcheck="false" autocomplete="off" hidden />
               </div>
-              <div id="minimapClip"><canvas id="minimap"></canvas></div>
+              <div id="minimapClip"><canvas id="minimap" class="overview-map"></canvas></div>
             </div>
           </div>
 
@@ -1445,12 +1445,16 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <div id="rsArrangements" class="rs-arrangements"></div>
           </div>
           <!-- The clip Rocksmith plays while the song is highlighted in the list.
-               The strip is the full song's spectrogram; the window is the clip. -->
+               The editor's own overview (web/overview.js); its window is the clip. -->
           <div class="section">
           <div class="section-head"><span>Preview clip</span></div>
-          <div id="rsPreviewStrip" class="rs-preview-strip" title="Click to move the playhead; drag the clip to move it">
-            <div id="rsPreviewWindow" class="rs-preview-window"></div>
-            <div id="rsPreviewHead" class="rs-preview-head"></div>
+          <div id="rsPreviewOverview" class="overview rs-preview-overview">
+            <canvas id="rsPreviewRuler" class="overview-ruler" tabindex="0" role="slider" aria-label="Preview playhead, seconds" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" title="Click or drag to set the playhead; arrow keys adjust by 0.1 seconds"></canvas>
+            <div id="rsPreviewTime" class="overview-time" hidden>
+              <button type="button" id="rsPreviewTimeLabel" class="overview-time-label" title="Double-click to enter a time (mm:ss.sss or h:mm:ss.sss)">00:00.000</button>
+              <input id="rsPreviewTimeInput" class="overview-time-input" type="text" aria-label="Seek to time: mm:ss or h:mm:ss, optional .sss milliseconds" placeholder="mm:ss or h:mm:ss" spellcheck="false" autocomplete="off" hidden />
+            </div>
+            <canvas id="rsPreviewMap" class="overview-map" title="Drag the clip to move it; click elsewhere to move the playhead"></canvas>
           </div>
           <div class="rs-preview-fields">
             <button type="button" id="rsPreviewPlay" class="icon-btn" aria-label="Play preview clip" title="Play the preview clip with its fades">

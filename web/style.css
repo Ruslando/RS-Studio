@@ -465,15 +465,14 @@ body.row-resizing { cursor: row-resize; user-select: none; }
 body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 @media (prefers-reduced-motion: reduce) { #minimapClip { transition: none; } }
 #miniStrip { display: flex; position: relative; flex-shrink: 0; min-width: 0; overflow: hidden; }
-#overviewRuler { background: var(--surface-toolbar); }
-#overviewWrap { flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--spectral-ground); }
-#overviewRuler { display: block; width: 100%; height: var(--h-overview-ruler); cursor: ew-resize; }
-#overviewTime { position: absolute; top: 0; max-width: 100%; height: var(--h-overview-ruler); z-index: 1; }
-#overviewTimeLabel, #overviewTimeInput { box-sizing: border-box; height: 100%; margin: 0; padding: 0 var(--s-sibling); border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--surface-toolbar); color: var(--text); font: 500 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
-#overviewTimeLabel { min-width: 7ch; cursor: text; }
-#overviewTimeInput { width: 17ch; max-width: 100%; }
-#overviewTimeInput:invalid { border-color: var(--error); }
-#minimap { display: block; width: 100%; height: 79px; cursor: pointer; }
+.overview { flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--spectral-ground); }
+.overview-ruler { display: block; background: var(--surface-toolbar); width: 100%; height: var(--h-overview-ruler); cursor: ew-resize; }
+.overview-time { position: absolute; top: 0; max-width: 100%; height: var(--h-overview-ruler); z-index: 1; }
+.overview-time-label, .overview-time-input { box-sizing: border-box; height: 100%; margin: 0; padding: 0 var(--s-sibling); border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--surface-toolbar); color: var(--text); font: 500 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.overview-time-label { min-width: 7ch; cursor: text; }
+.overview-time-input { width: 17ch; max-width: 100%; }
+.overview-time-input:invalid { border-color: var(--error); }
+.overview-map { display: block; width: 100%; height: 79px; cursor: pointer; }
 
 #viewer { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; border-radius: 0; }
 
@@ -1085,21 +1084,8 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 
 .rs-arrangements { display: flex; flex-direction: column; gap: var(--s-sibling); }
 
-/* Preview clip: the whole song as a spectrogram strip, the clip as a window on it. */
-.rs-preview-strip {
-  position: relative; height: 48px; border-radius: var(--r-control); overflow: hidden;
-  background: var(--control) center / 100% 100% no-repeat; cursor: pointer; touch-action: none;
-}
-.rs-preview-window {
-  position: absolute; top: 0; bottom: 0; cursor: grab;
-  border: 2px solid var(--accent); border-radius: var(--r-compact);
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--page) 55%, transparent);
-}
-.rs-preview-window:active { cursor: grabbing; }
-/* Section starts, as thin lines the clip can be lined up with. */
-.rs-preview-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--warn); opacity: .8; pointer-events: none; }
-.rs-preview-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 1; }
+/* Preview clip: the editor's overview, framed like a field. */
+.rs-preview-overview { flex: none; border-radius: var(--r-control); }
 .rs-preview-fields { display: flex; align-items: flex-end; gap: var(--s-row); margin-top: var(--s-sibling); flex-wrap: wrap; }
 
 .rs-arr-row {

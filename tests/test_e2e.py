@@ -4557,22 +4557,23 @@ class EndToEndTests(unittest.TestCase):
     def test_rocksmith_preview_clip_is_chosen_on_the_song(self):
         page = self.page
         self.new_audio_project()
-        # Two section markers to jump between.
+        # Two section markers to jump between, off the clip's 0.1 s steps: a jump
+        # must not land on the rounded start and find the same marker again.
         page.evaluate("""async () => {
             const { S } = await import('/store.js');
-            S.state.sectionMarkers = [{ id: 'a', t: 2, text: 'Verse', sectionType: 'verse' },
-                                      { id: 'b', t: 6, text: 'Chorus', sectionType: 'chorus' }];
+            S.state.sectionMarkers = [{ id: 'a', t: 2.04, text: 'Verse', sectionType: 'verse' },
+                                      { id: 'b', t: 6.07, text: 'Chorus', sectionType: 'chorus' }];
         }""")
         self.file_menu("#menuExportRocksmith")
-        expect(page.locator("#rsPreviewStrip")).to_be_visible()
+        strip = page.locator("#rsPreviewMap")
+        expect(strip).to_be_visible()
         expect(page.locator("#rsVolume")).to_have_count(0)       # volume is leveled, not asked
-        expect(page.locator(".rs-preview-tick")).to_have_count(2)
         expect(page.locator("#rsPreviewLength")).to_have_value("28")
+        playhead = lambda: float(page.locator("#rsPreviewRuler").get_attribute("aria-valuenow"))
         # The playhead waits at the clip's start, and Space plays at once: the
         # window has the focus, not the title field.
-        head = page.locator("#rsPreviewHead").bounding_box()
-        frame = page.locator("#rsPreviewWindow").bounding_box()
-        self.assertAlmostEqual(head["x"] + head["width"] / 2, frame["x"], delta=2)
+        self.assertAlmostEqual(playhead(), float(page.locator("#rsPreviewStart").input_value()), delta=0.05)
+        frame = strip.bounding_box()
         page.keyboard.press("Space")
         expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "true")
         page.keyboard.press("Space")
@@ -4595,7 +4596,9 @@ class EndToEndTests(unittest.TestCase):
         page.click("#rsPreviewPrev")
         expect(page.locator("#rsPreviewStart")).to_have_value("2.0")
         page.click("#rsPreviewNext")
-        expect(page.locator("#rsPreviewStart")).to_have_value("6.0")
+        expect(page.locator("#rsPreviewStart")).to_have_value("6.1")
+        page.click("#rsPreviewPrev")
+        expect(page.locator("#rsPreviewStart")).to_have_value("2.0")
         # Lengths are clamped to 5..30 s and the clip stays inside the song.
         page.fill("#rsPreviewLength", "60")
         page.locator("#rsPreviewLength").dispatch_event("change")
@@ -4604,15 +4607,15 @@ class EndToEndTests(unittest.TestCase):
         # A click on the strip moves the playhead; "Start here" puts the clip there.
         page.fill("#rsPreviewLength", "5")
         page.locator("#rsPreviewLength").dispatch_event("change")
-        strip = page.locator("#rsPreviewStrip").bounding_box()
+        strip = strip.bounding_box()
         page.mouse.click(strip["x"] + strip["width"] * 0.25, strip["y"] + 4)
         page.click("#rsPreviewHere")
         self.assertAlmostEqual(float(page.locator("#rsPreviewStart").input_value()), song * 0.25, delta=0.3)
         # Changing the clip puts the playhead back at its start.
         page.mouse.click(strip["x"] + strip["width"] * 0.9, strip["y"] + 4)
-        page.click("#rsPreviewNext")
-        head = page.locator("#rsPreviewHead").bounding_box()
-        self.assertAlmostEqual(head["x"] + head["width"] / 2, page.locator("#rsPreviewWindow").bounding_box()["x"], delta=2)
+        page.fill("#rsPreviewStart", "1")
+        page.locator("#rsPreviewStart").dispatch_event("change")
+        self.assertAlmostEqual(playhead(), 1, delta=0.05)
         # Space is this window's: it plays the clip, and the editor stays stopped.
         page.focus("#rsPreviewStart")
         page.keyboard.press("Space")

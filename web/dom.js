@@ -85,7 +85,7 @@ export const sctx = $("stage").getContext("2d"), rctx = $("ruler").getContext("2
 export const stage = $("stage"), ruler = $("ruler"), scroll = $("scroll"), viewer = $("viewer");
 export const rulerRight = $("rulerRight");
 export const stageSpacer = $("stageSpacer");
-export const overviewRuler = $("overviewRuler"), overviewRulerCtx = overviewRuler.getContext("2d");
+export const overviewRuler = $("overviewRuler");
 export const minimap = $("minimap"), mmctx = minimap.getContext("2d");
 export const zoomResetBtn = $("zoomReset");
 export const detectPanel = $("detectPanel"), detectClose = $("detectClose");
