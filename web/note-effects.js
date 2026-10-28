@@ -7,6 +7,10 @@ import { WHAMMY_TAG } from "./whammy.js";
 export const EFFECT_FIELDS = [
   "slide", "fx", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick", "slap",
   "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart", "slideEnd", "slideFrets",
+  // How Rocksmith draws the chord the note is in: "full" or "repeat" (chart._chord_display).
+  // Not in the signatures below: Guitar Pro has no such thing, so changing it must
+  // not take a note off the source-preserving Guitar Pro path.
+  "chordDisplay",
 ];
 
 // The subset that goes into a change-detection signature — EFFECT_FIELDS minus

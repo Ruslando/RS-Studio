@@ -1497,6 +1497,37 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     ...(selectedShapeIds.length === 1 ? [{ label: "Select entire shape", fn: selectEntireShape }] : []),
     ...(selectedShapeIds.length ? [{ label: "Remove shape (keep notes)", fn: unmarkSelectedShapes }] : []),
   ];
+  // How Rocksmith draws the selected chords. The export decides by itself, as EOF
+  // does; the two overrides keep EOF's names for those who know them.
+  const selLane = oneLane ? laneOf(sel[0]) : null;
+  const inChord = (n) => selLane.notes.some((m) => m !== n && Math.abs(m.start - n.start) < 0.002);
+  const chordNotes = selLane && canEditLane(selLane) ? sel.filter(inChord) : [];
+  const displayNow = new Set(chordNotes.map((n) => n.chordDisplay || ""));
+  const setDisplay = (value) => {
+    const prev = snapshotEdit();
+    const onsets = new Set(chordNotes.map((n) => n.start));
+    // The whole chord, not only the selected notes of it: the export reads any.
+    for (const n of selLane.notes) if ([...onsets].some((t) => Math.abs(n.start - t) < 0.002)) {
+      if (value) n.chordDisplay = value; else delete n.chordDisplay;
+    }
+    commitStructure(prev);
+  };
+  const displayItem = (value, label, tip) => ({
+    label: `${displayNow.size === 1 && displayNow.has(value) ? "✓ " : ""}${label}`, tip, fn: () => setDisplay(value),
+  });
+  const displayActions = chordNotes.length ? [{
+    label: "Chord display", kw: "rocksmith high density crazy repeat full chord",
+    tip: "How Rocksmith draws these chords: in full, or as a short repeat of the chord before.",
+    children: [
+      displayItem("", "Automatic", "A chord is drawn in full when it is new, starts a phrase, changes its mute "
+        + "or plays a technique of its own. A chord repeated right after itself is drawn as a repeat (a frame "
+        + "without frets), as in EOF."),
+      displayItem("full", "Always in full (Crazy)", "Draw this chord with all its frets and fingers even when it "
+        + "repeats the chord before, e.g. after a pause. EOF calls this Crazy."),
+      displayItem("repeat", "Always as repeat (High density)", "Draw this chord as a repeat frame without frets "
+        + "even where it would be drawn in full. Techniques on it are kept. EOF calls this High Density."),
+    ],
+  }] : [];
   // The selection is (part of) one chord: it can be renamed from here too, which
   // is the way to name one the stage shows no name for.
   const selChord = oneLane ? chordOfNote(laneOf(sel[0]), sel[0]) : null;
@@ -1533,6 +1564,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
       : motifActions.length > 1
         ? [{ label: "Motif", kw: "group phrase label", children: motifActions }]
         : []),
+    ...displayActions,
     ...(shapeActions.length
       ? [{ label: "Arpeggio / handshape", kw: "arpeggio handshape grip frame rocksmith", children: shapeActions }]
       : []),

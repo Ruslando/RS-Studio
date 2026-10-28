@@ -1022,6 +1022,24 @@ def _phrase_start_anchors(anchors: list, pi_times: list) -> list:
     return anchors
 
 
+def _chord_display(e: _Entity) -> str:
+    """The editor's override for how a chord is drawn: "full" (EOF's Crazy),
+    "repeat" (EOF's High Density), or "" to let the export decide."""
+    return next((n["chordDisplay"] for _, _, n in e.notes if n.get("chordDisplay") in ("full", "repeat")), "")
+
+
+def _chord_techniques(e: _Entity) -> bool:
+    """A chord playing a technique of its own is drawn in full, as EOF does
+    (eof_note_has_high_chord_density): a repeat would drop it, since only a full
+    chord carries chord notes. Mutes and accents ride on the chord itself."""
+    def has(n: dict) -> bool:
+        fx = n.get("fx") or {}
+        return bool((fx.get("hammer") and fx["hammer"] != "origin") or fx.get("vibrato")
+                    or n.get("slide") or n.get("bend") or n.get("harmonic") or n.get("tremPick")
+                    or n.get("slap") or n.get("linkNext"))
+    return any(has(n) for _, _, n in e.notes)
+
+
 def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) -> tuple[list, list]:
     """Fingerprints (runs of the same chord) and arpeggios (editor Shapes).
 
@@ -1052,9 +1070,16 @@ def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) 
             continue
         run = [e]
         j = k + 1
+        # The chord repeats while it is the same grip in the same phrase and nothing
+        # about it changes: a mute starting or ending, a technique of its own, or
+        # the chord before it sliding (EOF's rules). "full" and "repeat" override.
         while (j < len(entities) and entities[j].chord_id == e.chord_id and not entities[j].shape_id
-               and _mute_state(entities[j]) == _mute_state(e)
-               and phrase_of(entities[j].time) == phrase_of(e.time)):
+               and phrase_of(entities[j].time) == phrase_of(e.time)
+               and (_chord_display(entities[j]) == "repeat"
+                    or (_chord_display(entities[j]) != "full"
+                        and _mute_state(entities[j]) == _mute_state(e)
+                        and not _chord_techniques(entities[j])
+                        and not any(n.get("slide") for _, _, n in entities[j - 1].notes)))):
             run.append(entities[j])
             j += 1
         last = run[-1]
@@ -1296,8 +1321,8 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 link_parents.pop(s, None)      # a chord is never a Child
             template = chord_templates[e.chord_id]
             cn_id = -1
-            include_chord_notes = (e.first_in_shape or e.arpeggio_print != -1
-                                   or any(n.get("linkNext") or n.get("slide") == "legato" for _, _, n in e.notes))
+            include_chord_notes = (e.first_in_shape or e.arpeggio_print != -1 or _chord_techniques(e)
+                                   or any(n.get("slide") == "legato" for _, _, n in e.notes))
             if include_chord_notes:
                 # 6, not n_str: the SNG ChordNotes struct is a fixed uint32[6]
                 # regardless of instrument (see sng.py), so a bass chord leaves
@@ -1340,7 +1365,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                     mask |= S.PARENT
             if e.arpeggio_print != -1:
                 mask |= S.ARPEGGIO
-            elif e.first_in_shape:
+            elif e.first_in_shape and _chord_display(e) != "repeat":
                 mask |= S.CHORDPANEL
             else:
                 mask |= S.HIGHDENSITY
