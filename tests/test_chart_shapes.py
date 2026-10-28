@@ -154,7 +154,9 @@ class ShapeExportTest(unittest.TestCase):
                 compiled = _compile(_am(kind), phrases=[{"t": 1.5}])
                 level = compiled.sng.levels[0]
                 frames = level.arpeggios if kind == "arpeggio" else level.handshapes
-                self.assertEqual([(f.start_time, f.end_time) for f in frames][0][1], 1.5)
+                # The first piece ends a 32nd note (at 120 bpm) before the second, as DLC
+                # Builder's shortenHandshapes ends a handshape before the next one.
+                self.assertEqual([(f.start_time, f.end_time) for f in frames][0][1], 1.5 - 0.5 / 8)
                 self.assertEqual(len(frames), 2)
                 self.assertEqual(frames[0].chord_id, frames[1].chord_id, "both pieces hold the same grip")
                 self.assertEqual(frames[1].first_note_time, 1.5)

@@ -317,6 +317,13 @@ class ExporterFixes(unittest.TestCase):
                    for path, blob in read_psarc(files).items() if path.endswith(".json")]
         self.assertEqual(attrs["CentOffset"], -1200.0)
 
+    def test_handshapes_keep_a_32nd_apart(self):
+        """shortenHandshapes: a chord held into the next ends a 32nd note (at 120 bpm) before it."""
+        song = _compiled(_chord(2.0, 3.0, "x02210") + _chord(3.0, 3.4, "x32010"))
+        first, second = song.levels[0].handshapes
+        self.assertAlmostEqual(second.start_time - first.end_time, 0.5 / 8)
+        self.assertEqual([n.finger_print_id[0] for n in song.levels[0].notes], [0, 1])
+
     def test_section_carries_the_next_sections_strings(self):
         """processStringMasks: one step forward only, as DLC Builder walks the sections."""
         sections = [{"t": 2.0, "sectionType": "intro"}, {"t": 4.0, "sectionType": "verse"},

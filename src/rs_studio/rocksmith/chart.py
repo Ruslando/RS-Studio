@@ -1154,6 +1154,44 @@ def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) 
     return [fingerprints[k] for k in order], arpeggios
 
 
+def _shorten_handshapes(fingerprints: list, arpeggios: list, entities: list, beat_times: list) -> None:
+    """DLC Builder's HandShapeAdjuster.shortenHandshapes: a shape ending closer to
+    the next than a 32nd note (at the beat there) ends that far before it.
+
+    Handshapes and arpeggios are one list there, walked in time order. A shorter
+    minimum after a 32nd-note shape, a longer one after a sliding chord. A note
+    the shape no longer reaches leaves it, as DLC Builder finds a note's shape by time.
+    """
+    def chord_slide_at(t: float) -> bool:
+        return any(abs(e.time - t) < 1e-6 and e.chord_id != -1 and any(n.get("slide") == "legato" for _, _, n in e.notes)
+                   for e in entities)
+
+    shapes = sorted(fingerprints + arpeggios, key=lambda fp: fp.start_time)
+    for prev, following in zip(shapes, shapes[1:]):
+        if prev.end_time >= following.end_time:
+            continue   # nested
+        k = min(max(1, bisect.bisect_right(beat_times, prev.end_time)), len(beat_times) - 1)
+        beat = beat_times[k] - beat_times[k - 1]
+        n32 = beat / 8
+        length = prev.end_time - prev.start_time
+        if length <= n32:
+            gap = beat / 12
+        elif chord_slide_at(prev.start_time) and length > n32 * 4:
+            gap = n32 * 2
+        else:
+            gap = n32
+        if following.start_time - prev.end_time < gap:
+            end = following.start_time - gap
+            prev.end_time = end if end > prev.start_time else prev.start_time + length / 2
+    for prints, attr in ((fingerprints, "finger_print"), (arpeggios, "arpeggio_print")):
+        for fp in prints:
+            if fp.last_note_time >= fp.end_time:
+                fp.last_note_time = -1.0
+        for e in entities:
+            if getattr(e, attr) != -1 and e.time >= prints[getattr(e, attr)].end_time - 1e-9:
+                setattr(e, attr, -1)
+
+
 def _ignored(e: _Entity, note: S.Note) -> bool:
     """BasicFixes.addIgnores: notes the game cannot score, left out of the score.
 
@@ -1550,6 +1588,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
 
     anchors_raw = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, fixes)
     fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)
+    _shorten_handshapes(fingerprints, arpeggios, entities, [b[0] for b in arr.beats])
     emitted = _emit_notes(entities, voicing.chord_templates, arr, is_bass=n_str == 4)
     notes = emitted.notes
     _phrase_differences(arr, notes, fixes)
