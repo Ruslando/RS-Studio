@@ -32,6 +32,8 @@ export const KEY_COMMANDS = [
     ["detachReference", "Detach selected reference occurrences (keep notes)"],
     ["markMotif", "Mark selection as motif"], ["selectMotif", "Select entire motif"],
     ["unmarkMotif", "Unmark selected motifs (keep notes)"],
+    ["markArpeggio", "Mark selection as arpeggio"], ["markHandshape", "Mark selection as handshape"],
+    ["unmarkShape", "Remove arpeggio / handshape (keep notes)"],
     ["fretboardShape", "Fretboard: build a grip"],
     ["applyFretboardShape", "Fretboard: apply custom grip"],
     ["chooseFretboardAlternative", "Fretboard: use previewed alternative"],

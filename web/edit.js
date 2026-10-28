@@ -14,7 +14,7 @@ import { $, inTourCard, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBt
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
 import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapStrayNotes } from "./grid.js";
-import { nid, motifId } from "./ids.js";
+import { nid, motifId, shapeId } from "./ids.js";
 import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addCommentAt } from "./comments.js";
@@ -28,6 +28,7 @@ import { confirmStemRemoval } from "./stem-settings.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
 import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
+import { SHAPE_KINDS, markShape, remintShapes, shapeGroups, unmarkShape } from "./shapes.js";
 import { beginArtifactRename } from "./artifact-names.js";
 import { beginChordRename } from "./chord-rename.js";
 import { chordOfNote } from "./chord-names.js";
@@ -296,6 +297,7 @@ export function clipOf(notes) {
       start: n.start, end: n.end, pitch: n.pitch,
       ...(clock ? { beat0: clock.beatAt(n.start), beat1: clock.beatAt(n.end) } : {}),
       ...(n.motifId ? { motifId: n.motifId } : {}),
+      ...(n.shapeId ? { shapeId: n.shapeId, shapeKind: n.shapeKind, ...(n.shapeName ? { shapeName: n.shapeName } : {}) } : {}),
     });
   });
 }
@@ -421,6 +423,7 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
     if (shift) dropFingering(note);
     return note;
   });
+  remintShapes(S.clipboard.map((c, k) => [c, added[k]]), shapeId);
   lane.notes.push(...added);
   if (asReference) linkPasteAsReference(added, lane, refShift);
   commit(prev);
@@ -490,6 +493,7 @@ export function sendSelectionToLane(target, { move = false } = {}) {
     dropFingering(note);
     return note;
   });
+  remintShapes(picked.map(([n], k) => [n, added[k]]), shapeId);
   target.notes.push(...added);
   commit(prev);
   setSelection(new Set(added));
@@ -733,6 +737,36 @@ export function unmarkSelectedMotifs() {
     const lane = laneOf(note);
     if (lane && canEditLane(lane) && note.motifId) unmarkMotif(lane.notes, note.motifId);
   }
+  commit(previous); draw();
+}
+
+// ---- grip shapes: Rocksmith arpeggio and handshape frames (shapes.js) ----
+export function markSelectionAsShape(kind) {
+  const selected = [...S.selection].filter(note => laneOf(note));
+  const lanes = [...new Set(selected.map(laneOf))];
+  if (lanes.length !== 1 || !canEditLane(lanes[0])) return false;
+  if (selected.length < 2) { toast(`Select at least two notes for ${SHAPE_KINDS[kind].toLowerCase()}`); return false; }
+  const previous = snapshotEdit();
+  markShape(selected, shapeId(), kind);
+  commit(previous); draw();
+  return true;
+}
+
+export function selectEntireShape() {
+  const member = [...S.selection].find(note => note.shapeId && laneOf(note));
+  const notes = member && shapeGroups(laneOf(member).notes).get(member.shapeId);
+  if (!notes) return;
+  setSelection(new Set(notes)); draw();
+}
+
+export function unmarkSelectedShapes() {
+  const previous = snapshotEdit();
+  let changed = false;
+  for (const note of S.selection) {
+    const lane = laneOf(note);
+    if (lane && canEditLane(lane) && note.shapeId) { unmarkShape(lane.notes, note.shapeId); changed = true; }
+  }
+  if (!changed) return;
   commit(previous); draw();
 }
 
@@ -1451,6 +1485,17 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     ...(selectedMotifIds.length === 1 ? [{ label: "Select entire motif", fn: selectEntireMotif }] : []),
     ...(selectedMotifIds.length ? [{ label: "Unmark motif", fn: unmarkSelectedMotifs }] : []),
   ];
+  // Only shapes that still frame two notes or more (shapes.js shapeGroups).
+  const liveShapes = oneLane ? shapeGroups(laneOf(sel[0]).notes) : new Map();
+  const selectedShapeIds = [...new Set(sel.map((n) => n.shapeId).filter((id) => liveShapes.has(id)))];
+  const shapeActions = [
+    ...(sel.length >= 2 && oneLane ? [
+      { label: "Mark as arpeggio", kw: "arp broken chord grip frame rocksmith", fn: () => markSelectionAsShape("arpeggio") },
+      { label: "Mark as handshape", kw: "grip frame hold chord shape rocksmith", fn: () => markSelectionAsShape("handshape") },
+    ] : []),
+    ...(selectedShapeIds.length === 1 ? [{ label: "Select entire shape", fn: selectEntireShape }] : []),
+    ...(selectedShapeIds.length ? [{ label: "Remove shape (keep notes)", fn: unmarkSelectedShapes }] : []),
+  ];
   // The selection is (part of) one chord: it can be renamed from here too, which
   // is the way to name one the stage shows no name for.
   const selChord = oneLane ? chordOfNote(laneOf(sel[0]), sel[0]) : null;
@@ -1487,6 +1532,9 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
       : motifActions.length > 1
         ? [{ label: "Motif", kw: "group phrase label", children: motifActions }]
         : []),
+    ...(shapeActions.length
+      ? [{ label: "Arpeggio / handshape", kw: "arpeggio handshape grip frame rocksmith", children: shapeActions }]
+      : []),
   ];
   // Other layers to copy or move the selection into; hidden/locked ones are shown
   // but disabled, so the list does not change shape with layer state.

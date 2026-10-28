@@ -14,7 +14,7 @@ import { hexA } from "./util.js";
 const NAMES = [
   "ground", "toolbar", "ink", "paper", "chrome", "chrome-hover", "text", "label", "hint", "accent", "ok", "warn", "error",
   "line", "grid-bar", "grid-beat", "grid-sub",
-  "marker", "marker-idle", "section", "phrase", "tone", "motif", "trace", "ref", "comment",
+  "marker", "marker-idle", "section", "phrase", "tone", "motif", "shape", "trace", "ref", "comment",
 ];
 
 // Deferred module scripts run after the stylesheet is parsed, so :root is

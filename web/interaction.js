@@ -23,6 +23,7 @@ import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes,
 import { auditionNote, playbackTime, previewNotes, seekPlayback } from "./playback.js";
 import { toast } from "./notify.js";
 import { beginArtifactRename } from "./artifact-names.js";
+import { shapeGroups, shapeLabelAt } from "./shapes.js";
 import { beginChordRename } from "./chord-rename.js";
 import { boxOfNote, toggleRefEditLock, moveRefOccurrence, notesInBox, refBadgeAt, refBoxEdgeAt, refLockAt, resizeRefBox, shiftOf, toggleRefPitchLock } from "./references.js";
 import { lineXAtRow } from "./slice.js";
@@ -482,6 +483,16 @@ export function init_interaction() {
         else toggleRefPitchLock(lock.lane, lock.ref);
         return;
       }
+      // Click an arpeggio's or handshape's name to select all of its notes.
+      const shapeTag = shapeLabelAt(S.shapeLabels, x, y);
+      if (shapeTag) {
+        const members = shapeGroups(shapeTag.lane.notes).get(shapeTag.id);
+        if (members) {
+          S.state.lanes.forEach((l) => (l.active = l === shapeTag.lane)); renderLanes();
+          setSelection(new Set(members)); draw();
+          return;
+        }
+      }
       const badge = refBadgeAt(x, y);
       if (badge && canEditLane(badge.lane)) {
         const inside = notesInBox(badge.box, badge.lane.notes);
@@ -595,6 +606,14 @@ export function init_interaction() {
     const [x, y] = localXY(e);
     // Only actual flags consume this area; empty rail space is note-editing space.
     if (markerCursorAt(x, y) || commentAt(x, y) || markerRails().some(rail => rail.cursorAt?.(x, y))) return;
+    // Double-click an arpeggio's or handshape's name to rename it in place.
+    const shapeTag = shapeLabelAt(S.shapeLabels, x, y);
+    if (shapeTag && canEditLane(shapeTag.lane)) {
+      e.preventDefault(); S.drag = null;
+      beginArtifactRename("shape", shapeTag.lane, shapeTag.id,
+        { left: e.clientX - (x - shapeTag.x), top: e.clientY - (y - shapeTag.y), width: shapeTag.w, height: shapeTag.h });
+      return;
+    }
     // Double-click a reference's or motif's name to rename it in place.
     const label = refBadgeAt(x, y) || S.motifLabels.find((m) => x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h);
     if (label && canEditLane(label.lane)) {

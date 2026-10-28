@@ -3,7 +3,7 @@ import { paintNoteRow } from './timeline-paint.js';
 import { createOverview } from './overview.js';
 import { ISSUE_TEXT, laneIssues } from "./note-issues.js";
 import { hideTooltip, showTooltip } from "./tooltip.js";
-import { rocksmithIssueNotes } from "./rocksmith-check.js";
+import { rocksmithIssueNotes, rocksmithShapeProblems } from "./rocksmith-check.js";
 import { paintNoteBar, paintNoteGlow, paintNoteSelection, noteSelectionFill } from "./canvas-components.js";
 import { renderArtifacts } from "./artifacts.js";
 import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGhosts, notePlaybackGlow } from "./note-motion.js";
@@ -27,6 +27,7 @@ import { activeLane, canEditLane, laneOf } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";
 import { motifGroups, motifName } from "./motifs.js";
+import { shapeGroups, shapeLabel, shapeLabelAt } from "./shapes.js";
 import { laneChords } from "./chord-names.js";
 import { PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
@@ -245,6 +246,46 @@ function drawMotifs(vx0, vx1) {
   }
 }
 
+// Rocksmith grip frames (shapes.js): a solid box for a handshape, dashed for an
+// arpeggio, as the game draws them, with the grip's name underneath so it does
+// not collide with motif and chord labels above the notes. A shape the export has
+// a problem with (rocksmith-check.js) is framed in the warning colour, and its
+// label says when it goes out as plain notes; the problem itself is listed under
+// Warnings. The labels are kept for clicks: select the shape, double-click renames.
+function drawShapes(vx0, vx1) {
+  S.shapeLabels = [];
+  const active = activeLane();
+  for (const lane of S.state.lanes) {
+    if (!lane.visible) continue;
+    const problems = rocksmithShapeProblems(lane);
+    for (const [id, notes] of shapeGroups(lane.notes)) {
+      const problem = problems.get(id);
+      const color = problem ? PAINT.warn : PAINT.shape;
+      let t0 = Infinity, t1 = -Infinity, pLo = Infinity, pHi = -Infinity;
+      for (const n of notes) {
+        t0 = Math.min(t0, n.start); t1 = Math.max(t1, n.end);
+        pLo = Math.min(pLo, n.pitch); pHi = Math.max(pHi, n.pitch);
+      }
+      const x0 = xOf(t0) - 7, x1 = xOf(t1) + 7;
+      if (x0 > vx1 || x1 < vx0) continue;
+      const y0 = yOf(pHi) - 8, y1 = yOf(pLo) + S.state.rowH + 8;
+      sctx.save();
+      sctx.globalAlpha = lane === active ? 0.95 : 0.55;
+      sctx.strokeStyle = color; sctx.lineWidth = 2;
+      if (notes[0].shapeKind === "arpeggio") sctx.setLineDash([3, 3]);
+      sctx.strokeRect(x0, y0, Math.max(1, x1 - x0), y1 - y0);
+      sctx.setLineDash([]);
+      const label = shapeLabel(notes) + (problem?.plain ? " · exported as plain notes" : problem ? " · check hand" : "");
+      sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "top";
+      const labelX = Math.max(x0 + 3, vx0 + 3), labelY = y1 + 2;
+      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(label, labelX, labelY);
+      sctx.lineWidth = 1; sctx.fillStyle = color; sctx.fillText(label, labelX, labelY);
+      S.shapeLabels.push({ lane, id, x: labelX - 3, y: labelY - 1, w: sctx.measureText(label).width + 6, h: 14 });
+      sctx.restore();
+    }
+  }
+}
+
 // Each chord's name at its top left, in its layer's hue (rule 24), as chord
 // charts write a name above the chord. Drawn after the warning marks and the
 // motif and reference labels that sit in the same corner, and moved right past
@@ -256,7 +297,7 @@ function drawChordNames(vx0, vx1) {
   const active = activeLane();
   const taken = [
     ...warningMarks.map((m) => ({ x: m.x0, y: m.y0, w: m.x1 - m.x0, h: m.y1 - m.y0 })),
-    ...S.motifLabels, ...(S.refBadges || []),
+    ...S.motifLabels, ...(S.shapeLabels || []), ...(S.refBadges || []),
   ];
   const hits = (r) => taken.find((o) => r.x < o.x + o.w && o.x < r.x + r.w && r.y < o.y + o.h && o.y < r.y + r.h);
   sctx.save();
@@ -546,6 +587,7 @@ function paintFrame() {
   sctx.globalAlpha = 1;
   sctx.textBaseline = "alphabetic";
   drawMotifs(vx0, vx1);
+  drawShapes(vx0, vx1);
   drawDropPreview();
   drawStackBadges(stackBadges, vx0, vx1);
   drawBendHandles();
@@ -770,6 +812,7 @@ export function init_draw() {
     else if (!e.shiftKey && !S.sliceHeld && regionEdgeAt(x)) cur = "ew-resize";
     else if (mi >= 0) cur = "pointer";                       // hovering a suggestion
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && refLockAt(x, y)) cur = "pointer";   // pitch lock toggle
+    else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && shapeLabelAt(S.shapeLabels, x, y)) cur = "pointer"; // shape name: click selects
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && refBadgeAt(x, y)) cur = "grab"; // reference badge (click = select, drag = move)
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (rbe = refBoxEdgeAt(x, y)))
       cur = refEdgeCursor(rbe.edge);                         // reference box edge or corner

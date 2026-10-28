@@ -8,7 +8,7 @@ import { openSettingsModal } from './ui.js';
 import { draw } from './repaint.js';
 import { openDetectPanel, updateDetectStatus } from './detect.js';
 import { refMenuEntry, detachSelection } from './references.js';
-import { markSelectionAsMotif, selectEntireMotif, unmarkSelectedMotifs, setFxOnSelection } from './edit.js';
+import { markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection } from './edit.js';
 import { fxOn } from './note-effects.js';
 import { runFindSimilar } from './tracing.js';
 import { xOf } from './geometry.js';
@@ -55,6 +55,9 @@ export const EDITOR_COMMAND_HANDLERS = {
   detachReference: () => withSelection(detachSelection),
   markMotif: () => withSelection(markSelectionAsMotif), selectMotif: () => withSelection(selectEntireMotif),
   unmarkMotif: () => withSelection(unmarkSelectedMotifs),
+  markArpeggio: () => withSelection(() => markSelectionAsShape('arpeggio')),
+  markHandshape: () => withSelection(() => markSelectionAsShape('handshape')),
+  unmarkShape: () => withSelection(unmarkSelectedShapes),
   fretboardShape: () => click('fretboardShape'), applyFretboardShape: () => click('fretboardApply'),
   chooseFretboardAlternative: () => click('fretboardChoose'), autoFretboard: () => click('fretboardAuto'),
   ...Object.fromEntries(['palmMute', 'hammer', 'vibrato', 'dead', 'accent', 'letRing'].map(key =>

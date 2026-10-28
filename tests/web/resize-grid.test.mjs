@@ -37,7 +37,7 @@ try {
     './playback.js': { auditionNote: noop },
     './note-motion.js': { beginNoteGesture: noop, updateNoteGesture: noop, finishNoteGesture: noop },
     './edit.js': { snapshotEdit: () => structuredClone(lane.notes), commit: (...args) => commits.push(args) },
-  }, { './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true,
+  }, { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true,
     './project-position-core.js': true });
   init_interaction();
   stage.emit('mousedown', { clientX: 149 });

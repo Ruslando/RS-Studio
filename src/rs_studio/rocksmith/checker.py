@@ -134,6 +134,15 @@ FIXED = {
     "unvoiced": ("Note skipped", "The note has no string or fret."),
     "finger": ("Chord without fingering", "Some fretted notes of this grip have no finger; Rocksmith shows them without one."),
     "hand": ("Hand position guessed", "The note has no hand position from the editor, so the export placed the hand."),
+    "shape-grip": ("Arpeggio or handshape exported as plain notes",
+                   "Its notes do not form one grip: a string is played on two frets, or only one string is used. "
+                   "Put every note of a string on the same fret, or remove the shape."),
+    "shape-mixed": ("Arpeggio or handshape exported as plain notes",
+                    "A note outside the shape is played while the shape is held. Every note between its first "
+                    "and last note belongs to it: add that note to the shape, or move it out."),
+    "shape-hand": ("Hand position change inside an arpeggio or handshape",
+                   "The hand holds the grip for the whole shape, so the export keeps it where the shape begins "
+                   "and ignores this change. Move the hand anchor before or after the shape, or change the fingering."),
 }
 
 

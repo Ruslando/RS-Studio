@@ -80,7 +80,7 @@ current bindings.
 
 ## Actions available without a default key
 
-These 48 actions appear as **Unassigned** until a key is chosen. Each is connected
+These 51 actions appear as **Unassigned** until a key is chosen. Each is connected
 to its existing editor action; it applies to the current project and selection.
 
 | Area | Unassigned actions |
@@ -90,6 +90,7 @@ to its existing editor action; it applies to the current project and selection.
 | Markers | Add tempo/meter marker; section marker; phrase boundary; tone switch at playhead |
 | Detection and search | Open note detection; find similar passage |
 | References and motifs | Group selection into reference; detach selected reference occurrences while keeping notes; mark selection as motif; select entire motif; unmark selected motifs while keeping notes |
+| Rocksmith grip frames | Mark selection as arpeggio; mark selection as handshape; remove arpeggio / handshape while keeping notes |
 | Fretboard | Build a grip; apply custom grip; use previewed alternative; return to automatic |
 | Note techniques | Toggle palm mute; hammer-on/pull-off; vibrato; dead note; accent; let ring |
 | Layers | Previous layer; next layer; add layer; active layer settings; show/hide active layer; lock/unlock active layer |

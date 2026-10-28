@@ -1299,6 +1299,27 @@ function writtenColumnForm(columnNotes) {
 // `mintId` comes from the caller because note ids are drawn from app state, which
 // this module deliberately cannot see; a preview copy needs none.
 export function writeColumnOverride(laneNotes, columnNotes, choice, flow, mintId = null) {
+  const result = rewriteColumn(laneNotes, columnNotes, choice, flow, mintId);
+  keepColumnShape(columnNotes, result.column);
+  return result;
+}
+
+// A rewritten column stays in the arpeggio or handshape it was in (web/shapes.js):
+// notes it adds join it, and a restored snapshot does not bring back a shape the
+// column has since left. A column split across shapes keeps each note's own.
+function keepColumnShape(before, after) {
+  const first = before[0];
+  const shared = first?.shapeId && before.every((n) => n.shapeId === first.shapeId)
+    ? [first.shapeId, first.shapeKind, before.find((n) => n.shapeName)?.shapeName] : null;
+  const own = new Map(before.map((n) => [n.id, [n.shapeId, n.shapeKind, n.shapeName]]));
+  for (const note of after) {
+    const [id, kind, name] = shared || own.get(note.id) || [];
+    delete note.shapeId; delete note.shapeKind; delete note.shapeName;
+    if (id) { note.shapeId = id; note.shapeKind = kind; if (name) note.shapeName = name; }
+  }
+}
+
+function rewriteColumn(laneNotes, columnNotes, choice, flow, mintId) {
   const gone = new Set(columnNotes);
   const without = () => laneNotes.filter((n) => !gone.has(n));
   if (!choice) {
@@ -1675,6 +1696,82 @@ function holdsByColumn(columns, holds) {
   return out;
 }
 
+// ARPEGGIOS AND HANDSHAPES ARE ONE GRIP (web/shapes.js). The player holds one chord
+// shape and picks its notes, so every note of a shape the user marked is played from
+// that grip: one fret per string, all of it under one hand, and the hand still while
+// it lasts. Never inferred: only notes the user marked are voiced this way.
+//
+// The grip is chosen against what the lane would play without it: first the walk
+// as it is, then, among the playable grips of the shape's pitches (a note pinned by
+// the player keeps its pin), the one that moves the fewest notes from there, then the
+// cheapest. Its notes are then handed to the walk as pinned, with the grip's own
+// fingers and hand, so the hand plan and everything around the shape are worked
+// out against the grip. A shape whose pitches no single grip holds is voiced as
+// usual, and the export says so at the shape.
+//
+// Returns Map(note -> { string, fret, finger, seat }) or null when there is none.
+const GRIP_FLOW = { follow: "guided" };
+function shapeGrips(columns, tuning, options) {
+  const groups = new Map();
+  for (const { notes } of columns) for (const n of notes) {
+    if (!n.shapeId || (n.shapeKind !== "arpeggio" && n.shapeKind !== "handshape")) continue;
+    if (!groups.has(n.shapeId)) groups.set(n.shapeId, []);
+    groups.get(n.shapeId).push(n);
+  }
+  for (const [id, members] of groups) if (members.length < 2) groups.delete(id);
+  if (!groups.size) return null;
+
+  // The lane as it would be played without grips: what the grips are measured against.
+  const { priceAt, priced, hands: _, grips: __, ...plain } = options;
+  const firstHands = [];
+  const first = registerColumns(columns, tuning, { ...plain, hands: firstHands });
+  const placed = new Map(), seatOf = new Map();
+  first.forEach((shape, i) => shape?.forEach((pos, note) => {
+    placed.set(note, pos);
+    if (Number.isFinite(firstHands[i]?.seat)) seatOf.set(note, firstHands[i].seat);
+  }));
+
+  const frets = fretboardFor(options.instrument).frets - (Number(options.capo) || 0);
+  const profile = handProfileForTuning(tuning);
+  const grips = new Map();
+  for (const members of groups.values()) {
+    // One note per pitch stands for all its repeats: a repeated pitch is the same
+    // finger on the same fret.
+    const reps = new Map();
+    for (const n of members) if (!reps.has(n.pitch)) reps.set(n.pitch, n);
+    const voices = [...reps.values()];
+    if (voices.length > tuning.length) continue;
+    const pins = new Map();
+    for (const n of members) {
+      const pin = pinnedPositions([n], tuning).get(n), voice = reps.get(n.pitch);
+      if (pin && !pins.has(voice)) pins.set(voice, pin);
+    }
+    const fretted = new Set(members.filter(needsFret).map((n) => n.pitch));
+    const candidates = enumerateShapes(voices, tuning, frets, pins, profile).filter((grip) =>
+      grip.size === voices.length
+      && new Set([...grip.values()].map((p) => p.string)).size === voices.length
+      && [...grip].every(([voice, p]) => p.fret <= frets && !(p.fret === 0 && fretted.has(voice.pitch)))
+      && hasPlayableFingering(grip, profile));
+    if (!candidates.length) continue;
+    const moved = (grip) => members.filter((n) => {
+      const was = placed.get(n), now = grip.get(reps.get(n.pitch));
+      return !was || was.string !== now.string || was.fret !== now.fret;
+    }).length;
+    const ranked = candidates.map((grip) => ({ grip, moved: moved(grip), cost: shapeCost(grip, profile) }))
+      .sort((a, b) => a.moved - b.moved || a.cost - b.cost);
+    const grip = ranked[0].grip;
+    const hand = handForShape(grip, seatOf.get(members[0]), profile);
+    for (const n of members) {
+      const voice = reps.get(n.pitch), p = grip.get(voice);
+      const finger = hand.playable ? hand.fingers.get(voice) : undefined;
+      grips.set(n, { string: p.string, fret: p.fret,
+        ...(Number.isInteger(finger) && finger >= THUMB ? { finger } : {}),
+        ...(hand.playable && Number.isFinite(hand.seat) ? { seat: hand.seat } : {}) });
+    }
+  }
+  return grips.size ? grips : null;
+}
+
 function registerColumns(columns, tuning, options = {}) {
   const order = tuning.map((_, i) => i).sort((a, b) => tuning[a] - tuning[b]);
   const low = order.map((i) => tuning[i]);
@@ -1682,7 +1779,13 @@ function registerColumns(columns, tuning, options = {}) {
 
   const holds = holdsByColumn(columns, options.holds);
   const frets = fretboardFor(options.instrument).frets - (Number(options.capo) || 0);
-  const pins = columns.map(({ notes }) => lockedShape(notes, tuning));
+  // A column that is all inside arpeggios or handshapes is pinned to their grip
+  // (shapeGrips), unless the player pinned it themselves.
+  const grips = options.grips || null;
+  const userPins = columns.map(({ notes }) => lockedShape(notes, tuning));
+  const gripped = columns.map(({ notes }, i) => !userPins[i] && grips && notes.every((n) => grips.has(n))
+    ? new Map(notes.map((n) => [n, { string: grips.get(n).string, fret: grips.get(n).fret }])) : null);
+  const pins = columns.map((_, i) => userPins[i] || gripped[i]);
   const spread = spreadPins(columns, pins);
   const allRules = columns.map(({ notes }, i) => notes.map((n) => effectRule(n, columns[i + 1] ? columns[i + 1].notes : [])));
   const keptAll = columns.map(({ notes }, i) => pins[i] ? null : keptShape(notes, tuning, allRules[i], frets));
@@ -1705,8 +1808,15 @@ function registerColumns(columns, tuning, options = {}) {
     }) ? spread[i] : null;
     const authored = pins[i] || handed;
     const locked = authored || kept;
-    const flow = authored ? overrideFlow(columns[pins[i] ? i : spread.from[i]].notes) : null;
+    const flow = gripped[i] ? GRIP_FLOW : authored ? overrideFlow(columns[pins[i] ? i : spread.from[i]].notes) : null;
     const chosen = authored ? chosenFingers(notes, pins[i] ? notes : columns[spread.from[i]].notes) : new Map();
+    // The grip's fingers, where the player chose none, and its hand: one for the whole shape.
+    let gripSeat = null;
+    if (gripped[i]) for (const n of notes) {
+      const g = grips.get(n);
+      if (!chosen.has(n) && Number.isInteger(g.finger) && notes.length > 1) chosen.set(n, g.finger);
+      if (Number.isFinite(g.seat)) gripSeat = g.seat;
+    }
     const keptAt = kept && !holds[i] && !notes.some((n) => fitsPitch(n.pos, n.pitch, tuning)) ? keptHand(notes) : null;
     const fingers = keptAt != null ? keptFingers(notes) : chosen;
     const shadow = pins[i] && flow.follow === "here" ? shadowOf(notes, tuning, rules, frets, seat) : null;
@@ -1714,7 +1824,7 @@ function registerColumns(columns, tuning, options = {}) {
       // A hand put here by the player fixes the hand of this column only. It does not
       // move notes: where they go is decided before the hand (see planHand). A chosen
       // fingering puts the hand where those fingers are (handOfFingers).
-      handAt: holds[i]?.fret ?? (chosen.size ? handOfFingers(locked, chosen, handProfileForTuning(tuning)) : keptAt),
+      handAt: holds[i]?.fret ?? gripSeat ?? (chosen.size ? handOfFingers(locked, chosen, handProfileForTuning(tuning)) : keptAt),
       keptHand: keptAt != null,
       fingers,
       pitches: notes.map((n) => n.pitch),
@@ -1808,7 +1918,7 @@ function registerColumns(columns, tuning, options = {}) {
       if (!required.size && contacts > 1 && fingerMemory.has(key))
         required = new Map([...shape].map(([note, p]) => [note, fingerMemory.get(key).get(p.string)]).filter(([, f]) => f != null));
       const hand = handForShape(shape, seats[i], handProfileForTuning(tuning), required,
-        !!holds[i] || input[i].fingers.size > 0 || input[i].keptHand);
+        !!holds[i] || input[i].fingers.size > 0 || input[i].keptHand || !!gripped[i]);
       options.hands[i] = hand;
       if (contacts > 1 && !input[i].aside)
         fingerMemory.set(key, new Map([...shape].map(([note, p]) => [p.string, hand.fingers.get(note)])));
@@ -1853,7 +1963,8 @@ function handOfFingers(shape, fingers, profile) {
 // is named. `registerColumns` is that engine: a register per bar, and each note on
 // the string that lands nearest it. See its section at the foot of this file.
 export function voiceColumns(columns, tuning, options = {}) {
-  return registerColumns(columns, tuning, options);
+  const grips = shapeGrips(columns, tuning, options);
+  return registerColumns(columns, tuning, grips ? { ...options, grips } : options);
 }
 
 // Flatten already-grouped columns into Map(note -> { string, fret }).

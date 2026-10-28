@@ -67,13 +67,7 @@ export function unmarkMotif(notes, id) {
 
 export function migrateMotifs(notes) {
   for (const note of notes) {
-    if (!validMotifId(note.motifId)) {
-      if (typeof note.shapeId === "string" && /^shape_\d+$/.test(note.shapeId))
-        note.motifId = `motif_legacy_${note.shapeId.slice(6)}`;
-      else delete note.motifId;
-    }
-    // Existing authored fingering is preserved; motifs never manage it.
-    delete note.shapeId; delete note.shapeSource;
+    if (!validMotifId(note.motifId)) delete note.motifId;
     if (Array.isArray(note.written)) migrateMotifs(note.written);
   }
 }

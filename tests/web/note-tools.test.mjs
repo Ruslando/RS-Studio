@@ -9,7 +9,7 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
 
 // ---- slicing --------------------------------------------------------------
 {
-  const note = { id: 1, start: 0, end: 1, pitch: 50, slide: "shift", fx: { palmMute: true }, shapeId: "shape_1", bend: "full" };
+  const note = { id: 1, start: 0, end: 1, pitch: 50, slide: "shift", fx: { palmMute: true }, shapeId: "shape_1", shapeKind: "arpeggio", bend: "full" };
   const { left, right } = splitNote(note, 0.5, 0.1, () => 2);
   assert.deepEqual([left.id, left.start, left.end], [1, 0, 0.5]);
   assert.deepEqual([right.id, right.start, right.end], [2, 0.5, 1]);
@@ -17,7 +17,7 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
   assert.equal(right.slide, undefined, "what happens at the attack stays with the first half");
   assert.deepEqual(right.fx, { palmMute: true });
   assert.notEqual(right.fx, note.fx, "the halves do not share one effects object");
-  assert.ok(!("shapeId" in left) && !("shapeId" in right), "a cut note leaves its shape");
+  assert.ok(left.shapeId === "shape_1" && right.shapeId === "shape_1", "both halves stay in the grip shape");
   // A full bend is up by the middle and held: the first half rises, the second holds.
   assert.deepEqual(left.bendPoints, [[0, 0], [1, 2]]);
   assert.deepEqual(right.bendPoints, [[0, 2], [1, 2]]);
@@ -92,13 +92,13 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
   const {left, right} = splitNote(notes[0], .2, .1, () => 5);
   assert.equal(left.motifId, 'motif_1'); assert.equal(right.motifId, 'motif_1');
   unmarkMotif(notes, 'motif_1'); assert.deepEqual(notes, before);
-  const legacy = [{pitch: 40, shapeId: 'shape_9', shapeSource: 'manual', pos: {string:5, fret:0}},
+  const loaded = [{pitch: 40, shapeId: 'shape_9', shapeKind: 'arpeggio', pos: {string:5, fret:0}},
     {pitch:41, motifId:'motif_9'}, {pitch:42, motifId:'invalid'}];
-  migrateMotifs(legacy);
-  assert.equal(legacy[0].motifId, 'motif_legacy_9');
-  assert.deepEqual(legacy[0].pos, {string:5,fret:0}, 'loading preserves authored fingering');
-  assert.equal(motifGroups(legacy).size, 2, 'legacy and new markers cannot collide');
-  assert.ok(legacy.every(note => !('shapeId' in note) && !('shapeSource' in note)));
+  migrateMotifs(loaded);
+  assert.equal(loaded[0].shapeId, 'shape_9', 'a grip shape is not a motif');
+  assert.deepEqual(loaded[0].pos, {string:5,fret:0}, 'loading preserves authored fingering');
+  assert.equal(motifGroups(loaded).size, 1);
+  assert.ok(!('motifId' in loaded[2]), 'an invalid motif id is dropped');
 }
 
 // Extending a complete motif keeps its identity; ambiguous selections do not.

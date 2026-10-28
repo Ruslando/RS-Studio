@@ -13,6 +13,7 @@ import { refOccurrences } from "./reference-core.js";
 import { boxMinIn, laneClock } from "./references.js";
 import { songBarStarts } from "./song-bars.js";
 import { fretboardHandKey } from "./fretboard-cache.js";
+import { shapeChord, shapeGroups } from "./shapes.js";
 import { onLiveSections, onLiveTiming, timingData, timingIdOf } from "./timing.js";
 
 // A layer's bar lines come from its own timing (web/timing.js).
@@ -310,6 +311,8 @@ function buildSpecFromPrepared(prepared) {
       // and ship string+fret per note so the export matches the preview exactly.
       // string is 1-based GP order (string 1 = highest open), as the backend wants.
       const tuning = laneTuning(l);
+      // Arpeggio and handshape frames: the user's name, else the whole grip's chord (shapes.js).
+      const shapeNames = new Map([...shapeGroups(l.notes)].map(([id, notes]) => [id, shapeChord(notes)]));
       return {
         id: l.id,
         name: l.name,
@@ -330,6 +333,8 @@ function buildSpecFromPrepared(prepared) {
             ...(Number.isFinite(hand) ? { hand } : {}),
             // The fretboard's finger on a fretted note (0 thumb, 1 index … 4 pinky).
             ...(pos?.fret > 0 && finger >= 0 && finger <= 4 ? { finger } : {}),
+            ...(shapeNames.has(n.shapeId)
+              ? { shapeId: n.shapeId, shapeKind: n.shapeKind, shapeName: shapeNames.get(n.shapeId) } : {}),
           });
         }), (note) => note),
       };

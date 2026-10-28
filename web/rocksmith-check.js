@@ -20,6 +20,7 @@ import { stopArtifactPreview } from './artifact-preview.js';
 import { draw } from './repaint.js';
 import { icon } from './icons.js';
 import { markerArtifacts } from './marker-artifacts.js';
+import { shapeGroups } from './shapes.js';
 
 const SETTLE_MS = 700;
 const SAME_ONSET = 0.003;   // the check reports whole milliseconds of a float32 time
@@ -111,6 +112,32 @@ export function rocksmithIssueNotes(lane) {
     if (issue.time == null) continue;
     const notes = lane.notes.filter(note => Math.abs(note.start - issue.time) < SAME_ONSET);
     if (notes.length) out.push({ issue, notes });
+  }
+  return out;
+}
+
+// The export's problems with one layer's arpeggios and handshapes, per shape:
+// shape id -> { plain, issues }. `plain` means the shape went out as ordinary
+// notes. The export reports a broken shape at its first note and a hand change at
+// the note inside it, so an issue belongs to the shape whose stretch holds it.
+export function rocksmithShapeProblems(lane) {
+  const out = new Map();
+  const found = results.get(lane?.id);
+  if (!found?.issues?.length) return out;
+  const stretches = [...shapeGroups(lane.notes)].map(([id, notes]) => ({ id,
+    t0: Math.min(...notes.map((n) => n.start)), t1: Math.max(...notes.map((n) => n.start)) }));
+  for (const issue of found.issues) {
+    if (!String(issue.code).startsWith('shape-') || issue.time == null) continue;
+    // A broken shape is reported at its own first note; nested shapes make that the
+    // only safe match. A hand change lies anywhere inside its shape.
+    const shape = issue.code === 'shape-hand'
+      ? stretches.find((s) => issue.time > s.t0 - SAME_ONSET && issue.time < s.t1 + SAME_ONSET)
+      : stretches.find((s) => Math.abs(issue.time - s.t0) < SAME_ONSET);
+    if (!shape) continue;
+    if (!out.has(shape.id)) out.set(shape.id, { plain: false, issues: [] });
+    const entry = out.get(shape.id);
+    entry.issues.push(issue);
+    if (issue.code !== 'shape-hand') entry.plain = true;
   }
   return out;
 }

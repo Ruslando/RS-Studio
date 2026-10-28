@@ -48,6 +48,7 @@
   --stage-phrase:      #0d9488;   /* practice-phrase boundaries */
   --stage-tone:        #9333ea;   /* amp tone switches */
   --stage-motif:       #c4a7ff;   /* motif annotations */
+  --stage-shape:       #22d3ee;   /* Rocksmith arpeggio / handshape frames */
   --stage-trace:       #f0abfc;   /* find-similar suggestions */
   --stage-ref:         #e7c873;   /* linked reference groups */
   --stage-comment:     #a3e635;   /* free comments on the spectrogram */

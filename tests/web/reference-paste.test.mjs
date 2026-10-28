@@ -29,7 +29,7 @@ try {
     './note-effects.js': { copyEffects: (source, target) => target, FX_KEYS: [], FX_LABELS: {} }, './ids.js': { nid: () => ++id },
     './note-motion.js': { animateNoteChanges: noop }, './repaint.js': { draw: noop },
     './project.js': { refreshSaveState: noop }, './notify.js': { toast: message => messages.push(message) },
-  }, { './constants.js': true, './util.js': true });
+  }, { './constants.js': true, './util.js': true, './shapes.js': true });
   await doPaste({ at: 1.5 });
   assert.equal(backdrop.hidden, true, 'pasting inside the source reference never opens a prompt');
   assert.equal(lane.notes.length, 1);

@@ -57,7 +57,8 @@ ROCKSMITH_SECTION_NAMES = {
 # into notes linked one to the next: each later piece is a Child, not picked
 # again, carrying what starts at its cut. What belongs to the pick stays on the
 # first piece.
-_ATTACK_ONLY = ("grace", "slap", "stroke", "trill", "whammy", "shapeId", "shapeSource", "harmonic")
+_ATTACK_ONLY = ("grace", "slap", "stroke", "trill", "whammy", "harmonic")
+_SHAPE_FIELDS = ("shapeId", "shapeKind", "shapeName")
 _ATTACK_FX = ("hammer", "accent", "staccato", "ghost", "dead")
 _LINK_EPS = 0.002   # what counts as the same moment: onsets closer than this are one chord
 
@@ -146,7 +147,8 @@ def _add_grace_notes(notes: list, grid: dict, fixes: list) -> list:
             out.append(n)
             continue
         grace = {k: n[k] for k in ("string", "hand") if k in n}
-        grace.update(start=start - dur, end=start, fret=fret - step, pitch=_f(n.get("pitch")) - step)
+        grace.update(start=start - dur, end=start, fret=fret - step, pitch=_f(n.get("pitch")) - step,
+                     _helper=True)
         main = {k: v for k, v in n.items() if k != "grace"}
         main["fx"] = {**(n.get("fx") or {}), "hammer": True}
         out += [grace, main]
@@ -190,8 +192,10 @@ def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
             continue
         sign = -1 if kind == "inBelow" else 1
         fx = {k: v for k, v in (n.get("fx") or {}).items() if k != "vibrato"}
-        lead = {k: v for k, v in plain.items() if k not in ("bend", "bendPoints", "slideStart", "vibratoStart", "fx")}
-        lead.update(start=start, end=cut, fret=fret + sign * step, pitch=_f(n.get("pitch")) + sign * step, slide="legato")
+        lead = {k: v for k, v in plain.items()
+                if k not in ("bend", "bendPoints", "slideStart", "vibratoStart", "fx", *_SHAPE_FIELDS)}
+        lead.update(start=start, end=cut, fret=fret + sign * step, pitch=_f(n.get("pitch")) + sign * step, slide="legato",
+                    _helper=True)
         if fx:
             lead["fx"] = fx
         main = {k: v for k, v in plain.items() if k not in _ATTACK_ONLY}
@@ -556,29 +560,30 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
                 name=name, mask=mask))
         return chord_ids[key]
 
-    # Explicit editor Shapes become Rocksmith arpeggio fingerprints. They keep
-    # every note as an individually timed event while referencing one complete
-    # chord template for the grip displayed on the note highway.
+    # The editor's grip shapes (web/shapes.js) become Rocksmith fingerprints: an
+    # arpeggio (dashed frame, "-arp" chord) or a handshape (a grip held over single
+    # notes). Every note stays an individually timed event; the frame references one
+    # chord template for the whole grip shown on the note highway.
     raw_shapes: dict[str, list] = {}
     for item in voiced:
         shape_id = item[3].get("shapeId")
-        if isinstance(shape_id, str) and shape_id:
+        if isinstance(shape_id, str) and shape_id and item[3].get("shapeKind") in ("arpeggio", "handshape"):
             raw_shapes.setdefault(shape_id, []).append(item)
+    # A shape is a stretch of time, as EOF's markers are: every note played while
+    # it is held belongs to it. A note outside it in that stretch (another shape's
+    # included) breaks it. Notes the export made itself (_helper: a grace note, the
+    # start of a slide-in) belong to the note they lead into.
     mixed_shape_ids = set()
-    i = 0
-    while i < len(voiced):
-        j = i
-        while j < len(voiced) and voiced[j][0] - voiced[i][0] < 0.002:
-            j += 1
-        onset = voiced[i:j]
-        for shape_id in {item[3].get("shapeId") for item in onset if item[3].get("shapeId")}:
-            if any(item[3].get("shapeId") != shape_id for item in onset):
-                mixed_shape_ids.add(shape_id)
-        i = j
+    for shape_id, members in raw_shapes.items():
+        first, last = min(m[0] for m in members), max(m[0] for m in members)
+        if any(first - _LINK_EPS < item[0] < last + _LINK_EPS and item[3].get("shapeId") != shape_id
+               and not item[3].get("_helper") for item in voiced):
+            mixed_shape_ids.add(shape_id)
     shape_info: dict[str, dict] = {}
     for shape_id, members in raw_shapes.items():
+        start = min(item[0] for item in members)
         if shape_id in mixed_shape_ids:
-            warnings.append(f"Shape {shape_id} shares an onset with notes outside the Shape and was exported as ordinary notes")
+            fixes.append(("shape-mixed", start))
             continue
         by_string = {}
         finger_on = {}
@@ -589,7 +594,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             by_string[string] = fret
             finger_on.setdefault(string, _finger(n, fret))
         if conflict or len(by_string) < 2:
-            warnings.append(f"Shape {shape_id} cannot be held on one fixed multi-string grip and was exported as ordinary notes")
+            fixes.append(("shape-grip", start))
             continue
         frets = [-1] * 6
         midi = [-1] * 6
@@ -598,11 +603,18 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             frets[string] = fret
             midi[string] = tuning_low[string] + (fret or capo)
             fingers[string] = finger_on[string]
-        start = min(item[0] for item in members)
+        last = max(item[0] for item in members)
         end = max(max(_f(item[3].get("end"), item[0]), item[0] + 0.02) for item in members)
+        # The frame ends where the next note after it starts, as a chord run's does.
+        after = [item[0] for item in voiced if item[0] > last + _LINK_EPS]
+        if after:
+            end = max(min(end, min(after) - 0.001), last + 0.02)
+        kind = members[0][3]["shapeKind"]
+        name = next((str(m[3]["shapeName"]) for m in members if m[3].get("shapeName")), "") \
+            or _chord_name(m[3] for m in members)
         shape_info[shape_id] = {
-            "chord_id": ensure_chord_template(frets, midi, fingers, _chord_name(m[3] for m in members), start, arpeggio=True),
-            "start": start, "end": end, "frets": list(by_string.values()),
+            "chord_id": ensure_chord_template(frets, midi, fingers, name, start, arpeggio=kind == "arpeggio"),
+            "kind": kind, "start": start, "end": end, "frets": list(by_string.values()),
         }
 
     entities: list[_Entity] = []
@@ -843,9 +855,15 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, f
     changes: list[tuple[float, int]] = []
     cur = None
     for e in entities:
+        hands = [int(n["hand"]) for _, f, n in e.notes if f > 0 and isinstance(n.get("hand"), (int, float))]
+        # The hand holds a grip shape: it stays where the shape begins (I21). Where the
+        # editor's hand moves inside one (a hand anchor, or the fingering), say so.
+        if e.shape_id in shape_info and cur is not None and e.time > shape_info[e.shape_id]["start"] + 1e-6:
+            if hands and min(max(floor, min(hands) + capo), MAX_FRET - ANCHOR_WIDTH + 1) != cur:
+                fixes.append(("shape-hand", e.time))
+            continue
         held = shape_info[e.shape_id]["frets"] if e.shape_id in shape_info else [f for _, f, _ in e.notes]
         fretted = [f for f in held if f > 0]
-        hands = [int(n["hand"]) for _, f, n in e.notes if f > 0 and isinstance(n.get("hand"), (int, float))]
         if hands:
             fret = max(floor, min(hands) + capo)
         elif fretted:
@@ -957,17 +975,42 @@ def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) 
             ent.first_in_shape = m == 0
         k = j
 
+    # A user's arpeggio or handshape is one frame per phrase it spans: every phrase
+    # starts with an anchor, and an anchor inside a held frame breaks it (I22). So
+    # the frame is cut at each phrase start inside it, as a chord run is, and each
+    # piece holds the same grip. The phrase's anchor then sits on a frame's start.
     arpeggios: list[S.FingerPrint] = []
     for shape_id, info in sorted(shape_info.items(), key=lambda item: item[1]["start"]):
-        fp_id = len(arpeggios)
-        arpeggios.append(S.FingerPrint(
-            chord_id=info["chord_id"], start_time=info["start"], end_time=info["end"],
-            first_note_time=info["start"], last_note_time=-1.0))
-        for ent in entities:
-            if ent.shape_id == shape_id:
-                ent.arpeggio_print = fp_id
-
-    return fingerprints, arpeggios
+        arpeggio = info["kind"] == "arpeggio"
+        prints = arpeggios if arpeggio else fingerprints
+        cuts = [t for t in pi_times if info["start"] + 1e-5 < t < info["end"] - 1e-5]
+        bounds = [info["start"], *cuts, info["end"]]
+        members = [ent for ent in entities if ent.shape_id == shape_id]
+        for a, b in zip(bounds, bounds[1:]):
+            inside = [ent for ent in members if a - 1e-5 <= ent.time < b - 1e-5]
+            fp_id = len(prints)
+            prints.append(S.FingerPrint(
+                chord_id=info["chord_id"], start_time=a, end_time=b,
+                first_note_time=inside[0].time if inside else a, last_note_time=-1.0))
+            previous_chord = None
+            for ent in inside:
+                if arpeggio:
+                    ent.arpeggio_print = fp_id
+                    continue
+                ent.finger_print = fp_id
+                # A chord inside a handshape shows its panel when it is a new grip
+                # in this piece; the same grip again is a repeat (HighDensity).
+                if ent.chord_id != -1:
+                    ent.first_in_shape = ent.chord_id != previous_chord
+                    previous_chord = ent.chord_id
+    # Handshapes were appended after the automatic runs; keep the list in time order
+    # and point every entity at its fingerprint's new place.
+    order = sorted(range(len(fingerprints)), key=lambda k: fingerprints[k].start_time)
+    new_index = {old: new for new, old in enumerate(order)}
+    for ent in entities:
+        if ent.finger_print != -1:
+            ent.finger_print = new_index[ent.finger_print]
+    return [fingerprints[k] for k in order], arpeggios
 
 
 def _ignored(e: _Entity, note: S.Note) -> bool:
@@ -1144,7 +1187,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement) -> _No
                 slide_to=slide_to, slide_unpitch_to=unpitch_to,
                 tap=tap, slap=slap, pluck=pluck, vibrato=vibrato,
                 sustain=sustain, max_bend=max_bend, bend_values=bends,
-                finger_print_id=(-1, e.arpeggio_print),
+                finger_print_id=(e.finger_print, e.arpeggio_print),
             )
             sec.string_mask[0] |= 1 << string
         else:

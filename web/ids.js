@@ -15,6 +15,8 @@ export const laneId = () => "edit_" + (S.uid++);
 
 export const motifId = () => "motif_v2_" + (S.motifUid++);
 
+export const shapeId = () => "shape_" + (S.uid++);
+
 // Note ids ("n123") and lane ids ("edit_5") both draw from `uid`. A loaded project
 // keeps its saved ids, so `uid` must be bumped past the highest one or freshly
 // created notes/lanes would reuse ids and collide with loaded content (corrupting
@@ -28,7 +30,7 @@ export function syncUidPastLoaded() {
   const lanes = S.state.editLanes;
   for (const lane of lanes) {
     consider(lane.id);
-    for (const n of lane.notes) consider(n.id);
+    for (const n of lane.notes) { consider(n.id); consider(n.shapeId); }
   }
   S.uid = Math.max(S.uid, max + 1);
   S.motifUid = normalizeMotifIds(lanes);
