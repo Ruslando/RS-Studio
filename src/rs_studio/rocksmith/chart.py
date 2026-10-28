@@ -1194,12 +1194,23 @@ def _shorten_handshapes(fingerprints: list, arpeggios: list, entities: list, bea
             end = following.start_time - gap
             prev.end_time = end if end > prev.start_time else prev.start_time + length / 2
     for prints, attr in ((fingerprints, "finger_print"), (arpeggios, "arpeggio_print")):
-        for fp in prints:
-            if fp.last_note_time >= fp.end_time:
-                fp.last_note_time = -1.0
         for e in entities:
             if getattr(e, attr) != -1 and e.time >= prints[getattr(e, attr)].end_time - 1e-9:
                 setattr(e, attr, -1)
+
+
+def _print_note_times(prints: list, notes: list) -> None:
+    """A shape's first and last note time, as DLC Builder's convertHandshape finds
+    them: every note inside its time, the last one's sustain included, or -1 when
+    that reaches the shape's end (or nothing is inside)."""
+    for fp in prints:
+        inside = [n for n in notes if fp.start_time <= n.time < fp.end_time]
+        if not inside:
+            fp.first_note_time = fp.last_note_time = -1.0
+            continue
+        fp.first_note_time = inside[0].time
+        end = inside[-1].time + inside[-1].sustain
+        fp.last_note_time = end if end < fp.end_time else -1.0
 
 
 def _ignored(e: _Entity, note: S.Note) -> bool:
@@ -1602,6 +1613,8 @@ def compile_track(track: dict, grid: dict, song_length: float,
     emitted = _emit_notes(entities, voicing.chord_templates, arr, is_bass=n_str == 4)
     notes = emitted.notes
     _phrase_differences(arr, notes, fixes)
+    _print_note_times(fingerprints, notes)
+    _print_note_times(arpeggios, notes)
     # DLC Builder's processStringMasks: "for whatever reason" each section also
     # carries the strings of the section after it (one step, as it walks forward).
     for k in range(len(arr.sections) - 1):

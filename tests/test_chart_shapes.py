@@ -147,6 +147,23 @@ class ShapeExportTest(unittest.TestCase):
         self.assertEqual(template.name, "Am(add9)")
 
 
+    def test_frame_note_times_as_dlc_builder_finds_them(self):
+        """convertHandshape: the first note inside, and the last one's end unless it reaches the frame's end."""
+        for kind in ("handshape", "arpeggio"):
+            with self.subTest(kind):
+                notes = _am(kind)
+                notes[0]["end"] = 2.5   # the low A rings past the last note, so the frame does too
+                level = _compile(notes).sng.levels[0]
+                [frame] = level.arpeggios if kind == "arpeggio" else level.handshapes
+                last = level.notes[-1]
+                self.assertEqual((frame.first_note_time, frame.end_time), (1.0, 2.5))
+                self.assertEqual(frame.last_note_time, last.time + last.sustain)
+                self.assertLess(frame.last_note_time, frame.end_time)
+                # The last note held to the frame's end: no last note time.
+                level = _compile(_am(kind)).sng.levels[0]
+                [frame] = level.arpeggios if kind == "arpeggio" else level.handshapes
+                self.assertEqual(frame.last_note_time, -1.0)
+
     def test_a_phrase_start_inside_a_shape_cuts_its_frame(self):
         # A phrase starts on the beat at 1.5 s, between the 2nd and 3rd note.
         for kind in ("handshape", "arpeggio"):
