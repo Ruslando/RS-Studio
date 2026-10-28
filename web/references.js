@@ -23,6 +23,9 @@ import { S } from "./store.js";
 import { projectStart } from "./project-position-core.js";
 import { clamp, hexA } from "./util.js";
 
+// What a note carries for its own occurrence only: motif and grip-shape marks.
+const OCCURRENCE_FIELDS = ["motifId", "motifName", "shapeId", "shapeKind", "shapeName"];
+
 // ---- references (linked repeated note groups) ----
 // A reference group is a numbered set of capture BOXES placed over identical
 // repeats of a passage. The box is the source of truth: whatever notes sit inside
@@ -476,6 +479,12 @@ export function deleteRefGroup(lane, ref) {
 // (selection / undo) survives where the counts allow.
 function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock, mintId = nid) {
   const ordered = [...oldNotes].sort(noteOrder), b = clock.beatAt(anchor);
+  // Motifs and grip shapes belong to this occurrence, not to the reference: the
+  // mirror never copies them. They stay on the note at the same beat and pitch, so
+  // a note added or removed elsewhere in the box does not slide them onto others.
+  const at = (beat, pitch) => `${Math.round((beat - b) * 1000)}:${pitch}`;
+  const kept = new Map(ordered.map((n) => [at(clock.beatAt(n.start), n.pitch),
+    Object.fromEntries(OCCURRENCE_FIELDS.filter((f) => n[f] != null).map((f) => [f, n[f]]))]));
   for (let k = 0; k < pattern.length; k++) {
     const p = pattern[k];
     let nn = ordered[k];
@@ -483,6 +492,8 @@ function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock, mint
     nn.start = clock.timeAt(b + p.dt); nn.end = clock.timeAt(b + p.dt + p.dur); nn.pitch = p.pitch + shift;
     for (const f of EFFECT_FIELDS) delete nn[f];
     copyEffects(p.src, nn);
+    for (const f of OCCURRENCE_FIELDS) delete nn[f];
+    Object.assign(nn, kept.get(at(b + p.dt, nn.pitch)));
     if (shift !== srcShift) dropFingering(nn);
   }
   if (ordered.length > pattern.length) {

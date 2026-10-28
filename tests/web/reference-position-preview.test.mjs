@@ -13,14 +13,15 @@ const functions = ['relPattern', 'boxSig', 'mirrorBox', 'reconcileRefGroup', 'pr
 }).join('\n');
 let uid = 0;
 const clock = { beatAt: t => t, timeAt: t => t };
+const OCCURRENCE_FIELDS = JSON.parse(source.match(/const OCCURRENCE_FIELDS = (\[[^\]]*\]);/)[1]);
 const api = new Function('deps', `const { EFFECT_FIELDS, copyEffects, effectSig, shiftOf,
-  laneClock, boxRect, notesInBox, noteOrder, dropFingering, nid } = deps;
+  laneClock, boxRect, notesInBox, noteOrder, dropFingering, nid, OCCURRENCE_FIELDS } = deps;
   ${functions}
   return { previewPositionReferences, reconcileRefGroup };`)({
   EFFECT_FIELDS, copyEffects, effectSig, shiftOf, laneClock: () => clock,
   boxRect: occurrenceBox, notesInBox: (box, notes) => notes.filter(n => inRefBox(n, box, .1)),
   noteOrder: (a, b) => a.start - b.start || a.pitch - b.pitch,
-  dropFingering: n => { delete n.pos; delete n.arrangement; }, nid: () => `real-${++uid}`,
+  dropFingering: n => { delete n.pos; delete n.arrangement; }, nid: () => `real-${++uid}`, OCCURRENCE_FIELDS,
 });
 
 for (const shifted of [false, true]) {
@@ -53,6 +54,25 @@ for (const shifted of [false, true]) {
   api.previewPositionReferences(lane, preview);
   assert.ok(preview.notes.some(n => n.id.startsWith('position-preview-')));
   assert.equal(uid, 0);
+}
+
+// Grip shapes and motifs belong to one occurrence: the mirror neither copies them
+// nor lets them slide onto other notes when a note is added at the front.
+{
+  const shape = { shapeId: 'shape_9', shapeKind: 'arpeggio', motifId: 'motif_v2_1' };
+  const lane = { notes: [
+    { id: 'a1', start: 0.5, end: .7, pitch: 55 }, { id: 'a2', start: .75, end: .9, pitch: 57 },
+    { id: 'b1', start: 4.5, end: 4.7, pitch: 55, ...shape }, { id: 'b2', start: 4.75, end: 4.9, pitch: 57, ...shape },
+  ], refBoxes: { a: { rt0: 0, rt1: 1, pLo: 52, pHi: 57, anchors: [0, 4] } } };
+  const before = structuredClone(lane.notes), edited = structuredClone(lane);
+  edited.notes.push({ id: 'a0', start: 0, end: .2, pitch: 52 });   // a new first note in occurrence 1
+  api.reconcileRefGroup(edited, 'a', edited.refBoxes.a, before, lane.refBoxes.a, null);
+  const second = edited.notes.filter(n => n.start >= 4).sort((x, y) => x.start - y.start);
+  assert.deepEqual(second.map(n => [n.start, n.pitch]), [[4, 52], [4.5, 55], [4.75, 57]], 'the note was mirrored');
+  assert.ok(!('shapeId' in second[0]) && !('motifId' in second[0]), 'the mirrored new note is in no shape or motif');
+  assert.ok(second.slice(1).every(n => n.shapeId === 'shape_9' && n.motifId === 'motif_v2_1'),
+    'the shape and motif stay on their own notes');
+  assert.ok(edited.notes.filter(n => n.start < 4).every(n => !('shapeId' in n)), 'nothing is copied to the source');
 }
 
 console.log('reference position preview: commit propagation, transposition and isolated ids passed');
