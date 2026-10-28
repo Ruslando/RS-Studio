@@ -21,7 +21,7 @@ export function projectShiftPlan(state, timings) {
     for (const note of lane.notes || []) {
       position(note, 'start'); position(note, 'end');
     }
-    for (const field of ['toneMarkers', 'phraseBoundaries', 'handHolds'])
+    for (const field of ['toneMarkers', 'phraseBoundaries', 'crowdEvents', 'handHolds'])
       for (const marker of lane[field] || []) position(marker, 't');
     for (const group of Object.values(lane.refBoxes || {}))
       for (let i = 0; i < (group?.anchors || []).length; i++) {

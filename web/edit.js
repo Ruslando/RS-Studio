@@ -122,7 +122,7 @@ export function snapshotEdit() {
     // The capo too: moving it rewrites every fret, and those frets are undone above.
     snap.capo[l.id] = Number(l.capo) || 0;
     // Tone and phrase markers: a tempo change re-times them along with the notes.
-    snap.marks[l.id] = { tone: cloneJson(l.toneMarkers), phrase: cloneJson(l.phraseBoundaries) };
+    snap.marks[l.id] = { tone: cloneJson(l.toneMarkers), phrase: cloneJson(l.phraseBoundaries), crowd: cloneJson(l.crowdEvents || []) };
     snap.ui[l.id] = { visible: l.visible, muted: l.muted, locked: l.locked,
       tablatureEnabled: l.tablatureEnabled !== false, volume: normLayerVolume(l.volume) };
   }
@@ -209,6 +209,7 @@ function restore(snap) {
     if (snap.marks && snap.marks[l.id]) {
       l.toneMarkers = cloneJson(snap.marks[l.id].tone);
       l.phraseBoundaries = cloneJson(snap.marks[l.id].phrase);
+      l.crowdEvents = cloneJson(snap.marks[l.id].crowd || []);
     }
     const ui = snap.ui && snap.ui[l.id];
     if (ui) {

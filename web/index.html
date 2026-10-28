@@ -690,6 +690,26 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
     </div>
   </div>
 
+  <!-- Per-layer Rocksmith crowd events. Without any, the export adds DLC
+       Builder's; one of a kind set here replaces the export's of that kind. -->
+  <div id="crowdEventPop" class="live-editor" hidden role="dialog" aria-label="Crowd event">
+    <div class="pop-head">
+      <span class="pop-title">Crowd event</span>
+      <span class="pop-head-actions">
+        <button id="crowdEventDelete" class="pop-x pop-del" title="Delete event" aria-label="Delete event"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
+        <button id="crowdEventPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
+      </span>
+    </div>
+    <div class="dp-body">
+      <label class="field-group block"><span class="label">Event <span class="info" role="img" tabindex="0" title="What the Rocksmith crowd does. The export adds a crowd speed on the first beat, intro applause after the first note and outro applause at the end. Setting one of these kinds here replaces the export's of that kind. Intro and outro applause last until the next Applause end." aria-label="What the Rocksmith crowd does. The export adds a crowd speed on the first beat, intro applause after the first note and outro applause at the end. Setting one of these kinds here replaces the export's of that kind. Intro and outro applause last until the next Applause end.">i</span></span>
+        <select id="crowdEventCode"></select>
+      </label>
+      <label class="field-group block"><span class="label">Position</span>
+        <span class="pop-field"><input type="number" id="crowdEventTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
+      </label>
+    </div>
+  </div>
+
   <!-- A free comment on the spectrogram: pinned to a grid time and a pitch row,
        listed under Artifacts. Emptying the text and closing removes it. -->
   <div id="commentPop" class="live-editor" hidden role="dialog" aria-label="Comment">

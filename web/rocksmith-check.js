@@ -44,7 +44,7 @@ function checkKey() {
   return JSON.stringify([S.voicingRevision, S.state.duration, rsLeadIn(), S.state.grid, S.state.tempoMap,
     S.state.timings, marks(S.state.sectionMarkers),
     checkedLanes().map(lane => [lane.id, lane.rocksmithArrangement, lane.tuning, lane.customTuning, lane.capo,
-      lane.notes.length, marks(lane.toneMarkers), (lane.phraseBoundaries || []).map(b => [b.t, b.name ?? null, !!b.solo]), lane.timing ?? null])]);
+      lane.notes.length, marks(lane.toneMarkers), (lane.phraseBoundaries || []).map(b => [b.t, b.name ?? null, !!b.solo]), marks(lane.crowdEvents?.map(e => ({ t: e.t, tone: e.code }))), lane.timing ?? null])]);
 }
 
 async function runCheck() {
@@ -101,6 +101,11 @@ export function rocksmithLeadIn() {
 export function rocksmithCountIn(lane) {
   const found = results.get(lane?.id) || [...results.values()][0];
   return found && Array.isArray(found.events) ? { count: found.count, events: found.events } : null;
+}
+
+// The events the export writes for one layer, in editor time: [{ t, code }].
+export function rocksmithEvents(lane) {
+  return results.get(lane?.id)?.events || [];
 }
 
 // The issues of one layer that sit on its notes, with those notes: what the stage frames.

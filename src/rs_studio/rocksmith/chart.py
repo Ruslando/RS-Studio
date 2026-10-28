@@ -872,6 +872,34 @@ def _count_in(beats: list, song_start) -> list[tuple[float, str]]:
     return [(t, "B0" if b == 0 else "B1") for t, b in measure]
 
 
+CROWD_EVENTS = ("e0", "e1", "e2", "E3", "D3", "E13")
+
+
+def _crowd_events(authored, start_beat: float, first_note: float | None, song_length: float,
+                  average_tempo: float) -> list[tuple[float, str]]:
+    """The user's crowd events (EOF's Place RS Event), and DLC Builder's for what
+    they leave out (CrowdEventAdder.fs): a crowd speed from the average tempo on
+    the first beat, unless the user set one; intro applause (E3 0.6 s after the
+    first note, E13 2.5 s later), unless the user set an E3; outro applause (D3
+    9 s before the end, E13 at the end), unless the user set a D3."""
+    events = []
+    for raw in authored or []:
+        t = _f(raw.get("t") if isinstance(raw, dict) else None, -1.0)
+        code = str(raw.get("code") or "") if isinstance(raw, dict) else ""
+        if t >= 0 and code in CROWD_EVENTS:
+            events.append((t, code))
+    codes = {code for _, code in events}
+    if not codes & {"e0", "e1", "e2"}:
+        speed = "e0" if average_tempo < 90 else "e1" if average_tempo < 170 else "e2"
+        events.append((start_beat, speed))
+    if "E3" not in codes:
+        start = first_note + 0.6 if first_note is not None else start_beat
+        events += [(start, "E3"), (start + 2.5, "E13")]
+    if "D3" not in codes:
+        events += [(max(0.0, song_length - 9.0), "D3"), (song_length, "E13")]
+    return events
+
+
 def _average_notes(arr: _Arrangement, per_pi: list) -> list:
     """Per phrase: the notes of its iterations, averaged over them."""
     total = [0.0] * len(arr.phrases)
@@ -1458,21 +1486,23 @@ def compile_track(track: dict, grid: dict, song_length: float,
         capo_fret_id=capo if capo > 0 else -1,
     )
 
+    duration = arr.beats[-1][0] - arr.beats[0][0]
+    average_tempo = (len(arr.beats) - 1) / duration * 60.0 if duration > 0 else 120.0
     sng_obj = S.SNG(
         beats=arr.sng_beats,
         phrases=arr.phrases,
         chords=voicing.chord_templates,
         chord_notes=emitted.chord_notes,
         phrase_iterations=arr.phrase_iterations,
-        events=arr.events,
+        events=sorted(arr.events + _crowd_events(
+            track.get("crowdEvents"), arr.beats[0][0], voicing.first_t if entities else None,
+            song_length, average_tempo), key=lambda e: e[0]),
         dnas=[(voicing.first_t, S.DNA_RIFF), (arr.end_t, S.DNA_NONE)],
         sections=arr.sections,
         levels=[level],
         metadata=metadata,
     )
 
-    duration = arr.beats[-1][0] - arr.beats[0][0]
-    average_tempo = (len(arr.beats) - 1) / duration * 60.0 if duration > 0 else 120.0
     return Compiled(sng=sng_obj, note_count=len(notes), arr_props=emitted.arr_props,
                     average_tempo=average_tempo, warnings=warnings,
                     fixes=sorted(dict.fromkeys(fixes + [("I29", t) for t in voicing.dead_left_out]

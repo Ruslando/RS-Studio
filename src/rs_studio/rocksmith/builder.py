@@ -254,7 +254,7 @@ def _with_lead_in(spec: dict, lead: float) -> dict:
             at = marker.get("t", marker.get("seconds")) if isinstance(marker, dict) else None
             if isinstance(at, (int, float)) and at > 1e-6:
                 moved(marker)
-        for name in ("phraseBoundaries", "practiceBoundaries"):
+        for name in ("phraseBoundaries", "practiceBoundaries", "crowdEvents"):
             if track.get(name):
                 track[name] = [moved(item) for item in track[name]]
         # A layer on its own timing carries its own grid and sections.

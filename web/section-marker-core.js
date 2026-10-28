@@ -162,6 +162,34 @@ export function phraseName(value) {
   return /^(count|end|mover\d.*)$/i.test(name) ? "" : name;
 }
 
+// Rocksmith's crowd events, as EOF offers them (rs.c). The export fills in what
+// a layer leaves out the way DLC Builder does (chart._crowd_events).
+// The editor shows the names, never the codes.
+export const CROWD_EVENTS = [
+  ["e0", "Crowd slow"],
+  ["e1", "Crowd normal"],
+  ["e2", "Crowd fast"],
+  ["E3", "Intro applause"],
+  ["D3", "Outro applause"],
+  ["E13", "Applause end"],
+];
+const CROWD_CODES = new Set(CROWD_EVENTS.map(([code]) => code));
+
+// Every mark the export writes, by its Rocksmith code.
+export const RS_EVENT_NAMES = new Map([
+  ["COUNT", "Count-in phrase"], ["B0", "Count-in 1"], ["B1", "Count-in"], ...CROWD_EVENTS]);
+export const isCrowdEvent = (code) => CROWD_CODES.has(code);
+
+export function normalizeCrowdEvents(events, duration = Infinity) {
+  const limit = Number.isFinite(Number(duration)) ? Math.max(0, Number(duration)) : Infinity;
+  return (Array.isArray(events) ? events : []).flatMap((raw, index) => {
+    const t = Number(raw?.t);
+    if (!Number.isFinite(t) || !CROWD_CODES.has(raw?.code)) return [];
+    return [{ id: String(raw.id || `crowd_${index}_${Math.round(Math.max(0, t) * 1000)}`),
+      t: Math.max(0, Math.min(limit, t)), code: raw.code }];
+  }).sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));
+}
+
 export function normalizePhraseBoundaries(boundaries, duration = Infinity) {
   const limit = Number.isFinite(Number(duration)) ? Math.max(0, Number(duration)) : Infinity;
   const out = [];

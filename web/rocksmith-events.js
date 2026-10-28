@@ -1,8 +1,8 @@
 // What the Rocksmith export adds in front of the song, on a rail of its own:
-// the COUNT phrase on the first beat and the count-in ticks in the measure
-// before the song (B0 high, B1 low; chart.py _count_in). Read-only: the export
-// makes them, the live check (rocksmith-check.js) reports where. They sit in
-// the leading silence, so the rail shows once that is shown (lead-view.js).
+// the COUNT phrase on the first beat and the count-in clicks in the measure
+// before the song (B0 on beat 1, B1 on the rest; chart.py _count_in). Read-only:
+// the export makes them, the live check (rocksmith-check.js) reports where.
+// Its crowd events are on the crowd rail, where they can be moved (crowd-events.js).
 import { paintMarkerFlag } from "./canvas-components.js";
 import { stageUi } from "./constants.js";
 import { mmctx as minimapCtx, scroll, sctx } from "./dom.js";
@@ -10,6 +10,7 @@ import { xOf } from "./geometry.js";
 import { railBand, registerMarkerRail } from "./marker-rails.js";
 import { rocksmithCountIn } from "./rocksmith-check.js";
 import { PAINT } from "./stage-paint.js";
+import { RS_EVENT_NAMES, isCrowdEvent } from "./section-marker-core.js";
 import { S } from "./store.js";
 
 const RAIL_H = 22;
@@ -21,7 +22,14 @@ function items() {
   if (!S.state) return [];
   const found = rocksmithCountIn(S.state.editLanes?.find((lane) => lane.active));
   if (!found) return [];
-  const all = [...(Number.isFinite(found.count) ? [{ t: found.count, code: "COUNT" }] : []), ...found.events];
+  // The clicks are counted as a drummer counts in: B0 is 1, each B1 the next number.
+  let beat = 0;
+  const added = found.events.filter((item) => !isCrowdEvent(item.code)).map((item) => {
+    if (item.code !== "B0" && item.code !== "B1") return item;
+    beat = item.code === "B0" ? 1 : beat + 1;
+    return { ...item, beat, name: `Count-in ${beat}` };
+  });
+  const all = [...(Number.isFinite(found.count) ? [{ t: found.count, code: "COUNT" }] : []), ...added];
   return all.filter((item) => item.t >= -S.leadView - 1e-6);
 }
 
@@ -35,9 +43,10 @@ function drawRocksmithEvents() {
   sctx.textBaseline = "middle";
   list.forEach((item, i) => {
     const x = xOf(item.t);
-    // Labelled by code, as EOF and the SNG name them. A flag is no wider than
-    // the room to the next one, so the ticks of a fast measure stay apart.
-    const text = item.code;
+    // Labelled by name, not by code; a click by its count, which fits any zoom.
+    // A flag is no wider than the room to the next one, so the clicks of a fast
+    // measure stay apart.
+    const text = item.beat ? String(item.beat) : RS_EVENT_NAMES.get(item.code) || item.code;
     const room = i + 1 < list.length ? xOf(list[i + 1].t) - x - 2 : Infinity;
     const width = Math.max(6, Math.min(room, Math.ceil(sctx.measureText(text).width) + 18));
     const rect = { x0: x, x1: x + width, y0: top + 2, y1: top + RAIL_H - 2 };

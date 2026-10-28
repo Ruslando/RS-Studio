@@ -220,14 +220,15 @@ class ExporterFixes(unittest.TestCase):
         # the song's first beat, low ticks on the rest; COUNT on the first beat.
         [found] = builder.check_spec(_spec([_note(12.0, 12.5, 3, 5)], lead=10))
         self.assertEqual(found["count"], -10.0)
-        self.assertEqual(found["events"], [{"t": -2.0, "code": "B0"}, {"t": -1.5, "code": "B1"},
-                                           {"t": -1.0, "code": "B1"}, {"t": -0.5, "code": "B1"}])
+        ticks = [e for e in found["events"] if e["code"] in ("B0", "B1")]
+        self.assertEqual(ticks, [{"t": -2.0, "code": "B0"}, {"t": -1.5, "code": "B1"},
+                                 {"t": -1.0, "code": "B1"}, {"t": -0.5, "code": "B1"}])
         song = _compiled([_note(12.0, 12.5, 3, 5)], lead=10)
-        self.assertEqual([code for _, code in song.events], ["B0", "B1", "B1", "B1"])
+        self.assertEqual([code for _, code in song.events if code in ("B0", "B1")], ["B0", "B1", "B1", "B1"])
 
     def test_no_count_in_without_silence(self):
         [found] = builder.check_spec(_spec([_note(12.0, 12.5, 3, 5)], lead=0))
-        self.assertEqual(found["events"], [])
+        self.assertEqual([e for e in found["events"] if e["code"] in ("B0", "B1")], [])
 
     def test_a_slide_off_its_string_is_shown_where_it_is(self):
         notes = [_note(2.0, 2.5, 3, 5, slide="shift"), _note(2.5, 3.0, 2, 7)]

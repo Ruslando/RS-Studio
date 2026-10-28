@@ -12,11 +12,12 @@ same millisecond rounding, so equality tests (a tone change *on* a note, an
 anchor *at* a slide's end) come out as they do there.
 
 Not ported, because the exporter cannot produce what they look for:
-crowd-event placement (we write no events), vocals (no lyrics) and showlights
+vocals (no lyrics) and showlights
 (manifest.showlights always writes a fog and a beam note).
 """
 from __future__ import annotations
 
+import re
 import struct
 from dataclasses import dataclass, field, replace
 
@@ -48,6 +49,11 @@ def _clock(seconds: float) -> str:
 # code -> (title, help, important). Titles are DLC Builder's (i18n/en.json); the
 # help says what to change in the editor rather than in EOF.
 ISSUES = {
+    "I01": ("An applause event is missing the event that ends it",
+            "Intro and outro applause need an Applause end after them.", False),
+    "I02": ("Unexpected event between intro applause events",
+            "Crowd speed events do not work correctly between Intro applause and its Applause end.",
+            False),
     "I03": ("Note linked to a chord",
             "A legato slide ends on a chord. Rocksmith can only link a note to another single note.", False),
     "I04": ("Linked note missing its target",
@@ -233,6 +239,7 @@ class _Arrangement:
     song_length: int
     is_bass: bool
     levels: list
+    events: list = field(default_factory=list)   # [(ms, code)]
 
 
 def _bends(values) -> list:
@@ -273,6 +280,7 @@ def _view(song: S.SNG, is_bass: bool) -> _Arrangement:
         iterations=[(_ms(pi.start_time), pi.phrase_id) for pi in song.phrase_iterations],
         sections=[(s.name, _ms(s.start_time)) for s in song.sections],
         tone_times={_ms(t) for t, _ in song.tones},
+        events=[(_ms(t), code) for t, code in song.events],
         templates=song.chords,
         song_length=_ms(song.metadata.song_length),
         is_bass=is_bass,
@@ -615,6 +623,29 @@ def _check_anchors(arr: _Arrangement, level: _Level) -> list:
     return out
 
 
+CROWD_NAMES = {"e0": "Crowd slow", "e1": "Crowd normal", "e2": "Crowd fast",
+               "E3": "Intro applause", "D3": "Outro applause", "E13": "Applause end"}
+
+
+def _check_crowd_events(arr: _Arrangement) -> list:
+    """InstrumentalChecker.checkCrowdEventPlacement: E3 needs an E13 after it, and
+    no crowd event may sit between them. Both look at the first E3 and E13."""
+    start = next((t for t, code in arr.events if code == "E3"), None)
+    end = next((t for t, code in arr.events if code == "E13"), None)
+    if start is None:
+        return []
+    if end is None:
+        return [_issue("I01", start)]
+    out = []
+    for t, code in arr.events:
+        if start < t < end and re.search(r"e[0-2]|E3|D3$", code):
+            title, help_, important = ISSUES["I02"]
+            name = CROWD_NAMES.get(code, code)   # the editor shows names, never codes
+            out.append(Issue("I02", t / 1000, f"Unexpected event ({name}) between intro applause events",
+                             help_, important))
+    return out
+
+
 def _check_phrases(arr: _Arrangement) -> list:
     if len(arr.iterations) < 2:
         return []
@@ -650,6 +681,7 @@ def check(song: S.SNG, *, is_bass: bool, cent_offset: float = 0.0) -> list[Issue
     """Every issue DLC Builder would report for this arrangement, in its order."""
     arr = _view(song, is_bass)
     found = check_bass_tuning(list(song.metadata.tuning), cent_offset) if is_bass else []
+    found += _check_crowd_events(arr)
     found += _check_phrases(arr)
     for level in arr.levels:
         for step in (_check_notes, _check_chords, _check_handshapes, _check_anchors):

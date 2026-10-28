@@ -99,6 +99,7 @@ export function retimeSpan(lanes, sectionMarkers, dur, minCell, t0, t1, oldBpm, 
     for (const h of lane.handHolds || []) h.t = at(+h.t);   // same arithmetic as the note starts they sit on
     retimeMarks(lane.toneMarkers);
     retimeMarks(lane.phraseBoundaries);
+    retimeMarks(lane.crowdEvents);
   }
   retimeMarks(sectionMarkers);
   return spilled;
@@ -159,6 +160,7 @@ export function warpTimes(lanes, sectionMarkers, dur, minCell, warp, floor = 0) 
     for (const h of lane.handHolds || []) h.t = Math.max(floor, at(+h.t));   // same arithmetic as the note starts they sit on
     marks(lane.toneMarkers);
     marks(lane.phraseBoundaries);
+    marks(lane.crowdEvents);
   }
   marks(sectionMarkers);
 }
