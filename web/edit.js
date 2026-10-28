@@ -1505,10 +1505,11 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // Only on a layer the Rocksmith export plays: a melody or vocal layer has no frets.
   const editable = selLane && canEditLane(selLane) && isTablatureLane(selLane);
   const sameOnset = (a, b) => Math.abs(a.start - b.start) < 0.002;
-  const inChord = (n) => selLane.notes.some((m) => m !== n && sameOnset(m, n));
+  // A grip-only note is not played, so it makes no chord with the note beside it.
+  const inChord = (n) => !n.gripOnly && selLane.notes.some((m) => m !== n && !m.gripOnly && sameOnset(m, n));
   const chordNotes = editable ? sel.filter(inChord) : [];
   // A chord setting goes on the whole chord, not only its selected notes: the export reads any.
-  const wholeChords = () => selLane.notes.filter((n) => chordNotes.some((c) => sameOnset(c, n)));
+  const wholeChords = () => selLane.notes.filter((n) => !n.gripOnly && chordNotes.some((c) => sameOnset(c, n)));
   const setField = (notes, key, value) => {
     const prev = snapshotEdit();
     for (const n of notes) { if (value) n[key] = value; else delete n[key]; }
@@ -1533,6 +1534,13 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
         tip: "Rocksmith shows the note but does not score it: for a note the game cannot hear well. "
           + "In a chord, the whole chord is not scored. Notes on frets 23 and 24 are never scored anyway.",
         fn: () => setField(sel, "ignore", !allIgnored) },
+      ...(selectedShapeIds.length ? [
+        { label: tick(sel.every((n) => n.gripOnly), "Grip only (Ghost gem)"), kw: "ghost gem grip only shape",
+          tip: "The note is part of the arpeggio's or handshape's grip that Rocksmith shows, but it is not played: "
+            + "not heard, not scored, not in Guitar Pro. For a full chord shape where only some strings are picked.",
+          fn: () => { const on = !sel.every((n) => n.gripOnly);
+            setField(sel.filter((n) => !on || selectedShapeIds.includes(n.shapeId)), "gripOnly", on); } },
+      ] : []),
       ...(hasGrip ? [
         { label: tick(allFingerless, "No finger numbers (Fingerless)"), kw: "fingerless fingers",
           tip: "Rocksmith shows the chord, arpeggio or handshape without finger numbers, on purpose: for a grip "

@@ -519,6 +519,16 @@ function paintFrame() {
           sctx.strokeStyle = hexA(PAINT.text, motion.emphasis * .35); sctx.stroke();
         }
         sctx.lineWidth = 1; sctx.lineCap = "round";
+      } else if (n.gripOnly) {
+        // Shown in the grip, never played: a faint body with a dashed rim.
+        sctx.save();
+        sctx.globalAlpha *= 0.35;
+        paintNoteRow(sctx, x, y, w, rowH, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis, motion.reveal);
+        sctx.restore();
+        sctx.save();
+        sctx.setLineDash([3, 2]); sctx.lineWidth = 1; sctx.strokeStyle = fill;
+        sctx.beginPath(); sctx.roundRect(x + 0.5, y + 0.5, Math.max(1, w - 1), rowH - 1, 3); sctx.stroke();
+        sctx.restore();
       } else {
         paintNoteRow(sctx, x, y, w, rowH, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis, motion.reveal);
       }

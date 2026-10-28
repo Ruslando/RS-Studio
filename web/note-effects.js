@@ -9,10 +9,11 @@ export const EFFECT_FIELDS = [
   "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart", "slideEnd", "slideFrets",
   // Rocksmith only: how the chord the note is in is drawn ("full" or "repeat",
   // chart._chord_display), a note left out of the score (`ignore`), a chord shown
-  // without fingers (`fingerless`). Not in the signatures below: Guitar Pro has no
+  // without fingers (`fingerless`), a note only shown in a grip (`gripOnly`, EOF's
+  // ghost gem: not played, not in Guitar Pro). Not in the signatures below: Guitar Pro has no
   // such thing, so changing them must not take a note off the source-preserving
   // Guitar Pro path.
-  "chordDisplay", "ignore", "fingerless",
+  "chordDisplay", "ignore", "fingerless", "gripOnly",
 ];
 
 // The subset that goes into a change-detection signature — EFFECT_FIELDS minus
@@ -96,6 +97,7 @@ export function noteMarks(n) {
   if (WHAMMY_TAG[n.whammy]) m.push(WHAMMY_TAG[n.whammy]);
   if (n.ignore) m.push("Not scored");
   if (n.fingerless) m.push("No fingers");
+  if (n.gripOnly) m.push("Grip only");
   return m;
 }
 

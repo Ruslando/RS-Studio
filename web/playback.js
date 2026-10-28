@@ -364,7 +364,8 @@ function lanePlaybackEvents(lane) {
   const hit = eventCache.get(lane);
   if (hit && hit.revision === S.voicingRevision && hit.count === lane.notes.length
       && hit.duration === S.state.duration && hit.tempo === tempo && hit.notes === lane.notes) return hit.events;
-  const events = playbackEvents(lane.notes, (t) => gridAt(t)?.bpm || 120, S.state.duration);
+  // A grip-only note is shown in a Rocksmith grip, never played.
+  const events = playbackEvents(lane.notes.filter((n) => !n.gripOnly), (t) => gridAt(t)?.bpm || 120, S.state.duration);
   eventCache.set(lane, { revision: S.voicingRevision, count: lane.notes.length,
     duration: S.state.duration, tempo, notes: lane.notes, events });
   return events;

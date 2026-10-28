@@ -601,7 +601,8 @@ def build_gp5(spec: dict) -> tuple[bytes, list[str]]:
                      + ", ".join(f"{b:g} → {round(b)} BPM" for b in odd) + " — the tab drifts slightly from the audio")
 
     # Quantize every track first to learn how far the last segment must run.
-    quantized = [(t, _quantize(t["notes"], to_slot)) for t in tracks_spec]
+    # Grip-only notes are Rocksmith's (a grip shown, not played): no Guitar Pro note.
+    quantized = [(t, _quantize([n for n in t["notes"] if not n.get("gripOnly")], to_slot)) for t in tracks_spec]
     end_slot = max((seg[1] for _, q in quantized for seg in q), default=0)
     last = segs[-1]
     last_tempo = None if len(segs) == 1 else int(round(last["bpm"]))

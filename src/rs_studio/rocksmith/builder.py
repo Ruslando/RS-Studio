@@ -316,7 +316,8 @@ def _package_lead_in(spec: dict, track_indexes) -> float:
     starts = []
     for index in track_indexes:
         track = tracks[index]
-        notes = [n["start"] for n in track.get("notes") or [] if isinstance(n.get("start"), (int, float))]
+        notes = [n["start"] for n in track.get("notes") or []
+                 if isinstance(n.get("start"), (int, float)) and not n.get("gripOnly")]   # held, not played
         if not notes:
             continue
         sections = (track["sections"] if "sections" in track else spec.get("sections")) or []
@@ -729,7 +730,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             float(n["start"])
             for req in arr_requests
             for n in source_tracks[req["track"]].get("notes") or []
-            if n.get("start") is not None
+            if n.get("start") is not None and not n.get("gripOnly")
         ]
         first_note = min(starts) if starts else 0.0
 

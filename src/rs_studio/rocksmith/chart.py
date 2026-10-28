@@ -537,6 +537,10 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             fret = MAX_FRET
             fixes.append(("fret", _f(n.get("start"))))
         voiced.append((_f(n.get("start")), rs_string, fret, n))
+    # A grip-only note (EOF's ghost gem) is part of an arpeggio's or handshape's
+    # grip but never played: it shapes the frame's chord and is not a note.
+    grip_only = [v for v in voiced if v[3].get("gripOnly")]
+    voiced = [v for v in voiced if not v[3].get("gripOnly")]
     if not voiced:
         raise ValueError("No voiced notes to export")
     voiced.sort(key=lambda v: (v[0], v[1]))
@@ -569,10 +573,13 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
     # notes). Every note stays an individually timed event; the frame references one
     # chord template for the whole grip shown on the note highway.
     raw_shapes: dict[str, list] = {}
-    for item in voiced:
+    for item in voiced + grip_only:
         shape_id = item[3].get("shapeId")
         if isinstance(shape_id, str) and shape_id and item[3].get("shapeKind") in ("arpeggio", "handshape"):
             raw_shapes.setdefault(shape_id, []).append(item)
+    for item in grip_only:
+        if not any(not m[3].get("gripOnly") for m in raw_shapes.get(item[3].get("shapeId"), [])):
+            fixes.append(("grip-only", item[0]))   # no shape whose notes are played: nothing to shape
     # A shape is a stretch of time, as EOF's markers are: every note played while
     # it is held belongs to it. A note outside it in that stretch (another shape's
     # included) breaks it. Notes the export made itself (_helper: a grace note, the
@@ -1458,10 +1465,12 @@ def compile_track(track: dict, grid: dict, song_length: float,
     tuning_low = list(reversed(tuning_hi_lo))  # index 0 = lowest string
 
     capo = max(0, int(track.get("capo") or 0))
-    notes = _add_grace_notes(track.get("notes") or [], grid, fixes)
+    # Grip-only notes are never played, so no grace note, slide-in or link is made from them.
+    grip_only = [n for n in track.get("notes") or [] if n.get("gripOnly")]
+    notes = _add_grace_notes([n for n in track.get("notes") or [] if not n.get("gripOnly")], grid, fixes)
     notes = _add_slide_ins(notes, grid, fixes, capo)
     notes = _link_bend_continuations(_split_late_effects(notes, fixes))
-    track = {**track, "notes": notes}
+    track = {**track, "notes": notes + grip_only}
     voicing = _voiced_entities(track, n_str, tuning_low, warnings, fixes,
                                _sustain_rule(grid, song_length), capo)
     entities = voicing.entities

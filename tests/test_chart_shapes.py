@@ -20,6 +20,27 @@ def _compile(notes, phrases=None):
     return compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0, phrase_boundaries=phrases)
 
 
+class GripOnlyTest(unittest.TestCase):
+    def test_a_grip_only_note_shapes_the_frame_and_is_not_played(self):
+        # Only A and E picked; the C on the B string is held, not played.
+        notes = [n for n in _am("handshape") if n["string"] in (5, 4, 3)]
+        held = {"string": 2, "fret": 1, "pitch": 60, "start": 1.0, "end": 1.75, "hand": 1,
+                "shapeId": "shape_1", "shapeKind": "handshape", "shapeName": "Am", "gripOnly": True,
+                "grace": True}
+        compiled = _compile(notes + [held])
+        level = compiled.sng.levels[0]
+        self.assertEqual(len(level.notes), 3, "the held note is not a note, nor is its grace")
+        template = compiled.sng.chords[level.handshapes[0].chord_id]
+        self.assertEqual(template.frets[4], 1, "but it is in the grip")
+        self.assertNotIn("grip-only", [code for code, _ in compiled.fixes])
+
+    def test_a_grip_only_note_outside_a_shape_is_reported(self):
+        lone = {"string": 2, "fret": 1, "pitch": 60, "start": 3.0, "end": 3.5, "hand": 1, "gripOnly": True}
+        compiled = _compile(_am("handshape") + [lone])
+        self.assertIn(("grip-only", 3.0), compiled.fixes)
+        self.assertEqual(len(compiled.sng.levels[0].notes), 5)
+
+
 class ShapeExportTest(unittest.TestCase):
     def test_arpeggio_frames_single_notes_with_an_arp_grip(self):
         compiled = _compile(_am("arpeggio"))
