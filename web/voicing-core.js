@@ -2825,6 +2825,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
     for (let i = 0; i < n; i++) if (stood[i] != null) named[i] = stood[i];
     const reach = sorted.map((c, i) => {
       let lo = Infinity, hi = -Infinity;
+      const at = [], on = [];
       for (let k = 0; k < c.pitches.length; k++) {
         const s = strings[i][k];
         // A tapped note is the other hand's, and an open string is nobody's. A muted
@@ -2832,9 +2833,9 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
         // tab wrote down (an imported scratch says 22 beside a 3), not a reach.
         if (s < 0 || (c.rules && c.rules[k] && c.rules[k].free) || c.dead?.[k]) continue;
         const f = c.pitches[k] - tuning[s];
-        if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); }
+        if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); at.push(f); on.push(s); }
       }
-      return Number.isFinite(lo) ? { lo, hi } : null;
+      return Number.isFinite(lo) ? { lo, hi, at, on } : null;
     });
     const maxReach = handReach(handProfileForTuning(tuning));
     // The player's hand, where it can play what is there; otherwise it has lapsed.
@@ -2842,7 +2843,8 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       const g = c.handAt, r = reach[i];
       if (g != null && r && g >= 1 && g <= r.lo && r.hi - g < maxReach) named[i] = g;
     });
-    const planned = planHand(reach, named, span, maxReach);
+    const fingerCost = handProfileForTuning(tuning).id.startsWith(BASS_HAND_PROFILE.id) ? FINGER_COST : null;
+    const planned = planHand(reach, named, span, maxReach, sorted, fingerCost);
     for (let i = 0; i < n; i++) seats[i] = planned[i] ?? Math.max(1, registers[blocks.findIndex((idx) => idx.includes(i))] || 1);
   }
 
@@ -2873,37 +2875,68 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
 //              A soft edge, not a cutoff: one note a fret outside the hand is played
 //              with a stretch, not with two shifts.
 //   shifting   4 (and a hair per fret travelled), so a stretch of six still beats
-//              a shift and one of seven does not.
+//              a shift and one of seven does not. A one-fret nudge onto another
+//              string costs 1 when it plants the index on the new note: the fingers
+//              lift anyway. Anywhere else it is a shift — a cheap step chains into a
+//              crawl (9 -> 10 -> 11 across a run) that undercuts one clean shift.
+//   fingers    on bass, every note costs what the finger the hand gives it costs
+//              (FINGER_COST), per note, so a run on weak fingers adds up. Without it
+//              2-4-2-4-2 and 1-3-1-3-1 over the same frets cost the same, and the hand
+//              sat a fret below a figure for a whole bar to save a nudge a second
+//              later. Not on guitar, where a position with the pinky is the norm.
 //   the index  a hair for every fret the index stands below the lowest note, which
 //              only breaks ties: the hand sits ON the phrase, not under it.
+//
+//   a free hand  a shift costs 0.5 when nothing holds the hand before the column: a
+//              muted or open note since the last fretted one, or a rest at least as
+//              long as that note (a shorter gap is articulation). That is when players
+//              move, so a five-fret stretch (1) no longer beats shifting during
+//              a mute — a hammer-on from fret 11 to 13 after muted notes is played from
+//              the index at 11, not with ring and pinky off a hand left at 9. Still not
+//              free, so a hand does not chase a one-fret difference across every mute.
 //
 // `named[i]` is a hand the player put there (a hold) and is taken as given. Columns
 // with nothing fretted take the hand that is already there. This reads the hand off
 // the notes; it does not move them — where each note goes is still the register's.
 const HAND_SHIFT = 4;
+const FREE_SHIFT = 0.5;
+const NUDGE = 1;
+// ponytail: flat across the neck; the pinky is normal low on a bass (1-2-4), so scale
+// it by fret width there if low positions start dodging it.
+const FINGER_COST = [0, 0, 0.15, 0.2, 0.8];   // by finger, 1 index .. 4 pinky
+const fingersCost = (cost, at, g) => cost ? at.reduce((sum, f) => sum + cost[Math.min(4, Math.max(1, f - g + 1))], 0) : 0;
+const REST_GAP = 0.1;   // s; the shortest rest that frees the hand, however short the note
 // Past the reach no hand gets there: priced out, but still finite, so a column that
 // cannot be held any other way (a chord wider than the reach) keeps a hand.
 const stretchCost = (frets, span, reach = MAX_REACH) => (frets <= span ? 0 : frets > reach ? 1e6 : 3 ** (frets - span - 1));
 
-function planHand(reach, named, span = SPAN, maxReach = MAX_REACH) {
+function planHand(reach, named, span = SPAN, maxReach = MAX_REACH, times = null, fingerCost = null) {
   const n = reach.length, out = new Array(n).fill(null);
   let prev = null;                         // [{ g, cost, from }] of the last fretted column
+  let last = -1, free = false;             // that column, and whether the hand let go since
   const trail = [];
   for (let i = 0; i < n; i++) {
     const r = reach[i];
-    if (named[i] == null && !r) continue;
+    if (named[i] == null && !r) { free = true; continue; }
+    if (last >= 0 && times && times[i].t0 - times[last].end >= Math.max(REST_GAP, times[last].end - times[last].t0)) free = true;
+    const shift = free ? FREE_SHIFT : HAND_SHIFT;
+    // A nudge onto other strings (see above): no string shared with the last column.
+    const crossed = r && last >= 0 && reach[last] && !r.on.some((s) => reach[last].on.includes(s));
+    free = false; last = i;
     // From the lowest note down to where the top one is still in reach. A column
     // wider than any reach (fret 2 and fret 14 at once) still has the first: the
     // index on its lowest note. With none, the walk below had no state to read.
     const frets = named[i] != null ? [named[i]]
       : Array.from({ length: r.lo - Math.min(r.lo, Math.max(1, r.hi - maxReach + 1)) + 1 }, (_, k) => r.lo - k);
     const states = frets.map((g) => {
-      const own = named[i] != null ? 0 : stretchCost(r.hi - g + 1, span, maxReach) + 0.01 * (r.lo - g);
+      const own = named[i] != null ? 0
+        : stretchCost(r.hi - g + 1, span, maxReach) + fingersCost(fingerCost, r.at, g) + 0.01 * (r.lo - g);
       let best = 0, from = -1;
       if (prev) {
         best = Infinity;
         prev.forEach((p, k) => {
-          const c = p.cost + (p.g === g ? 0 : HAND_SHIFT + 0.002 * Math.abs(p.g - g));
+          const move = crossed && g === r.lo && Math.abs(p.g - g) === 1 ? Math.min(shift, NUDGE) : shift;
+          const c = p.cost + (p.g === g ? 0 : move + 0.002 * Math.abs(p.g - g));
           if (c < best) { best = c; from = k; }
         });
       }
