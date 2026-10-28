@@ -64,6 +64,22 @@ class RocksmithPackageTests(unittest.TestCase):
             if path.endswith(".sng"):
                 self.assertGreater(len(sng.unpack(blob)), len(blob), path)
 
+    def test_partition_counts_arrangements_of_one_name(self):
+        """DLC Builder's Partitioner: Lead 1, Lead 2 …, in the SNG and the manifest alike."""
+        spec = _spec([_track("Gtr", GUITAR, [0, 3]), _track("Gtr2", GUITAR, [5, 7]), _track("Bass", BASS, [0, 3])],
+                     [{"track": 1, "kind": "bonus_lead"}, {"track": 0, "kind": "lead"}, {"track": 2, "kind": "bass"}])
+        files, _, _, _ = _build(spec)
+        parts = {}
+        for path, blob in files.items():
+            if path.endswith(".json"):
+                attrs = next(iter(json.loads(blob)["Entries"].values()))["Attributes"]
+                stem = path.rsplit("/", 1)[1].removesuffix(".json")
+                plain = sng.unpack(files[f"songs/bin/generic/{stem}.sng"])
+                # MetaData ends: part int16, song length, tuning count + 6 int16, first note twice, max difficulty.
+                part = int.from_bytes(plain[-(2 + 4 + 4 + 12 + 12):-(4 + 4 + 12 + 12)], "little")
+                parts[attrs["FullName"].split("_", 1)[1]] = (attrs["SongPartition"], part)
+        self.assertEqual(parts, {"Lead": (1, 1), "BonusLead": (2, 2), "Bass": (1, 1)})
+
     def test_capo_chosen_for_the_export_replaces_the_layers_own(self):
         tracks = [_track("Gtr", GUITAR, [0, 3], capo=2)]
         own = _build(_spec(tracks, [{"track": 0, "kind": "lead", "tuning": GUITAR}]))[1]["Lead"]

@@ -237,7 +237,7 @@ def build_attributes(ctx, header: bool) -> dict:
         "SongBank": f"song_{low}.bnk",
         "SongEvent": f"Play_{key}",
         "SongOffset": -round(sng.metadata.start_time, 3),
-        "SongPartition": 1,
+        "SongPartition": ctx.partition,
         "SongXml": f"urn:application:xml:{low}_{file_tag}",
         "TargetScore": 100_000,
         "Techniques": {},  # Limitation: stats-only map; fill via Techniques.fs port if wanted

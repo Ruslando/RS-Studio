@@ -58,6 +58,7 @@ class SongContext:
     compiled: chart.Compiled
     cent_offset: float = 0.0
     scroll_speed: float = 1.3  # lower is faster, as DLC Builder sets it
+    partition: int = 1
 
 
 # "type" is the RS ArrangementType ordinal (Rocksmith2014.XML ArrangementName
@@ -622,6 +623,18 @@ def _template_midi(templates: list, offsets: list[int], capo: int, is_bass: bool
             for s, fret in enumerate(template.frets)]
 
 
+_PRIORITY_ORDER = {"main": 0, "alt": 1, "bonus": 2}
+
+
+def _partition(kinds: list[str], kind: str) -> int:
+    """Which arrangement of its name this one is: 1 for the first Lead, 2 for the
+    second … (DLC Builder's Partitioner, over arrangements sorted Main, Alt, Bonus)."""
+    arr = ARRANGEMENTS[kind]
+    return 1 + sum(1 for other in kinds
+                   if ARRANGEMENTS[other]["name"] == arr["name"]
+                   and _PRIORITY_ORDER[ARRANGEMENTS[other]["priority"]] < _PRIORITY_ORDER[arr["priority"]])
+
+
 def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: float,
                          key: str, warnings: list[str]) -> _Built:
     """One requested arrangement as the SNG it ships as."""
@@ -649,7 +662,6 @@ def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: f
     compiled.sng.metadata.tuning = tuple(offsets)
     # EOF: a power chord with the low string dropped to D and the rest standard.
     compiled.arr_props["dropDPower"] = compiled.arr_props["powerChords"] and offsets == [-2, 0, 0, 0, 0, 0]
-    compiled.sng.metadata.part = 3 if is_bass else (2 if arr["path"] == "rhythm" else 1)
     _template_midi(compiled.sng.chords, offsets, max(0, int(track.get("capo") or 0)), is_bass)
     base_tone, tone_slots, tone_events = _arrangement_tones(
         track, is_bass, key, arr["tag"], song_length, warnings)
@@ -754,6 +766,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         for sort_idx, req in enumerate(arr_requests):
             arr = ARRANGEMENTS[req["kind"]]
             built = _compile_arrangement(spec, tracks[req["track"]], req, song_length, key, warnings)
+            partition = _partition([r["kind"] for r in arr_requests], req["kind"])
+            built.compiled.sng.metadata.part = partition   # SNG and manifest agree, as in DLC Builder
             # Timed as in the editor, before the silence, like the live check.
             warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in built.issues())
             sng_packed = sng.pack(sng.serialize(built.compiled.sng))
@@ -763,6 +777,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
                 dlc_key=key, title=title, artist=artist, album=album, latin=latin, year=year,
                 is_bass=built.is_bass, arrangement=arr, representative=representative,
                 arrangement_sort=sort_idx,
+                partition=partition,
                 persistent_id=manifest.stable_uuid(key, arr["tag"]),
                 master_id=manifest.stable_id32(key, arr["tag"]),
                 tone=built.base_tone,
