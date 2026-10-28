@@ -415,7 +415,11 @@ def _base_note_mask(n: dict, fret: int, sustain: float) -> tuple[int, int]:
 
 
 def _bend_curve(n: dict, time: float, sustain: float) -> tuple[list, float]:
-    """Editor bend -> (bend values, max step). RS step 1.0 = a whole tone.
+    """Editor bend -> (bend values, max step).
+
+    Both count in semitones: RS step 1.0 = a half-step bend, 2.0 = a full one
+    (EOF writes its half-step bend strength as `step`, and DLC Builder's EOF
+    import reads it back the same way).
 
     Rocksmith stores the curve as absolute-time samples with no resolution limit
     of its own, so an editor curve maps across 1:1 — unlike the .gp5 path, a
@@ -426,7 +430,7 @@ def _bend_curve(n: dict, time: float, sustain: float) -> tuple[list, float]:
     pts = bend_points(n)
     if not pts:
         return [], 0.0
-    values = [S.BendValue(time + t * sustain, v / 2.0) for t, v in pts]
+    values = [S.BendValue(time + t * sustain, float(v)) for t, v in pts]
     if values and values[0].step == 0.0:
         values = values[1:]
     # BasicFixes.removeOverlappingBendValues: one value per moment, the first
@@ -439,7 +443,7 @@ def _bend_curve(n: dict, time: float, sustain: float) -> tuple[list, float]:
             seen.add(ms)
             unique.append(b)
     values = unique
-    return values[:32], max((v for _, v in pts), default=0.0) / 2.0
+    return values[:32], float(max((v for _, v in pts), default=0.0))
 
 
 def _chord_name(notes) -> str:

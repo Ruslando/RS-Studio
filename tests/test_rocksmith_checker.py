@@ -252,7 +252,14 @@ class ExporterFixes(unittest.TestCase):
         notes = [_note(2.0, 3.0, 3, 7, bend="custom", bendPoints=[[0, 0], [0.5, 2], [0.5, 2], [0.5004, 1], [1, 2]])]
         self.assertNotIn("I34", [c for c, _ in _codes(_spec(notes, lead=5))])
         values = _compiled(notes).levels[0].notes[0].bend_values
-        self.assertEqual([(round(b.time, 3), b.step) for b in values], [(7.5, 1.0), (8.0, 1.0)])
+        self.assertEqual([(round(b.time, 3), b.step) for b in values], [(7.5, 2.0), (8.0, 2.0)])
+
+    def test_bend_step_counts_semitones(self):
+        """RS `step` is in semitones, as EOF writes it: a full bend is 2.0, not 1.0."""
+        notes = [_note(2.0, 3.0, 3, 7, bend="full"), _note(4.0, 5.0, 3, 7, bend="half")]
+        full, half = _compiled(notes).levels[0].notes
+        self.assertEqual((max(b.step for b in full.bend_values), full.max_bend), (2.0, 2.0))
+        self.assertEqual((max(b.step for b in half.bend_values), half.max_bend), (1.0, 1.0))
 
     def test_hand_positions_are_the_editors(self):
         """Every hand position comes from the editor; the export only translates it."""
