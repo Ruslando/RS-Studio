@@ -428,6 +428,7 @@ function openRocksmithExportModal() {
   $("rsLeadIn").value = String(leadIn(localStorage.getItem(LS_LEAD_IN)));
   try { $("rsAuthor").value = localStorage.getItem(LS_AUTHOR) || ""; } catch { /* storage blocked: empty */ }
   try { $("rsDynamicDifficulty").checked = localStorage.getItem(LS_DD) !== "0"; } catch { /* storage blocked: on */ }
+  try { $("rsMac").checked = localStorage.getItem(LS_MAC) === "1"; } catch { /* storage blocked: off */ }
   try { $("rsValidate").checked = localStorage.getItem(LS_VALIDATE) !== "0"; } catch { /* storage blocked: on */ }
   rsIgnored = new Set(meta.rocksmith?.ignoredIssues || []);
   renderRsIssues();
@@ -473,6 +474,8 @@ const LS_LEAD_IN = "cw.rsLeadIn", LEAD_IN_DEFAULT = 10;
 const LS_AUTHOR = "cw.rsAuthor";
 // Difficulty levels on or off, on unless turned off; one setting for every export.
 const LS_DD = "cw.rsDynamicDifficulty";
+// A Mac package beside the PC one: off unless turned on.
+const LS_MAC = "cw.rsMac";
 // Stop on issues, as DLC Builder's "Validate before release build": on unless turned off.
 const LS_VALIDATE = "cw.rsValidate";
 
@@ -574,6 +577,8 @@ async function submitRocksmithExport() {
   rememberPref(LS_AUTHOR, author);
   const dynamicDifficulty = $("rsDynamicDifficulty").checked;
   rememberPref(LS_DD, dynamicDifficulty ? "1" : "0");
+  const mac = $("rsMac").checked;
+  rememberPref(LS_MAC, mac ? "1" : "0");
   const validate = $("rsValidate").checked;
   rememberPref(LS_VALIDATE, validate ? "1" : "0");
   // A whole number from 1; anything else falls back to 1 (the server checks again).
@@ -600,7 +605,7 @@ async function submitRocksmithExport() {
       spec.metadata = metadataPayload(state.metadata);
       spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane),
         bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version, author, dynamicDifficulty,
-        validate, ignoredIssues: [...rsIgnored].sort(),
+        validate, ignoredIssues: [...rsIgnored].sort(), mac,
         preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {
@@ -614,6 +619,13 @@ async function submitRocksmithExport() {
       const name = (encoded ? decodeURIComponent(encoded[1]) : (cd.match(/filename="([^"]+)"/) || [])[1]) || "song_p.psarc";
       let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
       downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name);
+      if (res.headers.get("X-Mac-Package")) {
+        const macRes = await fetch(`/api/projects/${state.job}/rocksmith/mac`);
+        if (!macRes.ok) throw new Error((await macRes.json().catch(() => ({}))).detail || "Mac package failed");
+        const macCd = macRes.headers.get("Content-Disposition") || "";
+        const macEncoded = macCd.match(/filename\*=UTF-8''([^;]+)/i);
+        downloadProjectBlob(await macRes.blob(), macEncoded ? decodeURIComponent(macEncoded[1]) : name.replace(/_p\.psarc$/, "_m.psarc"));
+      }
       toast(warns.length ? `Exported ${name} - ${warns.length} warning(s)` : `Exported ${name}`, 2200, warns.length ? "warn" : "ok");
     });
   } catch { /* the panel's toast has said what failed */ } finally {

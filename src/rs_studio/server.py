@@ -1959,6 +1959,11 @@ def api_prefs_save(payload: dict = Body(...)) -> dict:
     return {"saved": len(prefs)}
 
 
+# The Mac package of each project's last export, until the browser fetches it:
+# one response carries one file, so it is a second download.
+_MAC_PACKAGES: dict[str, tuple[str, bytes]] = {}
+
+
 @app.post("/api/projects/{job}/rocksmith")
 def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
     """Build a Rocksmith 2014 CDLC (.psarc) from the tab spec + project audio.
@@ -1998,14 +2003,24 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
         current["rocksmithKey"] = rs["dlcKey"]
     current["rocksmithPhraseLevels"] = phrase_levels   # for the next export's comparison
     _write_manifest(job, current)
-    return Response(
-        content=data,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": _attachment(filename),
-            "X-Tab-Warnings": json.dumps(warnings),
-        },
-    )
+    headers = {"Content-Disposition": _attachment(filename), "X-Tab-Warnings": json.dumps(warnings)}
+    _MAC_PACKAGES.pop(job, None)
+    if rs.get("mac") is True:
+        _MAC_PACKAGES[job] = (rs_builder.mac_filename(filename), rs_builder.to_mac(data))
+        headers["X-Mac-Package"] = "1"
+    return Response(content=data, media_type="application/octet-stream", headers=headers)
+
+
+@app.get("/api/projects/{job}/rocksmith/mac")
+def api_rocksmith_mac(job: str) -> Response:
+    """The Mac package the last export made, once."""
+    _job_dir(job)
+    found = _MAC_PACKAGES.pop(job, None)
+    if found is None:
+        raise HTTPException(status_code=404, detail="No Mac package; export again")
+    name, data = found
+    return Response(content=data, media_type="application/octet-stream",
+                    headers={"Content-Disposition": _attachment(name)})
 
 
 @app.get("/api/spectrogram/{job}/{stem}.png")

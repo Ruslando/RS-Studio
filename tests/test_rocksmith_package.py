@@ -157,6 +157,29 @@ class RocksmithPackageTests(unittest.TestCase):
         fingered = _build(_spec([_track("Bass", BASS, [0, 3])], [{"track": 0, "kind": "bass", "tuning": BASS}]))[1]
         self.assertEqual(fingered["Bass"]["ArrangementProperties"]["bassPick"], 0)
 
+    def test_the_mac_package_is_the_pc_one_moved_as_dlc_builder_builds_for_mac(self):
+        spec = _spec([_track("Gtr", GUITAR, [0, 3])], [{"track": 0, "kind": "lead", "tuning": GUITAR}])
+        pc, _, name = builder.build_cdlc(spec, None, _wems=WEMS, _song_length=20.0)
+        self.assertEqual(builder.mac_filename(name), name[:-8] + "_m.psarc")
+        pc_files, mac_files = read_psarc(pc), read_psarc(builder.to_mac(pc))
+        moved = {p.replace("songs/bin/generic/", "songs/bin/macos/").replace("audio/windows/", "audio/mac/"): p
+                 for p in pc_files}
+        self.assertEqual(set(mac_files), set(moved))
+        for path, source in moved.items():
+            if path.endswith(".sng"):
+                self.assertEqual(sng.unpack(mac_files[path], mac=True), sng.unpack(pc_files[source]))
+                self.assertNotEqual(mac_files[path], pc_files[source], "encrypted with the Mac key")
+            elif not path.endswith(".nt"):
+                self.assertEqual(mac_files[path], pc_files[source], path)
+        graph = next(b for p, b in mac_files.items() if p.endswith(".nt")).decode()
+        self.assertNotIn("dx9", graph)
+        self.assertNotIn("generic", graph)
+        self.assertNotIn("audio/windows", graph)
+        sng_item = next(line.split()[0] for line in graph.splitlines() if '"/songs/bin/macos"' in line)
+        tags = [line.split('"')[1] for line in graph.splitlines() if line.startswith(sng_item) and "/tag>" in line]
+        self.assertEqual(tags, ["application", "musicgame-song", "macos"])
+        self.assertEqual(graph.count('"macos"'), 1 + 2, "the SNG and both soundbanks")
+
     def test_japanese_names_go_out_only_when_given(self):
         arrangements = [{"track": 0, "kind": "lead", "tuning": GUITAR}]
         spec = _spec([_track("Gtr", GUITAR, [0, 3])], arrangements)

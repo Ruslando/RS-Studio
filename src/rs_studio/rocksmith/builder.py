@@ -693,6 +693,32 @@ def _dynamic_difficulty(spec: dict) -> bool:
     return (spec.get("rocksmith") or {}).get("dynamicDifficulty") is not False
 
 
+def to_mac(package: bytes) -> bytes:
+    """The Mac package of a finished PC one, as DLC Builder builds for Mac
+    (Platform.fs, GraphItem.fs): SNGs under the Mac key in bin/macos, audio in
+    audio/mac, macos instead of dx9 in the graph and an extra macos tag on each
+    SNG. Soundbanks and audio are the same files."""
+    entries = []
+    for path, data in psarc.read_psarc(package).items():
+        if path.startswith("songs/bin/generic/"):
+            path, data = path.replace("/generic/", "/macos/", 1), sng.pack(sng.unpack(data), mac=True)
+        elif path.startswith("audio/windows/"):
+            path = path.replace("audio/windows/", "audio/mac/", 1)
+        elif path.endswith("_aggregategraph.nt"):
+            text = data.decode("utf-8")
+            text = re.sub(r'^(<urn:uuid:[^>]+> <http://emergent\.net/aweb/1\.0/tag>) "musicgame-song"\.$',
+                          r'\g<0>\n\1 "macos".', text, flags=re.M)
+            data = (text.replace("/songs/bin/generic", "/songs/bin/macos")
+                    .replace("/audio/windows", "/audio/mac").replace('"dx9"', '"macos"').encode("utf-8"))
+        entries.append((path, data))
+    return psarc.build_psarc(entries)
+
+
+def mac_filename(name: str) -> str:
+    """…_p.psarc becomes …_m.psarc, as DLC Builder names a Mac release."""
+    return name[:-len("_p.psarc")] + "_m.psarc"
+
+
 def _blocking(spec: dict, issues: list) -> list:
     """The issues that stop the export, as DLC Builder's release build stops: every
     checker issue (I01 …) whose code the project has not ignored, unless the check

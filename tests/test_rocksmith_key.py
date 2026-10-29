@@ -42,7 +42,7 @@ class ProjectKeyTests(unittest.TestCase):
 
         def build(spec, audio, cover_art_path=None, phrase_levels=None):
             self.built.append(spec["rocksmith"]["dlcKey"])
-            return b"psarc", [], "song.psarc"
+            return b"psarc", [], "song_p.psarc"
         patcher = patch.object(builder, "build_cdlc", build)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -75,6 +75,20 @@ class ProjectKeyTests(unittest.TestCase):
     def test_the_browser_cannot_choose_the_key(self):
         job = self.new_project()
         self.assertNotEqual(self.export(job, "Song", dlcKey="MTTOther1", keySeed="x"), "MTTOther1")
+
+
+    def test_the_mac_package_is_a_second_download_once(self):
+        job = self.new_project()
+        with patch.object(builder, "to_mac", lambda data: b"mac " + data):
+            res = self.client.post(f"/api/projects/{job}/rocksmith",
+                                   json={"metadata": {"title": "Song"}, "rocksmith": {"mac": True}})
+        self.assertEqual(res.headers.get("X-Mac-Package"), "1")
+        mac = self.client.get(f"/api/projects/{job}/rocksmith/mac")
+        self.assertEqual((mac.status_code, mac.content), (200, b"mac psarc"))
+        self.assertIn("song_m.psarc", mac.headers["Content-Disposition"])
+        self.assertEqual(self.client.get(f"/api/projects/{job}/rocksmith/mac").status_code, 404)
+        self.export(job, "Song")
+        self.assertEqual(self.client.get(f"/api/projects/{job}/rocksmith/mac").status_code, 404, "only when asked")
 
 
 if __name__ == "__main__":

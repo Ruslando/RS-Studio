@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 SNG_KEY_PC = bytes.fromhex("CB648DF3D12A16BF71701414E69619EC171CCA5D2A142E3E59DE7ADDA18A3A30")
+# The Mac game's key; the format is otherwise the same (Rocksmith2014.SNG Cryptography.fs).
+SNG_KEY_MAC = bytes.fromhex("9821330E34B91F70D0A48CBD625993126970CEA09192C0E6CDA676CC9838289D")
 
 # NoteMask flags
 CHORD = 0x02
@@ -363,7 +365,7 @@ def serialize(sng: SNG) -> bytes:
     return bytes(out)
 
 
-def pack(plain: bytes) -> bytes:
+def pack(plain: bytes, mac: bool = False) -> bytes:
     """Compress + encrypt a plain SNG for a PC psarc.
 
     The fixed key and all-zero IV below are NOT a mistake and NOT a security
@@ -378,12 +380,12 @@ def pack(plain: bytes) -> bytes:
     drive-by report.)
     """
     payload = struct.pack("<i", len(plain)) + zlib.compress(plain, 9)
-    enc = Cipher(algorithms.AES(SNG_KEY_PC), modes.CTR(bytes(16))).encryptor()
+    enc = Cipher(algorithms.AES(SNG_KEY_MAC if mac else SNG_KEY_PC), modes.CTR(bytes(16))).encryptor()
     return (struct.pack("<ii", 0x4A, 3) + bytes(16)
             + enc.update(payload) + enc.finalize() + bytes(56))
 
 
-def unpack(data: bytes) -> bytes:
+def unpack(data: bytes, mac: bool = False) -> bytes:
     """Decrypt + decompress a packed SNG.
 
     Raises rather than asserting: `python -O` strips assert statements, and this
@@ -393,7 +395,7 @@ def unpack(data: bytes) -> bytes:
     if magic != 0x4A or header != 3:
         raise ValueError(f"not a packed SNG (magic={magic:#x}, header={header})")
     iv, payload = data[8:24], data[24:len(data) - 56]
-    dec = Cipher(algorithms.AES(SNG_KEY_PC), modes.CTR(iv)).decryptor()
+    dec = Cipher(algorithms.AES(SNG_KEY_MAC if mac else SNG_KEY_PC), modes.CTR(iv)).decryptor()
     plain = dec.update(payload) + dec.finalize()
     (length,) = struct.unpack("<i", plain[:4])
     out = zlib.decompress(plain[4:])
