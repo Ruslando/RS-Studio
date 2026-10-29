@@ -1670,7 +1670,10 @@ def compile_track(track: dict, grid: dict, song_length: float,
         events=sorted(arr.events + _crowd_events(
             track.get("crowdEvents"), arr.beats[0][0], voicing.first_t if entities else None,
             song_length, average_tempo), key=lambda e: e[0]),
-        dnas=[(voicing.first_t, S.DNA_RIFF), (arr.end_t, S.DNA_NONE)],
+        # No DNA (riff/chord/solo regions): official songs carry it as dna_* events,
+        # which EOF never writes, so DLC Builder and the Toolkit leave it empty and
+        # nobody has found what the game does with it. A blanket "riff" was a guess.
+        dnas=[],
         sections=arr.sections,
         levels=[level],
         metadata=metadata,

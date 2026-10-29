@@ -107,12 +107,6 @@ def build_attributes(ctx, header: bool) -> dict:
     song_len = sng.metadata.song_length
     diff = _round9(tech * note_count / song_len / 100.0)
 
-    dna_riffs = 0.0
-    for k, (t, dna_id) in enumerate(sng.dnas):
-        if dna_id != 0:
-            end = next((t2 for t2, d2 in sng.dnas[k + 1:] if d2 == 0), song_len)
-            dna_riffs += end - t
-    dna_riffs = round(dna_riffs, 3)
 
     attrs = {
         "AlbumArt": f"urn:image:dds:album_{low}",
@@ -125,7 +119,7 @@ def build_attributes(ctx, header: bool) -> dict:
         "DLC": True,
         "DLCKey": key,
         "DNA_Chords": 0.0,
-        "DNA_Riffs": dna_riffs,
+        "DNA_Riffs": 0.0,   # no DNA, as in CDLC from DLC Builder and the Toolkit (chart.py)
         "DNA_Solo": 0.0,
         "EasyMastery": 1.0,
         "LeaderboardChallengeRating": 0,

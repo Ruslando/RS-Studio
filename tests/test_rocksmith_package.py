@@ -110,6 +110,10 @@ class RocksmithPackageTests(unittest.TestCase):
         self.assertTrue(all(t["IsCustom"] is True for a in attrs for t in a["Tones"]))
         self.assertTrue(files[f"gamexblocks/nsongs/{key}.xblock"].startswith(b"\xef\xbb\xbf<?xml"))
         self.assertTrue(files["toolkit.version"].endswith(b"Package Comment: Remastered"))
+        # No DNA, as DLC Builder and the Toolkit build from EOF: none in the SNG, 0 s in the manifest.
+        self.assertEqual({(a["DNA_Riffs"], a["DNA_Chords"], a["DNA_Solo"]) for a in attrs}, {(0.0, 0.0, 0.0)})
+        song = builder._compile_arrangement(spec, spec["tracks"][0], {"kind": "lead"}, 20.0, "KEY", []).compiled.sng
+        self.assertEqual(song.dnas, [])
         self.assertIn(f"{key}_lead2.json".encode(), files[f"{key}_aggregategraph.nt"])
         # The ids still come from the internal tags: songs exported before keep their progress.
         dlc_key = attrs[0]["DLCKey"]
