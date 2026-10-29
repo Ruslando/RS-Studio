@@ -649,7 +649,9 @@ def showlights(contexts) -> bytes:
     lights.append((ms(song_length), _FOG_MAX))
     lights.sort(key=lambda light: light[0])
 
-    body = "\n".join(f'  <showlight time="{t}" note="{note}" />' for t, note in lights)
+    # Seconds with three decimals, as DLC Builder writes a time code (TimeCodeToString):
+    # the game reads "9000" as 9000 seconds, not 9 s.
+    body = "\n".join(f'  <showlight time="{t // 1000}.{t % 1000:03d}" note="{note}" />' for t, note in lights)
     doc = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         f'<showlights count="{len(lights)}">\n{body}\n</showlights>'

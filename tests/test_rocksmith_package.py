@@ -312,7 +312,10 @@ class ShowlightTests(unittest.TestCase):
                             {"t": 9, "sectionType": "verse"}]
         files, songs, _, _ = _build(spec)
         xml = next(b for p, b in files.items() if p.endswith("showlights.xml")).decode()
-        lights = [(int(t), int(n)) for t, n in re.findall(r'time="(\d+)" note="(\d+)"', xml)]
+        # Times in seconds with three decimals, as DLC Builder writes them.
+        self.assertFalse(re.search(r'time="\d+"', xml), "a time without decimals is read as seconds")
+        lights = [(int(s) * 1000 + int(ms), int(n)) for s, ms, n in re.findall(r'time="(\d+)\.(\d{3})" note="(\d+)"', xml)]
+        self.assertTrue(lights)
         self.assertIn(f'count="{len(lights)}"', xml)
         self.assertEqual(lights, sorted(lights, key=lambda light: light[0]))
         fogs = [n for _, n in lights if 24 <= n <= 35]
