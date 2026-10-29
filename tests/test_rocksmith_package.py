@@ -133,9 +133,13 @@ class RocksmithPackageTests(unittest.TestCase):
         spec = _spec([_track("Gtr", GUITAR, [0, 3]), _track("Bass", BASS, [0, 3])],
                      [{"track": 0, "kind": "lead", "tuning": GUITAR, "scrollSpeed": 2.04},
                       {"track": 1, "kind": "bass", "tuning": BASS}])
-        songs = _build(spec)[1]
-        self.assertEqual(songs["Lead"]["DynamicVisualDensity"], [2.0] * 20)
+        songs = _build({**spec, "rocksmith": {**spec["rocksmith"], "dynamicDifficulty": False}})[1]
+        self.assertEqual(songs["Lead"]["DynamicVisualDensity"], [2.0] * 20, "one level: the speed throughout")
         self.assertEqual(songs["Bass"]["DynamicVisualDensity"], [1.3] * 20, "unset: the usual 1.3")
+        # With levels: from 5.0 at the easiest down to the speed at the hardest (createDynamicVisualDensity).
+        levelled = _build(spec)[1]["Lead"]
+        self.assertEqual(levelled["DynamicVisualDensity"][0], 5.0)
+        self.assertEqual(levelled["DynamicVisualDensity"][levelled["MaxPhraseDifficulty"]:], [2.0] * (20 - levelled["MaxPhraseDifficulty"]))
         self.assertEqual(builder._scroll_speed(0.1), 0.5)
         self.assertEqual(builder._scroll_speed(9), 5.0)
 
@@ -152,6 +156,17 @@ class RocksmithPackageTests(unittest.TestCase):
         self.assertNotIn("BassPick", header["Lead"], "left out unless picked, as DLC Builder leaves it null")
         fingered = _build(_spec([_track("Bass", BASS, [0, 3])], [{"track": 0, "kind": "bass", "tuning": BASS}]))[1]
         self.assertEqual(fingered["Bass"]["ArrangementProperties"]["bassPick"], 0)
+
+    def test_difficulty_levels_are_made_unless_turned_off(self):
+        tracks = [_track("Gtr", GUITAR, [0, 3, 5, 7, 5, 3, 0, 3, 5, 7, 8, 10])]
+        arrangements = [{"track": 0, "kind": "lead", "tuning": GUITAR}]
+        lead = _build(_spec(tracks, arrangements))[1]["Lead"]
+        self.assertGreater(lead["MaxPhraseDifficulty"], 0)
+        self.assertLess(lead["NotesEasy"], lead["NotesHard"])
+        self.assertEqual(lead["NotesHard"], 12)
+        self.assertAlmostEqual(lead["EasyMastery"], lead["NotesEasy"] / 12, places=9)
+        flat = _build(_spec(tracks, arrangements, dynamicDifficulty=False))[1]["Lead"]
+        self.assertEqual((flat["MaxPhraseDifficulty"], flat["NotesEasy"], flat["EasyMastery"]), (0, 12, 1.0))
 
     def test_the_author_is_the_one_given(self):
         def author(name):
@@ -314,12 +329,13 @@ class TechniqueMapTests(unittest.TestCase):
         notes = [g(1.0, 3, 5, fx={"palmMute": True}), g(1.5, 3, 7, fx={"hammer": True}),
                  g(2.0, 2, 8, bend="full"), g(3.0, 6, 3, chordName="G5"), g(3.0, 5, 5, chordName="G5"), *barre]
         techniques = self._map(notes)
-        self.assertEqual(list(techniques), ["0"])
-        ids = set().union(*techniques["0"].values())
+        top = str(len(techniques) - 1)   # one map per level; the hardest has every note
+        self.assertEqual(list(techniques), [str(k) for k in range(len(techniques))])
+        ids = set().union(*techniques[top].values())
         # 7 palm mute, 3 + 6 hammer-on, 1 bend, 35 power chord, 37 barre, 38 chord
         self.assertTrue({1, 3, 6, 7, 35, 37, 38} <= ids, ids)
         self.assertNotIn(33, ids, "a power chord is not counted as a double stop too")
-        self.assertTrue(all(v == sorted(v) for v in techniques["0"].values()))
+        self.assertTrue(all(v == sorted(v) for v in techniques[top].values()))
 
     def test_a_note_on_a_phrase_start_counts_for_the_phrase_before(self):
         """DLC Builder's division: start < time <= end, and the last phrase is left out."""

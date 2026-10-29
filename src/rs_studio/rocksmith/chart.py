@@ -2,15 +2,18 @@
 
 The editor gives notes in seconds with voiced string/fret (see tab.py's spec
 docstring) — already audio-synced, so unlike the usual GP->EOF CDLC route no
-manual re-sync is needed. This builds a single difficulty level (no dynamic
-difficulty), phrases/sections every 8 measures, the editor's hand positions as
-anchors, and maps the editor's effect fields onto SNG note masks.
+manual re-sync is needed. This builds the chart as one level and, when asked,
+easier levels of it (dd.py), phrases and sections (every 8 measures unless set),
+the editor's hand positions as anchors, and maps the editor's effect fields onto
+SNG note masks.
 
 Conversion rules follow Rocksmith2014.NET's XmlToSng* modules.
 """
 from __future__ import annotations
 
 import bisect
+import copy
+import dataclasses
 import itertools
 import math
 import os
@@ -20,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from ..tab import bend_points
+from . import dd
 from . import sng as S
 
 
@@ -255,12 +259,22 @@ class _Entity:
 
 @dataclass
 class Compiled:
-    sng: S.SNG
+    sng: S.SNG                     # one level, the whole chart: what is checked
     note_count: int
     arr_props: dict
     average_tempo: float
     warnings: list = field(default_factory=list)
     fixes: list = field(default_factory=list)   # (issue code, time): what the export changed, where
+    dd_sng: S.SNG | None = None    # with difficulty levels, when made: what ships
+    note_counts: tuple | None = None   # notes at the easy, medium and hard levels
+
+    @property
+    def shipped(self) -> S.SNG:
+        return self.dd_sng or self.sng
+
+    @property
+    def sngs(self) -> list:
+        return [self.sng] + ([self.dd_sng] if self.dd_sng else [])
 
 
 def _f(value, default=0.0) -> float:
@@ -1361,14 +1375,19 @@ def _is_power_chord(template) -> bool:
     return b - a in (5, 7)
 
 
-def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bass: bool = False) -> _Notes:
+def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bass: bool = False,
+                keep: set | None = None, chord_notes: tuple | None = None) -> _Notes:
     """Entities -> SNG notes: masks, techniques, chord notes, arrangement flags.
 
     The longest stage, and the one that reads the most: anchors and fingerprints
     reach it stamped on the entities themselves rather than as parameters.
+
+    A difficulty level holds only some phrase iterations (`keep`): the others
+    are still read, so a slide or link finds the note the player sees after it,
+    but make no notes. `chord_notes` is the (list, ids) the levels share.
     """
-    chord_notes_list: list[S.ChordNotes] = []
-    chord_notes_ids: dict[tuple, int] = {}
+    chord_notes_list, chord_notes_ids = chord_notes if chord_notes is not None else ([], {})
+    note_at: dict[int, int] = {}   # entity index -> its note's index
     anchor_exts: list[S.AnchorExtension] = []
     notes: list[S.Note] = []
     notes_per_pi = [0] * len(arr.pi_times)
@@ -1382,8 +1401,8 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
     prev_note: S.Note | None = None
     dropped_slides_fx = []
 
-    # string -> index of a legato Parent still waiting for its Child. The index
-    # is the note's own: one SNG note per entity, so it equals `idx`.
+    # string -> entity index of a legato Parent still waiting for its Child
+    # (note_at turns it into the Parent's note index).
     link_parents: dict[int, int] = {}
 
     def next_on_string(idx: int, string: int) -> tuple[int, float, bool] | None:
@@ -1496,6 +1515,13 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
 
     for idx, e in enumerate(entities):
         pi_id = _find_pi(arr.pi_times, e.time, inclusive=True)
+        if keep is not None and pi_id not in keep:
+            # Not in this level: a kept note carried on into it carries on into nothing.
+            for s, _, _ in e.notes:
+                lost = link_parents.pop(s, None)
+                if lost in note_at:
+                    notes[note_at[lost]].mask &= ~S.PARENT
+            continue
         sec = arr.sections[_find_section(arr.sections, e.time)]
         anchor_fret = e.anchor_fret
         anchor_width = e.anchor_width
@@ -1503,7 +1529,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
         if e.chord_id == -1:
             string, fret, n = e.notes[0]
             sustain = e.sustain
-            parent = link_parents.pop(string, -1)
+            parent = note_at.get(link_parents.pop(string, -1), -1)
             mask, vibrato = _base_note_mask(n, fret, sustain)
             mask |= S.SINGLE
             if parent != -1:
@@ -1638,6 +1664,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
             note.chord_id, int(note.sustain * 1000))) & 0xFFFFFFFF
         notes_per_pi[pi_id] += 1
         prev_note = note
+        note_at[idx] = len(notes)
         notes.append(note)
 
     # The ceiling is int16: the note-link fields below (next_iter_note,
@@ -1664,10 +1691,83 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
                   dropped_slides=dropped_slides_fx)
 
 
+def _level(entities: list, shape_info: dict, templates: list, arr: _Arrangement, capo: int,
+           is_bass: bool, fixes: list, chord_notes: tuple, keep: set | None = None,
+           difficulty: int = 0) -> tuple[S.Level, _Notes]:
+    """Hand positions, grip shapes and notes of one difficulty level.
+
+    `keep`: the phrase iterations this level holds (all when None). The others
+    are part of `entities` all the same, as the player sees them at this level,
+    so what is kept is placed against them; their own shapes, anchors and notes
+    are left out.
+    """
+    anchors_raw = _hand_anchors(entities, shape_info, capo, arr.pi_times, fixes)
+    fingerprints, arpeggios = _handshapes(entities, shape_info, arr.end_t, arr.pi_times)
+    _shorten_handshapes(fingerprints, arpeggios, entities, [b[0] for b in arr.beats])
+    if keep is not None:
+        in_level = lambda t: _find_pi(arr.pi_times, t, inclusive=True) in keep  # noqa: E731
+        anchors_raw = [a for a in anchors_raw if in_level(a[0])]
+        fingerprints = _kept_prints(fingerprints, entities, "finger_print", in_level)
+        arpeggios = _kept_prints(arpeggios, entities, "arpeggio_print", in_level)
+    emitted = _emit_notes(entities, templates, arr, is_bass=is_bass, keep=keep, chord_notes=chord_notes)
+    notes = emitted.notes
+    _print_note_times(fingerprints, notes)
+    _print_note_times(arpeggios, notes)
+
+    sng_anchors = []
+    for k, (t, fret, width) in enumerate(anchors_raw):
+        end = anchors_raw[k + 1][0] if k + 1 < len(anchors_raw) else arr.pi_times[-1]
+        in_range = [i for i, n in enumerate(notes) if t <= n.time < end]
+        if in_range:
+            first_nt = notes[in_range[0]].time
+            # DLC Builder's convertAnchor: after a slide that ends by the anchor's start
+            # (its target note's place), the anchor's first note time is its start.
+            # Its test is one-sided, so any earlier slide not reaching past the start counts.
+            prev = notes[in_range[0] - 1] if in_range[0] else None
+            if prev is not None and prev.mask & S.SLIDE and prev.time + prev.sustain - t < 0.001:
+                first_nt = t
+            last = notes[in_range[-1]]
+            last_nt = last.time if (last.mask & (S.SLIDE | S.PARENT)) else last.time + last.sustain
+        else:
+            first_nt, last_nt = S.UNINIT_FIRST_NOTE, S.UNINIT_LAST_NOTE
+        sng_anchors.append(S.Anchor(
+            start_time=t, end_time=end, first_note_time=first_nt, last_note_time=last_nt,
+            fret=fret, width=width,
+            phrase_iteration_id=_find_pi(arr.pi_times, t, inclusive=True)))
+
+    level = S.Level(
+        difficulty=difficulty,
+        anchors=sng_anchors,
+        anchor_extensions=emitted.anchor_extensions,
+        handshapes=fingerprints,
+        arpeggios=arpeggios,
+        notes=notes,
+        average_notes_per_iteration=_average_notes(arr, emitted.per_pi),
+        notes_in_pi_excl_ignored=[a - b for a, b in zip(emitted.per_pi, emitted.ignored_per_pi)],
+        notes_in_pi_all=list(emitted.per_pi),
+    )
+    return level, emitted
+
+
+def _kept_prints(prints: list, entities: list, attr: str, in_level) -> list:
+    """The shapes a level keeps, and its entities pointed at their new places."""
+    index = {}
+    kept = []
+    for k, fp in enumerate(prints):
+        if in_level(fp.start_time):
+            index[k] = len(kept)
+            kept.append(fp)
+    for e in entities:
+        if getattr(e, attr) != -1:
+            setattr(e, attr, index.get(getattr(e, attr), -1))
+    return kept
+
+
 def compile_track(track: dict, grid: dict, song_length: float,
                   section_markers: list | None = None,
                   phrase_boundaries: list | None = None,
-                  song_end: float | None = None) -> Compiled:
+                  song_end: float | None = None,
+                  dynamic_difficulty: bool = False) -> Compiled:
     """Run the five stages, then assemble the SNG.
 
     The stages are a straight pipeline, each named for what it produces. The
@@ -1708,51 +1808,15 @@ def compile_track(track: dict, grid: dict, song_length: float,
                                   song_end=audio_end if song_end is None else song_end,
                                   obstacles=_phrase_obstacles(entities, voicing.shape_info))
 
-    anchors_raw = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, fixes)
-    fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)
-    _shorten_handshapes(fingerprints, arpeggios, entities, [b[0] for b in arr.beats])
-    emitted = _emit_notes(entities, voicing.chord_templates, arr, is_bass=n_str == 4)
-    notes = emitted.notes
+    chord_notes = ([], {})
+    level, emitted = _level(entities, voicing.shape_info, voicing.chord_templates, arr, capo,
+                            n_str == 4, fixes, chord_notes)
+    notes = level.notes
     _phrase_differences(arr, notes, fixes)
-    _print_note_times(fingerprints, notes)
-    _print_note_times(arpeggios, notes)
     # DLC Builder's processStringMasks: "for whatever reason" each section also
     # carries the strings of the section after it (one step, as it walks forward).
     for k in range(len(arr.sections) - 1):
         arr.sections[k].string_mask[0] |= arr.sections[k + 1].string_mask[0]
-
-    sng_anchors = []
-    for k, (t, fret, width) in enumerate(anchors_raw):
-        end = anchors_raw[k + 1][0] if k + 1 < len(anchors_raw) else arr.pi_times[-1]
-        in_range = [i for i, n in enumerate(notes) if t <= n.time < end]
-        if in_range:
-            first_nt = notes[in_range[0]].time
-            # DLC Builder's convertAnchor: after a slide that ends by the anchor's start
-            # (its target note's place), the anchor's first note time is its start.
-            # Its test is one-sided, so any earlier slide not reaching past the start counts.
-            prev = notes[in_range[0] - 1] if in_range[0] else None
-            if prev is not None and prev.mask & S.SLIDE and prev.time + prev.sustain - t < 0.001:
-                first_nt = t
-            last = notes[in_range[-1]]
-            last_nt = last.time if (last.mask & (S.SLIDE | S.PARENT)) else last.time + last.sustain
-        else:
-            first_nt, last_nt = S.UNINIT_FIRST_NOTE, S.UNINIT_LAST_NOTE
-        sng_anchors.append(S.Anchor(
-            start_time=t, end_time=end, first_note_time=first_nt, last_note_time=last_nt,
-            fret=fret, width=width,
-            phrase_iteration_id=_find_pi(arr.pi_times, t, inclusive=True)))
-
-    level = S.Level(
-        difficulty=0,
-        anchors=sng_anchors,
-        anchor_extensions=emitted.anchor_extensions,
-        handshapes=fingerprints,
-        arpeggios=arpeggios,
-        notes=notes,
-        average_notes_per_iteration=_average_notes(arr, emitted.per_pi),
-        notes_in_pi_excl_ignored=[a - b for a, b in zip(emitted.per_pi, emitted.ignored_per_pi)],
-        notes_in_pi_all=list(emitted.per_pi),
-    )
 
     metadata = S.MetaData(
         max_notes_and_chords=float(len(notes)),
@@ -1774,7 +1838,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
         beats=arr.sng_beats,
         phrases=arr.phrases,
         chords=voicing.chord_templates,
-        chord_notes=emitted.chord_notes,
+        chord_notes=chord_notes[0],
         phrase_iterations=arr.phrase_iterations,
         events=sorted(arr.events + _crowd_events(
             track.get("crowdEvents"), arr.beats[0][0], voicing.first_t if entities else None,
@@ -1788,7 +1852,86 @@ def compile_track(track: dict, grid: dict, song_length: float,
         metadata=metadata,
     )
 
-    return Compiled(sng=sng_obj, note_count=len(notes), arr_props=emitted.arr_props,
-                    average_tempo=average_tempo, warnings=warnings,
-                    fixes=sorted(dict.fromkeys(fixes + [("I29", t) for t in voicing.dead_left_out]
-                                               + emitted.dropped_slides), key=lambda f: f[1]))
+    compiled = Compiled(sng=sng_obj, note_count=len(notes), arr_props=emitted.arr_props,
+                        average_tempo=average_tempo, warnings=warnings,
+                        fixes=sorted(dict.fromkeys(fixes + [("I29", t) for t in voicing.dead_left_out]
+                                                   + emitted.dropped_slides), key=lambda f: f[1]))
+    if dynamic_difficulty:
+        compiled.dd_sng, compiled.note_counts = _difficulty_levels(
+            sng_obj, voicing, arr, capo, n_str == 4, chord_notes)
+    return compiled
+
+
+def _difficulty_levels(full: S.SNG, voicing: _Voicing, arr: _Arrangement, capo: int,
+                       is_bass: bool, chord_notes: tuple) -> tuple[S.SNG, tuple]:
+    """The chart with easier levels (dd.py), and its notes at the hero levels.
+
+    Each phrase iteration is levelled on its own; iterations of one phrase all
+    get the most levels any of them needs, as a phrase has one maxDifficulty.
+    Level d holds every iteration with more than d levels, and is built against
+    the others at their own top level, which is what the player sees beside it.
+    """
+    entities = voicing.entities
+    templates = dd.Templates(voicing.chord_templates)
+    pis = arr.phrase_iterations
+    by_pi: list[list] = [[] for _ in pis]
+    for e in entities:
+        by_pi[_find_pi(arr.pi_times, e.time, inclusive=True)].append(e)
+
+    def beats_in(k: int) -> list:
+        return [(t, beat_in == 0) for t, _, beat_in in arr.beats if pis[k].start_time <= t < pis[k].end_time]
+
+    own = [dd.level_count(by_pi[k], templates.list, [(dd.ms(t), m) for t, m in beats_in(k)],
+                          dd.ms(pis[k].start_time), dd.ms(pis[k].end_time)) for k in range(len(pis))]
+    per_phrase: dict[int, int] = {}
+    for k, pi in enumerate(pis):
+        per_phrase[pi.phrase_id] = max(per_phrase.get(pi.phrase_id, 1), own[k])
+    counts = [per_phrase[pi.phrase_id] for pi in pis]
+    levels_of = [dd.generate(by_pi[k], counts[k], templates, beats_in(k), pis[k].start_time, pis[k].end_time)
+                 for k in range(len(pis))]
+    max_chord = [dd.max_chord_strings(by_pi[k], templates.list) for k in range(len(pis))]
+
+    shape_cache: dict[tuple, dict | None] = {}
+
+    def shape_view(view: list, d: int) -> dict:
+        out = {}
+        for sid, info in voicing.shape_info.items():
+            home = _find_pi(arr.pi_times, info["start"], inclusive=True)
+            level = min(d, counts[home] - 1)
+            if level == counts[home] - 1:
+                out[sid] = info
+                continue
+            if (sid, level) not in shape_cache:
+                shape_cache[(sid, level)] = dd.shape_at_level(
+                    info, [e for e in entities if e.shape_id == sid], [e for e in view if e.shape_id == sid],
+                    (level + 1) / counts[home], max_chord[home], templates)
+            if shape_cache[(sid, level)] is not None:
+                out[sid] = shape_cache[(sid, level)]
+        return out
+
+    levels, per_pi = [], []
+    for d in range(max(counts)):
+        view = []
+        for k in range(len(pis)):
+            for e in levels_of[k][min(d, counts[k] - 1)]:
+                v = copy.copy(e)
+                v.finger_print = v.arpeggio_print = -1
+                v.first_in_shape = False
+                view.append(v)
+        shapes = shape_view(view, d)
+        for v in view:
+            if v.shape_id is not None and v.shape_id not in shapes:
+                v.shape_id = None
+        keep = {k for k in range(len(pis)) if counts[k] > d}
+        level, emitted = _level(view, shapes, templates.list, arr, capo, is_bass, [], chord_notes, keep, d)
+        levels.append(level)
+        per_pi.append(emitted.per_pi)
+
+    heroes = [dd.hero_levels(c - 1) for c in counts]
+    phrases = [dataclasses.replace(p, max_difficulty=per_phrase.get(k, 1) - 1) for k, p in enumerate(full.phrases)]
+    iterations = [dataclasses.replace(pi, difficulty=heroes[k]) for k, pi in enumerate(pis)]
+    note_counts = tuple(sum(per_pi[heroes[k][h]][k] for k in range(len(pis))) for h in range(3))
+    shipped = dataclasses.replace(
+        full, phrases=phrases, phrase_iterations=iterations, levels=levels, chord_notes=chord_notes[0],
+        metadata=dataclasses.replace(full.metadata, max_difficulty=len(levels) - 1))
+    return shipped, note_counts

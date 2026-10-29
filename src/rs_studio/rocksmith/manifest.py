@@ -79,9 +79,11 @@ def build_attributes(ctx, header: bool) -> dict:
 
     ctx carries: sng (chart.Compiled), ids, names — see builder.SongContext.
     """
-    sng = ctx.compiled.sng
+    sng = ctx.compiled.shipped
     props = ctx.compiled.arr_props
     note_count = ctx.compiled.note_count
+    # Notes at the easy, medium and hard levels of each phrase iteration (AccuData).
+    easy, medium, hard = ctx.compiled.note_counts or (note_count,) * 3
     key = ctx.dlc_key
     low = key.lower()
     arr = ctx.arrangement
@@ -105,7 +107,7 @@ def build_attributes(ctx, header: bool) -> dict:
     if tech <= 5:
         tech += 4
     song_len = sng.metadata.song_length
-    diff = _round9(tech * note_count / song_len / 100.0)
+    diff = _round9(tech * hard / song_len / 100.0)
 
 
     attrs = {
@@ -121,20 +123,20 @@ def build_attributes(ctx, header: bool) -> dict:
         "DNA_Chords": 0.0,
         "DNA_Riffs": 0.0,   # no DNA, as in CDLC from DLC Builder and the Toolkit (chart.py)
         "DNA_Solo": 0.0,
-        "EasyMastery": 1.0,
+        "EasyMastery": _round9(easy / max(1, hard)),
         "LeaderboardChallengeRating": 0,
         "ManifestUrn": f"urn:database:json-db:{low}_{file_tag}",
         "MasterID_RDV": ctx.master_id,
-        "MediumMastery": 1.0,
-        "NotesEasy": float(note_count),
-        "NotesHard": float(note_count),
-        "NotesMedium": float(note_count),
+        "MediumMastery": _round9(medium / max(1, hard)),
+        "NotesEasy": float(easy),
+        "NotesHard": float(hard),
+        "NotesMedium": float(medium),
         "PersistentID": ctx.persistent_id.hex.upper(),
         "SKU": "RS2",
         "Shipping": True,
-        "SongDiffEasy": _round9(tech * note_count / song_len / 25.0),
+        "SongDiffEasy": _round9(tech * easy / song_len / 25.0),
         "SongDiffHard": diff,
-        "SongDiffMed": _round9(tech * note_count / song_len / 50.0),
+        "SongDiffMed": _round9(tech * medium / song_len / 50.0),
         "SongDifficulty": diff,
         "SongKey": key,
         "SongLength": round(song_len, 3),
@@ -197,14 +199,12 @@ def build_attributes(ctx, header: bool) -> dict:
              "Fingers": list(c.fingers), "Frets": list(c.frets)}
             for i, c in enumerate(sng.chords) if c.name and not (c.mask & S.CHORD_MASK_ARPEGGIO)
         ],
-        # One entry per difficulty level the game may show. We emit a single level, so
-        # every entry is the arrangement's scroll speed (DLC Builder does the same).
-        "DynamicVisualDensity": [ctx.scroll_speed] * 20,
+        "DynamicVisualDensity": _visual_density(len(sng.levels), ctx.scroll_speed),
         "FullName": f"{key}_{arr_name}",   # Key_Lead for every Lead, as DLC Builder and the Toolkit
         "LastConversionDateTime": sng.metadata.last_conversion_date_time,
         "MasterID_PS3": -1,
         "MasterID_XBox360": -1,
-        "MaxPhraseDifficulty": 0,
+        "MaxPhraseDifficulty": len(sng.levels) - 1,
         "PhraseIterations": [
             {"PhraseIndex": pi.phrase_id,
              "MaxDifficulty": sng.phrases[pi.phrase_id].max_difficulty,
@@ -219,8 +219,8 @@ def build_attributes(ctx, header: bool) -> dict:
         ],
         "PreviewBankPath": f"song_{low}_preview.bnk",
         "RelativeDifficulty": 0,
-        "Score_MaxNotes": float(note_count),
-        "Score_PNV": 100_000.0 / max(1, note_count),
+        "Score_MaxNotes": float(hard),
+        "Score_PNV": 100_000.0 / max(1, hard),
         "Sections": [
             {"Name": s.name, "UIName": _SECTION_UI.get(s.name, _SECTION_UI["riff"]),
              "Number": s.number,
@@ -344,29 +344,47 @@ def _technique_map(sng) -> dict:
     end, and the last phrase is left out: DLC Builder does both on purpose, as
     official files do.
     """
-    per_pi: dict[str, list] = {}
-    notes = sng.levels[0].notes
-    for k, pi in enumerate(sng.phrase_iterations[:-1]):
-        ids = set()
-        for note in notes:
-            if pi.start_time < note.time <= pi.end_time:
-                ids |= _techniques(sng, note)
-        if ids:
-            per_pi[str(k)] = sorted(ids)
-    return {"0": per_pi} if per_pi else {}
+    out = {}
+    for lvl, level in enumerate(sng.levels):
+        per_pi: dict[str, list] = {}
+        for k, pi in enumerate(sng.phrase_iterations[:-1]):
+            ids = set()
+            for note in level.notes:
+                if pi.start_time < note.time <= pi.end_time:
+                    ids |= _techniques(sng, note)
+            if ids:
+                per_pi[str(k)] = sorted(ids)
+        if per_pi:
+            out[str(lvl)] = per_pi
+    return out
 
 
 def _chord_map(sng) -> dict:
     """Difficulty -> phrase iteration -> named chord ids (from handshapes)."""
-    per_pi: dict[str, list] = {}
-    level = sng.levels[0]
-    for k, pi in enumerate(sng.phrase_iterations):
-        ids = sorted({
-            fp.chord_id for fp in level.handshapes
-            if sng.chords[fp.chord_id].name and pi.start_time <= fp.start_time < pi.end_time})
-        if ids:
-            per_pi[str(k)] = ids
-    return {"0": per_pi} if per_pi else {}
+    out = {}
+    for lvl, level in enumerate(sng.levels):
+        per_pi: dict[str, list] = {}
+        for k, pi in enumerate(sng.phrase_iterations):
+            ids = sorted({
+                fp.chord_id for fp in level.handshapes
+                if sng.chords[fp.chord_id].name and pi.start_time <= fp.start_time < pi.end_time})
+            if ids:
+                per_pi[str(k)] = ids
+        if per_pi:
+            out[str(lvl)] = per_pi
+    return out
+
+
+def _visual_density(levels: int, scroll_speed: float) -> list:
+    """createDynamicVisualDensity: from 5.0 at the easiest level down to the
+    scroll speed at the hardest (or the 20th), then the scroll speed."""
+    end = min(max(scroll_speed, 0.5), 5.0)
+    top = min(levels, 20) - 1
+    if top <= 0:
+        return [end] * 20
+    factor = (end / 5.0) ** (1 / top)
+    # round() halves to even, as .NET's Math.Round does.
+    return [end if i >= top else round(5.0 * factor ** i, 1) for i in range(20)]
 
 
 def _dump(doc: dict) -> bytes:
@@ -588,6 +606,8 @@ def _showlight_source(contexts: list):
     """The Lead arrangement, else the first, in DLC Builder's order (route, then Main, Alt, Bonus)."""
     order = {"main": 0, "alt": 1, "bonus": 2}
     ranked = sorted(contexts, key=lambda c: (c.arrangement["route"], order[c.arrangement["priority"]]))
+    # The one-level chart: every phrase at its hardest, which is where DLC Builder
+    # takes the notes from (ShowLightGenerator.getMidiNotes).
     return next((c for c in ranked if c.arrangement["route"] == 1), ranked[0]).compiled.sng
 
 

@@ -668,8 +668,13 @@ def _partition(kinds: list[str], kind: str) -> int:
                    and _PRIORITY_ORDER[ARRANGEMENTS[other]["priority"]] < _PRIORITY_ORDER[arr["priority"]])
 
 
+def _dynamic_difficulty(spec: dict) -> bool:
+    """Whether the export makes difficulty levels: yes unless it says no."""
+    return (spec.get("rocksmith") or {}).get("dynamicDifficulty") is not False
+
+
 def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: float,
-                         key: str, warnings: list[str]) -> _Built:
+                         key: str, warnings: list[str], dynamic_difficulty: bool = False) -> _Built:
     """One requested arrangement as the SNG it ships as."""
     track = dict(base_track)
     if req.get("tuning"):
@@ -690,15 +695,18 @@ def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: f
             track.get("phraseBoundaries")
             or track.get("practiceBoundaries")
             or []),
-        song_end=_song_end(spec, song_length))
+        song_end=_song_end(spec, song_length),
+        dynamic_difficulty=dynamic_difficulty)
     warnings.extend(compiled.warnings)
-    compiled.sng.metadata.tuning = tuple(offsets)
+    for song in compiled.sngs:
+        song.metadata.tuning = tuple(offsets)
     # EOF: a power chord with the low string dropped to D and the rest standard.
     compiled.arr_props["dropDPower"] = compiled.arr_props["powerChords"] and offsets == [-2, 0, 0, 0, 0, 0]
     _template_midi(compiled.sng.chords, offsets, max(0, int(track.get("capo") or 0)), is_bass)
     base_tone, tone_slots, tone_events = _arrangement_tones(
         track, is_bass, key, arr["tag"], song_length, warnings)
-    compiled.sng.tones = tone_events
+    for song in compiled.sngs:
+        song.tones = tone_events
     return _Built(compiled, is_bass, cents, base_tone, tone_slots)
 
 
@@ -805,12 +813,14 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         arrangement_entries: list[tuple[str, bytes]] = []
         for sort_idx, req in enumerate(arr_requests):
             arr = ARRANGEMENTS[req["kind"]]
-            built = _compile_arrangement(spec, tracks[req["track"]], req, song_length, key, warnings)
+            built = _compile_arrangement(spec, tracks[req["track"]], req, song_length, key, warnings,
+                                         dynamic_difficulty=_dynamic_difficulty(spec))
             partition = _partition([r["kind"] for r in arr_requests], req["kind"])
-            built.compiled.sng.metadata.part = partition   # SNG and manifest agree, as in DLC Builder
+            for song in built.compiled.sngs:
+                song.metadata.part = partition   # SNG and manifest agree, as in DLC Builder
             # Timed as in the editor, before the silence, like the live check.
             warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in built.issues())
-            sng_packed = sng.pack(sng.serialize(built.compiled.sng))
+            sng_packed = sng.pack(sng.serialize(built.compiled.shipped))
             representative = arr["priority"] == "main"
 
             # Files are named as DLC Builder and the Toolkit name them (lead, lead2 …).
