@@ -1067,14 +1067,34 @@ def _chord_techniques(e: _Entity) -> bool:
     return any(has(n) for _, _, n in e.notes)
 
 
+def _mute_state(e: _Entity) -> tuple:
+    return (all((n.get("fx") or {}).get("dead") for _, _, n in e.notes),
+            all((n.get("fx") or {}).get("palmMute") for _, _, n in e.notes))
+
+
+def _repeats(e: _Entity, last_chord, before) -> bool:
+    """Whether chord `e` is drawn as a repeat of `last_chord`, the chord before it
+    in its run or frame (`before` is the entity right before it), by EOF's rules
+    (eof_note_has_high_chord_density): the same grip, and no mute starting or
+    ending, no technique of its own, no slide on the note before. "full" and
+    "repeat" in the editor override that.
+
+    The repeat keeps its HighDensity bit, as the Toolkit builds it. DLC Builder
+    drops it (FixHighDensity), but it also drops a repeat's chord notes, so a
+    forced repeat with a technique could not be told from a full chord there."""
+    if last_chord is None or e.chord_id != last_chord.chord_id:
+        return False
+    if _chord_display(e):
+        return _chord_display(e) == "repeat"
+    return (_mute_state(e) == _mute_state(last_chord) and not _chord_techniques(e)
+            and not any(n.get("slide") for _, _, n in before.notes))
+
+
 def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) -> tuple[list, list]:
     """Fingerprints (runs of the same chord) and arpeggios (editor Shapes).
 
-    A run may only skip ChordNotes (HighDensity "just repeat the last one") when
-    NOTHING about the chord changed since the previous hit. Same chord_id alone
-    isn't enough: XmlToSngNote.fs's FixHighDensity explicitly keeps ChordNotes on
-    the chord where a whole-chord mute/palm-mute starts or ends, even mid-run,
-    so the mute transition doesn't get silently dropped as "identical repeat".
+    A chord in a run, handshape or arpeggio is drawn as a repeat (HighDensity)
+    only when nothing about it changed since the chord before (_repeats).
 
     A run also stops at a phrase start, and its shape ends there: every phrase
     begins with an anchor (_phrase_start_anchors), and an anchor inside a held
@@ -1083,10 +1103,6 @@ def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) 
     """
     def phrase_of(t: float) -> int:
         return _find_pi(pi_times, t, inclusive=True)
-
-    def _mute_state(e: _Entity) -> tuple:
-        return (all((n.get("fx") or {}).get("dead") for _, _, n in e.notes),
-                all((n.get("fx") or {}).get("palmMute") for _, _, n in e.notes))
 
     fingerprints: list[S.FingerPrint] = []
     k = 0
@@ -1097,16 +1113,9 @@ def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) 
             continue
         run = [e]
         j = k + 1
-        # The chord repeats while it is the same grip in the same phrase and nothing
-        # about it changes: a mute starting or ending, a technique of its own, or
-        # the chord before it sliding (EOF's rules). "full" and "repeat" override.
-        while (j < len(entities) and entities[j].chord_id == e.chord_id and not entities[j].shape_id
+        while (j < len(entities) and not entities[j].shape_id
                and phrase_of(entities[j].time) == phrase_of(e.time)
-               and (_chord_display(entities[j]) == "repeat"
-                    or (_chord_display(entities[j]) != "full"
-                        and _mute_state(entities[j]) == _mute_state(e)
-                        and not _chord_techniques(entities[j])
-                        and not any(n.get("slide") for _, _, n in entities[j - 1].notes)))):
+               and _repeats(entities[j], entities[j - 1], entities[j - 1])):
             run.append(entities[j])
             j += 1
         last = run[-1]
@@ -1143,17 +1152,17 @@ def _handshapes(entities: list, shape_info: dict, end_t: float, pi_times: list) 
             prints.append(S.FingerPrint(
                 chord_id=info["chord_id"], start_time=a, end_time=b,
                 first_note_time=inside[0].time if inside else a, last_note_time=-1.0))
-            previous_chord = None
+            previous_chord = before = None
             for ent in inside:
                 if arpeggio:
                     ent.arpeggio_print = fp_id
-                    continue
-                ent.finger_print = fp_id
-                # A chord inside a handshape shows its panel when it is a new grip
-                # in this piece; the same grip again is a repeat (HighDensity).
+                else:
+                    ent.finger_print = fp_id
+                # A chord in the frame shows its panel by the same rules as a run.
                 if ent.chord_id != -1:
-                    ent.first_in_shape = ent.chord_id != previous_chord
-                    previous_chord = ent.chord_id
+                    ent.first_in_shape = not _repeats(ent, previous_chord, before)
+                    previous_chord = ent
+                before = ent
     # Handshapes were appended after the automatic runs; keep the list in time order
     # and point every entity at its fingerprint's new place.
     order = sorted(range(len(fingerprints)), key=lambda k: fingerprints[k].start_time)
@@ -1489,7 +1498,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
                     mask |= S.PARENT
             if e.arpeggio_print != -1:
                 mask |= S.ARPEGGIO
-            elif e.first_in_shape and _chord_display(e) != "repeat":
+            if e.first_in_shape and _chord_display(e) != "repeat":
                 mask |= S.CHORDPANEL
             else:
                 mask |= S.HIGHDENSITY

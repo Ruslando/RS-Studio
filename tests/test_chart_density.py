@@ -35,6 +35,19 @@ class ChordDensityTest(unittest.TestCase):
         drawn = _drawn(_chord(1.0), _chord(1.5, fx={"vibrato": True}, chordDisplay="repeat"))
         self.assertEqual(drawn[1], ("repeat", True), "a forced repeat still carries its technique")
 
+    def _shaped(self, kind, *chords):
+        return _drawn([{**n, "shapeId": "s1", "shapeKind": kind, "shapeName": "G5"} for c in chords for n in c])
+
+    def test_a_handshape_follows_the_same_rules(self):
+        drawn = self._shaped("handshape", _chord(1.0), _chord(1.5, chordDisplay="full"),
+                             _chord(2.0, fx={"vibrato": True}), _chord(2.5))
+        self.assertEqual([d for d, _ in drawn], ["full", "full", "full", "repeat"])
+
+    def test_an_arpeggio_shows_its_first_chord_in_full(self):
+        drawn = self._shaped("arpeggio", _chord(1.0), _chord(1.5))
+        self.assertEqual([d for d, _ in drawn], ["full", "repeat"],
+                         "DLC Builder and the Toolkit both draw the first chord of an arpeggio in full")
+
 
 class NoteStatusTest(unittest.TestCase):
     def _level(self, notes):
