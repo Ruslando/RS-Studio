@@ -333,6 +333,12 @@ class ExporterFixes(unittest.TestCase):
         downbeats = [(b.measure, b.mask) for b in beats if b.beat == 0][:3]
         self.assertEqual(downbeats, [(1, 1), (2, 3), (3, 1)])
 
+    def test_average_tempo_is_eofs(self):
+        """EOF: 60 s over (span / number of beats), so at 120 BPM a little over 120."""
+        compiled = _built([_note(2.0, 2.5, 3, 7)]).compiled
+        n = len(compiled.sng.beats)
+        self.assertAlmostEqual(compiled.average_tempo, 120.0 * n / (n - 1), places=3)
+
     def test_handshapes_keep_a_32nd_apart(self):
         """shortenHandshapes: a chord held into the next ends a 32nd note (at 120 bpm) before it."""
         song = _compiled(_chord(2.0, 3.0, "x02210") + _chord(3.0, 3.4, "x32010"))

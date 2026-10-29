@@ -1766,8 +1766,10 @@ def compile_track(track: dict, grid: dict, song_length: float,
         capo_fret_id=capo if capo > 0 else -1,
     )
 
+    # EOF's averageTempo, which DLC Builder copies to the manifest: 60 s over the
+    # span divided by the number of beats (not of the gaps between them).
     duration = arr.beats[-1][0] - arr.beats[0][0]
-    average_tempo = (len(arr.beats) - 1) / duration * 60.0 if duration > 0 else 120.0
+    average_tempo = len(arr.beats) / duration * 60.0 if duration > 0 else 120.0
     sng_obj = S.SNG(
         beats=arr.sng_beats,
         phrases=arr.phrases,
