@@ -139,6 +139,20 @@ class RocksmithPackageTests(unittest.TestCase):
         self.assertEqual(builder._scroll_speed(0.1), 0.5)
         self.assertEqual(builder._scroll_speed(9), 5.0)
 
+    def test_picked_bass_is_marked_as_dlc_builder_marks_it(self):
+        spec = _spec([_track("Gtr", GUITAR, [0, 3]), _track("Bass", BASS, [0, 3])],
+                     [{"track": 0, "kind": "lead", "tuning": GUITAR, "bassPicked": True},
+                      {"track": 1, "kind": "bass", "tuning": BASS, "bassPicked": True}])
+        files, songs, _, _ = _build(spec)
+        self.assertEqual(songs["Bass"]["ArrangementProperties"]["bassPick"], 1)
+        self.assertEqual(songs["Lead"]["ArrangementProperties"]["bassPick"], 0, "a guitar is never picked bass")
+        header = {e["Attributes"]["ArrangementName"]: e["Attributes"]
+                  for e in json.loads(next(b for p, b in files.items() if p.endswith(".hsan")))["Entries"].values()}
+        self.assertEqual(header["Bass"]["BassPick"], 1)
+        self.assertNotIn("BassPick", header["Lead"], "left out unless picked, as DLC Builder leaves it null")
+        fingered = _build(_spec([_track("Bass", BASS, [0, 3])], [{"track": 0, "kind": "bass", "tuning": BASS}]))[1]
+        self.assertEqual(fingered["Bass"]["ArrangementProperties"]["bassPick"], 0)
+
     def test_chords_carry_the_names_the_editor_sent(self):
         # E5 on the two low strings, then the same grip with no name sent.
         def chord(start, **name):

@@ -535,7 +535,8 @@ async function submitRocksmithExport() {
       spec.tracks.forEach((track, i) => nameExportChords(picks[i].lane, track.notes));
       spec.name = songName;
       spec.metadata = metadataPayload(state.metadata);
-      spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane) })), leadingSilence, version,
+      spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane),
+        bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version,
         preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {

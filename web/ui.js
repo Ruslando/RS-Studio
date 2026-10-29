@@ -56,7 +56,7 @@ export const settingsModalBackdrop = $("settingsModalBackdrop"), settingsModalCl
 
 export const layerName = $("layerName"), layerColor = $("layerColor");
 
-export const layerInstr = $("layerInstr"), layerTun = $("layerTun"), layerCapo = $("layerCapo"), layerArrangement = $("layerArrangement"), layerOwnTempo = $("layerOwnTempo"), layerOwnSections = $("layerOwnSections"), layerScrollSpeed = $("layerScrollSpeed");
+export const layerInstr = $("layerInstr"), layerTun = $("layerTun"), layerCapo = $("layerCapo"), layerArrangement = $("layerArrangement"), layerOwnTempo = $("layerOwnTempo"), layerOwnSections = $("layerOwnSections"), layerScrollSpeed = $("layerScrollSpeed"), layerBassPicked = $("layerBassPicked");
 export const spLayerName = $("spLayerName");
 
 export const layerVolume = $("layerVolume"), layerVolumeValue = $("layerVolumeValue");

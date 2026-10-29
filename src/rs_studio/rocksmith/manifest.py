@@ -147,6 +147,9 @@ def build_attributes(ctx, header: bool) -> dict:
     if sng.metadata.capo_fret_id > 0:
         attrs["CapoFret"] = float(sng.metadata.capo_fret_id)
     if header:
+        # Only when picked: DLC Builder leaves it null, and nulls are not written.
+        if ctx.bass_picked:
+            attrs["BassPick"] = 1
         attrs["Representative"] = 1 if ctx.representative else 0
         attrs["RouteMask"] = route
         return attrs
@@ -179,7 +182,7 @@ def build_attributes(ctx, header: bool) -> dict:
             "fretHandMutes": 1 if props["fretHandMutes"] else 0,
             "slapPop": 1 if props["slapPop"] else 0,
             "twoFingerPicking": 0, "fifthsAndOctaves": on("fifthsAndOctaves"), "syncopation": 0,
-            "bassPick": 0, "sustain": 1 if props["sustain"] else 0,
+            "bassPick": 1 if ctx.bass_picked else 0, "sustain": 1 if props["sustain"] else 0,
             "pathLead": 1 if arr["path"] == "lead" else 0,
             "pathRhythm": 1 if arr["path"] == "rhythm" else 0,
             "pathBass": 1 if arr["path"] == "bass" else 0,

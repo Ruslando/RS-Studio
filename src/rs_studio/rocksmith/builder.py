@@ -58,6 +58,7 @@ class SongContext:
     compiled: chart.Compiled
     cent_offset: float = 0.0
     scroll_speed: float = 1.3  # lower is faster, as DLC Builder sets it
+    bass_picked: bool = False  # DLC Builder's "Bass picked"
     partition: int = 1
     file_name: str = ""   # lead, lead2 …: the name its files carry (DLC Builder, Toolkit)
 
@@ -524,7 +525,7 @@ def _arrangement_specs(spec: dict, tracks: list[dict], warnings: list[str]) -> l
             raise ValueError("Rocksmith arrangement types must be unique in one package")
         used_tags.add(arr["tag"])
         out.append({"track": idx, "kind": kind, "tuning": item.get("tuning"), "capo": item.get("capo"),
-                    "scrollSpeed": item.get("scrollSpeed")})
+                    "scrollSpeed": item.get("scrollSpeed"), "bassPicked": item.get("bassPicked") is True})
     if not out:
         raise ValueError("No Rocksmith arrangements selected")
     return out
@@ -823,6 +824,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
                 compiled=built.compiled,
                 cent_offset=built.cent_offset,
                 scroll_speed=_scroll_speed(req.get("scrollSpeed")),
+                bass_picked=built.is_bass and req.get("bassPicked") is True,
             )
             contexts.append(ctx)
             arrangement_entries.extend([

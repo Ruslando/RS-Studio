@@ -58,6 +58,7 @@ function projectBody() {
     muted: l.muted, active: l.active, tablatureEnabled: l.tablatureEnabled !== false,
     ...(l.rocksmithArrangement ? { rocksmithArrangement: l.rocksmithArrangement } : {}), notes: l.notes,
     ...(Number.isFinite(l.scrollSpeed) ? { scrollSpeed: l.scrollSpeed } : {}),
+    ...(l.bassPicked ? { bassPicked: true } : {}),
     ...(timingIdOf(l) !== SONG ? { timing: l.timing } : {}),   // absent: follows the song's timing
     ...normalizedLaneFields(l, Number(S.state.duration) || Infinity),
     ...(Number.isFinite(l.gmProgram) ? { gmProgram: l.gmProgram } : {}),
@@ -284,6 +285,7 @@ export function mapLane(l, startAt = 0) {
     rocksmithArrangement: ["none", "lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm", "bass", "alt_bass", "bonus_bass"].includes(l.rocksmithArrangement)
       ? l.rocksmithArrangement : undefined,
     scrollSpeed: l.scrollSpeed == null ? undefined : laneScrollSpeed(l),
+    bassPicked: l.bassPicked === true || undefined,
     // Read back defensively: a bad fret or a bad time is dropped rather than
     // reaching the voicer, where it would move a hand nobody put.
     handHolds: Array.isArray(l.handHolds)

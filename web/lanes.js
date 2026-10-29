@@ -11,7 +11,7 @@ import { emptyLaneFields } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
 import { S, setSelection } from "./store.js";
 import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, tuningToNames } from "./tablature.js";
-import { closeLayerSettings, layerArrangement, layerCapo, layerOwnSections, layerOwnTempo, layerScrollSpeed, layerColor, layerDeleteBtn, layerInstr, layerName, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
+import { closeLayerSettings, layerArrangement, layerCapo, layerOwnSections, layerOwnTempo, layerScrollSpeed, layerBassPicked, layerColor, layerDeleteBtn, layerInstr, layerName, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
 import { layerVolumePercent, normLayerVolume, notesLowToHigh, volumeToDb } from "./util.js";
 import { busLevel, mountBus, volumeControl } from "./volume.js";
 import { withStartTone } from "./tone-marker-core.js";
@@ -123,7 +123,7 @@ export function renderLayerSettings() {
   // The chip carries the layer's own identity dot — the same colour the stage
   // draws it in, so the dialog names the object the way the sidebar does.
   spLayerName.parentElement?.style.setProperty("--chip-dot", lane?.color || "");
-  for (const el of [layerName, layerColor, layerInstr, layerTun, layerCapo, layerArrangement, layerScrollSpeed, layerVolume]) if (el) el.disabled = !lane;
+  for (const el of [layerName, layerColor, layerInstr, layerTun, layerCapo, layerArrangement, layerScrollSpeed, layerBassPicked, layerVolume]) if (el) el.disabled = !lane;
   buildTuningOptions(lane);
   if (!lane) return;
   if (layerName && document.activeElement !== layerName) layerName.value = lane.name || "";
@@ -148,6 +148,11 @@ export function renderLayerSettings() {
     layerArrangement.value = lane.rocksmithArrangement || "none";
   }
   if (layerScrollSpeed && document.activeElement !== layerScrollSpeed) layerScrollSpeed.value = laneScrollSpeed(lane).toFixed(1);
+  // Only a bass arrangement is picked or fingered (DLC Builder's "Bass picked").
+  if (layerBassPicked) {
+    layerBassPicked.closest("label").hidden = !/bass/.test(lane.rocksmithArrangement || "");
+    layerBassPicked.checked = !!lane.bassPicked;
+  }
   for (const [box, owns] of [[layerOwnTempo, ownsTempo], [layerOwnSections, ownsSections]]) {
     if (!box) continue;
     box.checked = owns(lane);
@@ -543,10 +548,16 @@ export function init_lanes() {
     if (layerArrangement) layerArrangement.addEventListener("change", () => {
       const lane = settingsLane(); if (!lane) return;
       setLaneArrangement(lane, layerArrangement.value);
+      renderLayerSettings();   // "Picked bass" shows for a bass arrangement only
     });
     if (layerScrollSpeed) layerScrollSpeed.addEventListener("input", () => {
       const lane = settingsLane(); if (!lane || layerScrollSpeed.value === "") return;   // mid-typing
       lane.scrollSpeed = laneScrollSpeed({ scrollSpeed: layerScrollSpeed.value });
+      refreshSaveState();
+    });
+    if (layerBassPicked) layerBassPicked.addEventListener("change", () => {
+      const lane = settingsLane(); if (!lane) return;
+      lane.bassPicked = layerBassPicked.checked;
       refreshSaveState();
     });
     // Leaving the field shows what is kept: clamped to 0.5–5 in tenths.
