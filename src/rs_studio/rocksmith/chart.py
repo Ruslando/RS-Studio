@@ -712,11 +712,12 @@ def phrase_name(raw) -> str:
 
 def _beats_phrases_sections(grid: dict, song_length: float, section_markers: list | None,
                             phrase_boundaries: list | None, first_t: float, last_end: float,
-                            warnings: list, song_end: float | None = None) -> _Arrangement:
+                            warnings: list, song_end: float | None = None,
+                            obstacles: tuple = ((), ())) -> _Arrangement:
     """The beat map, and the phrase/section structure laid over it.
 
     Sections come from the editor's markers when there are any and from an
-    eight-measure fallback when there are not. Ordinary sections land on
+    eight-measure fallback when there are not (_automatic_sections). Ordinary sections land on
     measure boundaries, with a warning if snapping exceeds 20ms. The special
     End section retains its exact timestamp and defines the terminal phrase.
     """
@@ -739,16 +740,14 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
             p1_idx = k
         else:
             break
-    automatic_boundaries = [
-        ms for ms in measure_starts[p1_idx::SECTION_MEASURES]
-        if ms < min(last_end, song_end if song_end is not None else song_length) - 1e-4
-    ]
-    if not automatic_boundaries:
-        automatic_boundaries = [measure_starts[p1_idx]]
     end_t = max(beats[0][0] + 0.001, min(song_length, song_end if song_end is not None else song_length))
     # Even an arrangement whose first note is beyond END needs a valid initial
     # section; the checker will report that note rather than hiding it.
-    automatic_boundaries = [t for t in automatic_boundaries if t < end_t - 1e-4] or [beats[0][0]]
+    if measure_starts[p1_idx] < end_t - 1e-4:
+        # Up to the end of the notes: an outro before END stays in the last phrase.
+        automatic = _automatic_sections(beats, measure_starts[p1_idx], min(end_t, last_end), *obstacles)
+    else:
+        automatic = [(beats[0][0], "riff")]
 
     # Authored section starts replace the eight-measure fallback. Rocksmith
     # sections must align with the beat/measure map and must begin at phrase
@@ -784,7 +783,7 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
         if section_entries[0][0] > first_t + 1e-4:
             section_entries.insert(0, (first_playable_boundary, "riff"))
     else:
-        section_entries = [(boundary, "riff") for boundary in automatic_boundaries]
+        section_entries = automatic
 
     section_boundaries = [time for time, _ in section_entries]
     section_names = [name for _, name in section_entries]
@@ -864,7 +863,7 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
             start_pi=start_pi, end_pi=max(start_pi, next_section_pi - 1),
             string_mask=[0] * 36))
     sections.append(S.Section(
-        name="noguitar", number=1, start_time=end_t, end_time=song_length,
+        name="noguitar", number=name_counts.get("noguitar", 0) + 1, start_time=end_t, end_time=song_length,
         start_pi=len(pi_times) - 1, end_pi=len(pi_times) - 1,
         string_mask=[0] * 36))
 
@@ -881,6 +880,95 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
                         phrase_iterations=phrase_iterations, pi_times=pi_times,
                         sections=sections, end_t=end_t,
                         events=_count_in(beats, grid.get("songStart")))
+
+
+MIN_PHRASE_GAP = 2.0       # DLC Builder's PhraseGenerator: MinimumPhraseSeparation
+MIN_NOGUITAR_GAP = 2.5     # ... MinimumNoGuitarPhraseLength
+
+
+def _phrase_obstacles(entities: list, shape_info: dict) -> tuple[list, list]:
+    """What an automatic phrase must not cut, as DLC Builder's PhraseGenerator
+    avoids it, and where content starts (notes, chords and shapes).
+
+    Spans: a single note's sustain; a linked note up to the end of the note it
+    links to (a phrase on that note would break the link); a chord's hand shape,
+    a run of the same chord as the export builds it or an editor shape.
+    """
+    spans = []
+    for k, e in enumerate(entities):
+        if e.chord_id == -1 and e.sustain > 0:
+            spans.append((e.time, e.time + e.sustain))
+        for s, _, n in e.notes:
+            if n.get("linkNext") or n.get("slide") == "legato":
+                target = next((f for f in entities[k + 1:] if any(x[0] == s for x in f.notes)), None)
+                if target is not None:
+                    spans.append((e.time, target.time + target.sustain))
+    k = 0
+    while k < len(entities):
+        e = entities[k]
+        if e.chord_id == -1 or e.shape_id:
+            k += 1
+            continue
+        j = k + 1
+        while j < len(entities) and not entities[j].shape_id and _repeats(entities[j], entities[j - 1], entities[j - 1]):
+            j += 1
+        spans.append((e.time, entities[j - 1].time + entities[j - 1].sustain))
+        k = j
+    spans += [(info["start"], info["end"]) for info in shape_info.values()]
+    starts = sorted({e.time for e in entities} | {info["start"] for info in shape_info.values()})
+    return spans, starts
+
+
+def _automatic_sections(beats: list, start: float, end: float, spans=(), starts=()) -> list:
+    """Sections without the editor's markers: DLC Builder's PhraseGenerator.
+
+    A riff section every eight measures from `start` until `end`, moved off the spans it
+    would cut (_phrase_obstacles) to the nearer side, and left out when that
+    comes within 2 s of the section before. Where no note follows for 2.5 s
+    the section is noguitar, and the next one starts on the next note. The
+    first section stays on `start`, the measure of the first note.
+    """
+    def moved(t: float, earlier: bool) -> float:
+        for _ in range(100):   # a safeguard against a loop, as DLC Builder has one
+            span = next(((a, b) for a, b in spans if a < t - 1e-6 and b > t + 1e-6), None)
+            if span is None:
+                break
+            t = span[0] if earlier else span[1]
+        return t
+
+    out = [(start, "riff")]
+    count, resume = 0, None
+    for t, _, beat_in in beats:
+        if t < start - 1e-6:
+            continue
+        if t >= end - 1e-6:
+            break
+        if beat_in == 0 and resume is None:
+            count += 1
+        if count < SECTION_MEASURES + 1 and not (resume is not None and t >= resume - 1e-6):
+            continue
+        count = 1
+        prev = out[-1][0]
+        if resume is None:
+            early, late = moved(t, True), moved(t, False)
+            at = early if t - early < late - t else late
+            if at - prev <= MIN_PHRASE_GAP:
+                if late - prev <= MIN_PHRASE_GAP:
+                    continue
+                at = late
+        else:
+            at, resume = resume, None
+        if at >= end - 1e-4:
+            continue
+        following = next((x for x in starts if x >= at - 1e-6), None)
+        if following is None:
+            name = "noguitar"
+        elif following - at >= MIN_NOGUITAR_GAP:
+            name, resume = "noguitar", following
+        else:
+            name = "riff"
+        out.append((at, name))
+    return out
 
 
 def _count_in(beats: list, song_start) -> list[tuple[float, str]]:
@@ -1614,7 +1702,8 @@ def compile_track(track: dict, grid: dict, song_length: float,
 
     arr = _beats_phrases_sections(grid, song_length, section_markers, phrase_boundaries,
                                   voicing.first_t, voicing.last_end, warnings,
-                                  song_end=audio_end if song_end is None else song_end)
+                                  song_end=audio_end if song_end is None else song_end,
+                                  obstacles=_phrase_obstacles(entities, voicing.shape_info))
 
     anchors_raw = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, fixes)
     fingerprints, arpeggios = _handshapes(entities, voicing.shape_info, arr.end_t, arr.pi_times)
