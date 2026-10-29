@@ -259,7 +259,10 @@ def _view(song: S.SNG, is_bass: bool) -> _Arrangement:
                                    n.slide_to, n.slide_unpitch_to, _bends(n.bend_values)))
                 continue
             chord_notes = []
-            if n.mask & S.CHORDPANEL:
+            # DLC Builder's chords have chord notes exactly when they show the panel.
+            # A repeat can keep chord notes for its techniques, as the Toolkit builds
+            # it (chart._repeats), so those count too.
+            if n.mask & S.CHORDPANEL or n.chord_notes_id != -1:
                 template = song.chords[n.chord_id]
                 cn = (song.chord_notes[n.chord_notes_id]
                       if 0 <= n.chord_notes_id < len(song.chord_notes) else None)

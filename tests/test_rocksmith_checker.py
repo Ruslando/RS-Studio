@@ -402,6 +402,16 @@ class HandBuiltArrangements(unittest.TestCase):
         chord = S.Note(mask=S.CHORD | S.PARENT | S.CHORDPANEL, time=2.0, chord_id=0)
         self.assertIn(("I18", 2.0), _found(_song(chords=[chord], templates=[template])))
 
+    def test_a_repeat_with_chord_notes_is_checked_by_them(self):
+        """A forced repeat keeps its chord notes, as the Toolkit builds it: no I18 for its link."""
+        template = S.ChordTemplate(frets=[3, 5, -1, -1, -1, -1], fingers=[1, 3, -1, -1, -1, -1], notes=[0] * 6)
+        chord = S.Note(mask=S.CHORD | S.PARENT | S.HIGHDENSITY | S.CHORDNOTES, time=2.0, chord_id=0,
+                       chord_notes_id=0, sustain=1.0)
+        song = _song([_single(3.0, 0, 3)], chords=[chord], templates=[template])
+        song.chord_notes = [S.ChordNotes(mask=[S.PARENT | S.SUSTAIN, S.SUSTAIN, 0, 0, 0, 0], slide_to=[-1] * 6,
+                                         slide_unpitch_to=[-1] * 6, vibrato=[0] * 6, bend_data=[[]] * 6)]
+        self.assertNotIn("I18", [c for c, _ in _found(song)])
+
     def test_anchor_inside_handshape(self):
         template = S.ChordTemplate(frets=[3, 5, -1, -1, -1, -1], fingers=[1, 3, -1, -1, -1, -1], notes=[0] * 6)
         song = _song(anchors=[(1.0, 3), (3.0, 5)], handshapes=[(0, 2.0, 4.0)], templates=[template])
