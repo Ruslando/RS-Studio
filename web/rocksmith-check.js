@@ -108,6 +108,21 @@ export function rocksmithEvents(lane) {
   return results.get(lane?.id)?.events || [];
 }
 
+// The checker's issues (I01 …) of the given layers, by code: what the export
+// stops on unless ignored. The export's own notes about what it changed are not here.
+export function rocksmithIssueCodes(laneIds) {
+  const codes = new Map();
+  for (const id of laneIds) {
+    for (const issue of results.get(id)?.issues || []) {
+      if (!/^I\d\d$/.test(issue.code)) continue;
+      const seen = codes.get(issue.code) || { title: issue.title, count: 0 };
+      seen.count += 1;
+      codes.set(issue.code, seen);
+    }
+  }
+  return codes;
+}
+
 // The issues of one layer that sit on its notes, with those notes: what the stage frames.
 export function rocksmithIssueNotes(lane) {
   const found = results.get(lane.id);

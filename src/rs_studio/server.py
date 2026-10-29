@@ -311,6 +311,10 @@ def _normalize_metadata(raw: dict | None, current: dict | None = None) -> dict:
                 continue
             if math.isfinite(value):
                 out["rocksmith"][key] = value
+        # Checker codes the export may go past for this song (DLC Builder's IgnoredIssues).
+        ignored = rs.get("ignoredIssues")
+        if isinstance(ignored, list):
+            out["rocksmith"]["ignoredIssues"] = sorted({c for c in ignored if isinstance(c, str) and re.fullmatch(r"I\d\d", c)})
     else:
         out.setdefault("rocksmith", {})
     return out

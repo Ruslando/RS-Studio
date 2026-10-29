@@ -17,6 +17,7 @@ import { createOverview } from "./overview.js";
 import { matchKey } from "./keymap.js";
 import { togglePlay, transportPlaying } from "./playback.js";
 import { rememberPref } from "./util.js";
+import { rocksmithIssueCodes } from "./rocksmith-check.js";
 import { TUNINGS, buildSpecForLanesAsync, customTunings, laneTuning, parseTuning, tuningToNames } from "./tablature.js";
 
 function rsStringCountForKind(kind) {
@@ -416,6 +417,9 @@ function openRocksmithExportModal() {
   $("rsLeadIn").value = String(leadIn(localStorage.getItem(LS_LEAD_IN)));
   try { $("rsAuthor").value = localStorage.getItem(LS_AUTHOR) || ""; } catch { /* storage blocked: empty */ }
   try { $("rsDynamicDifficulty").checked = localStorage.getItem(LS_DD) !== "0"; } catch { /* storage blocked: on */ }
+  try { $("rsValidate").checked = localStorage.getItem(LS_VALIDATE) !== "0"; } catch { /* storage blocked: on */ }
+  rsIgnored = new Set(meta.rocksmith?.ignoredIssues || []);
+  renderRsIssues();
   setRsStatus("");
   converterOk = false;
   $("rsExportGo").disabled = true;
@@ -458,6 +462,37 @@ const LS_LEAD_IN = "cw.rsLeadIn", LEAD_IN_DEFAULT = 10;
 const LS_AUTHOR = "cw.rsAuthor";
 // Difficulty levels on or off, on unless turned off; one setting for every export.
 const LS_DD = "cw.rsDynamicDifficulty";
+// Stop on issues, as DLC Builder's "Validate before release build": on unless turned off.
+const LS_VALIDATE = "cw.rsValidate";
+
+// Codes this song exports past, as DLC Builder's IgnoredIssues: kept with the
+// song's details, also for codes the chart no longer has.
+let rsIgnored = new Set();
+
+const rsPickedLaneIds = () => [...$("rsArrangements").querySelectorAll(".rs-arr-row")]
+  .filter((row) => row.querySelector(".rs-arr-on").checked)
+  .map((row) => rsModalLanes[parseInt(row.dataset.track, 10)]?.id);
+
+// The live check's issues of the ticked layers, each code with an Ignore box.
+function renderRsIssues() {
+  const box = $("rsIssues");
+  const codes = rocksmithIssueCodes(rsPickedLaneIds());
+  box.replaceChildren(...[...codes].sort(([a], [b]) => a.localeCompare(b)).map(([code, { title, count }]) => {
+    const label = document.createElement("label");
+    label.className = "chk";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = rsIgnored.has(code);
+    input.addEventListener("change", () => { if (input.checked) rsIgnored.add(code); else rsIgnored.delete(code); });
+    label.append(input, ` Ignore ${code}: ${title}${count > 1 ? ` (${count}×)` : ""}`);
+    return label;
+  }));
+  if (!codes.size) box.textContent = "No issues found.";
+}
+
+// The checked codes neither fixed nor ignored; empty with the check turned off.
+const rsOpenIssues = () => !$("rsValidate").checked ? []
+  : [...rocksmithIssueCodes(rsPickedLaneIds()).keys()].filter((code) => !rsIgnored.has(code));
 function leadIn(raw) {
   const value = raw === null || raw === "" ? NaN : Number(raw);
   return Number.isFinite(value) ? Math.min(30, Math.max(0, value)) : LEAD_IN_DEFAULT;
@@ -513,9 +548,14 @@ async function submitRocksmithExport() {
     picks.push({ lane, kind, tuning, capo: Number(row.querySelector(".rs-arr-capo").value) || 0 });
   }
   if (!picks.length) { setRsStatus("Select at least one arrangement.", true); return; }
+  const open = rsOpenIssues();
+  if (open.length) {
+    setRsStatus(`Fix or ignore the issues first (${open.join(", ")}), or turn off Stop on issues.`, true);
+    return;
+  }
 
   const meta = rsMetaFromForm();
-  meta.rocksmith = { previewStart: clip.start, previewLength: clip.length };
+  meta.rocksmith = { previewStart: clip.start, previewLength: clip.length, ignoredIssues: [...rsIgnored].sort() };
   S.state.metadata = { ...normalizeMetadata(S.state.metadata || {}), ...meta };
   const leadingSilence = leadIn($("rsLeadIn").value);
   rememberPref(LS_LEAD_IN, leadingSilence);
@@ -523,6 +563,8 @@ async function submitRocksmithExport() {
   rememberPref(LS_AUTHOR, author);
   const dynamicDifficulty = $("rsDynamicDifficulty").checked;
   rememberPref(LS_DD, dynamicDifficulty ? "1" : "0");
+  const validate = $("rsValidate").checked;
+  rememberPref(LS_VALIDATE, validate ? "1" : "0");
   // A whole number from 1; anything else falls back to 1 (the server checks again).
   const version = Math.max(1, Math.floor(Number($("rsVersion").value)) || 1);
   $("rsVersion").value = String(version);
@@ -547,6 +589,7 @@ async function submitRocksmithExport() {
       spec.metadata = metadataPayload(state.metadata);
       spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane),
         bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version, author, dynamicDifficulty,
+        validate, ignoredIssues: [...rsIgnored].sort(),
         preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {
@@ -571,6 +614,8 @@ export function init_rocksmith_export() {
   initPreviewClip();
   $("rocksmithExportForm").addEventListener("submit", (e) => { e.preventDefault(); submitRocksmithExport(); });
   $("rsExportClose").addEventListener("click", closeRocksmithExportModal);
+  $("rsArrangements").addEventListener("change", renderRsIssues);
+  window.addEventListener("cw-rocksmith-checked", () => { if (!$("rocksmithExportBackdrop").hidden) renderRsIssues(); });
   $("rsCoverDrop").addEventListener("click", (e) => { if (!e.target.closest(".cover-clear")) $("rsCoverInput").click(); });
   $("rsCoverDrop").addEventListener("keydown", (e) => {
     if (e.target.closest(".cover-clear")) return;

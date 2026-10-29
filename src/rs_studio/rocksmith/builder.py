@@ -16,6 +16,7 @@ import re
 import tempfile
 import unicodedata
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -691,6 +692,17 @@ def _dynamic_difficulty(spec: dict) -> bool:
     return (spec.get("rocksmith") or {}).get("dynamicDifficulty") is not False
 
 
+def _blocking(spec: dict, issues: list) -> list:
+    """The issues that stop the export, as DLC Builder's release build stops: every
+    checker issue (I01 …) whose code the project has not ignored, unless the check
+    is turned off. The export's own notes about what it changed do not stop it."""
+    rs = spec.get("rocksmith") or {}
+    if rs.get("validate") is False:
+        return []
+    ignored = set(rs.get("ignoredIssues") or [])
+    return [i for i in issues if i.code in checker.ISSUES and i.code not in ignored]
+
+
 def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: float,
                          key: str, warnings: list[str], dynamic_difficulty: bool = False) -> _Built:
     """One requested arrangement as the SNG it ships as."""
@@ -831,6 +843,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             preview_wem = wem.convert_to_wem(preview_wav, wwise_console)
 
         contexts: list[SongContext] = []
+        blocking: list[checker.Issue] = []
         arrangement_entries: list[tuple[str, bytes]] = []
         for sort_idx, req in enumerate(arr_requests):
             arr = ARRANGEMENTS[req["kind"]]
@@ -840,7 +853,9 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             for song in built.compiled.sngs:
                 song.metadata.part = partition   # SNG and manifest agree, as in DLC Builder
             # Timed as in the editor, before the silence, like the live check.
-            warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in built.issues())
+            issues = built.issues()
+            warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in issues)
+            blocking += _blocking(spec, issues)
             sng_packed = sng.pack(sng.serialize(built.compiled.shipped))
             if phrase_levels is not None:
                 warnings.extend(_fewer_levels(arr, built.compiled.shipped, phrase_levels))
@@ -907,6 +922,11 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
              + b"Package Comment: Remastered"),
             ("appid.appid", b"248750"),
         ]
+        if blocking:
+            codes = Counter(i.code for i in blocking)
+            listed = ", ".join(c + (f" ×{n}" if n > 1 else "") for c, n in sorted(codes.items()))
+            raise ValueError(f"Export stopped: {len(blocking)} issue(s) not fixed or ignored ({listed}). "
+                             "Fix them, or ignore them in the export window.")
         # Named by the sort values, as DLC Builder names a release ("Beatles_…").
         name = _cdlc_filename(manifest.sort_name(latin["artist"], "artist", ""),
                               manifest.sort_name(latin["title"], "title", ""), key, version)

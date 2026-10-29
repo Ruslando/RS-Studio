@@ -113,8 +113,20 @@ class ThroughTheExporter(unittest.TestCase):
 
     def test_export_warnings_carry_the_issues_in_editor_time(self):
         notes = [_note(4.0, 5.0, 3, 12, harmonic="natural", bend="full")]
-        _, warnings, _ = builder.build_cdlc(_spec(notes), None, _wems=(b"a", b"b"), _song_length=20.0)
+        spec = _spec(notes)
+        spec["rocksmith"]["validate"] = False
+        _, warnings, _ = builder.build_cdlc(spec, None, _wems=(b"a", b"b"), _song_length=20.0)
         self.assertIn("Lead: I35 at 0:04.000: Natural harmonic with bend", warnings)
+
+    def test_an_issue_stops_the_export_until_ignored_or_the_check_is_off(self):
+        """As DLC Builder's release build: fix it, ignore its code, or turn the check off."""
+        notes = [_note(4.0, 5.0, 3, 12, harmonic="natural", bend="full")]
+        build = lambda spec: builder.build_cdlc(spec, None, _wems=(b"a", b"b"), _song_length=20.0)
+        with self.assertRaisesRegex(ValueError, r"I35"):
+            build(_spec(notes))
+        ignored = _spec(notes)
+        ignored["rocksmith"]["ignoredIssues"] = ["I35"]
+        self.assertIn("Lead: I35 at 0:04.000: Natural harmonic with bend", build(ignored)[1])
 
 
 def _chord(start, end, frets_lo_hi, **effects_by_string):

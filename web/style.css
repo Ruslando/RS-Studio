@@ -1083,7 +1083,7 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 .rs-wwise-get:hover { background: var(--surface-button-hover); }
 .rs-wwise-get:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); outline: none; }
 
-.rs-arrangements { display: flex; flex-direction: column; gap: var(--s-sibling); }
+.rs-arrangements, .rs-issues { display: flex; flex-direction: column; gap: var(--s-sibling); }
 
 /* Preview clip: the editor's overview, framed like a field. */
 .rs-preview-overview { flex: none; border-radius: var(--r-control); }
