@@ -153,6 +153,16 @@ class RocksmithPackageTests(unittest.TestCase):
         fingered = _build(_spec([_track("Bass", BASS, [0, 3])], [{"track": 0, "kind": "bass", "tuning": BASS}]))[1]
         self.assertEqual(fingered["Bass"]["ArrangementProperties"]["bassPick"], 0)
 
+    def test_the_author_is_the_one_given(self):
+        def author(name):
+            files = _build(_spec([_track("Gtr", GUITAR, [0, 3])], [{"track": 0, "kind": "lead", "tuning": GUITAR}],
+                                 **({"author": name} if name is not None else {})))[0]
+            return files["toolkit.version"].split(b"\n")[1]
+        self.assertEqual(author("Ruslan Ñ"), "Package Author: Ruslan Ñ".encode())
+        self.assertEqual(author("  two\nlines\x00 "), b"Package Author: two lines", "one line, no control characters")
+        self.assertEqual(author(None), b"Package Author: ")
+        self.assertEqual(author("x" * 200), b"Package Author: " + b"x" * 100)
+
     def test_chords_carry_the_names_the_editor_sent(self):
         # E5 on the two low strings, then the same grip with no name sent.
         def chord(start, **name):

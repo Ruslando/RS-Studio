@@ -160,6 +160,12 @@ def _package_version(spec: dict) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 1 else 1
 
 
+def _package_author(spec: dict) -> str:
+    """The charter's name for toolkit.version: one line, at most 100 characters."""
+    value = (spec.get("rocksmith") or {}).get("author")
+    return " ".join("".join(c if c.isprintable() else " " for c in value).split())[:100] if isinstance(value, str) else ""
+
+
 def _cdlc_filename(artist: str, title: str, key: str, version: int = 1) -> str:
     """CustomsForge/Toolkit convention: Artist-Name_Song-Title_v1_p.psarc
     (underscores between fields, hyphens for spaces within a field, _p = PC).
@@ -860,7 +866,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             (f"audio/windows/{prev_file_id}.wem", preview_wem),
             ("toolkit.version",
              b"Toolkit version: rs-studio rocksmith-export\n"
-             b"Package Author: RS Studio\n"
+             + f"Package Author: {_package_author(spec)}\n".encode()
              + f"Package Version: {version}\n".encode()
              # "Remastered", as DLC Builder and the Toolkit write it: CustomsForge
              # Song Manager reads this line, and without it lists the package as

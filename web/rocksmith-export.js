@@ -414,6 +414,7 @@ function openRocksmithExportModal() {
   renderRsArrangements(lanes);
   renderPreviewClip();
   $("rsLeadIn").value = String(leadIn(localStorage.getItem(LS_LEAD_IN)));
+  try { $("rsAuthor").value = localStorage.getItem(LS_AUTHOR) || ""; } catch { /* storage blocked: empty */ }
   setRsStatus("");
   converterOk = false;
   $("rsExportGo").disabled = true;
@@ -452,6 +453,8 @@ const clearRsCover = () =>
 // song loads, so a first note in the first second cannot be seen coming; five seconds
 // is the room the note highway needs. Remembered across exports, 0 to 30.
 const LS_LEAD_IN = "cw.rsLeadIn", LEAD_IN_DEFAULT = 10;
+// The charter's name for toolkit.version, like DLC Builder's "Charter name": one per user.
+const LS_AUTHOR = "cw.rsAuthor";
 function leadIn(raw) {
   const value = raw === null || raw === "" ? NaN : Number(raw);
   return Number.isFinite(value) ? Math.min(30, Math.max(0, value)) : LEAD_IN_DEFAULT;
@@ -513,6 +516,8 @@ async function submitRocksmithExport() {
   S.state.metadata = { ...normalizeMetadata(S.state.metadata || {}), ...meta };
   const leadingSilence = leadIn($("rsLeadIn").value);
   rememberPref(LS_LEAD_IN, leadingSilence);
+  const author = $("rsAuthor").value.trim();
+  rememberPref(LS_AUTHOR, author);
   // A whole number from 1; anything else falls back to 1 (the server checks again).
   const version = Math.max(1, Math.floor(Number($("rsVersion").value)) || 1);
   $("rsVersion").value = String(version);
@@ -536,7 +541,7 @@ async function submitRocksmithExport() {
       spec.name = songName;
       spec.metadata = metadataPayload(state.metadata);
       spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane),
-        bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version,
+        bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version, author,
         preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {
