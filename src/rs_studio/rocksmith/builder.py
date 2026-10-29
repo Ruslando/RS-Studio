@@ -668,6 +668,24 @@ def _partition(kinds: list[str], kind: str) -> int:
                    and _PRIORITY_ORDER[ARRANGEMENTS[other]["priority"]] < _PRIORITY_ORDER[arr["priority"]])
 
 
+def _fewer_levels(arr: dict, song, phrase_levels: dict) -> list[str]:
+    """Phrases with fewer difficulty levels than at the last export.
+
+    DLC Builder (PhraseLevelComparer) offers new ids then, which resets the
+    arrangement's progress in the game; it stores the levels by phrase name. Here
+    the ids stay and the export says which phrases lost levels.
+    """
+    levels = {p.name: p.max_difficulty for p in song.phrases}
+    before = phrase_levels.get(arr["tag"]) or {}
+    fewer = [f"{name} ({levels[name] + 1}, was {before[name] + 1})" for name in levels
+             if isinstance(before.get(name), int) and before[name] > levels[name]]
+    phrase_levels[arr["tag"]] = levels
+    if not fewer:
+        return []
+    return [f"{arr['full_name']}: fewer difficulty levels than at the last export in "
+            f"{', '.join(fewer)}. Progress Rocksmith saved for these phrases may not fit them any more."]
+
+
 def _dynamic_difficulty(spec: dict) -> bool:
     """Whether the export makes difficulty levels: yes unless it says no."""
     return (spec.get("rocksmith") or {}).get("dynamicDifficulty") is not False
@@ -762,10 +780,13 @@ def check_spec(spec: dict) -> list[dict]:
 def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None = None,
                _wems: tuple[bytes, bytes] | None = None,
                _song_length: float | None = None,
-               cover_art_path: Path | None = None) -> tuple[bytes, list[str], str]:
+               cover_art_path: Path | None = None,
+               phrase_levels: dict | None = None) -> tuple[bytes, list[str], str]:
     """Build the psarc. Returns (bytes, warnings, download filename).
 
     _wems/_song_length bypass the WEM conversion + audio steps for the self-check.
+    phrase_levels: the levels each phrase had at the last export, per arrangement;
+    compared (_fewer_levels) and updated in place.
     """
     warnings: list[str] = []
     version = _package_version(spec)
@@ -821,6 +842,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             # Timed as in the editor, before the silence, like the live check.
             warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in built.issues())
             sng_packed = sng.pack(sng.serialize(built.compiled.shipped))
+            if phrase_levels is not None:
+                warnings.extend(_fewer_levels(arr, built.compiled.shipped, phrase_levels))
             representative = arr["priority"] == "main"
 
             # Files are named as DLC Builder and the Toolkit name them (lead, lead2 …).

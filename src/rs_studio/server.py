@@ -1973,20 +1973,22 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
     rs.update(dlcKey=m.get("rocksmithKey"), keySeed=m.get("rocksmithKeySeed"))
     spec["rocksmith"] = rs
     rs["dlcKey"] = rs_builder.package_key(spec)
+    phrase_levels = dict(m.get("rocksmithPhraseLevels") or {})
     try:
         data, warnings, filename = rs_builder.build_cdlc(
-            spec, source_audio, cover_art_path=cover_path)
+            spec, source_audio, cover_art_path=cover_path, phrase_levels=phrase_levels)
     except rs_builder.AudioConverterNotFoundError as exc:
         raise HTTPException(status_code=424, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"CDLC build failed: {exc}") from exc
-    if not m.get("rocksmithKey"):
-        # Fixed from now on: renaming the song keeps its key, ids and progress.
-        current = _read_manifest(job)
+    current = _read_manifest(job)
+    # Fixed from now on: renaming the song keeps its key, ids and progress.
+    if not current.get("rocksmithKey"):
         current["rocksmithKey"] = rs["dlcKey"]
-        _write_manifest(job, current)
+    current["rocksmithPhraseLevels"] = phrase_levels   # for the next export's comparison
+    _write_manifest(job, current)
     return Response(
         content=data,
         media_type="application/octet-stream",

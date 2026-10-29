@@ -168,6 +168,21 @@ class RocksmithPackageTests(unittest.TestCase):
         flat = _build(_spec(tracks, arrangements, dynamicDifficulty=False))[1]["Lead"]
         self.assertEqual((flat["MaxPhraseDifficulty"], flat["NotesEasy"], flat["EasyMastery"]), (0, 12, 1.0))
 
+    def test_phrases_with_fewer_levels_than_last_time_are_reported(self):
+        tracks = [_track("Gtr", GUITAR, [0, 3, 5, 7, 5, 3, 0, 3, 5, 7, 8, 10])]
+        arrangements = [{"track": 0, "kind": "lead", "tuning": GUITAR}]
+        levels = {}
+        builder.build_cdlc(_spec(tracks, arrangements), None, _wems=WEMS, _song_length=20.0, phrase_levels=levels)
+        self.assertTrue(levels["lead"])
+        name = next(n for n, top in levels["lead"].items() if top > 0)
+        levels["lead"][name] += 3
+        _, warnings, _ = builder.build_cdlc(_spec(tracks, arrangements), None, _wems=WEMS, _song_length=20.0,
+                                            phrase_levels=levels)
+        self.assertTrue(any("fewer difficulty levels" in w and name in w for w in warnings), warnings)
+        _, warnings, _ = builder.build_cdlc(_spec(tracks, arrangements), None, _wems=WEMS, _song_length=20.0,
+                                            phrase_levels=levels)
+        self.assertFalse(any("fewer difficulty levels" in w for w in warnings), "compared with the last export")
+
     def test_the_author_is_the_one_given(self):
         def author(name):
             files = _build(_spec([_track("Gtr", GUITAR, [0, 3])], [{"track": 0, "kind": "lead", "tuning": GUITAR}],
