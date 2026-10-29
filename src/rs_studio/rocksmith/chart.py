@@ -1085,11 +1085,16 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, f
     floor = capo + 1
     changes: list[tuple[float, int]] = []
     cur = None
+    seen_shapes: set = set()
     for e in entities:
         hands = [int(n["hand"]) for _, f, n in e.notes if f > 0 and isinstance(n.get("hand"), (int, float))]
+        shape = shape_info.get(e.shape_id)
+        first_of_shape = shape is not None and e.shape_id not in seen_shapes
+        if shape is not None:
+            seen_shapes.add(e.shape_id)
         # The hand holds a grip shape: it stays where the shape begins (I21). Where the
         # editor's hand moves inside one (a hand anchor, or the fingering), say so.
-        if e.shape_id in shape_info and cur is not None and e.time > shape_info[e.shape_id]["start"] + 1e-6:
+        if shape is not None and not first_of_shape and cur is not None and e.time > shape["start"] + 1e-6:
             if hands and min(max(floor, min(hands) + capo), MAX_FRET - ANCHOR_WIDTH + 1) != cur:
                 fixes.append(("shape-hand", e.time))
             continue
@@ -1105,7 +1110,10 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, f
             fret = cur if cur is not None else floor
         fret = min(fret, MAX_FRET - ANCHOR_WIDTH + 1)
         if fret != cur:
-            changes.append((e.time, fret))
+            # A shape's hand is set where the shape begins, even when its first notes
+            # are not played (an easier difficulty level): a hand moving inside a
+            # held shape is I21.
+            changes.append((shape["start"] if first_of_shape else e.time, fret))
             cur = fret
 
     anchors = _phrase_start_anchors([(t, fret, ANCHOR_WIDTH) for t, fret in changes], pi_times)
@@ -1862,6 +1870,46 @@ def compile_track(track: dict, grid: dict, song_length: float,
     return compiled
 
 
+def _hopo_lands(entities: list, i: int) -> bool:
+    """Whether hammer-on or pull-off `entities[i]` comes right after a note on its
+    own fret, nothing else picked between: the check's I31, rule for rule."""
+    e = entities[i]
+    string, fret, n = e.notes[0]
+    if e.chord_id != -1 or not ((n.get("fx") or {}).get("hammer") and n["fx"]["hammer"] != "origin"):
+        return False
+    prev = chord_before = None
+    for x in reversed(entities[:i]):
+        if abs(x.time - e.time) < 1e-6:
+            continue
+        if x.chord_id != -1:
+            if chord_before is None and any(s == string for s, _, _ in x.notes):
+                chord_before = x
+            continue
+        if x.notes[0][0] != string:
+            return False   # another string picked between
+        prev = x
+        break
+    if chord_before is not None and (prev is None or chord_before.time > prev.time):
+        return next(f for s, f, _ in chord_before.notes if s == string) == fret
+    if prev is None:
+        return False
+    # A pitched slide ends on the next note on its string, this one
+    # (_emit_notes drops a slide to an open string).
+    return prev.notes[0][1] == fret or (prev.notes[0][2].get("slide") in ("shift", "legato") and fret > 0)
+
+
+def _drop_same_fret_hopos(view: list, authored: set) -> None:
+    """A level cannot be fixed by hand, so it must not carry what the check
+    reports. With notes left out, a hammer-on or pull-off can come right after
+    a note on its own fret (I31); it is played as a picked note on that level.
+    One the chart itself has (`authored`) stays: the user sees that warning."""
+    for i, e in enumerate(view):
+        if (round(e.time, 4), e.notes[0][0]) not in authored and _hopo_lands(view, i):
+            string, fret, n = e.notes[0]
+            view[i] = copy.copy(e)
+            view[i].notes = [(string, fret, {**n, "fx": {k: v for k, v in n["fx"].items() if k != "hammer"}})]
+
+
 def _difficulty_levels(full: S.SNG, voicing: _Voicing, arr: _Arrangement, capo: int,
                        is_bass: bool, chord_notes: tuple) -> tuple[S.SNG, tuple]:
     """The chart with easier levels (dd.py), and its notes at the hero levels.
@@ -1892,6 +1940,7 @@ def _difficulty_levels(full: S.SNG, voicing: _Voicing, arr: _Arrangement, capo: 
     max_chord = [dd.max_chord_strings(by_pi[k], templates.list) for k in range(len(pis))]
 
     shape_cache: dict[tuple, dict | None] = {}
+    authored_hopos = {(round(e.time, 4), e.notes[0][0]) for i, e in enumerate(entities) if _hopo_lands(entities, i)}
 
     def shape_view(view: list, d: int) -> dict:
         out = {}
@@ -1922,6 +1971,7 @@ def _difficulty_levels(full: S.SNG, voicing: _Voicing, arr: _Arrangement, capo: 
         for v in view:
             if v.shape_id is not None and v.shape_id not in shapes:
                 v.shape_id = None
+        _drop_same_fret_hopos(view, authored_hopos)
         keep = {k for k in range(len(pis)) if counts[k] > d}
         level, emitted = _level(view, shapes, templates.list, arr, capo, is_bass, [], chord_notes, keep, d)
         levels.append(level)

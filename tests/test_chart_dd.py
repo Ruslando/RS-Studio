@@ -99,6 +99,32 @@ class LevelTests(unittest.TestCase):
         self.assertLess(medium, hard)
 
 
+class LevelGuardTests(unittest.TestCase):
+    """A level cannot be fixed by hand: what the check reports must not be made by levelling."""
+
+    def test_a_shape_whose_first_notes_are_left_out_sets_the_hand_at_its_start(self):
+        shape = {"s": {"start": 1.0, "end": 2.0, "frets": [3, 5], "chord_id": 0, "kind": "handshape"}}
+        late = _entity(1.5, (2, 5, {"hand": 3}))
+        late.shape_id = "s"
+        anchors = chart._hand_anchors([late], shape, 0, [0.0, 10.0], [])
+        self.assertEqual(anchors[0][:2], (1.0, 3), "the hand moves at the shape's start, not inside it (I21)")
+
+    def test_a_hammer_on_right_after_its_own_fret_is_picked_on_that_level(self):
+        before = _entity(1.0, (3, 5, {}))
+        hammer = _entity(1.5, (3, 5, {"fx": {"hammer": "hammer"}}))
+        view = [before, hammer]
+        chart._drop_same_fret_hopos(view, set())
+        self.assertNotIn("hammer", view[1].notes[0][2]["fx"])
+        self.assertIn("hammer", hammer.notes[0][2]["fx"], "the chart's own note is untouched")
+        view = [before, hammer]
+        chart._drop_same_fret_hopos(view, {(1.5, 3)})
+        self.assertIn("hammer", view[1].notes[0][2]["fx"], "the chart's own I31 stays: the user sees it")
+        between = _entity(1.25, (2, 7, {}))
+        view = [before, between, hammer]
+        chart._drop_same_fret_hopos(view, set())
+        self.assertIn("hammer", view[2].notes[0][2]["fx"], "something picked between: fine")
+
+
 class ScoreTests(unittest.TestCase):
     """NoteScorer: low is important, and comes in early."""
     BEATS = [(0, True), (500, False), (1000, False), (1500, False), (2000, True)]
