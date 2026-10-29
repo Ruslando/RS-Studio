@@ -868,7 +868,10 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
         string_mask=[0] * 36))
 
     sng_beats = []
-    for t, measure, beat_in in beats:
+    for t, index, beat_in in beats:
+        # Measures count from 1, as EOF numbers them in the XML DLC Builder reads
+        # (rs.c), so the first measure is odd and has no "even measure" bit.
+        measure = index + 1
         mask = 0
         if beat_in == 0:
             mask = 1 | (2 if measure % 2 == 0 else 0)

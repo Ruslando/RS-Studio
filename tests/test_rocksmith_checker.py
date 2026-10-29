@@ -327,6 +327,12 @@ class ExporterFixes(unittest.TestCase):
         self.assertEqual(beats(25.2), [24.5, 25.2], "the beat before the end moves on")
         self.assertEqual(beats(25.0), [24.5, 25.0])
 
+    def test_measures_count_from_one(self):
+        """As EOF numbers them: measure 1 is odd, so only measure 2, 4 … carry the even bit."""
+        beats = _compiled([_note(2.0, 2.5, 3, 7)]).beats
+        downbeats = [(b.measure, b.mask) for b in beats if b.beat == 0][:3]
+        self.assertEqual(downbeats, [(1, 1), (2, 3), (3, 1)])
+
     def test_handshapes_keep_a_32nd_apart(self):
         """shortenHandshapes: a chord held into the next ends a 32nd note (at 120 bpm) before it."""
         song = _compiled(_chord(2.0, 3.0, "x02210") + _chord(3.0, 3.4, "x32010"))
