@@ -1632,10 +1632,16 @@ def compile_track(track: dict, grid: dict, song_length: float,
     sng_anchors = []
     for k, (t, fret, width) in enumerate(anchors_raw):
         end = anchors_raw[k + 1][0] if k + 1 < len(anchors_raw) else arr.pi_times[-1]
-        in_range = [n for n in notes if t <= n.time < end]
+        in_range = [i for i, n in enumerate(notes) if t <= n.time < end]
         if in_range:
-            first_nt = in_range[0].time
-            last = in_range[-1]
+            first_nt = notes[in_range[0]].time
+            # DLC Builder's convertAnchor: after a slide that ends by the anchor's start
+            # (its target note's place), the anchor's first note time is its start.
+            # Its test is one-sided, so any earlier slide not reaching past the start counts.
+            prev = notes[in_range[0] - 1] if in_range[0] else None
+            if prev is not None and prev.mask & S.SLIDE and prev.time + prev.sustain - t < 0.001:
+                first_nt = t
+            last = notes[in_range[-1]]
             last_nt = last.time if (last.mask & (S.SLIDE | S.PARENT)) else last.time + last.sustain
         else:
             first_nt, last_nt = S.UNINIT_FIRST_NOTE, S.UNINIT_LAST_NOTE

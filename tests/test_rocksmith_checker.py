@@ -352,6 +352,14 @@ class ExporterFixes(unittest.TestCase):
         notes = [{"start": 2.0, "end": 2.5, "pitch": 26, "string": 4, "fret": 0}]
         self.assertEqual(_built(notes, kind="bass", tuning=drop_d).compiled.sng.metadata.tuning, (-2, 0, 0, 0, 0, 0))
 
+    def test_an_anchor_after_a_slide_starts_its_note_time_with_itself(self):
+        """DLC Builder: the first note time of an anchor right after a slide is the anchor's start."""
+        sections = [{"t": 2.0, "sectionType": "intro"}, {"t": 4.0, "sectionType": "verse"}]
+        notes = [_note(2.0, 2.5, 3, 5), _note(2.5, 3.0, 3, 5, slide="shift"), _note(4.5, 4.7, 3, 7)]
+        anchors = _compiled(notes, sections=sections).levels[0].anchors
+        phrase_anchor = next(a for a in anchors if abs(a.start_time - 9.0) < 1e-6)
+        self.assertAlmostEqual(phrase_anchor.first_note_time, 9.0, msg="not the note at 9.5")
+
     def test_song_never_outlasts_its_audio(self):
         """EOF: a song longer than its audio never reaches an end in the game."""
         notes = [_note(2.0, 2.5, 3, 7), _note(19.8, 19.9, 3, 7)]   # ends 0.1 s before the 20 s of audio
