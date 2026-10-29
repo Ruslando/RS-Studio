@@ -589,14 +589,19 @@ def _arrangement_tones(track: dict, is_bass: bool, key: str, tag: str,
         else:
             remaining.append((time, tone))
 
+    # Tone A is the base tone (id 0), as EOF writes it and the Toolkit requires
+    # ("ToneA (ID 0) is expected to be same as ToneBase"); the others follow in
+    # the order they first come. Without a switch there are no slots at all.
     used_slots = []
     current = base_name
     for _, tone in remaining:
-        if tone != current and tone not in used_slots:
-            used_slots.append(tone)
+        if tone != current:
+            for name in (base_name, tone):
+                if name not in used_slots:
+                    used_slots.append(name)
         current = tone
-    if len(used_slots) > 4:  # RS2014 hard limit: Tone_A..D, 4 switchable slots per arrangement.
-        raise ValueError("Rocksmith supports at most four switchable tones per arrangement")
+    if len(used_slots) > 4:  # RS2014 hard limit: Tone_A..D, the base tone among them.
+        raise ValueError("Rocksmith supports at most four tones per arrangement, the base tone included")
 
     def load(name: str) -> dict:
         if name in custom:

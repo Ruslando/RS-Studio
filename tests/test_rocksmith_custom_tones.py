@@ -56,9 +56,10 @@ class CustomToneTests(unittest.TestCase):
         base, slots, events = builder._arrangement_tones(track, False, "song", "lead", 30, warnings)
         self.assertEqual(base["Name"], "My solo")
         self.assertEqual(len(slots), 2)
-        self.assertNotEqual(base["Key"], slots[0]["Key"])
-        self.assertEqual(slots[0]["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"], 30)
-        self.assertEqual(events, [(5, 0), (10, 1)])
+        self.assertEqual(base["Key"], slots[0]["Key"], "tone A is the base tone")
+        self.assertNotEqual(base["Key"], slots[1]["Key"])
+        self.assertEqual(slots[1]["GearList"]["Amp"]["KnobValues"]["Amp_MarshallPlexi_Loudness1"], 30)
+        self.assertEqual(events, [(5, 1), (10, 0)])
         self.assertEqual(original["Key"], "custom")
         self.assertEqual(warnings, [])
 
@@ -68,11 +69,16 @@ class CustomToneTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Invalid custom sound"):
             builder._arrangement_tones({"toneMarkers": [{"t": 0, "tone": "sound_bad", "toneData": invalid}]}, False, "song", "lead", 30, [])
 
-    def test_more_than_four_switchable_snapshots_are_rejected(self):
-        markers = []
-        for i in range(6):
-            tone = manifest.load_internal_tone("clean", "custom")
-            tone["Name"] = f"Sound {i}"
-            markers.append({"t": i, "tone": f"sound_{i}", "toneData": tone})
-        with self.assertRaisesRegex(ValueError, "four switchable"):
-            builder._arrangement_tones({"toneMarkers": markers}, False, "song", "lead", 30, [])
+    def test_more_than_four_tones_are_rejected(self):
+        def markers(count):
+            out = []
+            for i in range(count):
+                tone = manifest.load_internal_tone("clean", "custom")
+                tone["Name"] = f"Sound {i}"
+                out.append({"t": i, "tone": f"sound_{i}", "toneData": tone})
+            return out
+        base, slots, _ = builder._arrangement_tones({"toneMarkers": markers(4)}, False, "song", "lead", 30, [])
+        self.assertEqual([s["Key"] for s in slots][0], base["Key"])
+        # Five: the base tone and four others, one more than tones A to D hold.
+        with self.assertRaisesRegex(ValueError, "at most four tones"):
+            builder._arrangement_tones({"toneMarkers": markers(5)}, False, "song", "lead", 30, [])

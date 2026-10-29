@@ -154,10 +154,11 @@ class RocksmithPackageTests(unittest.TestCase):
         tracks = [_track("Gtr", GUITAR, [0, 3], toneMarkers=markers)]
         lead = _build(_spec(tracks, [{"track": 0, "kind": "lead", "tuning": GUITAR}]))[1]["Lead"]
         self.assertTrue(lead["Tone_Base"].endswith("clean_tone"), lead["Tone_Base"])
-        self.assertTrue(lead["Tone_A"].endswith("lead_tone"), lead["Tone_A"])
-        # Going back to the first tone is a switch like any other: it takes a slot.
-        self.assertTrue(lead["Tone_B"].endswith("clean_tone"), lead["Tone_B"])
+        # Tone A is the base tone (id 0), as EOF writes it and the Toolkit requires.
+        self.assertEqual(lead["Tone_A"], lead["Tone_Base"])
+        self.assertTrue(lead["Tone_B"].endswith("lead_tone"), lead["Tone_B"])
         self.assertEqual(lead["Tone_C"], "")
+        self.assertEqual(len(lead["Tones"]), 2)
 
     def test_custom_tone_parameters_reach_the_packaged_manifest(self):
         tone = manifest.load_internal_tone("lead", "ignored")
