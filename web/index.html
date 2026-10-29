@@ -1465,6 +1465,15 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <input type="number" id="rsYear" class="num-4" min="1000" max="9999" step="1" placeholder="YYYY" />
             </label>
           </div>
+          <label class="chk"><input type="checkbox" id="rsJapanese" /> Japanese title and artist <span class="info" role="img" tabindex="0" title="Names Rocksmith shows instead when the game language is Japanese, as DLC Builder's Japanese fields. Song title and artist stay what every other language shows." aria-label="Names Rocksmith shows instead when the game language is Japanese, as DLC Builder's Japanese fields. Song title and artist stay what every other language shows.">i</span></label>
+          <div class="field-pair" id="rsJapaneseFields" hidden>
+            <label class="field-group block">Japanese title
+              <input type="text" id="rsJapaneseTitle" maxlength="180" lang="ja" />
+            </label>
+            <label class="field-group block">Japanese artist
+              <input type="text" id="rsJapaneseArtist" maxlength="180" lang="ja" />
+            </label>
+          </div>
           </div>
           </div>
           </div>

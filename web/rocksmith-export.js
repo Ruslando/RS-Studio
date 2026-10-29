@@ -91,8 +91,15 @@ function rsMetaFromForm() {
   meta.album = ($("rsAlbum").value || "").trim();
   meta.year = ($("rsYear").value || "").trim();
   rsLatin.read(meta);
+  // Off: no Japanese names in the package, and none kept.
+  const japanese = $("rsJapanese").checked;
+  meta.rocksmith = { ...meta.rocksmith,
+    japaneseTitle: japanese ? $("rsJapaneseTitle").value.trim() : "",
+    japaneseArtist: japanese ? $("rsJapaneseArtist").value.trim() : "" };
   return meta;
 }
+
+function syncRsJapanese() { $("rsJapaneseFields").hidden = !$("rsJapanese").checked; }
 
 // Failure is a dot, not red text (rule 8), so this is a class rather than an
 // inline colour — and the colour it used to set, --danger, has never been a
@@ -411,6 +418,10 @@ function openRocksmithExportModal() {
   $("rsAlbum").value = meta.album || "";
   $("rsYear").value = meta.year || "";
   rsLatin.fill(meta);
+  $("rsJapaneseTitle").value = meta.rocksmith?.japaneseTitle || "";
+  $("rsJapaneseArtist").value = meta.rocksmith?.japaneseArtist || "";
+  $("rsJapanese").checked = !!($("rsJapaneseTitle").value || $("rsJapaneseArtist").value);
+  syncRsJapanese();
   renderRsCover(meta);
   renderRsArrangements(lanes);
   renderPreviewClip();
@@ -555,7 +566,7 @@ async function submitRocksmithExport() {
   }
 
   const meta = rsMetaFromForm();
-  meta.rocksmith = { previewStart: clip.start, previewLength: clip.length, ignoredIssues: [...rsIgnored].sort() };
+  meta.rocksmith = { ...meta.rocksmith, previewStart: clip.start, previewLength: clip.length, ignoredIssues: [...rsIgnored].sort() };
   S.state.metadata = { ...normalizeMetadata(S.state.metadata || {}), ...meta };
   const leadingSilence = leadIn($("rsLeadIn").value);
   rememberPref(LS_LEAD_IN, leadingSilence);
@@ -615,6 +626,7 @@ export function init_rocksmith_export() {
   $("rocksmithExportForm").addEventListener("submit", (e) => { e.preventDefault(); submitRocksmithExport(); });
   $("rsExportClose").addEventListener("click", closeRocksmithExportModal);
   $("rsArrangements").addEventListener("change", renderRsIssues);
+  $("rsJapanese").addEventListener("change", syncRsJapanese);
   window.addEventListener("cw-rocksmith-checked", () => { if (!$("rocksmithExportBackdrop").hidden) renderRsIssues(); });
   $("rsCoverDrop").addEventListener("click", (e) => { if (!e.target.closest(".cover-clear")) $("rsCoverInput").click(); });
   $("rsCoverDrop").addEventListener("keydown", (e) => {

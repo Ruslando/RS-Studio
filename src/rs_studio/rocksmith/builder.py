@@ -17,7 +17,7 @@ import tempfile
 import unicodedata
 import uuid
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -60,6 +60,7 @@ class SongContext:
     cent_offset: float = 0.0
     scroll_speed: float = 1.3  # lower is faster, as DLC Builder sets it
     bass_picked: bool = False  # DLC Builder's "Bass picked"
+    japanese: dict = field(default_factory=dict)   # title/artist shown in the game's Japanese
     partition: int = 1
     file_name: str = ""   # lead, lead2 …: the name its files carry (DLC Builder, Toolkit)
 
@@ -821,6 +822,14 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         if gaps and shown[field] != latin[field]:
             warnings.append(f"Rocksmith cannot show {' '.join(gaps)} in the {field}; left out")
     low = key.lower()
+    rs_meta = (spec.get("metadata") or {}).get("rocksmith") or {}
+    japanese = {}
+    for field_, name in (("title", rs_meta.get("japaneseTitle")), ("artist", rs_meta.get("japaneseArtist"))):
+        name = str(name or "").strip()
+        if name and font.missing(name):
+            warnings.append(f"Rocksmith cannot show {' '.join(font.missing(name))} in the Japanese {field_}; left out")
+        if font.shown(name, ""):
+            japanese[field_] = font.shown(name, "")
 
     with tempfile.TemporaryDirectory(prefix="cw-rs-") as tmp:
         workdir = Path(tmp)
@@ -867,7 +876,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             file_name = arr["name"].lower() + (str(partition) if partition > 1 else "")
             ctx = SongContext(
                 dlc_key=key, title=shown["title"], artist=shown["artist"], album=shown["album"],
-                latin=latin, year=year,
+                latin=latin, year=year, japanese=japanese,
                 is_bass=built.is_bass, arrangement=arr, representative=representative,
                 arrangement_sort=0,   # always 0, in DLC Builder and the Toolkit
                 partition=partition, file_name=file_name,

@@ -311,6 +311,11 @@ def _normalize_metadata(raw: dict | None, current: dict | None = None) -> dict:
                 continue
             if math.isfinite(value):
                 out["rocksmith"][key] = value
+        # Names shown when the game language is Japanese (DLC Builder's Japanese fields).
+        for key in ("japaneseTitle", "japaneseArtist"):
+            value = _clean_text(rs.get(key), 180)
+            if value:
+                out["rocksmith"][key] = value
         # Checker codes the export may go past for this song (DLC Builder's IgnoredIssues).
         ignored = rs.get("ignoredIssues")
         if isinstance(ignored, list):

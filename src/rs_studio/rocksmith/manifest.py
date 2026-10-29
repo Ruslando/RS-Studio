@@ -124,6 +124,9 @@ def build_attributes(ctx, header: bool) -> dict:
         "DNA_Riffs": 0.0,   # no DNA, as in CDLC from DLC Builder and the Toolkit (chart.py)
         "DNA_Solo": 0.0,
         "EasyMastery": _round9(easy / max(1, hard)),
+        # Only when given: DLC Builder leaves them null, and nulls are not written.
+        **({"JapaneseArtistName": ctx.japanese["artist"]} if ctx.japanese.get("artist") else {}),
+        **({"JapaneseSongName": ctx.japanese["title"]} if ctx.japanese.get("title") else {}),
         "LeaderboardChallengeRating": 0,
         "ManifestUrn": f"urn:database:json-db:{low}_{file_tag}",
         "MasterID_RDV": ctx.master_id,

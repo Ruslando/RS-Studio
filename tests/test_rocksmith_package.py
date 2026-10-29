@@ -157,6 +157,17 @@ class RocksmithPackageTests(unittest.TestCase):
         fingered = _build(_spec([_track("Bass", BASS, [0, 3])], [{"track": 0, "kind": "bass", "tuning": BASS}]))[1]
         self.assertEqual(fingered["Bass"]["ArrangementProperties"]["bassPick"], 0)
 
+    def test_japanese_names_go_out_only_when_given(self):
+        arrangements = [{"track": 0, "kind": "lead", "tuning": GUITAR}]
+        spec = _spec([_track("Gtr", GUITAR, [0, 3])], arrangements)
+        spec["metadata"]["rocksmith"] = {"japaneseTitle": "紅蓮華", "japaneseArtist": "LiSA"}
+        files, songs, _, _ = _build(spec)
+        header = next(iter(json.loads(next(b for p, b in files.items() if p.endswith(".hsan")))["Entries"].values()))["Attributes"]
+        for attrs in (songs["Lead"], header):
+            self.assertEqual((attrs["JapaneseSongName"], attrs["JapaneseArtistName"], attrs["SongName"]), ("紅蓮華", "LiSA", "Song"))
+        plain = _build(_spec([_track("Gtr", GUITAR, [0, 3])], arrangements))[1]["Lead"]
+        self.assertNotIn("JapaneseSongName", plain, "left out unless given, as DLC Builder leaves it null")
+
     def test_difficulty_levels_are_made_unless_turned_off(self):
         tracks = [_track("Gtr", GUITAR, [0, 3, 5, 7, 5, 3, 0, 3, 5, 7, 8, 10])]
         arrangements = [{"track": 0, "kind": "lead", "tuning": GUITAR}]
