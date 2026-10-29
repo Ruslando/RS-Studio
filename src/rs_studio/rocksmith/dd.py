@@ -135,8 +135,15 @@ def max_chord_strings(entities: list, templates: list) -> int:
     return max((_note_count(templates[e.chord_id]) for e in entities if e.chord_id != -1), default=0)
 
 
+# What is played on a note besides string and fret. DLC Builder compares only the
+# mask; bend, slide target and vibrato count here too, since they are played
+# differently. Editor-only fields (finger, hand, shape, chord name) do not.
+_PLAYED = ("fx", "bend", "slide", "slideEnd", "slideFrets", "tremPick", "harmonic", "slap",
+           "linkNext", "ignore", "stroke", "trill", "whammy", "grace")
+
+
 def _signature(n: dict) -> tuple:
-    return tuple(sorted((k, repr(v)) for k, v in n.items() if k not in ("start", "end", "id")))
+    return tuple(repr(n.get(k)) for k in _PLAYED)
 
 
 def level_count(entities: list, templates: list, beats: list, start: int, end: int) -> int:

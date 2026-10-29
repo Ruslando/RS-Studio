@@ -199,6 +199,12 @@ class CountTests(unittest.TestCase):
         self.assertEqual(dd.level_count(single, templates.list, [(0, True)], 0, 1000), dd.MIN_LEVELS)
         self.assertEqual(dd.level_count([], templates.list, [], 0, 1000), 1)
 
+    def test_a_repeat_is_what_is_played_not_editor_fields(self):
+        plain = {"start": 0, "end": 1, "id": "a", "fx": {}}
+        self.assertEqual(dd._signature(plain), dd._signature(dict(plain, start=2, id="b", finger=3, shapeId="s")))
+        self.assertNotEqual(dd._signature(plain), dd._signature(dict(plain, bend=1)))
+        self.assertNotEqual(dd._signature(plain), dd._signature(dict(plain, fx={"vibrato": True})))
+
 
 if __name__ == "__main__":
     unittest.main()
