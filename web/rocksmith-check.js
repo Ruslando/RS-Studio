@@ -108,21 +108,6 @@ export function rocksmithEvents(lane) {
   return results.get(lane?.id)?.events || [];
 }
 
-// The checker's issues (I01 …) of the given layers, by code: what the export
-// stops on unless ignored. The export's own notes about what it changed are not here.
-export function rocksmithIssueCodes(laneIds) {
-  const codes = new Map();
-  for (const id of laneIds) {
-    for (const issue of results.get(id)?.issues || []) {
-      if (!/^I\d\d$/.test(issue.code)) continue;
-      const seen = codes.get(issue.code) || { title: issue.title, count: 0 };
-      seen.count += 1;
-      codes.set(issue.code, seen);
-    }
-  }
-  return codes;
-}
-
 // The issues of one layer that sit on its notes, with those notes: what the stage frames.
 export function rocksmithIssueNotes(lane) {
   const found = results.get(lane.id);
@@ -162,19 +147,34 @@ export function rocksmithShapeProblems(lane) {
   return out;
 }
 
-// Every problem of the active layer: the export's (Rocksmith), the editor's own
-// (note-issues.js) and its flags'.
+// Every problem of a layer: the export's (Rocksmith), the editor's own
+// (note-issues.js) and its flags'. `key` is the problem's kind, what the export
+// window ignores: a checker code, else a fixed title or the flag's kind.
 function rowsFor(lane) {
   const found = results.get(lane?.id);
   const rows = [];
-  if (found?.error) rows.push({ title: `Not exported: ${found.error}`, help: '', important: true, time: null });
-  for (const text of found?.warnings || []) rows.push({ title: text, help: '', important: false, time: null });
-  for (const issue of found?.issues || []) rows.push(issue);
+  if (found?.error) rows.push({ key: 'not-exported', title: `Not exported: ${found.error}`, help: '', important: true, time: null });
+  for (const text of found?.warnings || []) rows.push({ key: text, title: text, help: '', important: false, time: null });
+  for (const issue of found?.issues || []) rows.push({ ...issue, key: issue.code });
   if (lane) for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision))
-    rows.push({ title: issue.title, help: issue.help, important: issue.tone === 'error', time: issue.time });
-  for (const entry of markerArtifacts()) if (entry.issue)
-    rows.push({ title: entry.issue.title, help: entry.issue.help, important: entry.issue.tone === 'error', time: entry.t });
+    rows.push({ key: issue.title, title: issue.title, help: issue.help, important: issue.tone === 'error', time: issue.time });
+  // ponytail: flags are only built for the active layer, so another layer's flag problems are not here.
+  for (const entry of markerArtifacts()) if (entry.issue && entry.lane === lane)
+    rows.push({ key: `flag-${entry.kind}`, title: entry.issue.title, help: entry.issue.help, important: entry.issue.tone === 'error', time: entry.t });
   return rows.sort((a, b) => (a.time ?? -1) - (b.time ?? -1));
+}
+
+// Every problem the pane lists for these layers, by kind: what the export
+// window asks to fix or ignore before it exports. key -> { title, help, count, important }.
+export function rocksmithIssueKinds(lanes) {
+  const kinds = new Map();
+  for (const lane of lanes) for (const row of rowsFor(lane)) {
+    const seen = kinds.get(row.key) || { title: row.title, help: row.help || '', count: 0, important: false };
+    seen.count += 1;
+    seen.important ||= !!row.important;
+    kinds.set(row.key, seen);
+  }
+  return kinds;
 }
 
 function moveTo(t) {

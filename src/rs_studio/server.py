@@ -316,10 +316,11 @@ def _normalize_metadata(raw: dict | None, current: dict | None = None) -> dict:
             value = _clean_text(rs.get(key), 180)
             if value:
                 out["rocksmith"][key] = value
-        # Checker codes the export may go past for this song (DLC Builder's IgnoredIssues).
+        # Kinds of issue the export may go past for this song (DLC Builder's IgnoredIssues):
+        # checker codes (I01 …) and the editor's own kinds, keyed by short text.
         ignored = rs.get("ignoredIssues")
         if isinstance(ignored, list):
-            out["rocksmith"]["ignoredIssues"] = sorted({c for c in ignored if isinstance(c, str) and re.fullmatch(r"I\d\d", c)})
+            out["rocksmith"]["ignoredIssues"] = sorted({c for c in ignored if isinstance(c, str) and 0 < len(c) <= 200})[:200]
     else:
         out.setdefault("rocksmith", {})
     return out

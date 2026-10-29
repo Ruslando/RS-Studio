@@ -636,7 +636,8 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 
 #layerSettingsBackdrop, #stemSettingsBackdrop { z-index: var(--z-window-editor); }
 
-#openProjModal, #gpImportModal, #rocksmithExportModal, #setupModal.wide { width: var(--w-modal-wide); }
+#openProjModal, #gpImportModal, #setupModal.wide { width: var(--w-modal-wide); }
+#rocksmithExportModal { width: 960px; }
 #newProjModal { width: min(1080px, calc(100vw - 2 * var(--s-section))); height: min(640px, 92vh); max-height: 92vh; }
 
 #settingsModalBackdrop { z-index: var(--z-window-menu); }
@@ -1084,10 +1085,13 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 .rs-wwise-get:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); outline: none; }
 
 .rs-arrangements, .rs-issues { display: flex; flex-direction: column; gap: var(--s-sibling); }
+.rs-issue-row > .rs-issue-name { flex: 1; min-width: 0; }
+.rs-issue-row > .count { color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* Preview clip: the editor's overview, framed like a field. */
 .rs-preview-overview { flex: none; border-radius: var(--r-control); }
 .rs-preview-fields { display: flex; align-items: flex-end; gap: var(--s-row); margin-top: var(--s-sibling); flex-wrap: wrap; }
+.rs-preview-transport { display: flex; gap: var(--s-row); margin-left: auto; }
 
 .rs-arr-row {
   display: grid; align-items: center;

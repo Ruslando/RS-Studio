@@ -24,7 +24,7 @@ import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadata
 import { refreshSaveState, setTuning } from "./project.js";
 import { renderModels, stopModelPolling } from "./models.js";
 import { S } from "./store.js";
-import { exportRocksmith } from "./rocksmith-export.js";
+import { exportRocksmith, fillRocksmithSettings } from "./rocksmith-export.js";
 import { exportModernGp, exportTab, setView } from "./tablature.js";
 import { runFindSimilar } from "./tracing.js";
 import { detectTempoMap } from "./tempo-detect.js";
@@ -158,6 +158,7 @@ function showSettingsPane(section) {
   $("spModels").hidden = section !== "models";
   $("spTunings").hidden = section !== "tunings";
   $("spSounds").hidden = section !== "sounds";
+  $("spExport").hidden = section !== "export";
   $("settingsModalTitle").textContent = section === "project" ? SP_TITLES.project : "Settings";
   $("settingsApply").textContent = "Apply";
   $("settingsApply").disabled = false;   // renderProjectSettings disables it with no project open
@@ -186,6 +187,7 @@ export function openSettingsModal(section = "trace", selectTuning = null) {
   dropTuningDraft();
   dropSoundDraft();
   tuningSelect = selectTuning;
+  fillRocksmithSettings();   // the export window may have saved new values since
   showSettingsPane(section);
   settingsModalBackdrop.hidden = false;
   snapshotSettings();

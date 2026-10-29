@@ -17,7 +17,8 @@ import { createOverview } from "./overview.js";
 import { matchKey } from "./keymap.js";
 import { togglePlay, transportPlaying } from "./playback.js";
 import { rememberPref } from "./util.js";
-import { rocksmithIssueCodes } from "./rocksmith-check.js";
+import { rocksmithIssueKinds } from "./rocksmith-check.js";
+import { initCollapsibleSections } from "./collapsible-sections.js";
 import { TUNINGS, buildSpecForLanesAsync, customTunings, laneTuning, parseTuning, tuningToNames } from "./tablature.js";
 
 function rsStringCountForKind(kind) {
@@ -193,8 +194,7 @@ function renderRsArrangements(lanes) {
 //
 // The strip is the editor's overview (overview.js) with the clip as its window
 // and a playhead of its own: click, drag or type a time to move it, Play from
-// there (Space too, while this window is open), and "Start here" to put the
-// clip at it. Dragging the clip moves it.
+// there (Space too, while this window is open). Dragging the clip moves it.
 const PREVIEW_DEFAULT = 28, PREVIEW_MIN = 5, PREVIEW_MAX = 30, FADE_IN = 2.5, FADE_OUT = 3;
 const PREVIEW_MAP_H = 64;
 let clip = { start: 0, length: PREVIEW_DEFAULT }, songLength = 0, playT = 0;
@@ -357,7 +357,6 @@ function initPreviewClip() {
       $("rocksmithExportModal").focus({ preventScroll: true });
     });
   }
-  $("rsPreviewHere").addEventListener("click", () => setClip(playT));
   $("rsPreviewPlay").addEventListener("click", playPreview);
   // This window's own Space: the preview, not the song behind it. A focused
   // button keeps Space as its click, and a text field keeps it as a character.
@@ -404,7 +403,14 @@ async function checkAudioConverter() {
     $("rsWwiseGet").hidden = true;
   }
   $("rsWwiseWarn").hidden = converterOk && !linux;
-  $("rsExportGo").disabled = !converterOk;
+  syncRsExportGo();
+}
+
+// Export only with the audio tools found and every issue fixed or ignored.
+function syncRsExportGo() {
+  const open = rsOpenIssues().length;
+  $("rsExportGo").disabled = !converterOk || open > 0;
+  $("rsExportGo").title = open ? `Fix or ignore the ${open === 1 ? "issue" : `${open} issues`} first` : "";
 }
 
 function openRocksmithExportModal() {
@@ -429,7 +435,6 @@ function openRocksmithExportModal() {
   try { $("rsAuthor").value = localStorage.getItem(LS_AUTHOR) || ""; } catch { /* storage blocked: empty */ }
   try { $("rsDynamicDifficulty").checked = localStorage.getItem(LS_DD) !== "0"; } catch { /* storage blocked: on */ }
   try { $("rsMac").checked = localStorage.getItem(LS_MAC) === "1"; } catch { /* storage blocked: off */ }
-  try { $("rsValidate").checked = localStorage.getItem(LS_VALIDATE) !== "0"; } catch { /* storage blocked: on */ }
   rsIgnored = new Set(meta.rocksmith?.ignoredIssues || []);
   renderRsIssues();
   setRsStatus("");
@@ -476,37 +481,67 @@ const LS_AUTHOR = "cw.rsAuthor";
 const LS_DD = "cw.rsDynamicDifficulty";
 // A Mac package beside the PC one: off unless turned on.
 const LS_MAC = "cw.rsMac";
-// Stop on issues, as DLC Builder's "Validate before release build": on unless turned off.
-const LS_VALIDATE = "cw.rsValidate";
 
-// Codes this song exports past, as DLC Builder's IgnoredIssues: kept with the
-// song's details, also for codes the chart no longer has.
+// Kinds of issue this song exports past, as DLC Builder's IgnoredIssues: kept
+// with the song's details, also for kinds the chart no longer has.
 let rsIgnored = new Set();
 
-const rsPickedLaneIds = () => [...$("rsArrangements").querySelectorAll(".rs-arr-row")]
+const rsPickedLanes = () => [...$("rsArrangements").querySelectorAll(".rs-arr-row")]
   .filter((row) => row.querySelector(".rs-arr-on").checked)
-  .map((row) => rsModalLanes[parseInt(row.dataset.track, 10)]?.id);
+  .map((row) => rsModalLanes[parseInt(row.dataset.track, 10)]).filter(Boolean);
 
-// The live check's issues of the ticked layers, each code with an Ignore box.
+// The ticked layers' issues, as the Errors and Warnings pane lists them: a
+// disclosure each (the settings' one), a field row per kind with its Ignore box
+// (4.13), and Ignore all beside the disclosure's title.
 function renderRsIssues() {
-  const box = $("rsIssues");
-  const codes = rocksmithIssueCodes(rsPickedLaneIds());
-  box.replaceChildren(...[...codes].sort(([a], [b]) => a.localeCompare(b)).map(([code, { title, count }]) => {
-    const label = document.createElement("label");
-    label.className = "chk";
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = rsIgnored.has(code);
-    input.addEventListener("change", () => { if (input.checked) rsIgnored.add(code); else rsIgnored.delete(code); });
-    label.append(input, ` Ignore ${code}: ${title}${count > 1 ? ` (${count}×)` : ""}`);
-    return label;
-  }));
-  if (!codes.size) box.textContent = "No issues found.";
+  const kinds = [...rocksmithIssueKinds(rsPickedLanes())].sort(([, a], [, b]) => a.title.localeCompare(b.title));
+  for (const group of $("rsIssues").querySelectorAll(".sound-section")) {
+    const mine = kinds.filter(([, kind]) => kind.important === (group.dataset.tone === "error"));
+    group.hidden = !mine.length;
+    group.querySelector(".rs-issue-count").textContent = String(mine.length);
+    group.querySelector(".sub-list").replaceChildren(...mine.map(([key, { title, help, count, important }]) => {
+      const row = document.createElement("div");
+      row.className = "list-row list-row--fields artifact-issue-row rs-issue-row";
+      row.toggleAttribute("data-important", important);
+      // Rule 19: the sentence is the row's tooltip; DLC Builder's codes stay internal (10).
+      row.dataset.tip = help ? `${title}\n${help}` : title;
+      row.dataset.tipTone = important ? "error" : "warning";
+      const mark = document.createElement("span");
+      mark.className = "artifact-issue-mark";
+      mark.innerHTML = WARN_ICON;
+      const name = document.createElement("span");
+      name.className = "rs-arr-name rs-issue-name";
+      name.textContent = title;
+      const times = document.createElement("span");
+      times.className = "count";
+      times.textContent = count > 1 ? `${count}×` : "";
+      const label = document.createElement("label");
+      label.className = "chk";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = rsIgnored.has(key);
+      input.addEventListener("change", () => {
+        if (input.checked) rsIgnored.add(key); else rsIgnored.delete(key);
+        renderRsIssues();
+      });
+      label.append(input, " Ignore");
+      row.append(mark, name, times, label);
+      return row;
+    }));
+    const all = group.querySelector(".rs-issue-all"), ignored = mine.filter(([key]) => rsIgnored.has(key)).length;
+    all.checked = !!mine.length && ignored === mine.length;
+    all.indeterminate = ignored > 0 && ignored < mine.length;
+    all.onchange = () => {
+      for (const [key] of mine) if (all.checked) rsIgnored.add(key); else rsIgnored.delete(key);
+      renderRsIssues();
+    };
+  }
+  $("rsIssues").querySelector(".rs-issue-none").hidden = kinds.length > 0;
+  syncRsExportGo();
 }
 
-// The checked codes neither fixed nor ignored; empty with the check turned off.
-const rsOpenIssues = () => !$("rsValidate").checked ? []
-  : [...rocksmithIssueCodes(rsPickedLaneIds()).keys()].filter((code) => !rsIgnored.has(code));
+// The issue kinds neither fixed nor ignored.
+const rsOpenIssues = () => [...rocksmithIssueKinds(rsPickedLanes()).keys()].filter((key) => !rsIgnored.has(key));
 function leadIn(raw) {
   const value = raw === null || raw === "" ? NaN : Number(raw);
   return Number.isFinite(value) ? Math.min(30, Math.max(0, value)) : LEAD_IN_DEFAULT;
@@ -518,6 +553,26 @@ export function rsLeadIn() {
   let stored = null;
   try { stored = localStorage.getItem(LS_LEAD_IN); } catch { /* storage blocked: the default */ }
   return leadIn(stored);
+}
+
+// The Export page in Settings edits the same stored values the window starts
+// from, live like the other pages (Cancel re-fires the inputs to undo).
+const RS_SETTINGS = [["setRsAuthor", LS_AUTHOR], ["setRsLeadIn", LS_LEAD_IN], ["setRsDynamicDifficulty", LS_DD], ["setRsMac", LS_MAC]];
+
+export function fillRocksmithSettings() {
+  const get = (key) => { try { return localStorage.getItem(key); } catch { return null; } };   // blocked: defaults
+  $("setRsAuthor").value = get(LS_AUTHOR) || "";
+  $("setRsLeadIn").value = String(leadIn(get(LS_LEAD_IN)));
+  $("setRsDynamicDifficulty").checked = get(LS_DD) !== "0";
+  $("setRsMac").checked = get(LS_MAC) === "1";
+}
+
+function initRocksmithSettings() {
+  for (const [id, key] of RS_SETTINGS) {
+    const el = $(id);
+    el.addEventListener(el.type === "checkbox" ? "change" : "input", () => rememberPref(key,
+      el.type === "checkbox" ? (el.checked ? "1" : "0") : id === "setRsLeadIn" ? leadIn(el.value) : el.value.trim()));
+  }
 }
 
 export function exportRocksmith() {
@@ -564,7 +619,7 @@ async function submitRocksmithExport() {
   if (!picks.length) { setRsStatus("Select at least one arrangement.", true); return; }
   const open = rsOpenIssues();
   if (open.length) {
-    setRsStatus(`Fix or ignore the issues first (${open.join(", ")}), or turn off Stop on issues.`, true);
+    setRsStatus("Fix or ignore the issues first.", true);
     return;
   }
 
@@ -579,8 +634,6 @@ async function submitRocksmithExport() {
   rememberPref(LS_DD, dynamicDifficulty ? "1" : "0");
   const mac = $("rsMac").checked;
   rememberPref(LS_MAC, mac ? "1" : "0");
-  const validate = $("rsValidate").checked;
-  rememberPref(LS_VALIDATE, validate ? "1" : "0");
   // A whole number from 1; anything else falls back to 1 (the server checks again).
   const version = Math.max(1, Math.floor(Number($("rsVersion").value)) || 1);
   $("rsVersion").value = String(version);
@@ -605,7 +658,7 @@ async function submitRocksmithExport() {
       spec.metadata = metadataPayload(state.metadata);
       spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane),
         bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version, author, dynamicDifficulty,
-        validate, ignoredIssues: [...rsIgnored].sort(), mac,
+        ignoredIssues: [...rsIgnored].sort(), mac,
         preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {
@@ -635,6 +688,8 @@ async function submitRocksmithExport() {
 
 export function init_rocksmith_export() {
   initPreviewClip();
+  initRocksmithSettings();
+  initCollapsibleSections($("rsIssues"), "cw.rsIssueSections");
   $("rocksmithExportForm").addEventListener("submit", (e) => { e.preventDefault(); submitRocksmithExport(); });
   $("rsExportClose").addEventListener("click", closeRocksmithExportModal);
   $("rsArrangements").addEventListener("change", renderRsIssues);

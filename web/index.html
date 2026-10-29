@@ -915,7 +915,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <span id="settingsModalTitle">Trace options</span></span>
         <button id="settingsModalClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
-<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="sounds">Tone presets</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button></nav>      <div class="dialog-body">
+<div class="settings-layout"><nav id="settingsNav" class="settings-nav" aria-label="Settings categories"><button type="button" class="navigation-item" data-settings-pane="appearance">Appearance</button><button type="button" class="navigation-item" data-settings-pane="trace">Editor</button><button type="button" class="navigation-item" data-settings-pane="tunings">Tunings</button><button type="button" class="navigation-item" data-settings-pane="sounds">Tone presets</button><button type="button" class="navigation-item" data-settings-pane="export">Rocksmith export</button><button type="button" class="navigation-item" data-settings-pane="keys">Keyboard shortcuts</button><button type="button" class="navigation-item" data-settings-pane="models">Models</button></nav>      <div class="dialog-body">
         <div class="sp-pane" id="spSounds" hidden>
           <section class="sound-section" data-section="preset">
           <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="soundSectionPreset"><span class="sound-section-title">Preset</span><span id="soundDraftStatus" class="sp-note" role="status"></span><span id="soundPresetSummary" class="sp-note sound-section-summary"></span></button>
@@ -1221,6 +1221,19 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <div id="tuningEditor" class="tuning-editor"></div>
           </div>
         </div>
+        <!-- The Rocksmith export window starts from these, for every project, and
+             saves what it exported with back here. -->
+        <div class="sp-pane" id="spExport" hidden><div class="pane-intro"><h2>Rocksmith export</h2></div>
+          <label class="field-group block" title="Your name as the package's author, shown by CustomsForge Song Manager.">Author
+            <input type="text" id="setRsAuthor" maxlength="100" autocomplete="name" />
+          </label>
+          <div class="field-group block is-narrow" title="Silence added in front of the song, so the first notes can be seen coming">
+            <label class="label" for="setRsLeadIn">Leading silence</label>
+            <span class="stepper"><span class="pop-field"><input type="number" id="setRsLeadIn" class="num-4" min="0" max="30" step="0.5" data-stepper /><span class="pop-unit">s</span></span></span>
+          </div>
+          <label class="chk"><input type="checkbox" id="setRsDynamicDifficulty" /> Dynamic difficulty</label>
+          <label class="chk"><input type="checkbox" id="setRsMac" /> Also for Mac</label>
+        </div>
         <div class="sp-pane" id="spKeys" hidden><div class="pane-intro"><h2>Keyboard shortcuts</h2></div>
           <div class="keymap-tabs" role="tablist">
             <button class="keymap-tab" role="tab" aria-controls="keysPaneEdit" id="keysTabEdit" data-keytab="edit">Editable</button>
@@ -1494,24 +1507,28 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <canvas id="rsPreviewMap" class="overview-map" title="Drag the clip to move it; click elsewhere to move the playhead"></canvas>
           </div>
           <div class="rs-preview-fields">
-            <button type="button" id="rsPreviewPlay" class="icon-btn" aria-label="Play preview clip" title="Play the preview clip with its fades">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-            </button>
-            <button type="button" id="rsPreviewPrev" class="icon-btn" aria-label="Start at previous marker" title="Start at the previous section, phrase, tone or tempo marker"><span data-ui-icon="previousMarker" data-icon-size="16" aria-hidden="true"></span></button>
             <div class="field-group block is-narrow">
               <label class="label" for="rsPreviewStart">Start</label>
               <span class="stepper"><span class="pop-field"><input type="number" id="rsPreviewStart" class="num-4" min="0" step="0.5" data-stepper /><span class="pop-unit">s</span></span></span>
             </div>
-            <button type="button" id="rsPreviewNext" class="icon-btn" aria-label="Start at next marker" title="Start at the next section, phrase, tone or tempo marker"><span data-ui-icon="nextMarker" data-icon-size="16" aria-hidden="true"></span></button>
-            <button type="button" id="rsPreviewHere" class="btn btn--secondary" title="Start the clip at the playhead">Start here</button>
             <div class="field-group block is-narrow" title="5 to 30 seconds; DLC Builder uses 28">
               <label class="label" for="rsPreviewLength">Length</label>
               <span class="stepper"><span class="pop-field"><input type="number" id="rsPreviewLength" class="num-4" min="5" max="30" step="1" value="28" data-stepper /><span class="pop-unit">s</span></span></span>
+            </div>
+            <div class="rs-preview-transport">
+              <button type="button" id="rsPreviewPrev" class="icon-btn" aria-label="Start at previous marker" title="Start at the previous section, phrase, tone or tempo marker"><span data-ui-icon="previousMarker" data-icon-size="16" aria-hidden="true"></span></button>
+              <button type="button" id="rsPreviewPlay" class="icon-btn" aria-label="Play preview clip" title="Play the preview clip with its fades">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              </button>
+              <button type="button" id="rsPreviewNext" class="icon-btn" aria-label="Start at next marker" title="Start at the next section, phrase, tone or tempo marker"><span data-ui-icon="nextMarker" data-icon-size="16" aria-hidden="true"></span></button>
             </div>
           </div>
           </div>
           <div class="section">
           <div class="section-head"><span>Package</span></div>
+          <label class="field-group block" title="Your name as the package's author, shown by CustomsForge Song Manager. Remembered for every export.">Author
+            <input type="text" id="rsAuthor" maxlength="100" autocomplete="name" />
+          </label>
           <div class="field-pair">
           <!-- A div and a label[for], not a wrapping label: the stepper's buttons sit
                beside the field, and a click on them must not land on the field. -->
@@ -1524,17 +1541,29 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <span class="stepper"><input type="number" id="rsVersion" class="num-4" min="1" step="1" value="1" data-stepper /></span>
           </div>
           </div>
-          <label class="field-group block" title="Your name as the package's author, shown by CustomsForge Song Manager. Remembered for every export.">Author
-            <input type="text" id="rsAuthor" maxlength="100" autocomplete="name" />
-          </label>
           <label class="chk"><input type="checkbox" id="rsMac" /> Also for Mac <span class="info" role="img" tabindex="0" title="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export." aria-label="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export.">i</span></label>
           <label class="chk"><input type="checkbox" id="rsDynamicDifficulty" checked /> Dynamic difficulty <span class="info" role="img" tabindex="0" title="Easier levels of every phrase, as DLC Builder makes them: Rocksmith starts a player on an easy level and adds notes as they play well. Off: every phrase only as written. Remembered for every export." aria-label="Easier levels of every phrase, as DLC Builder makes them: Rocksmith starts a player on an easy level and adds notes as they play well. Off: every phrase only as written. Remembered for every export.">i</span></label>
           </div>
-          <!-- Issues of the live check: the export stops on any not fixed or ignored. -->
+          <!-- Issues of the live check: Export stays off until each is fixed or ignored. -->
           <div class="section">
           <div class="section-head"><span>Issues</span></div>
-          <label class="chk"><input type="checkbox" id="rsValidate" checked /> Stop on issues <span class="info" role="img" tabindex="0" title="Export only when every issue of the check is fixed or ignored, as DLC Builder does for a release build. Off: export with issues. Remembered for every export." aria-label="Export only when every issue of the check is fixed or ignored, as DLC Builder does for a release build. Off: export with issues. Remembered for every export.">i</span></label>
-          <div id="rsIssues" class="rs-issues"></div>
+          <div id="rsIssues" class="rs-issues">
+            <section class="sound-section" data-section="errors" data-tone="error">
+              <div class="sound-section-head">
+                <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="rsIssueErrors"><span class="sound-section-title">Errors</span><span class="sp-note rs-issue-count"></span></button>
+                <label class="chk"><input type="checkbox" class="rs-issue-all" /> Ignore all</label>
+              </div>
+              <div class="sound-section-body" id="rsIssueErrors"><div class="sound-section-inner"><div class="sub-list"></div></div></div>
+            </section>
+            <section class="sound-section" data-section="warnings" data-tone="warning">
+              <div class="sound-section-head">
+                <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="rsIssueWarnings"><span class="sound-section-title">Warnings</span><span class="sp-note rs-issue-count"></span></button>
+                <label class="chk"><input type="checkbox" class="rs-issue-all" /> Ignore all</label>
+              </div>
+              <div class="sound-section-body" id="rsIssueWarnings"><div class="sound-section-inner"><div class="sub-list"></div></div></div>
+            </section>
+            <p class="rs-issue-none sp-note">No issues found.</p>
+          </div>
           </div>
           <p id="rsExportStatus" class="sp-note" hidden></p>
         </div>

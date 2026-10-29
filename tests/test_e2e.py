@@ -4604,13 +4604,9 @@ class EndToEndTests(unittest.TestCase):
         page.locator("#rsPreviewLength").dispatch_event("change")
         expect(page.locator("#rsPreviewLength")).to_have_value("30")
         self.assertLessEqual(float(page.locator("#rsPreviewStart").input_value()), max(0.0, song - 30) + 0.05)
-        # A click on the strip moves the playhead; "Start here" puts the clip there.
         page.fill("#rsPreviewLength", "5")
         page.locator("#rsPreviewLength").dispatch_event("change")
         strip = strip.bounding_box()
-        page.mouse.click(strip["x"] + strip["width"] * 0.25, strip["y"] + 4)
-        page.click("#rsPreviewHere")
-        self.assertAlmostEqual(float(page.locator("#rsPreviewStart").input_value()), song * 0.25, delta=0.3)
         # Changing the clip puts the playhead back at its start.
         page.mouse.click(strip["x"] + strip["width"] * 0.9, strip["y"] + 4)
         page.fill("#rsPreviewStart", "1")
