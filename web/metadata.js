@@ -2,6 +2,8 @@
 // and export dialogs. The manifest stores the cover art as a job-relative path;
 // the client also receives coverArtUrl for previewing it.
 
+import { latinUsable, nameCheck } from "./game-font.js";
+
 export function normalizeMetadata(raw = {}) {
   return {
     title: (raw.title || "").trim(),
@@ -47,17 +49,20 @@ export function metadataPayload(meta) {
 }
 
 // ---- Latin spelling for names in another script ----
-// Rocksmith displays 伊根 or トーテム as written, but sorts by a field that must
-// start with a Latin letter or digit, and the .psarc name is ASCII. So a name
-// with characters outside Western European Latin gets a second field beside it.
-const FOREIGN = /[^\x20-\x7e\xa1-\xff]/g;
-const LATIN_OK = /^[0-9A-Za-z][\x20-\x7e\xa1-\xff]*$/;
+// Rocksmith sorts by a field that must start with a Latin letter or digit, and the
+// .psarc name is ASCII. Its fonts have Latin, typographic marks (’ “ – …) and
+// Japanese, nothing else. So a name with characters outside the Latin part of
+// those fonts gets a second field beside it: Japanese is shown as written and
+// sorted by the Latin spelling; a name the fonts cannot show (Кино, Dvořák) is
+// shown as its Latin spelling too, since the game would leave gaps.
 const LATIN_WHY = "Rocksmith shows the name as written, but sorts the song and names its file by Latin letters.";
+const latinWhyMissing = (chars) => `Rocksmith's fonts have no ${chars.join(" ")}: the game shows this Latin spelling instead, and sorts by it.`;
 const LATIN_MISSING = "Needed for Rocksmith export: Latin letters, starting with a letter or digit.";
 
 // "伊根 (Ine)" already carries its Latin spelling; offer that rather than an empty field.
 function latinGuess(name) {
-  const latin = name.replace(FOREIGN, " ").replace(/\s+/g, " ").replace(/^[^0-9A-Za-z]+/, "").trim();
+  const latin = [...name].map((ch) => (nameCheck(ch).foreign ? " " : ch)).join("")
+    .replace(/\s+/g, " ").replace(/^[^0-9A-Za-z]+/, "").trim();
   return latin.includes("(") ? latin : latin.replace(/\)$/, "");
 }
 
@@ -69,12 +74,16 @@ export function latinFields(ids) {
   const fields = Object.entries(ids).map(([key, id]) => {
     const name = document.getElementById(id), group = document.createElement("div");
     group.className = "field-group block latin-field";
-    group.innerHTML = `<span class="label">Latin spelling <span class="info" role="img" tabindex="0" title="${LATIN_WHY}" aria-label="${LATIN_WHY}">i</span><span class="dot dot--warn" role="img" title="${LATIN_MISSING}" aria-label="${LATIN_MISSING}"></span></span><input type="text" maxlength="180" aria-label="Latin spelling" />`;
+    group.innerHTML = `<span class="label">Latin spelling <span class="info" role="img" tabindex="0">i</span><span class="dot dot--warn" role="img" title="${LATIN_MISSING}" aria-label="${LATIN_MISSING}"></span></span><input type="text" maxlength="180" aria-label="Latin spelling" />`;
     name.after(group);
-    const latin = group.querySelector("input"), dot = group.querySelector(".dot");
-    const needed = () => name.value.search(FOREIGN) !== -1;
-    const missing = () => needed() && !LATIN_OK.test(latin.value.trim());
+    const latin = group.querySelector("input"), dot = group.querySelector(".dot"), info = group.querySelector(".info");
+    const needed = () => nameCheck(name.value).foreign;
+    const missing = () => needed() && !latinUsable(latin.value.trim());
     const sync = () => {
+      const gaps = nameCheck(name.value).missing;
+      const why = gaps.length ? latinWhyMissing(gaps) : LATIN_WHY;
+      info.title = why;
+      info.setAttribute("aria-label", why);
       group.hidden = !needed();
       latin.disabled = name.disabled;
       dot.hidden = !missing();

@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from . import bnk, chart, checker, dds, manifest, psarc, sng, wem
+from . import bnk, chart, checker, dds, font, manifest, psarc, sng, wem
 from .tones import custom_tone
 from .wem import AudioConverterNotFoundError, WwiseNotFoundError  # public error types
 
@@ -759,6 +759,14 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
     artist, title, album, year = _song_meta(spec)
     key = package_key(spec)
     latin = _latin_names(spec, artist, title, album)
+    # What the game shows: a name whose characters its fonts lack goes out as its
+    # Latin spelling (the key stays made from the name itself).
+    shown = {field: font.shown(name, latin[field])
+             for field, name in (("artist", artist), ("title", title), ("album", album))}
+    for field, name in (("title", title), ("artist", artist), ("album", album)):
+        gaps = font.missing(name)
+        if gaps and shown[field] != latin[field]:
+            warnings.append(f"Rocksmith cannot show {' '.join(gaps)} in the {field}; left out")
     low = key.lower()
 
     with tempfile.TemporaryDirectory(prefix="cw-rs-") as tmp:
@@ -798,7 +806,8 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             # keeps its ids and the game keeps its progress.
             file_name = arr["name"].lower() + (str(partition) if partition > 1 else "")
             ctx = SongContext(
-                dlc_key=key, title=title, artist=artist, album=album, latin=latin, year=year,
+                dlc_key=key, title=shown["title"], artist=shown["artist"], album=shown["album"],
+                latin=latin, year=year,
                 is_bass=built.is_bass, arrangement=arr, representative=representative,
                 arrangement_sort=0,   # always 0, in DLC Builder and the Toolkit
                 partition=partition, file_name=file_name,
