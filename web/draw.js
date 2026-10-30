@@ -37,6 +37,7 @@ import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
 import { songBarStarts } from "./song-bars.js";
+import { displayGridStep, gridSegments, segBarSec } from "./grid.js";
 import { noteName } from "./util.js";
 import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
 
@@ -390,6 +391,35 @@ function drawDropPreview() {
   sctx.globalAlpha = 1;
   if (motif) sctx.setLineDash([6, 4]);
   sctx.strokeRect(x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad);
+  sctx.restore();
+}
+
+// Bar numbers along the bottom of the view, on the thick bar lines of the tempo
+// grid (note-render.js drawGrid): each tempo marker starts a new bar, as there.
+// Counted up from the grid's start; the lead-in before it has none. A bar line
+// the zoomed-out grid does not draw, or one too close to the last label, gets none.
+function drawBarNumbers(vx0, vx1) {
+  const segs = gridSegments(), dur = S.state.duration;
+  sctx.save();
+  sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
+  const y = scroll.scrollTop + S.stageHeight - 3;
+  let bar = 0, freeFrom = -Infinity;
+  for (let si = 0; si < segs.length; si++) {
+    const seg = segs[si], len = segBarSec(seg), step = displayGridStep(seg);
+    if (!(len > 0)) continue;
+    const segEnd = si + 1 < segs.length ? segs[si + 1].t : dur + 1e-6;
+    for (let k = 0; seg.t + k * len < segEnd - 1e-6 && seg.t + k * len <= dur + 1e-6; k++) {
+      bar++;
+      const t = seg.t + k * len, x = xOf(t);
+      if (x > vx1) { sctx.restore(); return; }
+      const cells = (t - seg.t) / step;
+      if (x < vx0 - 40 || x < freeFrom || !(step > 0) || Math.abs(cells - Math.round(cells)) > 1e-6) continue;
+      const label = String(bar), w = sctx.measureText(label).width;
+      sctx.fillStyle = veil(); sctx.fillRect(x + 2, y - 11, w + 4, 12);
+      sctx.fillStyle = PAINT.label; sctx.fillText(label, x + 4, y);
+      freeFrom = x + w + 10;
+    }
+  }
   sctx.restore();
 }
 
@@ -755,6 +785,7 @@ function paintFrame({ panels = true } = {}) {
   sctx.strokeStyle = PAINT.accent; sctx.lineWidth = 2;   // rule 7: the playhead is one of accent's four uses
   sctx.beginPath(); sctx.moveTo(px, 0); sctx.lineTo(px, contentH()); sctx.stroke();
   sctx.lineWidth = 1;
+  drawBarNumbers(vx0, vx1);
   drawComments();
   sctx.save();
   const reveal = railScale();
