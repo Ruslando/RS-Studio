@@ -1809,7 +1809,8 @@ export function init_edit() {
       return;
     }
     // No Tab walk through the editor's controls; Tab alone still opens the note menu below.
-    if (e.key === "Tab" && !modalOpen()) e.preventDefault();
+    // Popovers (role=dialog) keep Tab, so a typed value is applied when leaving its field.
+    if (e.key === "Tab" && !modalOpen() && !e.target.closest?.('[role="dialog"]')) e.preventDefault();
     if (mod && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
       if (S.state) saveProject({ saveAs: e.shiftKey });

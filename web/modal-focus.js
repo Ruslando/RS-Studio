@@ -98,8 +98,9 @@ export function initModalFocus() {
   // The editor page runs on shortcuts, not focus: a control there that gains focus
   // (a click, a closing menu or dialog handing it back) drops it again, so Space and
   // the arrows always reach the editor. Menus, the note menu, popovers and the tour
-  // keep focus for their own keys; text fields keep it for typing.
-  const ownKeys = '.ctxmenu, .menu-list, .live-editor, .tour-card, [aria-modal="true"]';
+  // keep focus for their own keys, as does the project start handle (arrows move it);
+  // text fields keep it for typing.
+  const ownKeys = '.ctxmenu, .menu-list, .live-editor, .tour-card, [aria-modal="true"], #projectStartHandle';
   const typing = 'input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, [contenteditable]';
   document.addEventListener('focusin', (event) => {
     const el = event.target;
