@@ -1,8 +1,7 @@
-import { paintNoteRow, paintTimeGridLine } from './timeline-paint.js';
+import { paintBarNumber, paintNoteRow, paintTimeGridLine } from './timeline-paint.js';
 import { $, scroll } from "./dom.js";
 import { PAINT } from "./stage-paint.js";
 import { dpr, playheadScrollLeft } from "./util.js";
-import { stageMono } from "./constants.js";
 
 let visible = false, frame = 0, activeMode = null;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -29,19 +28,17 @@ function paint() {
     ctx.fillStyle = PAINT.ground; ctx.fillRect(0, 0, width, height);
     ctx.save(); ctx.beginPath(); ctx.rect(inset, 0, viewport, height); ctx.clip();
     ctx.translate(inset - left, 0);
-    ctx.font = stageMono(9, 400); ctx.textAlign = "left";
-    for (let beat = 0; beat < 48; beat++) {
-      const x = beat * 20;
-      paintTimeGridLine(ctx, x, 19, height, beat % 4 ? 'beat' : 'bar');
-      if (!(beat % 4)) { ctx.fillStyle = PAINT.label; ctx.fillText(String(beat / 4 + 1), x + 3, 13); }
-      if (!(beat % 2)) {
-        const rowHeight = 12, row = [2, 1, 0, 1, 3, 2][beat / 2 % 6];
-        paintNoteRow(ctx, x, 22 + row * rowHeight, beat % 6 ? 20 : 40, rowHeight, PAINT.ok);
-      }
+    // The stage's own pieces: its grid (a half-beat subdivision), notes, bar
+    // numbers along the bottom and playhead.
+    for (let half = 0; half < 96; half++) paintTimeGridLine(ctx, half * 10, 0, height, half % 8 ? half % 2 ? 'sub' : 'beat' : 'bar');
+    for (let beat = 0; beat < 48; beat += 2) {
+      const rowHeight = 12, row = [2, 1, 0, 1, 3, 2][beat / 2 % 6];
+      paintNoteRow(ctx, beat * 20, 6 + row * rowHeight, beat % 6 ? 20 : 40, rowHeight, PAINT.ok);
     }
+    for (let bar = 0; bar < 12; bar++) paintBarNumber(ctx, bar * 80, height - 3, String(bar + 1));
     const head = time * speed;
     ctx.strokeStyle = PAINT.accent; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(head, 19); ctx.lineTo(head, height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(head, 0); ctx.lineTo(head, height); ctx.stroke();
     ctx.restore();
     canvas.dataset.scroll = String(left);
     canvas.dataset.playhead = String(head - left);

@@ -1,5 +1,5 @@
 import { $ } from './dom.js';
-import { paintNoteRow, paintTimeGridLine } from './timeline-paint.js';
+import { paintBarNumber, paintNoteRow, paintTimeGridLine } from './timeline-paint.js';
 import { S } from './store.js';
 import { noteMarks } from './note-effects.js';
 import { paintNoteLabel, paintSlideLabel } from './note-label-paint.js';
@@ -22,8 +22,11 @@ export function drawNoteAppearancePreview() {
   ctx.fillStyle = PAINT.ground; ctx.fillRect(0, 0, width, height);
   ctx.lineWidth = 1; ctx.strokeStyle = PAINT.gridBeat;
   const layout = notePreviewLayout(width, S.state?.rowH || 12);
-  for (let beat = 0; beat * layout.cellWidth < width; beat++)
-    paintTimeGridLine(ctx, beat * layout.cellWidth, 0, height, beat % 4 ? 'beat' : 'bar');
+  // The stage's grid, half-beat subdivision included, and its bar numbers.
+  for (let half = 0; half * layout.cellWidth / 2 < width; half++)
+    paintTimeGridLine(ctx, half * layout.cellWidth / 2, 0, height, half % 8 ? half % 2 ? 'sub' : 'beat' : 'bar');
+  for (let bar = 0; bar * 4 * layout.cellWidth < width; bar++)
+    paintBarNumber(ctx, bar * 4 * layout.cellWidth, height - 3, String(bar + 1));
   const options = spectrogramLabelOptions();
   for (let i = 0; i < 2; i++) {
     const { x, y, width: span, height: rowHeight } = layout.notes[i], hovered = i === noteHover;

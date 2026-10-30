@@ -24,7 +24,7 @@ try {
     './stage-paint.js': { PAINT: { text: '#fff' }, halo: () => '#000' },
   }, { './constants.js': true, './spectrogram-labels.js': true });
   const previews = await mockImport(new URL('../../web/editor-previews.js', import.meta.url), {
-    './dom.js': { $: id => controls[id] }, './timeline-paint.js': { paintNoteRow: noop, paintTimeGridLine: noop }, './store.js': { S: { state: null } },
+    './dom.js': { $: id => controls[id] }, './timeline-paint.js': { paintNoteRow: noop, paintTimeGridLine: noop, paintBarNumber: noop }, './store.js': { S: { state: null } },
     './note-label-paint.js': painter, './stage-paint.js': { PAINT: {} }, './util.js': { dpr: () => 1 },
     './fretboard.js': { drawFretboardSettingsPreview: noop },
   }, { './spectrogram-labels.js': true, './editor-preview-layout.js': true, './note-effects.js': true });

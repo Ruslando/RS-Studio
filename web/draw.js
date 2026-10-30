@@ -1,5 +1,5 @@
 import { paintIntensity } from './spectrogram-intensity.js';
-import { paintNoteRow } from './timeline-paint.js';
+import { paintBarNumber, paintNoteRow } from './timeline-paint.js';
 import { createOverview } from './overview.js';
 import { ISSUE_TEXT, laneIssues } from "./note-issues.js";
 import { hideTooltip, showTooltip } from "./tooltip.js";
@@ -400,8 +400,6 @@ function drawDropPreview() {
 // the zoomed-out grid does not draw, or one too close to the last label, gets none.
 function drawBarNumbers(vx0, vx1) {
   const segs = gridSegments(), dur = S.state.duration;
-  sctx.save();
-  sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
   const y = scroll.scrollTop + S.stageHeight - 3;
   let bar = 0, freeFrom = -Infinity;
   for (let si = 0; si < segs.length; si++) {
@@ -411,16 +409,12 @@ function drawBarNumbers(vx0, vx1) {
     for (let k = 0; seg.t + k * len < segEnd - 1e-6 && seg.t + k * len <= dur + 1e-6; k++) {
       bar++;
       const t = seg.t + k * len, x = xOf(t);
-      if (x > vx1) { sctx.restore(); return; }
+      if (x > vx1) return;
       const cells = (t - seg.t) / step;
       if (x < vx0 - 40 || x < freeFrom || !(step > 0) || Math.abs(cells - Math.round(cells)) > 1e-6) continue;
-      const label = String(bar), w = sctx.measureText(label).width;
-      sctx.fillStyle = veil(); sctx.fillRect(x + 2, y - 11, w + 4, 12);
-      sctx.fillStyle = PAINT.label; sctx.fillText(label, x + 4, y);
-      freeFrom = x + w + 10;
+      freeFrom = paintBarNumber(sctx, x, y, String(bar));
     }
   }
-  sctx.restore();
 }
 
 // The frame itself. Registered with repaint.js at boot; everything else asks for
