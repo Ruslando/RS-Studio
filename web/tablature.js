@@ -33,6 +33,7 @@ import { parseTuning, songTimeToTabMs, tabMsToSongTime } from "./util.js";
 import { TUNINGS } from "./tunings.js";
 import { arrangedNotes, chordColumns, handChoices, handProfileForTuning, isChosenFinger, keepVoicing, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
 import { draw } from "./repaint.js";
+import { paintMemo } from "./paint-memo.js";
 
 // ---- tablature (Guitar Pro export + alphaTab preview) ----
 // Tuning presets live in tunings.js (no DOM), so guitar-pro-edit.js can read them too.
@@ -150,13 +151,13 @@ function tabLanes() {
 // opening tablature never monopolizes the browser's main thread.
 const laneVoicingCache = new WeakMap();
 
-export function laneFingeringKey(lane, tuning = laneFretTuning(lane)) {
+export const laneFingeringKey = paintMemo(function laneFingeringKey(lane, tuning = laneFretTuning(lane)) {
   // The bar lines are part of the answer now — the voicer plans the hand a bar at a
   // time — and a meter-only grid edit changes them without touching a note, so it
   // never bumps voicingRevision. Keyed on the times themselves rather than a summary:
   // a tempo marker can move a bar without changing how many there are.
   return fretboardHandKey(lane, S.voicingRevision, `${tuning.join(",")}:${laneBars(lane).join(",")}`);
-}
+});
 
 const aborted = () => Object.assign(new Error("tablature generation cancelled"), { name: "AbortError" });
 

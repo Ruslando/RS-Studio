@@ -168,11 +168,18 @@ export function initMarkerArtifacts() {
   }
 }
 
+// The transport's previous/next buttons follow the playhead, so they update on
+// every pass. Returns the entries, which tell the pane whether a marker changed.
+export function syncMarkerButtons() {
+  const entries = S.state ? markerArtifacts() : [];
+  for (const [id, direction] of [['previousMarker', -1], ['nextMarker', 1]])
+    $(id).disabled = !S.state || adjacentMarkerTime(entries, playbackTime(), direction, S.state.duration, -S.leadView) === null;
+  return entries;
+}
+
 export function renderMarkerArtifacts() {
   if (!sections.size) return;
   const entries = markerArtifacts(), live = new Set(entries.map(entry => entry.key));
-  for (const [id, direction] of [['previousMarker', -1], ['nextMarker', 1]])
-    $(id).disabled = !S.state || adjacentMarkerTime(entries, playbackTime(), direction, S.state.duration, -S.leadView) === null;
   for (const [key, row] of rows) if (!live.has(key)) { row.remove(); rows.delete(key); }
   for (const [kind, {list, count, head, body}] of sections) {
     const group = entries.filter(entry => groupOf(entry.kind) === kind);

@@ -18,8 +18,18 @@
 // runs once per frame, and the resize observer, which has to repaint before the
 // browser can present a cleared backing store as a black frame.
 
+import { withMemo } from "./paint-memo.js";
+
 let queued = 0;
 let painter = null;
+// Something asked for a paint since the last one. A playback frame that nobody
+// asked for only moves the playhead, so the side panels (which follow it only
+// for their next/previous buttons) refresh four times a second instead of sixty.
+let requested = true, panelsAt = 0;
+const PANEL_MS = 250;
+// A paint the playback loop runs: it paints the next frame anyway, so an
+// animation asking for one from inside it would only paint the frame twice.
+let loopPaint = false;
 
 // draw.js calls this once, from init_draw().
 export function setPainter(fn) {
@@ -27,10 +37,19 @@ export function setPainter(fn) {
 }
 
 export function draw() {
-  if (!queued) queued = requestAnimationFrame(drawNow);
+  if (loopPaint) return;
+  requested = true;
+  if (!queued) queued = requestAnimationFrame(() => drawNow());
 }
 
-export function drawNow() {
+// `playhead`: only the playback clock moved (the playback loop).
+export function drawNow({ playhead = false } = {}) {
   if (queued) { cancelAnimationFrame(queued); queued = 0; }
-  painter?.();
+  const now = performance.now();
+  const panels = requested || !playhead || now - panelsAt >= PANEL_MS;
+  if (panels) panelsAt = now;
+  requested = false;
+  loopPaint = playhead;
+  try { withMemo(() => painter?.({ panels })); } finally { loopPaint = false; }
 }
+

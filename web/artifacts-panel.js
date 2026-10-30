@@ -4,6 +4,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 import { $ } from "./dom.js";
 import { snapPanels, splitter } from "./splitters.js";
 import { clamp, rememberPref } from "./util.js";
+import { draw } from "./repaint.js";
 
 const LS_W = "cw.artifactsW", LS_C = "cw.artifactsCollapsed";
 const MIN = 220, MAX = 480, DEFAULT = 300, COLLAPSE_AT = 150;
@@ -23,6 +24,7 @@ export function initArtifactsPanel() {
     const expanded = !panel.hasAttribute("data-collapsed");
     if (expanded) panel.classList.remove("is-peeking");
     content.inert = !expanded;
+    draw();   // an opened pane fills in on the next frame
     syncPanelControls("artifacts", expanded, `${expanded ? "Hide" : "Show"} artifacts`);
   };
   const fold = (collapsed, snapping = false) => {

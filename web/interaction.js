@@ -10,6 +10,7 @@ import { updateDetectStatus } from "./detect.js";
 import { bendHandles, effectStartHandles, noteRibbon, slideFretOf, slideFretsHandle, regionEdgeAt } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
+import { withMemo } from "./paint-memo.js";
 import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { cursorTimeAt, pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
@@ -57,7 +58,9 @@ function noteAt(lane, t, pitch, exact = pitch) {
   return null;
 }
 
-export function pickNote(t, pitch, exact = pitch) {
+export const pickNote = (t, pitch, exact = pitch) => withMemo(() => pickNoteNow(t, pitch, exact));
+
+function pickNoteNow(t, pitch, exact) {
   const order = [activeLane(), ...S.state.lanes.filter((l) => l !== activeLane())];
   for (const lane of order) {
     // Locked or hidden lanes are display-only — never hit-test them, so their

@@ -740,7 +740,7 @@ function tick() {
   // black frame when switching back.
   if (!editorEl.hidden) {
     revealPlaybackPosition({ redraw: false });
-    drawNow();
+    drawNow({ playhead: true });
   }
   if (!hasAudioTransport() && S.scorePlaying && ct >= duration) pauseTransport();
   else if (transportPlaying()) requestAnimationFrame(tick);

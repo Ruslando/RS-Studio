@@ -9,6 +9,7 @@ import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
 import { outOfFretboardRange } from "./voicing-core.js";
 import { bendCurve } from "./bend.js";
 import { OVERLAP_EPS } from "./constants.js";
+import { paintMemo } from "./paint-memo.js";
 
 export const ISSUE_TEXT = {
   outOfRange: ["Note out of range", "No string and fret of this tuning plays this pitch. Change the note or the tuning."],
@@ -48,7 +49,7 @@ export function stackedBends(note) {
 
 const issue = (kind, tone, [title, help], notes, time = notes[0].start) => ({ kind, tone, title, help, time, notes });
 
-export function laneIssues(lane, tuning, maxFret, revision = 0) {
+export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, revision = 0) {
   if (!lane?.notes?.length) return [];
   const out = [];
   const outside = (n) => outOfFretboardRange(n.pitch, tuning, maxFret);
@@ -61,4 +62,4 @@ export function laneIssues(lane, tuning, maxFret, revision = 0) {
   }
   for (const notes of stackClusters(lane.notes)) out.push(issue("stack", "error", ISSUE_TEXT.stack, notes));
   return out.sort((a, b) => a.time - b.time);
-}
+});

@@ -5,6 +5,7 @@ import { retimeSpan, segBeatSec } from "./bars.js";
 import { MIN_DUR } from "./constants.js";
 import { bpmInput, markerBpm, offsetInput, subdivCustom, subdivCustomWrap, subdivSel, tapBtn, tapInfo, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
+import { paintMemo } from "./paint-memo.js";
 import { commit, snapshotEdit } from "./edit.js";
 import { editLanes, refreshCounts, renderLanes } from "./lanes.js";
 import { onLiveTiming, sectionsOnLiveTempo } from "./timing.js";
@@ -94,10 +95,10 @@ export function exportResolution() {
 // beats of 60/bpm; tsDen only affects how the beat is notated on export.
 export const extraMarkers = () => (S.state && S.state.tempoMap) || [];
 
-export function gridSegments() {
+export const gridSegments = paintMemo(function gridSegments() {
   const seg0 = { t: gridOffset(), bpm: gridBpm(), tsNum: beatsPerBar(), tsDen: gridTsDen(), subdiv: gridSubdiv(), seg0: true };
   return segmentsFrom(seg0, extraMarkers());
-}
+});
 
 // Read another timing without switching the live editor grid during a paint.
 export function timingSegments(timing) {

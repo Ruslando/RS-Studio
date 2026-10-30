@@ -118,22 +118,9 @@ export function paintMarkerFlag(ctx, rect, color, { dashed = false } = {}) {
   const width = x1 - x, height = y1 - y;
   ctx.save();
   rectangle(ctx, x, y, width, height, 4);
-  // Blur only the pixels behind this flag. Clip in world coordinates before
-  // sampling the existing canvas in device pixels; labels are painted later.
-  ctx.save();
-  ctx.clip();
-  const transform = ctx.getTransform();
-  const blur = 3 * Math.abs(transform.a), padding = blur * 2;
-  const sx = Math.max(0, Math.floor(x * transform.a + transform.e - padding));
-  const sy = Math.max(0, Math.floor(y * transform.d + transform.f - padding));
-  const sw = Math.min(ctx.canvas.width - sx, Math.ceil(width * transform.a + padding * 2));
-  const sh = Math.min(ctx.canvas.height - sy, Math.ceil(height * transform.d + padding * 2));
-  if (sw > 0 && sh > 0) {
-    ctx.resetTransform(); ctx.filter = `blur(${blur}px)`;
-    ctx.drawImage(ctx.canvas, sx, sy, sw, sh, sx, sy, sw, sh);
-  }
-  ctx.restore();
-  ctx.fillStyle = hexA(PAINT.chrome, 0.55); ctx.fill();
+  // A denser fill stands in for a backdrop blur: blurring the canvas into
+  // itself copied the frame once per flag and cost most of a playback frame.
+  ctx.fillStyle = hexA(PAINT.chrome, 0.78); ctx.fill();
   ctx.fillStyle = hexA(color, 0.10); ctx.fill();
   const sheen = ctx.createLinearGradient(x, y, x, y + height);
   sheen.addColorStop(0, hexA(PAINT.text, 0.12));

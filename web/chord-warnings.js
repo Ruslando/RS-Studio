@@ -1,4 +1,5 @@
 import { chordColumns, chordPlayability } from './voicing-core.js';
+import { paintMemo } from './paint-memo.js';
 
 // What each kind says, on the fretboard and on the stage's warning mark.
 export const SHAPE_WARNINGS = {
@@ -11,7 +12,7 @@ const shapeCache = new Map();
 
 // Both canvases use the same result. Repeated grips share the physical test;
 // gesture frames invalidate by their actual timing/pitches as well as revision.
-export function chordWarnings(lane, tuning, maxFret, revision = 0) {
+export const chordWarnings = paintMemo(function chordWarnings(lane, tuning, maxFret, revision = 0) {
   if (!lane?.notes?.length) return [];
   const signature = JSON.stringify([revision, tuning, maxFret,
     lane.notes.map(n => [n.id, n.start, n.end, n.pitch, n.pos?.string, n.pos?.fret])]);
@@ -29,4 +30,4 @@ export function chordWarnings(lane, tuning, maxFret, revision = 0) {
   });
   laneCache.set(lane, { signature, warnings });
   return warnings;
-}
+});

@@ -79,7 +79,10 @@ async function runCheck() {
 }
 
 // Called on every paint pass: starts a check once the chart has stopped changing.
-function scheduleCheck() {
+// The latest check's answer; a new Map whenever one arrives.
+export const checkResults = () => results;
+
+export function scheduleCheck() {
   if (!S.state) return;
   const key = checkKey();
   if (key === lastKey) return;

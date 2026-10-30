@@ -19,8 +19,9 @@ import { clipOf, doCopy, doPaste, openRefMenu, openMotifMenu, placeClip } from "
 
 import { motifGroups } from './motifs.js';
 import { artifactName, beginArtifactRename } from './artifact-names.js';
-import { initMarkerArtifacts, renderMarkerArtifacts, clearMarkerArtifacts } from './marker-artifacts.js';
-import { initRocksmithIssues, renderRocksmithIssues } from './rocksmith-check.js';
+import { initMarkerArtifacts, renderMarkerArtifacts, clearMarkerArtifacts, syncMarkerButtons } from './marker-artifacts.js';
+import { checkResults, initRocksmithIssues, renderRocksmithIssues, scheduleCheck } from './rocksmith-check.js';
+import { PAINT } from './stage-paint.js';
 
 const rows = new Map();
 let dragged = null;
@@ -47,8 +48,30 @@ function revealArtifact(lane, box, notes) {
   renderLanes(); refreshSaveState(); draw();
 }
 
+// The pane is rebuilt only while it is open, and only when something it lists
+// can have changed. Not every change bumps voicingRevision (tone markers and
+// layer settings do not), so the key also holds every layer setting, every
+// reference's locks and every marker as the pane would list it.
+let shownKey = null;
+function paneKey(markers) {
+  const content = $('artifactsContent');
+  if (content.inert) return null;
+  return [S.state, S.voicingRevision, S.undoStack?.length, S.redoStack?.length, checkResults(), S.spectImg,
+    S.state?.curStem, PAINT.ground, content.clientWidth,
+    markers.map(m => `${m.key}@${m.t}:${m.name}:${m.issue?.title || ''}`).join('|'),
+    ...(S.state?.editLanes || []).flatMap(l => [l.id, l.active, l.visible, l.locked, l.name, l.color, l.notes, l.notes.length,
+      l.instrument, l.tuning, l.customTuning, l.capo, l.rocksmithArrangement, l.timing,
+      Object.entries(l.refBoxes || {}).map(([ref, g]) => `${ref}:${!!g.locked}:${!!g.transposable}:${g.anchors?.length}`).join('|')])];
+}
+const sameKey = (a, b) => a && b && a.length === b.length && a.every((v, i) => v === b[i]);
+
 export function renderArtifacts() {
   if (!$('artifactList')) return;
+  // The transport's marker buttons and the export check run whether or not the pane shows.
+  const markers = syncMarkerButtons(); scheduleCheck();
+  const key = paneKey(markers);
+  if (!key || sameKey(key, shownKey)) return;
+  shownKey = key;
   const references = [], motifs = [];
   if (S.state) {
     // Only the active layer's artifacts: the pane follows the edit target.
@@ -304,6 +327,7 @@ export function init_artifacts() {
   audio.addEventListener("play", stopArtifactPreview);
   window.addEventListener("cw-transport", event => { if (event.detail === "play") stopArtifactPreview(); });
   const clear = () => {
+    shownKey = null;
     clearMarkerArtifacts();
     resetArtifactPreviews(true); rows.clear(); collapsedArtifacts.clear(); $('artifactList').replaceChildren(); $('motifList').replaceChildren();
   };

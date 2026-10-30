@@ -395,8 +395,8 @@ function drawDropPreview() {
 
 // The frame itself. Registered with repaint.js at boot; everything else asks for
 // a paint through draw()/drawNow() there and never imports this module.
-function paintFrame() {
-  renderArtifacts();
+function paintFrame({ panels = true } = {}) {
+  if (panels) renderArtifacts();
   beginNoteMotionFrame(S.state, S.drag);
   const playheadTime = playbackTime();
   beginNotePlaybackFrame(S.state, playheadTime, transportPlaying());

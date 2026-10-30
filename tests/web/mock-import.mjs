@@ -10,7 +10,8 @@ export async function mockImport(url, overrides = {}, real = {}) {
   const source = (await readFile(url, 'utf8')).replace(
     /import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["'];?/g,
     (statement, names, specifier) => {
-      if (real[specifier]) return statement.replace(specifier, new URL(specifier, url).href);
+      // paint-memo.js is plain bookkeeping with no effects; always the real one.
+      if (real[specifier] || specifier === './paint-memo.js') return statement.replace(specifier, new URL(specifier, url).href);
       const module = { ...overrides[specifier] };
       const exports = names.split(',').map(name => name.trim().split(/\s+as\s+/)[0]);
       for (const name of exports) if (!(name in module)) module[name] = () => {
