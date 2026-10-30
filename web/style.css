@@ -1381,8 +1381,9 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 }
 
 .pane-intro { margin-bottom: var(--s-group); }
-.theme-preview-content { zoom: .5; pointer-events: none; }
-.theme-preview-content .welcome-card { width: 100%; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
+.theme-preview-content { pointer-events: none; display: flex; flex-direction: column; gap: var(--s-sibling); padding: var(--s-sibling); background: var(--workspace-ground); }
+.theme-preview-editor { display: flex; gap: var(--s-sibling); align-items: flex-start; }
+.theme-preview-stage { flex: none; border-radius: var(--r-container); }
 .pane-intro h2 { margin: 0; font: 600 var(--text-heading)/1.2 var(--font-ui); letter-spacing: -.01em; }
 .project-create-body { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.2fr); grid-template-rows: minmax(0, 1fr); align-items: stretch; overflow: hidden; min-height: 0; }
 .project-create-body > .section { min-width: 0; }

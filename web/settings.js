@@ -5,7 +5,10 @@
 
 import { $ } from "./dom.js";
 import { drawFretboard } from "./fretboard.js";
-import { refreshStagePaint } from "./stage-paint.js";
+import { PAINT, refreshStagePaint } from "./stage-paint.js";
+import { paintBarNumber, paintNoteRow, paintTimeGridLine } from "./timeline-paint.js";
+import { EDIT_PALETTE } from "./constants.js";
+import { dpr } from "./util.js";
 import { draw } from "./repaint.js";
 import { initTimelineScrollPreview, refreshTimelineScrollPreview } from "./timeline-scroll-preview.js";
 import { initEditorPreviews, refreshEditorPreviews } from "./editor-previews.js";
@@ -56,18 +59,60 @@ function setTheme(t) {
   document.querySelectorAll('input[name="theme"]').forEach(radio => { radio.checked = radio.value === v; });
 }
 
-function init_theme() {
-  // Render the actual launcher components; cloned controls are only an image.
+// The theme previews show a slice of the editor built from its real parts: the
+// toolbar and the note layer section are clones of the live ones, the stage strip
+// is painted by the stage's own painters (its colours are the spectral palette,
+// which is the same in both themes). The clones live in a closed shadow root with
+// the app's stylesheets, so they keep their ids, and with them their real styling,
+// without clashing with the app's. Rebuilt whenever the pane shows, so they are the
+// current ones; laid out at a fixed natural width and zoomed to fit.
+// The sidebar keeps its real 300px; padding and gap are --s-sibling (8px) each.
+const STAGE_W = 520, STAGE_H = 150, PREVIEW_W = 300 + STAGE_W + 3 * 8;
+const previewRoots = new WeakMap();
+
+function paintPreviewStage(canvas, color) {
+  const dp = dpr();
+  canvas.width = Math.round(STAGE_W * dp); canvas.height = Math.round(STAGE_H * dp);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dp, 0, 0, dp, 0, 0);
+  ctx.fillStyle = PAINT.ground; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+  const half = 15, rowH = 12;
+  for (let i = 0; i * half < STAGE_W; i++) paintTimeGridLine(ctx, i * half, 0, STAGE_H, i % 8 ? i % 2 ? 'sub' : 'beat' : 'bar');
+  for (const [beat, row, beats] of [[0, 6, 2], [2, 4, 1], [3, 3, 1], [4, 5, 3], [8, 2, 2], [10, 4, 2], [12, 1, 4]])
+    paintNoteRow(ctx, beat * 2 * half, 10 + row * rowH, beats * 2 * half, rowH, color);
+  for (let bar = 0; bar * 8 * half < STAGE_W; bar++) paintBarNumber(ctx, bar * 8 * half, STAGE_H - 3, String(bar + 1));
+  ctx.strokeStyle = PAINT.accent; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(5 * 2 * half, 0); ctx.lineTo(5 * 2 * half, STAGE_H); ctx.stroke();
+}
+
+function renderThemePreviews() {
+  const active = document.querySelector('#lanes .lane-row.active');
+  const sheets = [...document.querySelectorAll('link[rel="stylesheet"]')];
   for (const surface of document.querySelectorAll('.theme-preview-surface')) {
+    let root = previewRoots.get(surface);
+    if (!root) previewRoots.set(surface, root = surface.attachShadow({ mode: 'closed' }));
     const content = document.createElement('div');
     content.className = 'theme-preview-content';
     content.inert = true;
-    content.setAttribute('aria-hidden', 'true');
-    const launcher = document.querySelector('#welcome .welcome-card').cloneNode(true);
-    for (const element of launcher.querySelectorAll('[id]')) element.removeAttribute('id');
-    content.append(launcher);
-    surface.replaceChildren(content);
+    content.style.width = PREVIEW_W + 'px';
+    content.style.zoom = String(surface.clientWidth / PREVIEW_W);
+    const side = document.createElement('aside');
+    side.id = 'sidebar';
+    side.append($('layersSection').cloneNode(true));
+    const stage = document.createElement('canvas');
+    stage.className = 'theme-preview-stage';
+    stage.style.width = STAGE_W + 'px'; stage.style.height = STAGE_H + 'px';
+    const editor = document.createElement('div');
+    editor.className = 'theme-preview-editor';
+    editor.append(side, stage);
+    content.append($('transport').cloneNode(true), editor);
+    root.replaceChildren(...sheets.map(link => link.cloneNode()), content);
+    paintPreviewStage(stage, active?.querySelector('.lane-dot')?.style.background || EDIT_PALETTE[0]);
   }
+}
+
+function init_theme() {
+  new ResizeObserver(() => { if (!$('spAppearance').hidden) renderThemePreviews(); }).observe($('spAppearance'));
   for (const radio of document.querySelectorAll('input[name="theme"]')) {
     radio.addEventListener("input", () => { if (radio.checked) setTheme(radio.value); });
   }
