@@ -20,6 +20,7 @@ assert.ok(pitches.slice(0,apex+1).every((p,i,a) => !i || p > a[i-1]), 'ascending
 assert.ok(pitches.slice(apex).every((p,i,a) => !i || p < a[i-1]), 'descending');
 assert.ok(pitches.every(p => [7,9,11,2,4].includes(p%12)), 'G major pentatonic');
 assert.equal(pitches[0], pitches.at(-1));
+assert.equal(new Set(run.map(c => c.seat)).size, 1, 'the hand holds one position through the box');
 assert.ok(duration > columns.at(-1).end);
 for (const capo of [0,2,7,12]) for (const column of fretboardPreviewPhrase(tuning,capo).columns) {
   assert.ok(Number.isFinite(column.seat));
