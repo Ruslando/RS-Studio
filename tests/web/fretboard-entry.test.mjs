@@ -44,6 +44,7 @@ for (const finger of [0, 2]) {
   assert.equal(preview.x, fretCentre(17), "upcoming note previews at its target fret");
   assert.equal(preview.string, 0, "preview never travels from the outgoing string");
   assert.equal(preview.opacity, 0.5, "preview fades in ahead of its onset");
+  assert.ok(preview.grow > 0.35 && preview.grow < 1, "preview grows in from small");
   assert.equal(before.pressed, false, "preview is not sounding yet");
   const onset = handAt(cols, 5, 0.5);
   assert.equal(onset.marks[0].x, fretCentre(17), "new finger appears at its destination");
@@ -52,16 +53,17 @@ for (const finger of [0, 2]) {
   assert.equal(tail.opacity, 1);
 }
 
-// Silence and the end of the song both release smoothly; paused views stay exact.
+// Silence and the end of the song both release smoothly, and quicker than a
+// note arrives; paused views stay exact.
 const single = handColumns([old]);
 let previousOpacity = 1;
-for (const t of [1.01, 1.05, 1.09, 1.15, 1.179]) {
+for (const t of [1.01, 1.03, 1.05, 1.07, 1.079]) {
   const m = handAt(single, t, 0.5).marks[0];
   assert.equal(m.x, fretCentre(2));
   assert.ok(m.opacity > 0 && m.opacity < previousOpacity);
   previousOpacity = m.opacity;
 }
-assert.equal(handAt(single, 1.18, 0.5), null);
+assert.equal(handAt(single, 1.08, 0.5), null);
 assert.equal(handAt(single, 1.05, 0), null);
 
 // A chord can move one finger while keeping another in place.

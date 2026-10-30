@@ -40,7 +40,7 @@ import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
 import { S } from "./store.js";
 import { fingerLightAt, fingerPulseAt, fingerWaveAt, popLiftAt, popPreparation, popThicknessAt } from "./string-techniques.js";
-import { stringAttackPulse, stringGlow } from "./string-glow.js";
+import { fretStrikeAt, stringAttackPulse, stringGlow } from "./string-glow.js";
 import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulations.js";
 import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
@@ -949,8 +949,10 @@ function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, o
       }
     } else { trace(nut); ctx.stroke(); }
     const fingerLight = kind === "hammer" || kind === "tap";
-    const glow = moving ? stringGlow(contact, now.t) * (fingerLight ? 0.3 : 1) : 0;
-    const pulse = moving && !fingerLight ? stringAttackPulse(contact, now.t) : 0;
+    // Only an open string is struck on the board; a fretted pick pulses its fingertip (drawHand).
+    const open = !(contact?.fret > 0);
+    const glow = moving && open ? stringGlow(contact, now.t) * (fingerLight ? 0.3 : 1) : 0;
+    const pulse = moving && open && !fingerLight ? stringAttackPulse(contact, now.t) : 0;
     if (glow > 0.001 || pulse > 0.001) {
       ctx.lineCap = "round"; trace(start);
       ctx.strokeStyle = hexA(lane.color || PAINT.accent, Math.min(1, glow * 0.3 + pulse * 0.45));
@@ -1281,8 +1283,9 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
 // selected it, and accent said the same thing about every layer, which is the one
 // thing a marker on a neck must not do when the sidebar is holding six of them.
 // A finger on its way to the next grip is the same disc outlined in that hue, which
-// is the button spec's own filled-versus-outlined idiom and not a size change, so
-// rule 5 holds: the marker never grows or shrinks and the eye tracks one object.
+// is the button spec's own filled-versus-outlined idiom and not a size change. The
+// one exception is a finger that appears from nowhere: it grows in from small, so
+// an arriving note never looks like a leaving one fading out.
 //
 // Outlined rather than a second grey fill because the first build made a
 // travelling finger a --stage-label disc, and an inlay is a --stage-hint disc of
@@ -1378,7 +1381,7 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
       r: markRadius(m.x, scale, s),
     }));
     const style = filled && time != null ? whammyGripStyle(g[0].note, time) : { size: 1, opacity: 1 };
-    const x = pts[0].x, r = pts[0].r * style.size;
+    const x = pts[0].x, r = pts[0].r * style.size * (g[0].grow ?? 1);
     ctx.save();
     const ghost = !!g[0].note?.fx?.ghost;
     ctx.globalAlpha *= style.opacity * (g[0].opacity ?? 1) * (ghost ? 0.4 : 1);
@@ -1848,6 +1851,23 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
     // A bright, compact impact under the outgoing ripple.
     ctx.beginPath(); ctx.arc(x, y, r * (1.12 + pulse.progress * 0.25), 0, Math.PI * 2);
     ctx.fillStyle = hexA(PAINT.paper, pulse.strength * 0.35); ctx.fill();
+    ctx.restore();
+  }
+  // A picked fretted note: a soft disc of the layer's hue closes in on the fingertip.
+  // Filled and contracting, where a technique's rings above are outlined and spread.
+  if (moving) for (const m of at.marks) {
+    if (!(m.fret > 0) || !(m.pressed ?? at.pressed) || fingerPulseAt(m, t)) continue;
+    const u = fretStrikeAt(m, t);
+    if (u == null) continue;
+    const x = X(m.x), y = Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s));
+    const r = markRadius(m.x, scale, s), fade = (1 - u) ** 2;
+    const fx = m.note?.fx || {};
+    ctx.save();
+    ctx.globalAlpha *= (m.opacity ?? 1) * (fx.ghost ? 0.4 : fx.accent ? 1 : 0.85);
+    ctx.beginPath(); ctx.arc(x, y, r * (2 - u), 0, Math.PI * 2);
+    ctx.fillStyle = hexA(hue, 0.45 * fade); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r * (1.35 - 0.35 * u), 0, Math.PI * 2);
+    ctx.fillStyle = hexA(PAINT.paper, 0.5 * fade); ctx.fill();
     ctx.restore();
   }
   // The low finger stays planted. A second finger taps/releases the upper fret;

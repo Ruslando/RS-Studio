@@ -37,3 +37,16 @@ export function stringAttackPulse(mark, t) {
   const strength = fx.ghost ? 0.35 : fx.accent ? 1.2 : 1;
   return Math.min(1, strength * (1 - age / window) ** 2);
 }
+
+// A picked fretted note does not light its string: the fingertip takes the hit.
+// Progress 0..1 through the pulse, or null outside it. Arrivals by hammer, pull or
+// legato slide are not picked, so they have none (their technique cue shows instead).
+export const FRET_STRIKE_SECONDS = 0.22;
+export function fretStrikeAt(mark, t) {
+  if (mark.dead || (mark.slurred && !mark.tremoloStep)) return null;
+  const strike = strikeTime(mark, t);
+  if (strike == null) return null;
+  const window = mark.tremoloStep ? Math.min(FRET_STRIKE_SECONDS, mark.tremoloStep * 0.8) : FRET_STRIKE_SECONDS;
+  const age = t - strike;
+  return age >= 0 && age < window ? age / window : null;
+}

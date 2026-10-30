@@ -389,8 +389,10 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
           if (SLIDE_IN.has(f.note?.slide)) b.x = slideSpan(f, null, next.eighth, s)?.from.x ?? b.x;
           b.lift = bendLift(b, next.start, s.strings) * push;
           // Unmatched fingers preview at their own destination without travelling.
+          // They grow in from small, so arriving never looks like leaving.
           if (!a) {
-            b.opacity = u * u * (3 - 2 * u);
+            const e = u * u * (3 - 2 * u);
+            b.opacity = e; b.grow = 0.35 + 0.65 * e;
             return [b];
           }
           const o = markAt(a, s);
@@ -464,8 +466,10 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
 }
 
 // Releases remain at their last played position for a short, smooth fade.
-// Keep this out of the paused/editing view, where travel is zero.
+// Keep this out of the paused/editing view, where travel is zero. A played
+// marker goes quicker (MARK_FADE_SECONDS) than its string settles.
 export const MARK_RELEASE_SECONDS = 0.18;
+export const MARK_FADE_SECONDS = 0.08;
 export function handAt(columns, t, travel, s = GUITAR, animate = true) {
   if (!animate) {
     const col = columns[startedBy(columns, t)];
@@ -480,17 +484,17 @@ export function handAt(columns, t, travel, s = GUITAR, animate = true) {
   const i = startedBy(columns, t);
   for (let j = i; j >= 0; j--) {
     const col = columns[j], next = columns[j + 1];
-    if (next && next.start <= t - MARK_RELEASE_SECONDS) break;
+    if (next && next.start <= t - MARK_FADE_SECONDS) break;
     for (const f of col.fingers) {
       const end = Math.min(f.note?.end ?? col.end, next?.start ?? Infinity);
-      if (t < end || t >= end + MARK_RELEASE_SECONDS) continue;
+      if (t < end || t >= end + MARK_FADE_SECONDS) continue;
       // A moving finger already owns its marker; do not leave a second one behind.
       if (marks.some((m) => (f.finger >= THUMB && m.finger === f.finger && !m.dead && !f.dead)
         || (m.string === f.string && m.fret === f.fret))) continue;
       const last = handPoseAt(columns, end - 1e-8, 0, s)?.marks.find((m) =>
         m.note === f.note && m.string === f.string);
       if (!last) continue;
-      const u = (t - end) / MARK_RELEASE_SECONDS;
+      const u = (t - end) / MARK_FADE_SECONDS;
       const release = f.soundingEnd ?? end;
       const lift = t >= release ? bendLift(last, Math.min(release, f.note?.end ?? release), s.strings)
         * bendSnapAt(t - release) : last.lift;
