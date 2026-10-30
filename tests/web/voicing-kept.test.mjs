@@ -1,15 +1,15 @@
 // Run: node tests/web/voicing-kept.test.mjs
-// Once voiced, a note keeps its position and hand (note.auto): adding a note voices
-// only the new one, around the rest.
+// Once voiced, a note keeps its position (note.auto): adding a note voices only the
+// new one, around the rest. The hand is planned anew every time.
 import assert from "node:assert/strict";
 import { keepVoicing, moveCapo, voiceNotesFingered } from "../../web/voicing-core.js";
 
 const tuning = [64, 59, 55, 50, 45, 40];              // app order: string 0 = high E
 const note = (start, pitch) => ({ start, end: start + 0.2, pitch });
 const voice = (notes) => voiceNotesFingered(notes, tuning, Infinity, { bars: [0, 2, 4, 6, 8] });
-const where = (found, notes) => notes.map((n) => {
+const where = (found, notes, hand = true) => notes.map((n) => {
   const p = found.voiced.get(n);
-  return p ? `${p.string}:${p.fret}@${found.seats.get(n)}` : "-";
+  return p ? `${p.string}:${p.fret}` + (hand ? `@${found.seats.get(n)}` : "") : "-";
 });
 
 // A minor pentatonic around fret 5, then a high A (fret 17 on the high E) in the middle.
@@ -18,12 +18,12 @@ const run = [45, 48, 50, 52, 55, 57, 60, 62, 64, 67, 69, 67, 64, 62, 60, 57]
 const first = voice(run);
 assert.equal(keepVoicing(run, first, tuning), true, "the first solve is kept");
 assert.equal(keepVoicing(run, first, tuning), false, "keeping it again changes nothing");
-const before = where(first, run);
+const before = where(first, run, false);
 
 const high = note(2.1, 81);
 const lane = [...run, high];
 const second = voice(lane);
-assert.deepEqual(where(second, run), before, "no kept note moves, nor its hand");
+assert.deepEqual(where(second, run, false), before, "no kept note moves");
 assert.equal(tuning[second.voiced.get(high).string] + second.voiced.get(high).fret, 81, "the new note is placed");
 keepVoicing(lane, second, tuning);
 assert.deepEqual(where(voice(lane), lane), where(second, lane), "solving again is stable");
@@ -73,36 +73,25 @@ assert.deepEqual(where(voice(lane), lane), where(second, lane), "solving again i
   assert.equal(a.auto.n, 2, "kept as a chord of two");
 }
 
-// A hand anchor wins while it is there; removing it gives the kept hand back.
+// The hand is not kept: a stale stored hand is ignored and dropped on the next keep.
 {
   const notes = run.slice(0, 8).map((n) => ({ ...n, start: n.start + 50, end: n.end + 50 }));
   const plain = voice(notes);
   keepVoicing(notes, plain, tuning);
+  assert.equal(notes[3].auto.hand, undefined, "no hand is kept");
   const hand = plain.seats.get(notes[3]);
-  const holds = [{ t: notes[3].start, fret: hand + 2 }];
-  const anchored = voiceNotesFingered(notes, tuning, Infinity, { bars: [0, 2, 4, 6, 8], holds });
-  keepVoicing(notes, anchored, tuning, holds);
-  assert.equal(notes[3].auto.hand, hand, "the anchor is not kept as the automatic hand");
-  assert.equal(voice(notes).seats.get(notes[3]), hand, "without the anchor the hand is back");
+  notes.forEach((n) => { n.auto = { ...n.auto, hand: hand + 3, finger: 4 }; });   // an older project
+  const again = voice(notes);
+  assert.equal(again.seats.get(notes[3]), hand, "the stored hand decides nothing");
+  assert.equal(keepVoicing(notes, again, tuning), true, "and is dropped");
+  assert.equal(notes[3].auto.hand, undefined);
 }
 
-// A typed finger is the player's: it is not kept as the engine's own.
+// Moving the capo moves a kept position with the strings.
 {
-  const n = note(60, 57), notes = [n];
-  const found = voice(notes);
-  keepVoicing(notes, found, tuning);
-  const engine = n.auto.finger;
-  n.finger = 0;
-  found.fingers.set(n, 0);                                 // as laneFingering applies it
-  keepVoicing(notes, found, tuning);
-  assert.equal(n.auto.finger, engine, "removing the typed finger gives the engine's back");
-}
-
-// Moving the capo moves a kept position and hand with the strings.
-{
-  const n = { ...note(30, 57), auto: { string: 3, fret: 7, hand: 5 } };
+  const n = { ...note(30, 57), auto: { string: 3, fret: 7 } };
   moveCapo({ capo: 0, notes: [n] }, 2);
-  assert.deepEqual(n.auto, { string: 3, fret: 5, hand: 3 });
+  assert.deepEqual(n.auto, { string: 3, fret: 5 });
 }
 
 // A chord slides into a kept chord on other strings: the target follows the slide.

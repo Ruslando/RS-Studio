@@ -364,7 +364,7 @@ export async function laneFingering(lane, signal) {
   // longer fits (keepVoicing). No undo step and no new revision — the answer is the
   // same, it is only remembered.
   // Only for the lane itself: previews voice a copy, and their answer is hypothetical.
-  if (S.state?.editLanes?.includes(lane)) keepVoicing(lane.notes, found, tuning, lane.handHolds);
+  if (S.state?.editLanes?.includes(lane)) keepVoicing(lane.notes, found, tuning);
   return { tuning, notes, ...found };
 }
 

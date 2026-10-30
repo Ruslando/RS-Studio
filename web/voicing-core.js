@@ -796,8 +796,10 @@ export function pinnedPositions(notes, tuning) {
 }
 
 // THE ENGINE'S OWN ANSWER, KEPT. Once a note has been voiced, `note.auto` holds where
-// it landed — { string, fret, hand, finger, n } — and the next solve takes it as given,
-// so adding a note never moves the ones already there. Not an override: it carries no
+// it landed — { string, fret, n } — and the next solve takes it as given, so adding a
+// note never moves the ones already there. The hand and fingers are not kept: they are
+// planned anew on every solve from where the notes are, so they follow the current
+// rules and whatever is around them (an older project's stored hand is ignored). Not an override: it carries no
 // follow mode, teaches the memory like any automatic note, and is never handed on.
 // `n` is how many notes its column had.
 //
@@ -807,8 +809,7 @@ export function pinnedPositions(notes, tuning) {
 // that is still kept.
 //
 // While an override (`pos`) is on a note, its kept answer is left as it was: returning
-// the column to automatic brings back where it was before. The hand is kept only on
-// columns nobody placed by hand — no override, no hand anchor.
+// the column to automatic brings back where it was before.
 const fitsPitch = (p, pitch, tuning, maxFret = MAX_FRET) =>
   !!p && Number.isInteger(p.string) && Number.isInteger(p.fret) &&
   p.string >= 0 && p.string < tuning.length && p.fret >= 0 && p.fret <= maxFret &&
@@ -843,46 +844,20 @@ function dropsSlide(prev, prevShape, prevRules, shape, tuning, maxFret) {
   });
 }
 
-// The column's kept hand: one fret all its notes agree on, or none.
-function keptHand(notes) {
-  const hands = new Set(notes.map((n) => n.auto?.hand));
-  const [hand] = hands;
-  return hands.size === 1 && Number.isFinite(hand) && hand >= 1 ? hand : null;
-}
-
-function keptFingers(notes) {
-  const out = new Map();
-  for (const n of notes) {
-    const f = n.auto?.finger;
-    if (Number.isInteger(f) && f >= THUMB && f <= 4) out.set(n, f);
-  }
-  return out;
-}
-
 // A finger the player typed onto a note (note.finger): 0 the thumb, 1-4 index to pinky.
 export const isChosenFinger = (f) => Number.isInteger(f) && f >= THUMB && f <= 4;
 
-// Write a solve back as kept. `holds` are the lane's hand anchors: a column under one
-// keeps the hand it had before, so removing the anchor gives that hand back.
-// Returns whether any note changed.
-export function keepVoicing(notes, { voiced, fingers, seats }, tuning, holds = null) {
-  const columns = chordColumns(notes), held = holdsByColumn(columns, holds);
+// Write a solve back as kept. Returns whether any note changed.
+export function keepVoicing(notes, { voiced }, tuning) {
   let changed = false;
-  columns.forEach((column, i) => column.notes.forEach((n) => {
+  chordColumns(notes).forEach((column) => column.notes.forEach((n) => {
     const p = voiced.get(n);
     if (!p || fitsPitch(n.pos, n.pitch, tuning)) return;
     const a = n.auto || {};
-    // A typed finger is the player's, not the engine's: keep what the engine had.
-    const hand = held[i] ? a.hand : seats?.get(n);
-    const finger = held[i] || isChosenFinger(n.finger) ? a.finger : fingers?.get(n);
-    const next = {
-      string: p.string, fret: p.fret,
-      ...(Number.isFinite(hand) ? { hand } : {}),
-      ...(Number.isInteger(finger) ? { finger } : {}),
-      n: column.notes.length,
-    };
-    if (a.string === next.string && a.fret === next.fret && a.hand === next.hand
-      && a.finger === next.finger && a.n === next.n) return;
+    const next = { string: p.string, fret: p.fret, n: column.notes.length };
+    // An older kept answer that still carries a hand or finger is rewritten without.
+    if (a.string === next.string && a.fret === next.fret && a.n === next.n
+      && a.hand === undefined && a.finger === undefined) return;
     n.auto = next;   // replaced, never edited: undo snapshots share the old object
     changed = true;
   }));
@@ -901,7 +876,7 @@ export function moveCapo(lane, capo) {
   const shift = (p) => (Number.isInteger(p?.fret) ? { ...p, fret: p.fret - delta } : p);
   for (const note of lane.notes) {
     if (note.pos) note.pos = shift(note.pos);
-    if (note.auto) note.auto = { ...shift(note.auto), ...(Number.isFinite(note.auto.hand) ? { hand: note.auto.hand - delta } : {}) };
+    if (note.auto) note.auto = shift(note.auto);
     if (note.arrangement?.notes) note.arrangement = { ...note.arrangement, notes: note.arrangement.notes.map(shift) };
   }
   // Where the player put the hand moves with it, so it stays on the same wood.
@@ -1797,7 +1772,7 @@ function registerColumns(columns, tuning, options = {}) {
     // is the other refusal, and only the walk knows it — see `soft` in voiceRegister.)
     // Some notes pinned and some not (a note added to an imported chord): the pinned
     // ones keep their strings exactly and only the rest are placed, around them.
-    // Voiced before and still fitting (keepVoicing): taken as it is, with its hand.
+    // Voiced before and still fitting (keepVoicing): taken as it is; its hand is planned anew.
     const kept = keptAll[i] && !dropsSlide(columns[i - 1]?.notes, pins[i - 1] || keptAll[i - 1], allRules[i - 1], keptAll[i], tuning, frets)
       ? keptAll[i] : null;
     const some = pins[i] || kept ? null : pinnedPositions(notes, tuning);
@@ -1817,16 +1792,13 @@ function registerColumns(columns, tuning, options = {}) {
       if (!chosen.has(n) && Number.isInteger(g.finger) && notes.length > 1) chosen.set(n, g.finger);
       if (Number.isFinite(g.seat)) gripSeat = g.seat;
     }
-    const keptAt = kept && !holds[i] && !notes.some((n) => fitsPitch(n.pos, n.pitch, tuning)) ? keptHand(notes) : null;
-    const fingers = keptAt != null ? keptFingers(notes) : chosen;
     const shadow = pins[i] && flow.follow === "here" ? shadowOf(notes, tuning, rules, frets, seat) : null;
     return {
       // A hand put here by the player fixes the hand of this column only. It does not
       // move notes: where they go is decided before the hand (see planHand). A chosen
       // fingering puts the hand where those fingers are (handOfFingers).
-      handAt: holds[i]?.fret ?? gripSeat ?? (chosen.size ? handOfFingers(locked, chosen, handProfileForTuning(tuning)) : keptAt),
-      keptHand: keptAt != null,
-      fingers,
+      handAt: holds[i]?.fret ?? gripSeat ?? (chosen.size ? handOfFingers(locked, chosen, handProfileForTuning(tuning)) : null),
+      fingers: chosen,
       pitches: notes.map((n) => n.pitch),
       // Onset and release. Lean decides the register once per bar and charges
       // less to change it across a rest, so it needs both — without them the
@@ -1918,7 +1890,7 @@ function registerColumns(columns, tuning, options = {}) {
       if (!required.size && contacts > 1 && fingerMemory.has(key))
         required = new Map([...shape].map(([note, p]) => [note, fingerMemory.get(key).get(p.string)]).filter(([, f]) => f != null));
       const hand = handForShape(shape, seats[i], handProfileForTuning(tuning), required,
-        !!holds[i] || input[i].fingers.size > 0 || input[i].keptHand || !!gripped[i]);
+        !!holds[i] || input[i].fingers.size > 0 || !!gripped[i]);
       options.hands[i] = hand;
       if (contacts > 1 && !input[i].aside)
         fingerMemory.set(key, new Map([...shape].map(([note, p]) => [p.string, hand.fingers.get(note)])));
