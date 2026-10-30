@@ -1777,7 +1777,8 @@ function registerColumns(columns, tuning, options = {}) {
   const pins = columns.map((_, i) => userPins[i] || gripped[i]);
   const spread = spreadPins(columns, pins);
   const allRules = columns.map(({ notes }, i) => notes.map((n) => effectRule(n, columns[i + 1] ? columns[i + 1].notes : [])));
-  const keptAll = columns.map(({ notes }, i) => pins[i] ? null : keptShape(notes, tuning, allRules[i], frets));
+  // A locked override handed on (spread) outranks where the column was voiced before.
+  const keptAll = columns.map(({ notes }, i) => pins[i] || spread[i] ? null : keptShape(notes, tuning, allRules[i], frets));
   const input = columns.map(({ notes, t0 }, i) => {
     const rules = allRules[i];
     // A pin handed on from an identical column is an offer the column can refuse:
