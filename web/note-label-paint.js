@@ -27,6 +27,14 @@ export function paintNoteLabel(ctx, text, x, width, y, height = Infinity, availa
   ctx.restore();
 }
 
+// A label just outside x on `side`, so it names a point without covering the note.
+export function paintNoteLabelBeside(ctx, text, x, side, y, height, availableWidth) {
+  if (!text) return;
+  ctx.save(); ctx.font = stageUi(noteLabelSize(), 600);
+  const half = ctx.measureText(text).width / 2 + 5; ctx.restore();
+  paintNoteLabel(ctx, text, x + (side === 'left' ? -half : half), 0, y, height, availableWidth);
+}
+
 export function paintSlideLabel(ctx, slide, x0, x1, y, height = Infinity) {
   const mark = edgeSlide(slide);
   if (mark) paintNoteLabel(ctx, mark.glyph, mark.side === 'left' ? x0 - 9 : x1 + 9, 0, y, height, Math.abs(x1 - x0));

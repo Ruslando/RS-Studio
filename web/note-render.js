@@ -23,7 +23,7 @@ import { ruler, rulerRight, scroll, sctx } from "./dom.js";
 import { laneFingering, laneFingeringKey } from "./tablature.js";
 import { draw } from "./repaint.js";
 import { edgeSlide, resolveNoteAppearance, sourceLabelPositions, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
-import { paintNoteLabel, paintSlideLabel } from "./note-label-paint.js";
+import { paintNoteLabel, paintNoteLabelBeside, paintSlideLabel } from "./note-label-paint.js";
 import { contentH, pitchAt, timeAt, xOf, yOf } from "./geometry.js";
 import { gridAt, gridSegments, displayGridStep } from "./grid.js";
 import { gridLineKind } from './auto-grid.js';
@@ -347,6 +347,8 @@ export function drawNoteFx() {
     const capo = options.fromNut ? Number(lane.capo) || 0 : 0;
     const hammerTags = laneHammerTags(lane);
     const slides = laneSlides(lane);
+    // Notes reached by a legato slide are not picked again: their names stand beside them.
+    const slurred = new Set([...slides].filter(([source]) => source.slide === "legato").map(([, target]) => target));
     // Labels of a layer that is not being edited fade with its notes (draw.js).
     sctx.save();
     if (!lane.active || lane.locked) sctx.globalAlpha = 0.5;
@@ -365,8 +367,17 @@ export function drawNoteFx() {
         // The sliding part: after a late start, or before a slide-in lands (bend.js).
         const into = SLIDE_IN.has(n.slide), [p0, p1] = into ? ribbon.points.slice(0, 2) : ribbon.points.slice(-2);
         const w = xOf(ribbon.end) - x, xs = x + w * p0[0], xe = x + w * p1[0];
-        if (into) centeredLabel(label, xe, x1 - xe, n.pitch);
+        // The landing note of a slide-in is not picked again, so its name stands beside it.
+        if (into) paintNoteLabelBeside(sctx, label, x1, "right", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
+        else if (edgeSlide(n.slide)) paintNoteLabelBeside(sctx, label, x, "left", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
         else centeredLabel(label, x, 0, n.pitch, x1 - x);
+        // A slide into or out of nowhere has no note at its far end, so name that pitch beside it.
+        if (edgeSlide(n.slide)) {
+          const [t, semi] = into ? ribbon.points[0] : ribbon.points.at(-1), pos = positions?.get(n);
+          const far = spectrogramLabel({ pitch: n.pitch + semi }, pos && { ...pos, fret: pos.fret + semi }, mode, [], capo);
+          paintNoteLabelBeside(sctx, far, x + w * t, into ? "left" : "right", yOf(n.pitch + semi) + S.state.rowH / 2,
+            S.state.rowH, xOf(ribbon.end) - x);
+        }
         const arrow = p1[1] < p0[1] ? "\u2198" : "\u2197";
         if (effects) centeredLabel((n.slide === "legato" ? "\u2312" : "") + arrow,
           xs, xe - xs, n.pitch + (p0[1] + p1[1]) / 2);
@@ -383,7 +394,8 @@ export function drawNoteFx() {
           centeredLabel(bendPitchName(n.pitch + semi), x + (x1 - x) * t, 0, n.pitch + semi, (x1 - x) / curve.length);
         const baseLabel = spectrogramLabel(n, positions?.get(n), mode === 'both' ? 'positions' : mode === 'notes' ? 'none' : mode, tags, capo);
         if (baseLabel) centeredLabel(baseLabel, x, x1 - x, n.pitch);
-      } else if (label) centeredLabel(label, x, x1 - x, n.pitch);
+      } else if (label && slurred.has(n)) paintNoteLabelBeside(sctx, label, x1, "right", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
+      else if (label) centeredLabel(label, x, x1 - x, n.pitch);
       if (effects && !ribbon) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2, S.state.rowH);
       if (effects && n.fx?.vibrato) paintVibratoWave(n, lane);
       if (grace) {

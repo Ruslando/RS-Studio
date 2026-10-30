@@ -47,6 +47,14 @@ assert.equal(x(0, pair), fretCentre(7), "starts on its own fret");
 assert.equal(x(0.5, pair), fretCentre(8), "slides over the whole note, as Rocksmith plays it");
 assert.equal(x(1, pair), fretCentre(9), "on the next fret by its end");
 assert.ok(x(0.875, pair) > fretCentre(7) && x(0.875, pair) < fretCentre(9), "gliding between, not stepping");
+const span = handAt(pair, 0.5, 0).marks[0].slideSpan;
+assert.deepEqual([span.from.fret, span.to.fret], [7, 9], "a stopped board knows where the slide starts and lands");
+// A slide-out plays to its end before the hand travels to the next note.
+{
+  const out = { start: 0, end: 1, slide: "outDown", slideFrets: 3 }, after = { start: 1, end: 2 };
+  const song = [{ ...column(2, 7, out)[0], shape: "x" }, { ...column(2, 12, after)[0], shape: "y" }];
+  assert.ok(handAt(song, 0.95, 0.5).marks[0].x < fretCentre(7), "still sliding down, not pulled toward fret 12");
+}
 // A chord's slide lands each voice on its own string.
 const a = [45, 52, 57].map((p, i) => ({ start: 0, end: 1, pitch: p, slide: "shift", pos: { string: 5 - i } }));
 const b = [47, 54, 59].map((p, i) => ({ start: 1, end: 2, pitch: p, pos: { string: 5 - i } }));

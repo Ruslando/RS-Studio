@@ -1844,6 +1844,12 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
   // The low finger stays planted. A second finger taps/releases the upper fret;
   // its fill follows the same sixteenth-note phase as the audible trill.
   const marks = at.marks.flatMap((m) => {
+    // Stopped on a slide: where it starts, pressed, and a ghost where it lands.
+    if (!moving && m.slideSpan) {
+      const { from, to } = m.slideSpan, pitch = m.pitch ?? m.note?.pitch;
+      return [{ ...m, ...from, pitch: pitch + from.fret - m.fret },
+        { ...m, ...to, pitch: pitch + to.fret - m.fret, lift: 0, pressed: false, opacity: 0.55 }];
+    }
     if (m.graceTarget) return [m, { ...m, ...m.graceTarget, noteLabel: false, lift: 0, pressed: false, opacity: 0.55 }];
     if (m.graceOrigin) return [{ ...m, ...m.graceOrigin, noteLabel: false, lift: 0 }, m];
     if (m.trill) return [m, { ...m, ...m.trill, noteLabel: false, trill: undefined, lift: 0, pressed: m.trill.down,
@@ -1853,6 +1859,25 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
     return [m];
   });
   drawGrip(ctx, s, scale, X, Y, marks, hue, at.pressed, { time: $("fretboardAnimations")?.checked === false ? null : t, liveStrings: moving });
+  if (!moving) for (const m of at.marks) if (m.slideSpan) drawSlideArrow(ctx, s, scale, X, Y, m);
+}
+
+// Start to target along the string, between the two marks.
+function drawSlideArrow(ctx, s, scale, X, Y, m) {
+  const { from, to } = m.slideSpan, dir = Math.sign(to.x - from.x);
+  const xa = from.x + dir * markRadius(from.x, scale, s) / scale * 1.2;
+  const xb = to.x - dir * markRadius(to.x, scale, s) / scale * 1.2;
+  if ((xb - xa) * dir <= 0) return;
+  const at = (x) => [X(x), Y(stringOffsetAt(m.string, x, s))];
+  const [x0, y0] = at(xa), [x1, y1] = at(xb), angle = Math.atan2(y1 - y0, x1 - x0), head = 7;
+  ctx.save();
+  ctx.lineCap = ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+  ctx.moveTo(x1 - head * Math.cos(angle - 0.5), y1 - head * Math.sin(angle - 0.5)); ctx.lineTo(x1, y1);
+  ctx.lineTo(x1 - head * Math.cos(angle + 0.5), y1 - head * Math.sin(angle + 0.5));
+  ctx.lineWidth = 4; ctx.strokeStyle = PAINT.ground; ctx.stroke();
+  ctx.lineWidth = 2; ctx.strokeStyle = PAINT.text; ctx.stroke();
+  ctx.restore();
 }
 
 // ---- putting the hand somewhere ----

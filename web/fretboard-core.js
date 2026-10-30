@@ -33,7 +33,7 @@
 import { bendSnapAt } from "./string-techniques.js";
 import { hammerLink } from "./articulations.js";
 import { graceBefore } from "./grace.js";
-import { SLIDES_TO_NEXT, bendCurve, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
+import { SLIDES_TO_NEXT, SLIDE_IN, SLIDE_OUT, bendCurve, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
 
 // Finger numbers as Rocksmith has them: 1 index … 4 pinky, 0 the thumb (only ever
 // chosen, see thumbPoses), -1 none (an open string).
@@ -301,6 +301,18 @@ function movingAnchor(from, to, shift, s, fade = 1) {
     x1: a.x1 + (b.x1 - a.x1) * shift, opacity: 1 };
 }
 
+// The frets a slide runs between, start to end, or null when it goes nowhere.
+function slideSpan(f, next, eighth, s) {
+  const note = f.note;
+  if (!note?.slide || !(f.fret > 0)) return null;
+  const onto = SLIDES_TO_NEXT.has(note.slide) && next?.fingers.find((g) => g.string === f.string);
+  const options = { to: onto ? onto.fret - f.fret : 0, steps: false, eighth, fret: f.fret };
+  const d = note.end - note.start;
+  const from = Math.max(1, f.fret + slideAt(note, 0, d, options));
+  const to = Math.max(1, f.fret + slideAt(note, d, d, options));
+  return from === to ? null : { from: { fret: from, x: fretCentre(from, s) }, to: { fret: to, x: fretCentre(to, s) } };
+}
+
 // Where the hand is at time t: `{ pressed, marks }`, or null for an empty neck.
 //
 // Travel is tested before the grip is, because a shift now overlaps the note it is
@@ -342,7 +354,10 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
 
   const hammersOn = cur && next?.fingers.some((f) => cur.fingers.some((g) =>
     g.string === f.string && hammerLink(g.note, f.note)));
-  const window = next ? travelWindow(cur, next, travel) : 0;
+  // A slide out of the note plays to its end before the hand leaves for the next one.
+  const slidesOut = cur?.fingers.some((f) => f.fret > 0 && SLIDE_OUT.has(f.note?.slide));
+  const window = !next ? 0 : slidesOut ? Math.max(0, Math.min(travelWindow(cur, next, travel), next.start - cur.end))
+    : travelWindow(cur, next, travel);
   // Once the neck has gone empty, the old grip is no longer a visible origin.
   // Reappear at the destination instead, including when its shape is unchanged.
   const fresh = !cur || cur.end < next?.start - window;
@@ -370,6 +385,8 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
         marks: [...held.map((m) => ({ ...m, pressed: true })), ...next.fingers.flatMap((f) => {
           const grace = graceBefore(f.note, next.eighth ? 30 / next.eighth : 120, f.fret);
           const b = markAt(grace ? { ...f, fret: f.fret + grace.offset } : f, s), a = originFor(f, origins);
+          // A slide-in starts away from its fret, so the hand travels to where it starts.
+          if (SLIDE_IN.has(f.note?.slide)) b.x = slideSpan(f, null, next.eighth, s)?.from.x ?? b.x;
           b.lift = bendLift(b, next.start, s.strings) * push;
           // Unmatched fingers preview at their own destination without travelling.
           if (!a) {
@@ -429,6 +446,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
           m.x = fretCentre(Math.max(1, f.fret + semi), s);
           anchorSlide ||= semi;
         }
+        m.slideSpan = slideSpan(f, next, cur.eighth, s);
       }
       const interval = trillInterval(note?.trill);
       if (interval && t >= note.start && t < note.end && f.fret + interval <= s.frets) {
@@ -451,7 +469,9 @@ export const MARK_RELEASE_SECONDS = 0.18;
 export function handAt(columns, t, travel, s = GUITAR, animate = true) {
   if (!animate) {
     const col = columns[startedBy(columns, t)];
-    const marks = col?.fingers.filter((f) => t <= (f.note?.end ?? col.end)).map((f) => markAt(f, s)) || [];
+    const next = columns[startedBy(columns, t) + 1];
+    const marks = col?.fingers.filter((f) => t <= (f.note?.end ?? col.end))
+      .map((f) => ({ ...markAt(f, s), slideSpan: slideSpan(f, next, col.eighth, s) })) || [];
     return marks.length ? { pressed: true, marks, anchor: anchorAtSeat(col.seat, s) } : null;
   }
   const pose = handPoseAt(columns, t, travel, s);
