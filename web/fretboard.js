@@ -60,6 +60,7 @@ const controlsHeight = () => $("fretboardControls").offsetHeight;
 // Off at launch: the neck is a second view of the song, and the editor opens on the
 // song. A session toggle either way — like the marker lanes, and like zoom.
 let visible = false;
+let foldedState = null;   // the project the folded strip's picture belongs to
 // A height the player dragged the panel to (the handle above it), or 0 for "as tall
 // as the neck wants". The neck scales into whatever it is given — both axes share one
 // scale — so smaller is a smaller neck and taller is the same neck with air round it.
@@ -1009,6 +1010,14 @@ function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, o
 export function drawFretboard() {
   if (editorEl.hidden || !S.state) return;
   const ctx = fretboardEl.getContext("2d");
+  // Folded, the board is not worked out at all: the strip keeps its last picture
+  // under the frost, and only a peek (the pointer over it) brings it up to date.
+  // Another project's picture is wiped rather than kept.
+  if (!visible && !fretboardPanel.classList.contains("is-peeking")) {
+    if (foldedState !== S.state) { foldedState = S.state; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, fretboardEl.width, fretboardEl.height); }
+    return;
+  }
+  foldedState = S.state;
   const dp = dpr(), w = fretboardEl.width / dp, h = fretboardEl.height / dp;
   ctx.setTransform(dp, 0, 0, dp, 0, 0);
   ctx.clearRect(0, 0, w, h);
@@ -2139,7 +2148,7 @@ function boxUnder(e) {
 
 export function init_fretboard() {
   fretboardPanel.addEventListener("mouseenter", () => {
-    if (!visible) fretboardPanel.classList.add("is-peeking");
+    if (!visible) { fretboardPanel.classList.add("is-peeking"); drawFretboard(); }
   });
   fretboardPanel.addEventListener("mouseleave", () => fretboardPanel.classList.remove("is-peeking"));
   fretboardPanel.addEventListener("click", (event) => {
