@@ -1589,7 +1589,7 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #matchPrevious, #matchNext { min-width: var(--h-control); height: var(--h-control); padding: 0; }
 #matchNavigator button[hidden] { display: none; }
 
-#spectrogramControls { position: absolute; z-index: 2; width: 280px; max-width: calc(100% - 16px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--e1); }
+#spectrogramControls { position: absolute; z-index: 2; width: 320px; max-width: calc(100% - 16px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--e1); }
 #spectrogramControls.collapsed { width: max-content; }
 .stage-controls-head { display: flex; align-items: center; gap: var(--s-pair); padding: var(--s-pair); }
 #stageControlsTabs { flex: 1; }
@@ -1599,13 +1599,13 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #spectrogramControls.docking #stageControlsDrag { cursor: grabbing; }
 #stageControlsBody { padding: var(--s-sibling) var(--s-row) var(--s-row); border-top: 1px solid var(--line); }
 .stage-pane { display: grid; gap: var(--s-sibling); }
-#stagePaneView > label { display: grid; grid-template-columns: 84px minmax(40px, 1fr) 4ch; gap: var(--s-sibling); align-items: center; color: var(--label); font-size: var(--text-caption); }
+.stage-pane > label { display: grid; grid-template-columns: 84px minmax(40px, 1fr) 4ch; gap: var(--s-sibling); align-items: center; color: var(--label); font-size: var(--text-caption); }
 .stage-channel-row { display: flex; align-items: center; justify-content: space-between; color: var(--label); font-size: var(--text-control); }
 #stageChannelButton { display: flex; align-items: center; justify-content: space-between; gap: var(--s-row); min-width: 100px; border: 1px solid var(--line); background: var(--surface-inset); }
 #stageChannelButton svg { width: 14px; height: 14px; }
 #stageChannelMenu { min-width: 160px; }
-#stageIntensityMin, #stageIntensityMax { min-width: 0; width: 100%; }
-#stageIntensityMinValue, #stageIntensityMaxValue { width: 4ch; color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); }
+#stageIntensityMin, #stageIntensityMax, #quickTraceThreshold { min-width: 0; width: 100%; }
+.stage-pane > label > output { width: 4ch; color: var(--text); font: 400 var(--text-data)/1 var(--font-mono); }
 #stageChannelStatus { position: absolute; top: calc(100% + var(--s-pair)); right: 0; max-width: 100%; padding: var(--s-sibling) var(--s-row); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-compact); color: var(--label); font-size: var(--text-caption); }
 #stageChannelStatus:empty { display: none; }
 

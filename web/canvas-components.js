@@ -112,7 +112,8 @@ export function paintWarningSymbol(ctx, x, y, size) {
   ctx.restore();
 }
 
-export function paintMarkerFlag(ctx, rect, color) {
+// dashed: a flag that is only proposed (the export's, until you take it over).
+export function paintMarkerFlag(ctx, rect, color, { dashed = false } = {}) {
   const { x0: x, y0: y, x1, y1 } = rect;
   const width = x1 - x, height = y1 - y;
   ctx.save();
@@ -139,6 +140,18 @@ export function paintMarkerFlag(ctx, rect, color) {
   sheen.addColorStop(1, hexA(PAINT.text, 0));
   ctx.fillStyle = sheen; ctx.fill();
   rectangle(ctx, x + 0.5, y + 0.5, width - 1, height - 1, 4);
-  ctx.strokeStyle = hexA(color, 0.65); ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = hexA(color, dashed ? 0.9 : 0.65); ctx.lineWidth = 1;
+  if (dashed) ctx.setLineDash([3, 2]);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// A small padlock, 7×9, its top-left at (x, y): a mark that cannot be moved.
+export function paintLock(ctx, x, y, color) {
+  ctx.save();
+  ctx.strokeStyle = ctx.fillStyle = color; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(x + 3.5, y + 3.5, 2.2, Math.PI, 0); ctx.lineTo(x + 5.7, y + 4.5);
+  ctx.moveTo(x + 1.3, y + 4.5); ctx.lineTo(x + 1.3, y + 3.5); ctx.stroke();
+  ctx.fillRect(x, y + 4.5, 7, 4.5);
   ctx.restore();
 }

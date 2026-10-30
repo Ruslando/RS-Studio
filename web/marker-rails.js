@@ -65,8 +65,9 @@ export function setRailOrigin(y) {
   origin = Number(y) || 0;
 }
 
-// rail: { id, height, draw?, drawMinimap?, cursorAt?, mouseDown?, contextMenu?,
+// rail: { id, height, draw?, drawMinimap?, cursorAt?, tipAt?, mouseDown?, contextMenu?,
 //          menuLabel?, addAt?(time, clientX, clientY) }
+// tipAt(x, y) returns a tooltip block { title, body } for the flag under the pointer.
 // menuLabel + addAt contribute an entry to the canvas right-click menu.
 export function registerMarkerRail(rail) {
   if (!rail?.id) throw new Error("marker rail needs an id");

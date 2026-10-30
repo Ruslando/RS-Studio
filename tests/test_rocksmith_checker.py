@@ -111,6 +111,14 @@ class ThroughTheExporter(unittest.TestCase):
         self.assertIsNone(lead["error"])
         self.assertEqual(rhythm["error"], "No voiced notes to export")
 
+    def test_the_check_marks_the_crowd_events_it_added(self):
+        spec = _spec([_note(2.0, 2.5, 6, 3)], lead=5)
+        spec["tracks"][0]["crowdEvents"] = [{"t": 1.0, "code": "e2"}]
+        [found] = builder.check_spec(spec)
+        crowd = {(round(e["t"], 3), e["code"]): e.get("auto", False) for e in found["events"] if e["code"] in ("e0", "e1", "e2", "E3")}
+        self.assertEqual(crowd[(1.0, "e2")], False, "the layer's own")
+        self.assertTrue(crowd[(2.6, "E3")], "the export's intro applause")
+
     def test_export_warnings_carry_the_issues_in_editor_time(self):
         notes = [_note(4.0, 5.0, 3, 12, harmonic="natural", bend="full")]
         spec = _spec(notes)
@@ -221,26 +229,27 @@ class ExporterFixes(unittest.TestCase):
         self.assertEqual([n.parent_prev_note for n in rest].count(0), 1)
 
     def test_the_check_reports_the_silence_the_package_starts_with(self):
-        # The editor shows it: the setting, or more when the first note comes early.
+        # The editor shows it: the setting, or two measures when that is shorter.
         [found] = builder.check_spec(_spec([_note(12.0, 12.5, 3, 5)], lead=5))
         self.assertEqual(found["leadIn"], 5.0)
-        [found] = builder.check_spec(_spec([_note(2.0, 2.5, 3, 5)], lead=5))
-        self.assertEqual(found["leadIn"], 8.0)    # first note at 10 s
+        [found] = builder.check_spec(_spec([_note(2.0, 2.5, 3, 5)], lead=0))
+        self.assertEqual(found["leadIn"], 4.0)    # two 2 s measures
 
     def test_the_silence_ends_with_a_count_in_measure(self):
         # As EOF's Add silence: a high tick on the downbeat of the measure before
-        # the song's first beat, low ticks on the rest; COUNT on the first beat.
+        # the song's first beat, low ticks on the rest; COUNT a measure before.
         [found] = builder.check_spec(_spec([_note(12.0, 12.5, 3, 5)], lead=10))
-        self.assertEqual(found["count"], -10.0)
+        self.assertEqual(found["count"], -4.0)
         ticks = [e for e in found["events"] if e["code"] in ("B0", "B1")]
         self.assertEqual(ticks, [{"t": -2.0, "code": "B0"}, {"t": -1.5, "code": "B1"},
                                  {"t": -1.0, "code": "B1"}, {"t": -0.5, "code": "B1"}])
         song = _compiled([_note(12.0, 12.5, 3, 5)], lead=10)
         self.assertEqual([code for _, code in song.events if code in ("B0", "B1")], ["B0", "B1", "B1", "B1"])
 
-    def test_no_count_in_without_silence(self):
+    def test_a_count_in_even_when_no_silence_is_asked_for(self):
         [found] = builder.check_spec(_spec([_note(12.0, 12.5, 3, 5)], lead=0))
-        self.assertEqual([e for e in found["events"] if e["code"] in ("B0", "B1")], [])
+        self.assertEqual(found["count"], -4.0)
+        self.assertEqual([e["t"] for e in found["events"] if e["code"] in ("B0", "B1")], [-2.0, -1.5, -1.0, -0.5])
 
     def test_a_slide_off_its_string_is_shown_where_it_is(self):
         notes = [_note(2.0, 2.5, 3, 5, slide="shift"), _note(2.5, 3.0, 2, 7)]

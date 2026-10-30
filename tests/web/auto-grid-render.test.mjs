@@ -12,6 +12,7 @@ const { drawGrid } = await mockImport(new URL('../../web/note-render.js', import
   './grid.js': { gridAt: () => segment, gridSegments: () => [segment],
     displayGridStep: seg => autoGridStep(seg, S.pxPerSec) },
   './timeline-paint.js': { paintTimeGridLine: (...args) => lines.push(args) },
+  './rocksmith-check.js': { rocksmithCountIn: () => null },
 }, { './auto-grid.js': true });
 drawGrid();
 assert.ok(lines.length > 1, 'grid rendering completes');

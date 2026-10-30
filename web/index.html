@@ -273,15 +273,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
         <span class="pt-dot" id="projDirtyDot" title="Unsaved changes" hidden></span>
       </div>
     </div>
-<div class="group zoom-cluster" id="zoomCluster">
-          <button id="zoomOut" class="icon" title="Zoom out (− / Ctrl+scroll)" aria-label="Zoom out"><span data-ui-icon="minus" aria-hidden="true"></span></button>
-          <input type="range" id="zoomSlider" min="0" max="22" step="1" value="8" title="Zoom" />
-          <button id="zoomIn" class="icon" title="Zoom in (+ / Ctrl+scroll)" aria-label="Zoom in"><span data-ui-icon="plus" aria-hidden="true"></span></button>
-          <span id="zoomVal" class="zval">100%</span>
-          <button id="zoomReset" class="icon" title="Fit (press 0)" aria-label="Fit">
-            <span data-ui-icon="fit" aria-hidden="true"></span>
-          </button>
-        </div><span class="sep-v"></span><div class="group workspace-controls"><button type="button" class="icon-btn" id="sidebarToggle" data-panel-toggle="sidebar" aria-expanded="true"
+<span class="sep-v"></span><div class="group workspace-controls"><button type="button" class="icon-btn" id="sidebarToggle" data-panel-toggle="sidebar" aria-expanded="true"
                   title="Hide layer sidebar" aria-label="Hide layer sidebar">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
           </button><button type="button" class="icon-btn" id="markerLanesToggle" data-panel-toggle="markers" aria-expanded="true"
@@ -361,13 +353,14 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <div class="stage-controls-head">
                 <button type="button" id="stageControlsDrag" class="icon-btn icon-btn--compact" aria-label="Move spectrogram controls; arrow keys choose an edge" title="Drag along the spectrogram edges"></button>
                 <div id="stageControlsTabs" class="tabs" role="tablist" aria-label="Spectrogram controls">
+                  <button type="button" class="tab" role="tab" id="stageTabSpectrogram" data-stage-tab="spectrogram" aria-controls="stagePaneSpectrogram">Spectrogram</button>
                   <button type="button" class="tab" role="tab" id="stageTabView" data-stage-tab="view" aria-controls="stagePaneView">View</button>
                   <button type="button" class="tab" role="tab" id="stageTabDraw" data-stage-tab="draw" aria-controls="stagePaneDraw">Drawing</button>
                 </div>
                 <button type="button" id="stageControlsToggle" class="icon-btn icon-btn--compact" aria-controls="stageControlsBody" aria-expanded="false" aria-label="Expand spectrogram controls"></button>
               </div>
               <div id="stageControlsBody" hidden>
-                <div id="stagePaneView" class="stage-pane" role="tabpanel" aria-labelledby="stageTabView">
+                <div id="stagePaneSpectrogram" class="stage-pane" role="tabpanel" aria-labelledby="stageTabSpectrogram">
                 <div class="stage-channel-row"><span>Channel</span>
                   <div class="menu-anchor" data-floating-menu>
                     <button type="button" id="stageChannelButton" class="menu-btn btn--compact" aria-haspopup="menu" aria-expanded="false" aria-controls="stageChannelMenu"><span id="stageChannelLabel">Stereo</span><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
@@ -384,24 +377,36 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                   <div class="menu-anchor" data-floating-menu>
                     <button type="button" id="stageViewButton" class="menu-btn btn--compact" aria-haspopup="menu" aria-expanded="false" aria-controls="stageViewMenu"><span id="stageViewLabel">CQT</span><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
                     <div id="stageViewMenu" class="menu-list" role="menu" aria-label="Spectrogram view" hidden>
-                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="true" data-view="fine" data-short="CQT" title="Energy per pitch: constant-Q transform with 3 rows per semitone. Shows bends, slides, vibrato and off-pitch notes."><span class="menu-item-text">Constant-Q transform<small class="menu-item-desc">Overview: where the sound energy sits</small></span><span class="chkmark">✓</span></button>
-                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-view="fundamental" data-short="HPS" title="Harmonic Product Spectrum: lights each note at its fundamental, even when an overtone is louder. Best for low and distorted notes."><span class="menu-item-text">Harmonic product spectrum<small class="menu-item-desc">Low or distorted notes, octave errors</small></span><span class="chkmark"></span></button>
-                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-view="contrast" data-short="SW" title="Spectral whitening: each pitch compared to its surroundings, so single notes stand out from the mix. Good all-rounder."><span class="menu-item-text">Spectral whitening<small class="menu-item-desc">Single notes in a dense mix</small></span><span class="chkmark"></span></button>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="true" data-view="fine" data-short="CQT" title="Energy per pitch: constant-Q transform with 3 rows per semitone. Shows bends, slides, vibrato and off-pitch notes."><span class="menu-item-text">Constant-Q transform<small class="menu-item-desc">Default view: displays sound energy</small></span><span class="chkmark">✓</span></button>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-view="fundamental" data-short="HPS" title="Harmonic Product Spectrum: lights each note at its fundamental, even when an overtone is louder. Best for low and distorted notes."><span class="menu-item-text">Harmonic product spectrum<small class="menu-item-desc">Corrects octave errors: useful for low or distorted notes</small></span><span class="chkmark"></span></button>
+                      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-view="contrast" data-short="SW" title="Spectral whitening: each pitch compared to its surroundings, so single notes stand out from the mix. Good all-rounder."><span class="menu-item-text">Spectral whitening<small class="menu-item-desc">Helps with notes in dense mixes</small></span><span class="chkmark"></span></button>
                     </div>
                   </div>
                 </div>
-                <div class="stage-channel-row" title="Time-frequency reassignment: moves energy to where it actually comes from, so lines get thinner. Available for CQT and HPS."><span id="stageSharpLabel" class="menu-item-text">Reassignment<small class="menu-item-desc">Thinner lines: bends, vibrato, slides</small></span>
+                <div class="stage-channel-row" title="Time-frequency reassignment: moves energy to where it actually comes from, so lines get thinner. Available for CQT and HPS."><span id="stageSharpLabel">Reassignment</span>
                   <input type="checkbox" id="stageSharp" aria-labelledby="stageSharpLabel" />
-                </div>
-                <div class="stage-channel-row" title="The silence the Rocksmith export puts in front of the song, shown before its start. It follows the export's Leading silence, and is longer when the export needs more room before the first note."><span id="stageLeadInLabel" class="menu-item-text">Leading silence<small class="menu-item-desc">Rocksmith export, before the song</small></span>
-                  <input type="checkbox" id="stageLeadIn" aria-labelledby="stageLeadInLabel" />
                 </div>
                 <label>Intensity min <input id="stageIntensityMin" type="range" min="0" max="100" step="1" value="0" aria-label="Minimum spectrogram intensity" /><output id="stageIntensityMinValue" for="stageIntensityMin">0%</output></label>
                 <label>Intensity max <input id="stageIntensityMax" type="range" min="0" max="100" step="1" value="100" aria-label="Maximum spectrogram intensity" /><output id="stageIntensityMaxValue" for="stageIntensityMax">100%</output></label>
                 </div>
+                <div id="stagePaneView" class="stage-pane" role="tabpanel" aria-labelledby="stageTabView" hidden>
+                  <div class="stage-channel-row"><span>Zoom</span><div class="group zoom-cluster" id="zoomCluster">
+                    <button id="zoomOut" class="icon" title="Zoom out (− / Ctrl+scroll)" aria-label="Zoom out"><span data-ui-icon="minus" aria-hidden="true"></span></button>
+                    <input type="range" id="zoomSlider" min="0" max="22" step="1" value="8" title="Zoom" />
+                    <button id="zoomIn" class="icon" title="Zoom in (+ / Ctrl+scroll)" aria-label="Zoom in"><span data-ui-icon="plus" aria-hidden="true"></span></button>
+                    <span id="zoomVal" class="zval">100%</span>
+                    <button id="zoomReset" class="icon" title="Fit (press 0)" aria-label="Fit">
+                      <span data-ui-icon="fit" aria-hidden="true"></span>
+                    </button>
+                  </div></div>
+                  <div class="stage-channel-row" title="The silence the Rocksmith export puts in front of the song, shown before its start. It follows the export's Leading silence, and is never shorter than two measures for the count-in."><span id="stageLeadInLabel">Leading silence</span>
+                    <input type="checkbox" id="stageLeadIn" aria-labelledby="stageLeadInLabel" />
+                  </div>
+                </div>
                 <div id="stagePaneDraw" class="stage-pane" role="tabpanel" aria-labelledby="stageTabDraw" hidden>
                   <div class="stage-channel-row"><label class="chk"><input type="checkbox" id="quickTraceSnap" checked /> Snap to pitch</label><span class="kbd" id="quickTraceSnapKey">T</span></div>
                   <div class="stage-channel-row"><span>Range</span><select id="quickTraceRange" class="trace-range-ctl" aria-label="Drawing search range"><option value="1">±1</option><option value="2" selected>±2</option><option value="3">±3</option></select></div>
+                  <label title="How bright the spectrogram must be for a drawn note to snap to it. While you use the slider, the stage shows in green what passes.">Snap threshold <input type="range" id="quickTraceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" aria-label="Snap threshold" /><output class="trace-thresh-val" for="quickTraceThreshold">18%</output></label>
                 </div>
               </div>
               <span id="stageChannelStatus" role="status"></span>
@@ -1021,6 +1026,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
              tracing feature can keep reading one stable set of ids. -->
         <div class="sp-pane" id="spTrace" hidden><div hidden>
           <input type="checkbox" id="traceSnap" checked hidden />
+          <input type="range" id="traceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" hidden />
           <select id="traceRange" class="trace-range-ctl" hidden>
             <option value="1">±1</option>
             <option value="2" selected>±2</option>
@@ -1227,7 +1233,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <label class="field-group block" title="Your name as the package's author, shown by CustomsForge Song Manager.">Author
             <input type="text" id="setRsAuthor" maxlength="100" autocomplete="name" />
           </label>
-          <div class="field-group block is-narrow" title="Silence added in front of the song, so the first notes can be seen coming">
+          <div class="field-group block is-narrow" title="Silence added in front of the song. Never shorter than two measures: the count-in phrase, then the count-in ticks.">
             <label class="label" for="setRsLeadIn">Leading silence</label>
             <span class="stepper"><span class="pop-field"><input type="number" id="setRsLeadIn" class="num-4" min="0" max="30" step="0.5" data-stepper /><span class="pop-unit">s</span></span></span>
           </div>
@@ -1532,7 +1538,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <div class="field-pair">
           <!-- A div and a label[for], not a wrapping label: the stepper's buttons sit
                beside the field, and a click on them must not land on the field. -->
-          <div class="field-group block is-narrow" title="Silence added in front of the song, so the first notes can be seen coming">
+          <div class="field-group block is-narrow" title="Silence added in front of the song. Never shorter than two measures: the count-in phrase, then the count-in ticks.">
             <label class="label" for="rsLeadIn">Leading silence</label>
             <span class="stepper"><span class="pop-field"><input type="number" id="rsLeadIn" class="num-4" min="0" max="30" step="0.5" value="10" data-stepper /><span class="pop-unit">s</span></span></span>
           </div>

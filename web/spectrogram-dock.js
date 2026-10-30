@@ -3,16 +3,17 @@ import { closeMenus } from './menus.js';
 import { icon, DRAG_HANDLE_ICON } from './icons.js';
 
 let showTab = () => {};
-// Expand the controls on one tab ('view' | 'draw'); a second call on the open tab collapses.
+// Expand the controls on one tab ('spectrogram' | 'view' | 'draw'); a second call on the open tab collapses.
 export const toggleStageTab = tab => showTab(tab);
 
 export function initSpectrogramDock(panel) {
   const key = 'rs-spectrogram-controls';
-  let state = { edge: 'right', fraction: .15, collapsed: true, tab: 'view' };
+  const TABS = ['spectrogram', 'view', 'draw'];
+  let state = { edge: 'right', fraction: .15, collapsed: true, tab: 'spectrogram' };
   try {
     const saved = JSON.parse(localStorage.getItem(key));
     if (saved && ['top','right','bottom','left'].includes(saved.edge) && Number.isFinite(saved.fraction))
-      state = { edge: saved.edge, fraction: Math.max(0, Math.min(1, saved.fraction)), collapsed: saved.collapsed !== false, tab: saved.tab === 'draw' ? 'draw' : 'view' };
+      state = { edge: saved.edge, fraction: Math.max(0, Math.min(1, saved.fraction)), collapsed: saved.collapsed !== false, tab: TABS.includes(saved.tab) ? saved.tab : 'spectrogram' };
   } catch { /* use the default layout */ }
   const handle = document.getElementById('stageControlsDrag'), toggle = document.getElementById('stageControlsToggle');
   const body = document.getElementById('stageControlsBody'), tabs = document.getElementById('stageControlsTabs');
@@ -47,7 +48,7 @@ export function initSpectrogramDock(panel) {
   tabs.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
     event.preventDefault();
-    select(state.tab === 'view' ? 'draw' : 'view');
+    select(TABS[(TABS.indexOf(state.tab) + (event.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]);
     tabs.querySelector(`[data-stage-tab="${state.tab}"]`).focus();
   });
   showTab = tab => {

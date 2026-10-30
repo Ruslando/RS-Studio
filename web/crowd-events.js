@@ -48,7 +48,9 @@ export function automaticCrowdEvents(lane = activeLane()) {
   // A kind the layer sets replaces the export's of that kind (chart._crowd_events),
   // so those are left out at once, not when the next check comes back.
   const own = new Set((lane?.crowdEvents || []).map((e) => (/^e[0-2]$/.test(e.code) ? "speed" : e.code)));
-  const auto = rocksmithEvents(lane).filter((item) => NAMES.has(item.code));
+  // Only what the export added itself: the layer's own come back too, and a
+  // check from before a delete would still show the deleted one.
+  const auto = rocksmithEvents(lane).filter((item) => item.auto && NAMES.has(item.code));
   const out = [];
   auto.forEach((item, k) => {
     const kind = /^e[0-2]$/.test(item.code) ? "speed" : item.code;
@@ -72,17 +74,9 @@ function adopt(lane, item) {
 }
 
 // Opens the editor on an event, own or automatic (the Artifacts list uses it too).
-export function editCrowdEvent(clientX, clientY, item, lane = activeLane()) {
-  if (!item.auto) return openCrowdEventPop(clientX, clientY, item, lane);
-  endPopEdit();
-  popSnapshot = snapshotEdit();   // adopting and editing are one undo step
-  const mine = adopt(lane, item);
-  changed(lane);
-  const held = popSnapshot;
-  popSnapshot = null;   // openCrowdEventPop ends the previous session; this one carries on
-  openCrowdEventPop(clientX, clientY, events(lane).find((e) => e.id === mine.id) || mine, lane);
-  popSnapshot = held;
-}
+// An automatic one stays the export's until it is changed (apply adopts it).
+export const editCrowdEvent = (clientX, clientY, item, lane = activeLane()) =>
+  openCrowdEventPop(clientX, clientY, item, lane);
 
 const duration = () => Number(S.state?.duration) || Number(S.state?.scoreDuration) || Infinity;
 const snapTime = (value) => Math.max(0, Math.min(duration(), snap(Math.max(0, Number(value) || 0))));
@@ -108,6 +102,9 @@ export function openCrowdEventPop(clientX, clientY, event, lane = activeLane()) 
   editEvent = event;
   crowdEventCode.value = event.code;
   crowdEventTime.value = String(+Number(event.t).toFixed(3));
+  // The export puts an automatic event back whenever its kind is missing.
+  crowdEventDelete.disabled = !!event.auto;
+  crowdEventDelete.title = event.auto ? "Added by default" : "Delete event";
   crowdEventPop.hidden = false;
   placeFloating(crowdEventPop, clientX, clientY);
 }
@@ -122,6 +119,11 @@ function apply() {
   const lane = editingLane();
   if (!editEvent || !lane) return;
   beginPopEdit();
+  if (editEvent.auto) {
+    editEvent = adopt(lane, editEvent);
+    crowdEventDelete.disabled = false;
+    crowdEventDelete.title = "Delete event";
+  }
   editEvent.code = crowdEventCode.value;
   editEvent.t = withTiming(timingIdOf(lane), () => snapTime(crowdEventTime.value));
   crowdEventTime.value = String(+editEvent.t.toFixed(3));
@@ -183,12 +185,11 @@ function drawRail() {
   sctx.textBaseline = "middle";
   for (const event of [...events(lane), ...automaticCrowdEvents(lane)]) {
     const x = xOf(event.t), label = crowdEventLabel(event);
-    sctx.globalAlpha = event.auto ? 0.55 : 1;
     const rect = { event, lane, x0: x, x1: x + Math.ceil(sctx.measureText(label).width) + 18,
       y0: top + 2, y1: top + RAIL_H - 2 };
     rects.push(rect);
     if (rect.x0 > right || rect.x1 < left) continue;
-    paintMarkerFlag(sctx, rect, PAINT.marker);
+    paintMarkerFlag(sctx, rect, PAINT.marker, { dashed: !!event.auto });
     sctx.fillStyle = PAINT.text;
     sctx.fillText(label, x + 9, top + RAIL_H / 2);
   }
@@ -213,6 +214,8 @@ export function init_crowd_events() {
     draw: drawRail,
     drawMinimap,
     cursorAt: (x, y) => (S.state && inBand(y - scroll.scrollTop) && hitAt(x, y) ? "grab" : null),
+    tipAt: (x, y) => (S.state && inBand(y - scroll.scrollTop) && hitAt(x, y)?.event.auto
+      ? { title: "Automatic crowd event", body: "Added by the export. Drag or click it to make it your own." } : null),
     mouseDown,
     menuLabel: "Add crowd event",
     addAt,
@@ -224,7 +227,11 @@ export function init_crowd_events() {
     const lane = editingLane();
     if (!editEvent || !lane) return;
     beginPopEdit();
-    lane.crowdEvents = events(lane).filter((item) => item !== editEvent);
+    // An applause takes its end with it: the next Applause end before another applause.
+    const list = [...events(lane)].sort((a, b) => a.t - b.t);
+    const end = /^(E3|D3)$/.test(editEvent.code)
+      ? list.slice(list.indexOf(editEvent) + 1).find((item) => /^(E3|D3|E13)$/.test(item.code)) : null;
+    lane.crowdEvents = events(lane).filter((item) => item !== editEvent && !(end?.code === "E13" && item === end));
     closeCrowdEventPop();
     changed(lane);
   });

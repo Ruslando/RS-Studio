@@ -25,7 +25,9 @@ import { icon } from './icons.js';
 import { rocksmithEventItems } from './rocksmith-events.js';
 import { RS_EVENT_NAMES } from './section-marker-core.js';
 
-const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['crowd', 'Crowd events'], ['tone', 'Tone switches'], ['anchor', 'Hand anchors'], ['comment', 'Comments'], ['rocksmith', 'Rocksmith export']];
+const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['anchor', 'Hand anchors'], ['comment', 'Comments'], ['rocksmith', 'Rocksmith']];
+// Crowd events are Rocksmith's too, so they are listed with the export's own marks.
+const groupOf = kind => (kind === 'crowd' ? 'rocksmith' : kind);
 // The export's own marks (rocksmith-events.js): listed and visited, never edited.
 const EXPORT_NAMES = Object.fromEntries(RS_EVENT_NAMES);
 const sections = new Map(), rows = new Map();
@@ -173,7 +175,7 @@ export function renderMarkerArtifacts() {
     $(id).disabled = !S.state || adjacentMarkerTime(entries, playbackTime(), direction, S.state.duration, -S.leadView) === null;
   for (const [key, row] of rows) if (!live.has(key)) { row.remove(); rows.delete(key); }
   for (const [kind, {list, count, head, body}] of sections) {
-    const group = entries.filter(entry => entry.kind === kind);
+    const group = entries.filter(entry => groupOf(entry.kind) === kind);
     setText(count, String(group.length));
     head.classList.toggle('is-empty', !group.length); body.classList.toggle('is-empty', !group.length);
     group.forEach((entry, index) => {

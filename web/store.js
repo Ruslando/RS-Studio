@@ -72,6 +72,7 @@ export const S = {
   //   frame   → drag a time range for looping / detection (= Alt-drag)
   toolMode: "pan",
   traceHeld: false,
+  heatPreview: false,  // the snap threshold slider is in use: show what passes it
   sliceHeld: false,  // temporary FL-style Slice gesture while the S key is held
   taps: [],
   undoStack: [],

@@ -32,7 +32,7 @@ import { laneChords } from "./chord-names.js";
 import { PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
-import { cancelHoverPreview, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
+import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
@@ -411,6 +411,7 @@ function paintFrame() {
   }
   drawLeadSilence(vy0);
   drawRuler();   // depends on rowH + vertical scroll, so repaint alongside the stage
+  drawHeatThresholdOverlay();
 
   sctx.strokeStyle = PAINT.gridSub;
   for (let p = S.state.spec.midi_low; p <= S.state.spec.midi_high; p++) {
@@ -421,7 +422,7 @@ function paintFrame() {
   drawGrid();
   if (S.detectRegion) drawDetectRegion(vx0, vx1);
   if (S.drag && S.drag.mode === "trace") drawTraceRange(S.drag.points);
-  else if ((S.toolMode === "trace" || S.traceHeld) && S.mouseX != null && S.mouseY != null) drawTraceRange([[S.mouseX, S.mouseY]]);
+  else if ((S.toolMode === "trace" || S.traceHeld || S.heatPreview) && S.mouseX != null && S.mouseY != null) drawTraceRange([[S.mouseX, S.mouseY]]);
 
   // Overlap stacks (same pitch + overlapping time inside one edit lane) are no
   // longer merged — flag them with a hot color + a count badge instead.
@@ -833,8 +834,11 @@ export function init_draw() {
     else cur = "grab";                                       // empty = pan; a click still seeks
     stage.style.cursor = cur;
     // A warning mark explains itself in a tooltip at the pointer.
-    showTooltip(warningMarks.filter(m => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1).map(m => m.tip)
-      .sort((a, b) => (b.tone === "error") - (a.tone === "error")), e.clientX, e.clientY);
+    // A warning mark explains itself; otherwise a rail flag may say what it is.
+    const tips = warningMarks.filter(m => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1).map(m => m.tip)
+      .sort((a, b) => (b.tone === "error") - (a.tone === "error"));
+    const railTip = !tips.length && markerRails().map(rail => rail.tipAt?.(x, y)).find(Boolean);
+    showTooltip(railTip ? [railTip] : tips, e.clientX, e.clientY);
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
     S.refLockHover = refLockAt(x, y);
     S.mouseX = x;

@@ -261,12 +261,13 @@ def _with_lead_in(spec: dict, lead: float) -> dict:
 
     Two things do not simply move. A tone marker at the very start names the
     arrangement's base tone, not a switch, so it stays at 0. And the beat grid is
-    extended BACKWARDS by whole measures into the silence instead of starting
-    after it, so the lead-in has bar lines to count along and every downbeat is
-    still where the music puts it.
+    extended BACKWARDS into the silence by the measures _lead_measures asks for
+    (COUNT, then the count-in ticks), so every downbeat is still where the music
+    puts it. Silence before those measures has no beats.
     """
     if lead <= 0:
         return spec
+    measures = {key: _lead_measures(grid, notes, marks) for key, grid, notes, marks in _lead_groups(spec)}
     out = copy.deepcopy(spec)
     if isinstance(out.get("songEnd"), (int, float)):
         out["songEnd"] += lead
@@ -279,7 +280,7 @@ def _with_lead_in(spec: dict, lead: float) -> dict:
             return item
         return item + lead if isinstance(item, (int, float)) else item
 
-    for track in out.get("tracks") or []:
+    for index, track in enumerate(out.get("tracks") or []):
         for note in track.get("notes") or []:
             for name in ("start", "end"):
                 if isinstance(note.get(name), (int, float)):
@@ -294,19 +295,19 @@ def _with_lead_in(spec: dict, lead: float) -> dict:
         # A layer on its own timing carries its own grid and sections.
         for section in track.get("sections") or []:
             moved(section)
-        _grid_lead_in(track.get("grid"), lead, moved)
+        _grid_lead_in(track.get("grid"), lead, moved, measures.get(index, 2))
     for section in out.get("sections") or []:
         moved(section)
-    _grid_lead_in(out.get("grid"), lead, moved)
+    _grid_lead_in(out.get("grid"), lead, moved, measures.get(None, 2))
     return out
 
 
-def _grid_lead_in(grid, lead: float, moved) -> None:
+def _grid_lead_in(grid, lead: float, moved, measures: int) -> None:
     if not isinstance(grid, dict):
         return
     for marker in grid.get("tempoMap") or []:
         moved(marker)
-    placed = _lead_grid(grid, lead)
+    placed = _lead_grid(grid, lead, measures)
     if placed is not None:
         # Where the song's own grid starts, behind the silence: the count-in
         # measure ends there (chart._count_in).
@@ -314,40 +315,52 @@ def _grid_lead_in(grid, lead: float, moved) -> None:
         grid["offset"] = placed[0]
 
 
-def _lead_grid(grid: dict, lead: float) -> tuple[float, float] | None:
-    """(first beat, measure length) of a grid behind `lead` seconds of silence.
-
-    With silence, the grid runs back into it by whole measures (_grid_lead_in);
-    without, it starts where it always did.
-    """
+def _grid_measure(grid: dict) -> tuple[float, float] | None:
+    """(first beat, measure length) of a grid, the measure at its first tempo."""
     try:
         bpm = float(grid.get("bpm") or 120.0) or 120.0
-        measure = 60.0 / bpm * max(1, int(grid.get("tsNum") or 4))
-        start = max(0.0, float(grid.get("offset") or 0.0))
+        return max(0.0, float(grid.get("offset") or 0.0)), 60.0 / bpm * max(1, int(grid.get("tsNum") or 4))
     except (TypeError, ValueError):
         return None
-    if lead <= 0:
-        return start, measure
+
+
+def _lead_grid(grid: dict, lead: float, measures: int = 2) -> tuple[float, float] | None:
+    """(first beat, measure length) of a grid behind `lead` seconds of silence:
+    `measures` measures before the song's first beat, as many as fit."""
+    placed = _grid_measure(grid)
+    if placed is None or lead <= 0:
+        return placed
+    start, measure = placed
     start += lead
-    return start - int(start / measure) * measure, measure
+    return start - min(measures, int(start / measure + 1e-9)) * measure, measure
 
 
-MIN_FIRST_NOTE = 10.0   # EOF: "At least one note begins < 10 seconds" is an error
+def _lead_measures(grid: dict, notes, sections) -> int:
+    """Measures the silence holds before the song's first beat: two empty ones,
+    COUNT and then the count-in ticks, and one more for each that a note or a
+    section reaches back before them (a pickup). A section snaps to the nearest
+    downbeat, so within half a measure of one it starts a phrase there."""
+    placed = _grid_measure(grid)
+    if placed is None:
+        return 2
+    start, measure = placed
+    note, section = min(notes, default=math.inf), min(sections, default=math.inf)
+    n = 2
+    while n < 64 and (note < start - (n - 2) * measure - 1e-6
+                      or section < start - (n - 2) * measure - measure / 2 - 1e-6):
+        n += 1
+    return n
 
 
-def _package_lead_in(spec: dict, track_indexes) -> float:
-    """The silence the package starts with: what the export asked for, or more.
-
-    Raised until EOF's rules for the start of a Rocksmith arrangement hold for
-    every exported lane: the first note comes at 10 s or later, and a whole
-    empty measure lies before it, the COUNT phrase (DLC Builder's I25). That
-    measure fails only when a section snaps onto the first beat, or a measure is
-    longer than the silence; then the silence grows by whole measures, so the
-    downbeats stay where the music puts them.
-    """
-    lead = _lead_in_seconds(spec)
+def _lead_groups(spec: dict, track_indexes=None) -> list:
+    """Per grid the exported lanes follow: (key, grid, note starts, section times).
+    The key is the lane's index for a lane on its own timing, None for the song's.
+    Without indexes, the lanes the export asks for (all when it names none)."""
     tracks = spec.get("tracks") or []
-    starts = []
+    if track_indexes is None:
+        asked = [item.get("track") for item in (spec.get("rocksmith") or {}).get("arrangements") or []]
+        track_indexes = [i for i in asked if isinstance(i, int) and 0 <= i < len(tracks)] or range(len(tracks))
+    groups = {}
     for index in track_indexes:
         track = tracks[index]
         notes = [n["start"] for n in track.get("notes") or []
@@ -356,25 +369,25 @@ def _package_lead_in(spec: dict, track_indexes) -> float:
             continue
         sections = (track["sections"] if "sections" in track else spec.get("sections")) or []
         marks = [s["t"] for s in sections if isinstance(s, dict) and isinstance(s.get("t"), (int, float)) and s["t"] >= 0]
-        starts.append((min(notes), min(marks, default=float("inf")),
-                       track.get("grid") or spec.get("grid") or {}))
-    if not starts:
-        return lead
-    lead = max(lead, MIN_FIRST_NOTE - min(note for note, _, _ in starts))
-    for _ in range(64):
-        grow = 0.0
-        for note, section, grid in starts:
-            placed = _lead_grid(grid, lead)
-            if placed is None:
-                continue
-            first, measure = placed
-            # A section snaps to the nearest downbeat: within half a measure of
-            # the first one, it would start the first phrase there.
-            if note + lead < first + measure - 1e-6 or section + lead < first + measure / 2 - 1e-6:
-                grow = max(grow, measure)
-        if not grow:
-            break
-        lead += grow
+        key = index if isinstance(track.get("grid"), dict) else None
+        _, grid, have_notes, have_marks = groups.get(key, (key, track.get("grid") or spec.get("grid") or {}, [], []))
+        groups[key] = (key, grid, have_notes + notes, have_marks + marks)
+    return list(groups.values())
+
+
+def _package_lead_in(spec: dict, track_indexes) -> float:
+    """The silence the package starts with: what the export asked for, or more.
+
+    Never shorter than the measures _lead_measures puts before the song's first
+    beat (two empty ones at the first tempo: COUNT, DLC Builder's I25, and the
+    count-in ticks), so asking for none still gives those two.
+    """
+    lead = _lead_in_seconds(spec)
+    for _, grid, notes, marks in _lead_groups(spec, track_indexes):
+        placed = _grid_measure(grid)
+        if placed is not None:
+            start, measure = placed
+            lead = max(lead, _lead_measures(grid, notes, marks) * measure - start)
     return lead
 
 
@@ -809,7 +822,13 @@ def check_spec(spec: dict) -> list[dict]:
         song = built.compiled.sng
         found["count"] = next((pi.start_time - lead for pi in song.phrase_iterations
                                if song.phrases[pi.phrase_id].name == "COUNT"), None)
-        found["events"] = [{"t": t - lead, "code": code} for t, code in song.events]
+        # auto: a crowd event the export added (chart._crowd_events), not one of the layer's own.
+        own = [(e["t"], e.get("code")) for e in tracks[index].get("crowdEvents") or []
+               if isinstance(e, dict) and isinstance(e.get("t"), (int, float))]
+        found["events"] = [{"t": t - lead, "code": code,
+                            **({"auto": True} if code in chart.CROWD_EVENTS and not any(
+                                c == code and abs(t - o) < 1e-3 for o, c in own) else {})}
+                           for t, code in song.events]
         issues = [issue.in_editor(lead) for issue in built.issues()]
         found["issues"] = [{"code": i.code, "time": i.time, "title": i.title, "help": i.help,
                             "important": i.important} for i in issues]

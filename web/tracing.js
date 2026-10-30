@@ -3,7 +3,7 @@
 
 import { MIN_DUR, stageMono, SIMILAR_MAX_MATCHES, SIMILAR_PITCH_MARGIN, SIMILAR_THRESHOLD, TRACE_FALLBACK_STEP, TRACE_POINT_GAP } from "./constants.js";
 import { similarScores } from "./similar-core.js";
-import { audio, scroll, sctx, traceRangeSel, traceSnapInput } from "./dom.js";
+import { audio, scroll, sctx, traceRangeSel, traceSnapInput, traceThresholdInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { clipOf, commit, copyEffects, placeClip, snapshotEdit } from "./edit.js";
 import { laneClock, wholeBoxOf } from "./references.js";
@@ -34,10 +34,20 @@ export function prepareSpectSample() {
   } catch {
     S.spectPixels = null;
   }
+  rebuildHeatMask();
 }
 
 function traceStep() {
   return gridStep() || TRACE_FALLBACK_STEP;
+}
+
+// Snap threshold: how bright a cell must be for a traced note to land on it.
+function traceThresholdPercent() {
+  return clamp(parseFloat(traceThresholdInput?.value) || 0, 0, 100);
+}
+
+function traceThreshold() {
+  return traceThresholdPercent() / 100 * 255;
 }
 
 function traceSearchRange() {
@@ -50,17 +60,83 @@ function traceSnap() {
   return traceSnapInput ? traceSnapInput.checked : true;
 }
 
-// Range only steers the snap search, so dim them when free-drawing.
-// Covers the hidden state inputs and their Settings-modal mirrors.
+// Range and threshold only steer the snap search, so dim them when free-drawing.
+// Covers the hidden state inputs and their mirrors.
 function updateTraceControls() {
   const off = !traceSnap();
-  document.querySelectorAll(".trace-range-ctl").forEach((el) => (el.disabled = off));
+  document.querySelectorAll(".trace-range-ctl, .trace-heat-ctl").forEach((el) => (el.disabled = off));
+}
+
+function updateTraceThresholdLabel() {
+  const txt = `${Math.round(traceThresholdPercent())}%`;
+  document.querySelectorAll(".trace-thresh-val").forEach((el) => (el.textContent = txt));
+  document.querySelectorAll(".trace-heat-ctl").forEach((el) => el.setAttribute("aria-valuetext", txt));
+}
+
+// While the threshold slider is hovered, focused or moved, the stage shows in
+// green which cells pass it, so the setting can be judged against the song.
+function setHeatPreview(on) {
+  S.heatPreview = !!on && traceSnap();
+  draw();
 }
 
 // Relative brightness used by tracing and passage matching on the original PNG.
 function pixelEnergy(r, g, b) {
   const lum = 0.299 * r + 0.587 * g + 0.114 * b;
   return Math.max(r, g, b) * 0.65 + lum * 0.35;
+}
+
+// The heat overlay's colour ramp: a green that gets brighter and more opaque
+// with energy. Written out rather than pulled from the theme because it sits on
+// the always-dark stage and has to stay legible over the spectrogram.
+function heatColorForEnergy(e) {
+  const a = clamp((e - traceThreshold()) / Math.max(1, 255 - traceThreshold()), 0, 1);
+  return [Math.round(90 + 120 * a), Math.round(230 + 25 * a), Math.round(190 + 45 * a), Math.round(70 + 120 * a)];
+}
+
+const heatMaskCanvas = document.createElement("canvas");
+const heatMaskCtx = heatMaskCanvas.getContext("2d");
+
+// Uses pixelEnergy, as the snap search does, so the preview shows what snaps.
+function rebuildHeatMask() {
+  if (!S.spectPixels || !S.spectImg || !heatMaskCtx) return;
+  const { width, height } = S.spectImg;
+  heatMaskCanvas.width = width;
+  heatMaskCanvas.height = height;
+  const image = heatMaskCtx.createImageData(width, height);
+  const threshold = traceThreshold();
+  for (let i = 0; i < width * height * 4; i += 4) {
+    const energy = pixelEnergy(S.spectPixels[i], S.spectPixels[i + 1], S.spectPixels[i + 2]);
+    if (energy < threshold) continue;
+    image.data.set(heatColorForEnergy(energy), i);
+  }
+  heatMaskCtx.putImageData(image, 0, 0);
+}
+
+export function drawHeatThresholdOverlay() {
+  if (!S.heatPreview || !S.state || !S.spectImg || !heatMaskCanvas.width) return;
+  const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
+  const t0 = Math.max(0, vx0 / S.pxPerSec), t1 = Math.min(S.state.duration, vx1 / S.pxPerSec);
+  if (t1 <= t0) return;
+  sctx.save();
+  sctx.globalCompositeOperation = "screen";
+  sctx.drawImage(heatMaskCanvas,
+    (t0 / S.state.duration) * heatMaskCanvas.width, 0,
+    ((t1 - t0) / S.state.duration) * heatMaskCanvas.width, heatMaskCanvas.height,
+    t0 * S.pxPerSec, 0, (t1 - t0) * S.pxPerSec, contentH());
+  sctx.restore();
+}
+
+// Rebuilding the mask scans the whole spectrogram, so slider input is coalesced
+// to one rebuild per frame.
+let heatMaskRaf = 0;
+function scheduleHeatMaskRebuild() {
+  if (heatMaskRaf) return;
+  heatMaskRaf = requestAnimationFrame(() => {
+    heatMaskRaf = 0;
+    rebuildHeatMask();
+    if (S.heatPreview) draw();
+  });
 }
 
 export function addTracePoint(points, x, y) {
@@ -151,7 +227,7 @@ export function notesFromTrace(points) {
   if (!S.state || !S.spectImg || points.length < 2) return [];
   const snap = traceSnap();
   const step = traceStep();
-  const threshold = 0.18 * 255; // Existing background-rejection baseline for pitch snapping.
+  const threshold = traceThreshold();
   const off = gridStep() ? gridOffset() : 0;
   const minX = Math.max(0, Math.min(...points.map((p) => p[0])));
   const maxX = Math.min(songWidth(), Math.max(...points.map((p) => p[0])));
@@ -663,6 +739,14 @@ export function init_tracing() {
     document.getElementById(id)?.addEventListener('click', () => acceptMatch(S.matchFocus, mode));
   updateMatchNavigator();
   if (traceRangeSel) traceRangeSel.addEventListener("input", () => draw());
+  updateTraceThresholdLabel();
+  traceThresholdInput?.addEventListener("input", () => { updateTraceThresholdLabel(); scheduleHeatMaskRebuild(); });
+  // The preview follows the visible slider (the hidden input is only the store).
+  const slider = document.getElementById("quickTraceThreshold");
+  for (const [type, on] of [["pointerenter", true], ["focus", true], ["input", true]])
+    slider?.addEventListener(type, () => setHeatPreview(on));
+  slider?.addEventListener("pointerleave", () => { if (document.activeElement !== slider) setHeatPreview(false); });
+  slider?.addEventListener("blur", () => setHeatPreview(false));
   updateTraceControls();
   if (traceSnapInput) traceSnapInput.addEventListener("change", () => { updateTraceControls(); draw(); });
 }
