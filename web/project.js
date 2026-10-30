@@ -385,6 +385,7 @@ export async function applyProject(data) {
     stems: (data.stems || []).map((s) => ({
       id: s.id, name: s.name, spec: s.spectrogram, audioUrl: s.audio_url,
       muted: !!s.muted, solo: !!s.solo, volume: normLayerVolume(s.volume), channel: s.channel || "stereo",
+      separation: s.separation || null,
     })),
     mix: normMix(data.mix),
     editLanes: sourceLanes.map(lane => mapLane(lane, Number(data.projectStart) || 0)),
@@ -917,7 +918,7 @@ async function openAddStemMenu(anchor) {
     sw.setAttribute("aria-label", "New audio source");
     sw.innerHTML = `
       <button type="button" class="mode ${mode === "separate" ? "active" : ""}" data-pick="separate"
-        ${available.length ? "" : "disabled title='No separation model is available'"}>Separate from audio</button>
+        ${available.length ? "" : "disabled title='No separation model is available'"}>Separate from full song</button>
       <button type="button" class="mode ${mode === "upload" ? "active" : ""}" data-pick="upload">Upload my own</button>`;
     sw.querySelectorAll("[data-pick]").forEach((b) =>
       b.addEventListener("click", () => { mode = b.dataset.pick; render(); }));
@@ -988,7 +989,7 @@ export async function addStem(stemId, label, backend) {
     const s = data.stem;
     S.state.stems.push({
       id: s.id, name: s.name, spec: s.spectrogram, audioUrl: s.audio_url,
-      muted: false, solo: false,
+      muted: false, solo: false, separation: s.separation || null,
     });
     ensureStemMixer();   // build the follower element + gain for the new stem
     stopPendingStem();
@@ -1082,6 +1083,7 @@ export async function removeStem(stem) {
 // panel is still showing this stem — the panel guards its own half.
 function applyStemReplacement(stem, s, warn, duration) {
   stem.spec = s.spectrogram;
+  stem.separation = s.separation || null;   // an upload clears it, a separation records it
   refreshStemAudio(stem, s.audio_url);
   if (stem.id === S.state.curStem) selectStem(stem.id);
   // The master's file can change length on replace — resize the canvas to match

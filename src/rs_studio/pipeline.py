@@ -981,6 +981,33 @@ def add_stem(
     return StemView(id=out_id, name=name, audio_path=audio_path, spectrogram=spec), warn
 
 
+def separate_into_stem(
+    job_dir: Path, input_path: Path, separator: str, part: str, stem_id: str, name: str,
+) -> tuple[StemView, str | None]:
+    """Separate `part` out of any file (a layer's own audio, an upload) into `stem_id`.
+
+    Unlike add_stem this never touches the full song's separation cache in
+    `stems/`: the input is not the full song, so its results must not be found
+    there later. The separated wav is kept as `upload_{stem_id}.wav`, the layer's
+    lossless audio for the next "from this layer" pass.
+    """
+    import shutil
+    import tempfile
+
+    job_dir = Path(job_dir)
+    with tempfile.TemporaryDirectory(dir=job_dir) as tmp:
+        produced, warn = _run_separator(separator, input_path, Path(tmp), [part])
+        src = produced.get(part)
+        if src is None:
+            raise ValueError(warn or f"Could not produce stem '{part}'.")
+        for old in job_dir.glob(f"upload_{stem_id}.*"):
+            old.unlink(missing_ok=True)
+        kept = job_dir / f"upload_{stem_id}{src.suffix or '.wav'}"
+        shutil.move(src, kept)
+    processing.report("Encoding separated audio")
+    return ingest_stem(kept, job_dir, stem_id, name), warn
+
+
 def ingest_stem(
     src_path: Path, job_dir: Path, stem_id: str, name: str, with_tempo: bool = False
 ) -> StemView:

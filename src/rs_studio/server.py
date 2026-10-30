@@ -497,6 +497,7 @@ def _response_from_manifest(m: dict) -> dict:
             "solo": bool(st.get("solo", False)),
             "volume": st.get("volume", 1.0),
             "channel": st.get("channel", "stereo"),
+            "separation": st.get("separation"),
         })
     return {
         "job": job,
@@ -611,6 +612,7 @@ def _ingest_full_song(job: str, m: dict, audio: UploadFile) -> pipeline.StemView
     m["tuning"] = {"estimate": estimate, "reference": pipeline.suggested_reference(estimate), "shift": 0.0}
     m["inputRel"] = in_path.name
     m["filename"] = audio.filename
+    _drop_separation_cache(job_dir, m)
     return view
 
 
@@ -626,6 +628,30 @@ def _project_input(job_dir: Path, m: dict, missing: str = "Original audio missin
     if not candidates:
         raise HTTPException(status_code=404, detail=missing)
     return candidates[0]
+
+
+def _drop_separation_cache(job_dir: Path, m: dict) -> None:
+    """Forget the full song's earlier separations once the full song changes.
+
+    add_stem reuses `stems/**.wav` keyed only by backend and part, so after a new
+    full song it would quietly hand back stems of the old one. Files a stem still
+    plays from (the no-ffmpeg fallback) are kept.
+    """
+    keep = {(job_dir / s["audio_rel"]).resolve() for s in m.get("stems", []) if s.get("audio_rel")}
+    for wav in (job_dir / "stems").rglob("*.wav"):
+        if wav.resolve() not in keep:
+            wav.unlink(missing_ok=True)
+
+
+def _layer_audio(job_dir: Path, st: dict) -> Path:
+    """The best copy of a layer's own audio: its lossless upload, else what it plays."""
+    uploads = sorted(job_dir.glob(f"upload_{st['id']}.*"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if uploads:
+        return uploads[0]
+    played = _safe_project_file(job_dir, st.get("audio_rel"))
+    if not played or not played.exists():
+        raise HTTPException(status_code=404, detail="This layer's audio is missing")
+    return played
 
 
 def _drop_project_file(job_dir: Path, rel: str | None) -> None:
@@ -702,12 +728,15 @@ def _blank_manifest(job_id: str) -> dict:
 _stem_updates_lock = Lock()
 
 
-def _append_processed_stem(job, job_dir, view, separator=None):
+def _append_processed_stem(job, job_dir, view, separator=None, part=None):
     # Several upload/separation requests can finish together. Merge into the
     # latest manifest instead of overwriting other newly completed audio.
     with _stem_updates_lock:
         current = _read_manifest(job)
-        current.setdefault("stems", []).append(_stem_entry(job_dir, view))
+        entry = _stem_entry(job_dir, view)
+        if separator and part:
+            entry["separation"] = {"backend": separator, "part": part, "source": "song"}
+        current.setdefault("stems", []).append(entry)
         if separator:
             current["separated"] = True
             current["separator"] = current.get("separator") or separator
@@ -808,7 +837,7 @@ def api_project_stem_separate(job: str, payload: dict = Body(...)) -> JSONRespon
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Separation failed: {exc}") from exc
 
-    _append_processed_stem(job, job_dir, view, backend)
+    _append_processed_stem(job, job_dir, view, backend, part)
 
     spec = dict(view.spectrogram)
     spec["url"] = f"/api/spectrogram/{job}/{view.id}.png"
@@ -1738,7 +1767,7 @@ def api_stem_add(payload: dict = Body(...)) -> JSONResponse:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not add stem: {exc}") from exc
 
-    _append_processed_stem(job, job_dir, view, separator)
+    _append_processed_stem(job, job_dir, view, separator, stem_id)
 
     spec = dict(view.spectrogram)
     spec["url"] = f"/api/spectrogram/{job}/{view.id}.png"
@@ -1748,6 +1777,7 @@ def api_stem_add(payload: dict = Body(...)) -> JSONResponse:
             "name": view.name,
             "spectrogram": spec,
             "audio_url": f"/api/audio/{job}/{view.id}",
+            "separation": {"backend": separator, "part": stem_id, "source": "song"},
         },
     }
     if warn:
@@ -1804,10 +1834,19 @@ def api_stem_replace(job: str, stem_id: str, file: UploadFile) -> JSONResponse:
 
     st["spectrogram"] = view.spectrogram
     st["audio_rel"] = str(view.audio_path.relative_to(job_dir))
+    st.pop("separation", None)   # a file the user brought, not a separation
     is_master = m["stems"] and m["stems"][0]["id"] == stem_id
     if is_master:
         m["duration"] = view.spectrogram.get("duration")
         m["songEnd"] = view.spectrogram.get("songEnd") or m["duration"]
+        # The new full song is what "separate from full song" means from now on.
+        # It used to keep pointing at the first upload.
+        old = _safe_project_file(job_dir, m.get("inputRel"))
+        if old and old != src_path.resolve():
+            old.unlink(missing_ok=True)
+        m["inputRel"] = src_path.name
+        m["filename"] = file.filename or m.get("filename")
+        _drop_separation_cache(job_dir, m)
     _write_manifest(job, m)
 
     spec, audio_url = _cache_busted(job, stem_id)
@@ -1823,6 +1862,7 @@ def api_stem_recreate(job: str, stem_id: str, payload: dict = Body(...)) -> JSON
     overwriting its audio in place (main editor's stem edit panel)."""
     backend = payload.get("backend", "demucs")
     part = payload.get("part", "")
+    from_layer = payload.get("source") == "layer"   # else the full song
     m = _read_manifest(job)
     st = _find_stem(m, stem_id)
     if m["stems"] and m["stems"][0]["id"] == stem_id:
@@ -1831,9 +1871,16 @@ def api_stem_recreate(job: str, stem_id: str, payload: dict = Body(...)) -> JSON
         raise HTTPException(status_code=400, detail="Unknown separator")
 
     job_dir = _job_dir(job)
-    source = _project_input(job_dir, m, "Full song audio isn't available to separate from")
     try:
-        view, warn = processing.run(payload.get("progress_id"), pipeline.add_stem, job_dir, source, backend, part, stem_id, output_dir=job_dir)
+        if from_layer:
+            view, warn = processing.run(payload.get("progress_id"), pipeline.separate_into_stem, job_dir,
+                                        _layer_audio(job_dir, st), backend, part, stem_id, st["name"], output_dir=job_dir)
+        else:
+            source = _project_input(job_dir, m, "Full song audio isn't available to separate from")
+            view, warn = processing.run(payload.get("progress_id"), pipeline.add_stem, job_dir, source, backend, part, stem_id, output_dir=job_dir)
+            # Its own audio is the full song's separation now, not an old upload.
+            for old in job_dir.glob(f"upload_{stem_id}.*"):
+                old.unlink(missing_ok=True)
     except processing.OperationCancelled:
         return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
     except Exception as exc:
@@ -1841,12 +1888,14 @@ def api_stem_recreate(job: str, stem_id: str, payload: dict = Body(...)) -> JSON
 
     st["spectrogram"] = view.spectrogram
     st["audio_rel"] = str(view.audio_path.relative_to(job_dir))
+    st["separation"] = {"backend": backend, "part": part, "source": "layer" if from_layer else "song"}
     m["separated"] = True
     m["separator"] = m.get("separator") or backend
     _write_manifest(job, m)
 
     spec, audio_url = _cache_busted(job, stem_id)
-    resp = {"stem": {"id": stem_id, "name": st["name"], "spectrogram": spec, "audio_url": audio_url}}
+    resp = {"stem": {"id": stem_id, "name": st["name"], "spectrogram": spec, "audio_url": audio_url,
+                     "separation": st["separation"]}}
     if warn:
         resp["warning"] = warn
     return JSONResponse(resp)

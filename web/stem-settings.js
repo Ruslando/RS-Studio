@@ -39,6 +39,7 @@ let stemVolumeAtOpen = 1;       // the volume slider plays live; Cancel/Escape p
 let stemEditState = "idle";     // "idle" (preview + replace) | "working"
 let stemEditMode = "separate";  // which replacement source is showing
 let stemEditBackend = null, stemEditPart = null;
+let stemEditFrom = "song";      // what "Separate" works on: "song" | "file"
 let stemEditError = null;
 let stemEditAudioEl = null, stemEditPos = 0, stemEditDuration = NaN, stemEditPlaying = false;
 let stemEditWorkLabel = "";
@@ -61,8 +62,12 @@ export function openStemSettings(stem, isMaster) {
   stemEditTarget = stem;
   stemEditIsMaster = !!isMaster;
   stemEditState = "idle";
-  stemEditMode = stemEditHasFullSong() ? "separate" : "upload";
-  stemEditBackend = null; stemEditPart = null; stemEditError = null;
+  stemEditMode = "separate";
+  // Start from how this layer was made, so redoing it is one click on Separate.
+  const made = stem.separation || {};
+  stemEditBackend = made.backend || null; stemEditPart = made.part || null; stemEditError = null;
+  // The server records a picked file as "layer": the file became the layer's audio first.
+  stemEditFrom = made.source === "layer" || !stemEditHasFullSong() ? "file" : "song";
   stemVolumeAtOpen = normLayerVolume(stem.volume);
   setStemEditAudio(stem.audioUrl);
   renderStemSettings();
@@ -162,18 +167,25 @@ function renderStemEditCard() {
         <span class="t-caps sc-replace-label">Replace</span>
         ${!master ? `
           <div class="view-switch" role="group" aria-label="Replacement source">
-            <button type="button" class="mode ${stemEditMode === "separate" ? "active" : ""}" data-pick="separate"
-              ${stemEditHasFullSong() ? "" : "disabled title='No full song on file to separate from'"}>Separate from audio</button>
+            <button type="button" class="mode ${stemEditMode === "separate" ? "active" : ""}" data-pick="separate">Separate</button>
             <button type="button" class="mode ${stemEditMode === "upload" ? "active" : ""}" data-pick="upload">Upload my own</button>
           </div>
         ` : ""}
         ${showSeparate ? `
+          <label class="sc-from-row">From
+            <select class="sc-from">
+              <option value="song" ${stemEditFrom === "song" ? "selected" : ""}
+                ${stemEditHasFullSong() ? "" : "disabled"}>Full song</option>
+              <option value="file" ${stemEditFrom === "file" ? "selected" : ""}>An audio file…</option>
+            </select>
+          </label>
           <div class="sc-source-row">
             <select class="sc-backend">
               ${avail.map((s) => `<option value="${s.id}" ${s.id === (stemEditBackend || (avail[0] && avail[0].id)) ? "selected" : ""}>${s.label}</option>`).join("")}
             </select>
             <select class="sc-part"></select>
             <button type="button" class="primary sc-go" ${avail.length ? "" : "disabled"}>Separate</button>
+            <input type="file" class="sc-file" accept="audio/*" hidden />
           </div>
           ${avail.length ? "" : `<p class="sc-error">No separation backend is available.</p>`}
         ` : `
@@ -209,7 +221,11 @@ function wireStemEditCard() {
     const backendSel = card.querySelector(".sc-backend");
     if (backendSel) {
       const partSel = card.querySelector(".sc-part");
-      stemEditBackend = stemEditBackend || backendSel.value;
+      stemEditBackend = backendSel.value;   // a remembered backend may no longer be installed
+      const fromSel = card.querySelector(".sc-from");
+      fromSel.addEventListener("change", () => { stemEditFrom = fromSel.value; });
+      const fileIn = card.querySelector(".sc-file");
+      fileIn.addEventListener("change", () => { if (fileIn.files[0]) startStemEditSeparate(fileIn.files[0]); });
       const fillParts = () => {
         const b = separators.find((s) => s.id === backendSel.value);
         const parts = (b && b.stems) || [];
@@ -220,7 +236,8 @@ function wireStemEditCard() {
       backendSel.addEventListener("change", () => { stemEditBackend = backendSel.value; stemEditPart = null; fillParts(); });
       card.querySelector(".sc-go").addEventListener("click", () => {
         stemEditBackend = backendSel.value; stemEditPart = partSel.value;
-        startStemEditSeparate();
+        if (stemEditFrom === "file") fileIn.click();
+        else startStemEditSeparate();
       });
     } else {
       const drop = card.querySelector(".sc-drop");
@@ -298,19 +315,30 @@ function failStemEdit(stem, message) {
   }
 }
 
-async function startStemEditSeparate() {
+// `file`: separate from an audio file the user picks. It becomes the layer's
+// audio first, then is separated as "this layer's audio".
+async function startStemEditSeparate(file = null) {
   const stem = stemEditTarget;
   const state = S.state;   // drop the result if another project opens mid-separation
+  const backend = stemEditBackend, part = stemEditPart;
+  const source = file ? "layer" : "song";
   stemEditState = "working";
-  stemEditWorkLabel = `Separating with ${backendLabel(stemEditBackend)}…`;
+  stemEditWorkLabel = `Separating with ${backendLabel(backend)}…`;
   stemEditError = null;
   renderStemEditCard();
   closeStemSettings();
   try {
+    if (file) {
+      const fd = new FormData();
+      fd.append("file", file);
+      await uploadRequest(`/api/projects/${state.job}/stems/${stem.id}/replace`, fd, "Uploading audio", file.name);
+      if (S.state !== state) return;
+    }
     const data = await operationRequest(
       `/api/projects/${state.job}/stems/${stem.id}/separate`,
-      {backend: stemEditBackend, part: stemEditPart},
-      "Separating audio", `${backendLabel(stemEditBackend)} · ${stemEditPart} → ${stem.name}`,
+      {backend, part, source},
+      "Separating audio",
+      `${backendLabel(backend)} · ${part} from ${file ? file.name : "full song"} → ${stem.name}`,
     );
     if (S.state !== state) return;
     finishStemEdit(stem, data.stem, data.warning);

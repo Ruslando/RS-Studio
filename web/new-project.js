@@ -167,7 +167,7 @@ function createStemCard() {
       body = `
         <div class="view-switch" role="group" aria-label="Audio source">
           <button type="button" class="mode ${mode === "separate" ? "active" : ""}" data-pick="separate"
-            ${hasFullSong() ? "" : "disabled title='Upload the full song first to separate stems from it'"}>Separate from audio</button>
+            ${hasFullSong() ? "" : "disabled title='Upload the full song first to separate stems from it'"}>Separate from full song</button>
           <button type="button" class="mode ${mode === "upload" ? "active" : ""}" data-pick="upload">Upload my own</button>
         </div>
         ${mode === "separate" ? `

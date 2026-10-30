@@ -993,6 +993,8 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 
 .sc-source-row { display: flex; gap: var(--s-sibling); margin-top: var(--s-row); }
 .sc-source-row select { flex: 1; min-width: 0; width: 0; }
+.sc-from-row { display: flex; align-items: center; gap: var(--s-sibling); margin-top: var(--s-row); }
+.sc-from-row select { flex: 1; min-width: 0; }
 .sc-source-row { flex-wrap: wrap; }
 .sc-source-row select { flex-basis: 120px; }
 .sc-go { flex: none; }
