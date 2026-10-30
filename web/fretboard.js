@@ -2414,7 +2414,8 @@ export function init_fretboard() {
     button.blur();
     const value = button.dataset.value === "auto" ? null : Number(button.dataset.value);
     if (value !== null && !(handColumnHere(lane)?.choices || []).includes(value)) return;
-    setHandAnchor(lane, handTimeHere(lane), value);
+    // Choosing a hand here is an explicit action, so it may add the anchor.
+    setHandAnchor(lane, handTimeHere(lane), value, { create: value !== null });
     drawFretboard();
   });
   window.addEventListener("cw-transport", event => {
