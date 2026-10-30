@@ -1,6 +1,6 @@
 // Expensive chord-arrangement enumeration and phrase scoring live in a worker
 // so opening and using the chord preview never blocks the browser's UI thread.
-import { diverseShapes, enumerateShapes, gripCostBreakdown, handProfileForTuning, scoreShapesAsDecided, shapeCost, shapeKey, voiceNotesFingered } from "./voicing-core.js";
+import { diverseShapes, enumerateShapes, gripCostBreakdown, handProfileForTuning, scoreShapesAsDecided, shapeCost, shapeKey, staleKept, voiceNotesFingered } from "./voicing-core.js";
 // Also exported by voicing-core, and imported again when the re-voicing block
 // below comes back: arrangementVoiceCounts, chordArrangementChoices.
 
@@ -28,6 +28,10 @@ self.onmessage = (ev) => {
   // Where the player put the fretting hand, in seconds. Times and not notes, so a
   // hold survives retracing the passage under it — see holdsByColumn.
   const holds = ev.data.holds;
+  if (task === "stale") {
+    self.postMessage({ task, stale: staleKept(ev.data.notes || [], tuning, { bars, instrument, capo, holds }) });
+    return;
+  }
   if (task === "voice") {
     const notes = ev.data.notes || [];
     // The hand rides along with the positions: which finger took each note and which

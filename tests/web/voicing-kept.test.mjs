@@ -2,7 +2,7 @@
 // Once voiced, a note keeps its position (note.auto): adding a note voices only the
 // new one, around the rest. The hand is planned anew every time.
 import assert from "node:assert/strict";
-import { keepVoicing, moveCapo, voiceNotesFingered } from "../../web/voicing-core.js";
+import { keepVoicing, moveCapo, staleKept, voiceNotesFingered } from "../../web/voicing-core.js";
 
 const tuning = [64, 59, 55, 50, 45, 40];              // app order: string 0 = high E
 const note = (start, pitch) => ({ start, end: start + 0.2, pitch });
@@ -103,6 +103,16 @@ assert.deepEqual(where(voice(lane), lane), where(second, lane), "solving again i
   const found = voice([a, b, c, d]);
   assert.deepEqual([c, d].map((n) => found.voiced.get(n).string), [5, 2], "the slides keep their strings");
   assert.deepEqual([a, b].map((n) => found.voiced.get(n).string), [5, 2], "the source stays");
+}
+
+// A kept place the engine would not choose today is pointed at, with today's answer.
+{
+  const n = note(80, 57), notes = [n];                     // A3: fret 2 on the G string fresh
+  const today = voice(notes).voiced.get(n);
+  n.auto = { string: 4, fret: 12, n: 1 };                  // an older solve: fret 12 on the A string
+  assert.deepEqual(staleKept(notes, tuning, { bars: [0, 2, 4, 6, 8] }), [{ string: today.string, fret: today.fret }]);
+  n.auto = { string: today.string, fret: today.fret, n: 1 };
+  assert.deepEqual(staleKept(notes, tuning, { bars: [0, 2, 4, 6, 8] }), [null], "same as today: nothing to say");
 }
 
 console.log("voicing-kept: ok");

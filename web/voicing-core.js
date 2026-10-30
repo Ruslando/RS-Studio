@@ -844,6 +844,20 @@ function dropsSlide(prev, prevShape, prevRules, shape, tuning, maxFret) {
   });
 }
 
+// KEPT, BUT NOT WHAT THE ENGINE WOULD SAY TODAY. Per note: where a fresh solve would
+// put it, when that differs from its kept place, else null. Different, not better:
+// the engine has no single score to say which is better, so the stage only points
+// at it and "Recalculate positions" takes it. One whole-lane pass.
+export function staleKept(notes, tuning, options = {}) {
+  const fresh = notes.map(({ auto, ...n }) => n);
+  const { voiced } = voiceNotesFingered(fresh, tuning, Infinity, options);
+  return notes.map((n, i) => {
+    const a = n.auto, p = voiced.get(fresh[i]);
+    if (!a || !p || n.pos || !fitsPitch(a, n.pitch, tuning)) return null;
+    return a.string === p.string && a.fret === p.fret ? null : { string: p.string, fret: p.fret };
+  });
+}
+
 // A finger the player typed onto a note (note.finger): 0 the thumb, 1-4 index to pinky.
 export const isChosenFinger = (f) => Number.isInteger(f) && f >= THUMB && f <= 4;
 
