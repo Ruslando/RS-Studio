@@ -70,4 +70,12 @@ assert.equal(held.seat, 5);
 assert.ok([...am7].filter(([, pos]) => pos.fret === 5).every(([note]) => held.fingers.get(note) === 1));
 const conflicting = handForShape(am7, 3, undefined, new Map(), true);
 assert.equal(conflicting.seat, 5, 'an incompatible requested register must not invent an impossible hand');
+// A muted note leading into a shift sits under the hand it shifts to, not the one it left.
+{
+  const bass = [43, 38, 33, 28];
+  const at = (start, string, fret, fx) => ({ start, end: start + 0.2, pitch: bass[string] + fret, pos: { string, fret, scope: 'local' }, ...(fx ? { fx } : {}) });
+  const run = [at(0, 3, 7), at(0.3, 3, 7), at(1, 3, 2, { dead: true }), at(1.2, 3, 2), at(1.6, 3, 4)];
+  const { seats } = voiceNotesFingered(run, bass, Infinity, { instrument: 'bass' });
+  assert.deepEqual(run.map(n => seats.get(n)), [7, 7, 2, 2, 2], 'the mute takes the hand that reaches its fret');
+}
 console.log('joint hand poses: barres, anatomy, anchors and alternatives passed');

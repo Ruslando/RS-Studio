@@ -2906,18 +2906,25 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
   if (seats) {
     const named = new Array(n).fill(null);
     for (let i = 0; i < n; i++) if (stood[i] != null) named[i] = stood[i];
+    const loose = new Array(n).fill(null);
     const reach = sorted.map((c, i) => {
-      let lo = Infinity, hi = -Infinity;
+      let lo = Infinity, hi = -Infinity, llo = Infinity, lhi = -Infinity;
       const at = [], on = [];
       for (let k = 0; k < c.pitches.length; k++) {
         const s = strings[i][k];
+        if (s < 0) continue;
+        const f = c.pitches[k] - tuning[s];
         // A tapped note is the other hand's, and an open string is nobody's. A muted
         // one is the hand relaxing where it already is: its fret is whatever the
-        // tab wrote down (an imported scratch says 22 beside a 3), not a reach.
-        if (s < 0 || (c.rules && c.rules[k] && c.rules[k].free) || c.dead?.[k]) continue;
-        const f = c.pitches[k] - tuning[s];
+        // tab wrote down (an imported scratch says 22 beside a 3), not a reach. Its
+        // fret only says which neighbouring hand it sits under (`loose`, planHand).
+        if ((c.rules && c.rules[k] && c.rules[k].free) || c.dead?.[k]) {
+          if (f > 0) { llo = Math.min(llo, f); lhi = Math.max(lhi, f); }
+          continue;
+        }
         if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); at.push(f); on.push(s); }
       }
+      if (Number.isFinite(llo)) loose[i] = { lo: llo, hi: lhi };
       return Number.isFinite(lo) ? { lo, hi, at, on } : null;
     });
     const maxReach = handReach(handProfileForTuning(tuning));
@@ -2927,7 +2934,7 @@ export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars =
       if (g != null && r && g >= 1 && g <= r.lo && r.hi - g < maxReach) named[i] = g;
     });
     const fingerCost = handProfileForTuning(tuning).id.startsWith(BASS_HAND_PROFILE.id) ? FINGER_COST : null;
-    const planned = planHand(reach, named, span, maxReach, sorted, fingerCost);
+    const planned = planHand(reach, named, span, maxReach, sorted, fingerCost, loose);
     for (let i = 0; i < n; i++) seats[i] = planned[i] ?? Math.max(1, registers[blocks.findIndex((idx) => idx.includes(i))] || 1);
   }
 
@@ -2993,7 +3000,7 @@ const REST_GAP = 0.1;   // s; the shortest rest that frees the hand, however sho
 // cannot be held any other way (a chord wider than the reach) keeps a hand.
 const stretchCost = (frets, span, reach = MAX_REACH) => (frets <= span ? 0 : frets > reach ? 1e6 : 3 ** (frets - span - 1));
 
-function planHand(reach, named, span = SPAN, maxReach = MAX_REACH, times = null, fingerCost = null) {
+function planHand(reach, named, span = SPAN, maxReach = MAX_REACH, times = null, fingerCost = null, loose = null) {
   const n = reach.length, out = new Array(n).fill(null);
   let prev = null;                         // [{ g, cost, from }] of the last fretted column
   let last = -1, free = false;             // that column, and whether the hand let go since
@@ -3034,8 +3041,16 @@ function planHand(reach, named, span = SPAN, maxReach = MAX_REACH, times = null,
     out[trail[t].i] = st.g; k = st.from;
   }
   // Nothing fretted here: the hand is wherever it already was, or is about to be.
-  for (let i = 1; i < n; i++) if (out[i] == null) out[i] = out[i - 1];
-  for (let i = n - 2; i >= 0; i--) if (out[i] == null) out[i] = out[i + 1];
+  // A muted or tapped note still sits on a fret: it takes the hand before it when
+  // that reaches the fret, else the one after it when that does (a mute leading into
+  // a shift is played where the shift lands), else the one before.
+  const next = new Array(n).fill(null);
+  for (let i = n - 1, q = null; i >= 0; i--) { next[i] = q; if (out[i] != null) q = out[i]; }
+  const fits = (g, m) => g != null && (!m || (g <= m.lo && m.hi - g < maxReach));
+  for (let i = 0; i < n; i++) if (out[i] == null) {
+    const p = i ? out[i - 1] : null, q = next[i], m = loose?.[i];
+    out[i] = fits(p, m) ? p : fits(q, m) ? q : p ?? q;
+  }
   return out;
 }
 
