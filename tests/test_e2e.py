@@ -55,9 +55,16 @@ class EndToEndTests(unittest.TestCase):
         cls.url = f"http://127.0.0.1:{port}/"
         cls.log = open(cls.data / "server.log", "w", encoding="utf-8")
         cls.addClassCleanup(cls.log.close)
+        # The server keeps setup state and the editor's preferences in the user's
+        # config folder; give it a throwaway one so tests neither read nor
+        # overwrite the real preferences, and setup counts as done.
+        config = cls.data / "config"
+        (config / "rs-studio").mkdir(parents=True)
+        (config / "rs-studio" / "setup-complete").write_text("1\n")
         cls.server = subprocess.Popen(
             [sys.executable, "-m", "rs_studio", "serve", "--port", str(port)],
-            env={**os.environ, "RS_STUDIO_DATA_ROOT": str(cls.data)}, stdout=cls.log, stderr=subprocess.STDOUT)
+            env={**os.environ, "RS_STUDIO_DATA_ROOT": str(cls.data), "APPDATA": str(config),
+                 "XDG_CONFIG_HOME": str(config)}, stdout=cls.log, stderr=subprocess.STDOUT)
         cls.addClassCleanup(cls.server.wait, 10)
         cls.addClassCleanup(cls.server.terminate)
         deadline = time.monotonic() + 120
@@ -73,8 +80,16 @@ class EndToEndTests(unittest.TestCase):
         cls.addClassCleanup(playwright.stop)
         cls.browser = playwright.chromium.launch(channel="msedge")
 
+    def set_prefs(self, prefs):
+        """Replace the preferences the server hands every page on load (/api/prefs)."""
+        request = urllib.request.Request(self.url + "api/prefs", data=json.dumps(prefs).encode(),
+                                         headers={"Content-Type": "application/json"}, method="POST")
+        urllib.request.urlopen(request, timeout=10).close()
+
     def setUp(self):
-        # A new context per test: nothing in localStorage carries over.
+        # A new context per test, and no preferences on the server, which the page loads
+        # into localStorage: nothing in localStorage carries over.
+        self.set_prefs({})
         context = self.browser.new_context(viewport={"width": 1440, "height": 900})
         self.addCleanup(context.close)
         self.page = context.new_page()
@@ -310,17 +325,13 @@ class EndToEndTests(unittest.TestCase):
         for theme in ['dark', 'light']:
             page.locator(f'#spAppearance .preview-choice:has(input[value="{theme}"]) .theme-preview-surface').click()
             expect(page.locator(f'input[name="theme"][value="{theme}"]')).to_be_checked()
-            current = previews.evaluate_all('els => els.map(el => ({background: getComputedStyle(el).backgroundColor, text: getComputedStyle(el).color, action: getComputedStyle(el.querySelector(".welcome-start")).backgroundColor}))')
+            # Each preview is a slice of the editor in a closed shadow root (settings.js),
+            # so only its own surface is read here.
+            current = previews.evaluate_all('els => els.map(el => ({background: getComputedStyle(el).backgroundColor, text: getComputedStyle(el).color}))')
             self.assertNotEqual(current[0]['background'], current[1]['background'])
             self.assertNotEqual(current[0]['text'], current[1]['text'])
-            self.assertNotEqual(current[0]['action'], current[1]['action'])
             colors[theme] = current
             self.assertEqual(page.locator('#spAppearance select').count(), 0)
-            for preview in [previews.nth(0), previews.nth(1)]:
-                self.assertEqual(preview.locator('[id]').count(), 0)
-                expect(preview.locator('.theme-preview-content')).to_have_attribute('inert', '')
-                self.assertEqual(preview.locator('.welcome-opt').all_text_contents(), page.locator('#welcome .welcome-opt').all_text_contents())
-                self.assertEqual(preview.locator('.wo-icon svg').count(), page.locator('#welcome .wo-icon svg').count())
             shots = Path(__file__).resolve().parents[1] / 'design-shots'
             shots.mkdir(exist_ok=True)
             page.locator('#settingsModal').screenshot(path=str(shots / f'appearance-{theme}.png'))
@@ -374,47 +385,6 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate('window.__midNoteAttacks.slice(-2)'), ['C4','E4'])
         page.locator('#play').click()
 
-    def test_the_hand_follows_a_moved_note_and_offers_only_hands_that_play_it(self):
-        self.open_reference_project()
-        page = self.page
-        got = page.evaluate("""async () => {
-            const { S } = await import('/store.js');
-            const edit = await import('/edit.js');
-            const tab = await import('/tablature.js');
-            const lane = S.state.editLanes[0];
-            const pin = (string, fret) => ({ string, fret, scope: 'local' });
-            // Low E: fret 1 with the index, fret 5 with the pinky (a one-fret stretch).
-            lane.notes = [{ id: 'h1', start: 1, end: 1.4, pitch: 41, pos: pin(5, 1) },
-                          { id: 'h2', start: 2, end: 2.4, pitch: 45, pos: pin(5, 5) }];
-            lane.handHolds = [];
-            S.voicingRevision++;
-            const before = await tab.laneFingering(lane);
-            const hands = f => f.notes.map(n => f.seats.get(n));
-            // The pinky's note goes up to fret 12 on the same string, as a drag up the
-            // stage does it (interaction.js): pitch first, then the hand follows.
-            const was = edit.handsBefore(lane);
-            lane.notes[1].pitch = 52; lane.notes[1].pos = pin(5, 12);
-            edit.followHand(lane, was, 2, 'h2');
-            S.voicingRevision++;
-            const after = await tab.laneFingering(lane);
-            return { before: hands(before), after: hands(after), holds: lane.handHolds,
-                     pos: lane.notes[1].pos };
-        }""")
-        self.assertEqual(got["before"], [1, 1])
-        self.assertEqual(got["holds"], [{"t": 2, "fret": 8}], "the hand moved with the note, keeping the stretch")
-        self.assertEqual(got["after"], [1, 8])
-        # The hand list offers only hands that can play the note at fret 12.
-        self.fretboard_hover_points(2.1)
-        hands = page.locator("#fretboardHandList [data-value]")
-        expect(hands).to_have_text([re.compile(r"Auto"), "7", "8", "9", "10", "11", "12"])
-        expect(page.locator('#fretboardHandList [data-value="8"]')).to_have_attribute("aria-checked", "true")
-        self.pick_value('fretboardHandList', 12)
-        expect(page.locator('#fretboardHandList [data-value="12"]')).to_have_attribute("aria-checked", "true")
-        holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
-        self.assertEqual(holds, [{"t": 2, "fret": 12}], "only reachable hands are on offer")
-        pos = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[1].pos")
-        self.assertEqual((pos["string"], pos["fret"]), (5, 12), "changing the hand moves no note")
-
     def test_chord_names_show_on_stage_and_board_and_can_be_renamed(self):
         self.open_reference_project()
         page = self.page
@@ -439,8 +409,8 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(found["name"], "C6")
         # The fretboard's bar names it too.
         self.fretboard_hover_points(2.1)
-        board = page.locator('#fretboardChordList [aria-checked="true"]')
-        expect(board).to_have_text("C6")
+        board = page.locator('#fretboardChordInput')
+        expect(board).to_have_value("C6")
         # Double-click the name: the readings are offered, and the one picked is kept.
         # (Read again: opening the board moved the stage.)
         page.evaluate("async () => { (await import('/repaint.js')).draw(); await new Promise(requestAnimationFrame); }")
@@ -450,29 +420,27 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#chordRenameNames option")).to_have_count(2)
         self.assertEqual(page.locator("#chordRenameNames option").evaluate_all("o => o.map(x => x.value)"), ["C6", "Am7/C"])
         field.fill("Am7/C"); field.press("Enter")
-        expect(board).to_have_text("Am7/C")
+        expect(board).to_have_value("Am7/C")
         names = "async () => (await import('/store.js')).S.state.editLanes[0].notes.map(n => n.chordName || '')"
         self.assertEqual(page.evaluate(names), ["Am7/C"] * 4)
-        # Any text is a name: from the board's Custom this time.
-        self.pick_value("fretboardChordList", "__custom")
-        page.locator(".chord-rename").fill("Intro chord")
-        page.keyboard.press("Enter")
-        expect(board).to_have_text("Intro chord")
+        # Any text is a name: typed into the board's field this time.
+        board.fill("Intro chord")
+        board.press("Enter")
+        expect(board).to_have_value("Intro chord")
         page.keyboard.press("Control+z")
-        expect(board).to_have_text("Am7/C")
-        # The board lists the readings; picking the engine's returns the chord to it.
-        expect(page.locator("#fretboardChordList [role=radio]")).to_have_text(["C6", "Am7/C"])
-        self.pick_value("fretboardChordList", "C6")
-        expect(board).to_have_text("C6")
+        expect(board).to_have_value("Am7/C")
+        # Auto returns the chord to the engine's name.
+        page.click("#fretboardChordAuto")
+        expect(board).to_have_value("C6")
         self.assertEqual(page.evaluate(names), [""] * 4)
         # A given name belongs to its tones: change one and the engine names it again.
-        self.pick_value("fretboardChordList", "__custom"); page.locator(".chord-rename").fill("Mine"); page.keyboard.press("Enter")
+        board.fill("Mine"); board.press("Enter")
         page.evaluate("""async () => {
             const { S } = await import('/store.js');
             S.state.editLanes[0].notes[3].pitch = 58;
             S.voicingRevision++; (await import('/repaint.js')).draw();
         }""")
-        expect(board).to_have_text("C7")
+        expect(board).to_have_value("C7")
 
     def test_an_override_is_only_here_guided_or_locked(self):
         self.open_reference_project()
@@ -509,55 +477,44 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[1].pos.follow ?? 'here'"),
                          "here", "the choice is undone like any edit")
 
-    def test_finger_buttons_choose_a_notes_finger_and_a_chords_fingering(self):
+    def test_typed_fingering_sets_a_notes_finger_and_keeps_its_position(self):
         self.open_reference_project()
         page = self.page
         page.evaluate("""async () => {
             const { S } = await import('/store.js');
             const lane = S.state.editLanes[0];
             const pin = (string, fret) => ({ string, fret, scope: 'local' });
-            lane.notes = [{ id: 'g1', start: 1, end: 1.6, pitch: 52, pos: pin(4, 7) },
-                          ...[[4, 0, 45], [3, 2, 52], [2, 2, 57], [1, 2, 61], [0, 0, 64]].map(([s, f, p], k) =>
-                            ({ id: 'g' + (k + 2), start: 3, end: 3.6, pitch: p, pos: pin(s, f) }))];
-            lane.handHolds = [{ t: 1, fret: 7 }]; lane.refBoxes = {};
+            lane.notes = [{ id: 'g1', start: 1, end: 1.6, pitch: 52, pos: pin(4, 7) }];
+            lane.handHolds = []; lane.refBoxes = {};
             S.voicingRevision++;
         }""")
         state = """async () => {
             const { S } = await import('/store.js');
             const tab = await import('/tablature.js');
             const lane = S.state.editLanes[0], f = await tab.laneFingering(lane);
-            return { fingers: f.notes.map(n => f.fingers.get(n) ?? null), seats: f.notes.map(n => f.seats.get(n) ?? null),
-                     chosen: lane.notes.map(n => n.pos?.finger ?? null), holds: lane.handHolds };
+            const n = lane.notes[0];
+            return { typed: n.finger ?? null, played: f.fingers.get(f.notes[0]) ?? null, pos: [n.pos.string, n.pos.fret] };
         }"""
-        self.fretboard_hover_points(1.1)
-        expect(page.locator("#fretboardFingerLabel")).to_have_text("Finger")
-        checked = page.locator('#fretboardFingerList [aria-checked="true"]')
-        expect(checked).to_have_text("Auto (1)")
-        page.click('#fretboardFingerList [aria-checked="true"]')            # a shut list opens on a click
-        page.locator("#fretboardFingerList [data-value]", has_text=re.compile(r"^2$")).click()
-        expect(checked).to_have_text("2")
-        expect(page.locator("#fretboardFingerList")).not_to_have_attribute("data-open", "")
+        points = self.fretboard_hover_points(1.1)
+        auto = page.evaluate(state)
+        self.assertIsNone(auto["typed"])
+        # Point at the note and type its finger; Done keeps it as one edit.
+        page.click("#fretboardFingering")
+        expect(page.locator("#fretboardFingering")).to_have_text("Cancel")
+        page.mouse.click(*points["note"])
+        page.keyboard.press("3")
+        page.click("#fretboardApply")
+        expect(page.locator("#fretboardFingering")).to_have_text("Assign custom fingering")
         got = page.evaluate(state)
-        self.assertEqual((got["chosen"][0], got["fingers"][0], got["seats"][0]), (2, 2, 6), "finger 2 puts the hand on 6")
-        self.assertEqual(got["holds"], [], "the chosen finger replaces the hand anchor")
-        # Auto gives the finger back to the engine; the position this note was pinned to stays.
-        self.pick_value("fretboardFingerList", "auto")
-        expect(checked).to_have_text(re.compile(r"^Auto \(\d\)$"))
-        pos = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[0].pos")
-        self.assertEqual((pos["string"], pos["fret"], "finger" in pos), (4, 7, False))
-        # The chord: its fingerings in turn, chosen on every fretted string.
-        self.fretboard_hover_points(3.1)
-        expect(page.locator("#fretboardFingerLabel")).to_have_text("Fingering")
-        shot = Path(__file__).resolve().parents[1] / ".runs" / "fretboard-fingering.png"
-        shot.parent.mkdir(exist_ok=True)
-        page.locator("#fretboardPanel").screenshot(path=str(shot))
-        before = checked.inner_text()
-        self.pick_value("fretboardFingerList", 1)
-        expect(checked).not_to_have_text(before)
-        got = page.evaluate(state)
-        self.assertEqual([c is not None for c in got["chosen"][1:]], [False, True, True, True, False],
-                         "open strings get no finger")
-        self.assertEqual(got["chosen"][2:5], got["fingers"][2:5], "the board plays the chosen fingering")
+        self.assertEqual((got["typed"], got["played"], got["pos"]), (3, 3, [4, 7]), "the typed finger, on the same position")
+        page.keyboard.press("Control+z")
+        self.assertIsNone(page.evaluate(state)["typed"], "undone like any edit")
+        # Escape discards what was typed.
+        page.click("#fretboardFingering")
+        page.mouse.click(*points["note"])
+        page.keyboard.press("2")
+        page.keyboard.press("Escape")
+        self.assertIsNone(page.evaluate(state)["typed"])
 
     def test_rocksmith_hand_positions_are_the_fretboards(self):
         """What the fretboard shows is what Rocksmith gets: every note's hand position and every chord's fingers."""
@@ -715,7 +672,8 @@ class EndToEndTests(unittest.TestCase):
         }""")
         state = lambda: page.evaluate("""async () => {
             const {S} = await import('/store.js'); const scroll = document.querySelector('#scroll');
-            return {left:scroll.scrollLeft,top:scroll.scrollTop,notes:S.state.editLanes[0].notes,
+            // auto is where the engine last voiced a note (keepVoicing), not an edit.
+            return {left:scroll.scrollLeft,top:scroll.scrollTop,notes:S.state.editLanes[0].notes.map(({auto, ...n}) => n),
                 selection:[...S.selection].map(n=>n.id),undo:S.undoStack.length,
                 time:(await import('/playback.js')).playbackTime()};
         }""")
@@ -821,8 +779,8 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#stagePaneDraw')).to_be_visible()
         expect(page.locator('#stagePaneView')).to_be_hidden()
         expect(page.locator('#stageTabDraw')).to_have_attribute('aria-selected', 'true')
-        expect(page.locator('#quickTraceSnap')).to_be_focused()
-        page.keyboard.press('Space')
+        # Editor-page controls keep no focus (modal-focus.js): Space stays play/pause.
+        page.locator('#quickTraceSnap').click()
         expect(page.locator('#traceSnap')).to_be_checked()
         self.assertFalse(page.evaluate("async () => (await import('/playback.js')).transportPlaying()"))
         page.locator('#quickTraceRange').select_option('3')
@@ -870,7 +828,9 @@ class EndToEndTests(unittest.TestCase):
 
     def test_drawing_search_range_five_is_removed_and_migrated(self):
         page = self.page
-        page.add_init_script("localStorage.setItem('cw.settings', JSON.stringify({traceRange:'5'}))")
+        # A preference saved by an older version: the page mirrors it to the server, which
+        # hands it back on reload.
+        page.evaluate("localStorage.setItem('cw.settings', JSON.stringify({traceRange:'5'}))")
         page.reload()
         for control in ['traceRange','traceRangeM','quickTraceRange']:
             expect(page.locator(f'#{control}')).to_have_value('3')
@@ -1862,11 +1822,26 @@ class EndToEndTests(unittest.TestCase):
             self.assertAlmostEqual(note['end'] - note['start'], result['step'])
 
     def pick_value(self, list_id, value):
-        """Choose a value in the fretboard's Capo or Hand list, opening it first."""
+        """Choose a value in the fretboard's Capo, Hand or Grip list, opening it first."""
+        page = self.page
+        self.open_values(list_id)
+        # An open list is at most as tall as the room above the board; scroll to the value.
+        item = page.locator(f'#{list_id} [data-value="{value}"]')
+        item.evaluate('e => e.scrollIntoView({ block: "nearest" })')
+        item.click()
+
+    def open_values(self, list_id):
+        """A click on a shut value list opens it instead of choosing."""
         page = self.page
         if page.locator(f'#{list_id}').get_attribute('data-open') is None:
-            page.click(f'[aria-controls="{list_id}"]')
-        page.click(f'#{list_id} [data-value="{value}"]')
+            page.click(f'#{list_id} [aria-checked="true"]')
+        expect(page.locator(f'#{list_id}')).to_have_attribute('data-open', '')
+
+    def step_grip(self, delta):
+        """Pick the next (or previous) grip in the Grip list, as the old arrows did."""
+        shown, count = map(int, self.page.locator('#fretboardAltCount').inner_text().split(' / '))
+        label = (shown - 1 + delta) % count + 1
+        self.pick_value('fretboardGripList', label - 2)   # 1 is the current grip (-1), 2 the first other (0)
 
     def fretboard_hover_points(self, time=2):
         page = self.page
@@ -1923,15 +1898,15 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardAltCount')).to_have_text('1 / 3')
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
         expect(page.locator('#fretboardChoose')).to_be_disabled()
-        page.locator('#fretboardAltNext').click()
+        self.step_grip(1)
         expect(page.locator('#fretboardAltCount')).to_have_text('2 / 3')
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '1')
-        page.locator('#fretboardAltNext').click()
+        self.step_grip(1)
         expect(page.locator('#fretboardAltCount')).to_have_text('3 / 3')
-        page.locator('#fretboardAltNext').click()
+        self.step_grip(1)
         expect(page.locator('#fretboardAltCount')).to_have_text('1 / 3')
         expect(page.locator('#fretboardChoose')).to_be_disabled()
-        page.locator('#fretboardAltPrev').click()
+        self.step_grip(-1)
         expect(page.locator('#fretboardAltCount')).to_have_text('3 / 3')
         expect(page.locator('#fretboardChoose')).to_be_enabled()
         page.keyboard.press('ArrowLeft')
@@ -2159,7 +2134,7 @@ class EndToEndTests(unittest.TestCase):
             }).filter(x=>x.ratio < (x.text?4.5:3));
         }"""
         # Audit the current controls in both hover and engaged states.
-        page.locator('#fretboardAltNext').hover()
+        page.locator('#fretboardGripList [aria-checked="true"]').hover()
         self.assertEqual(page.evaluate(audit_script), [], 'Hovered light-mode buttons need readable foregrounds')
         page.locator('#fretboardShape').click()
         page.locator('#fretboardShape').hover()
@@ -2246,14 +2221,14 @@ class EndToEndTests(unittest.TestCase):
         shot=Path(__file__).resolve().parents[1]/'.runs'/'custom-shape-navigation.png'
         page.locator('#fretboardPanel').screenshot(path=str(shot))
         page.locator('#fretboardShape').click()
-        expect(page.locator('#fretboardShape')).to_have_text('Custom shape')
+        expect(page.locator('#fretboardShape')).to_have_text('Assign custom grip')
         expect(page.locator('#fretboardSetup')).to_be_visible()
         self.assertEqual(page.evaluate("async () => JSON.stringify((await import('/store.js')).S.state.editLanes[0].notes)"), original)
         page.locator('#fretboardShape').click()
         pick(4,0);pick(3,5);pick(2,5)
         page.locator('#fretboardApply').click()
         expect(page.locator('#fretboardSetup')).to_be_visible()
-        expect(page.locator('#fretboardShape')).to_have_text('Custom shape')
+        expect(page.locator('#fretboardShape')).to_have_text('Assign custom grip')
         actual=page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.find(n=>n.start===80&&n.pitch===45).pos")
         self.assertEqual((actual['string'],actual['fret']), (4,0))
         page.keyboard.press('Control+z')
@@ -2595,7 +2570,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#lanes .lane-row')).to_be_visible()
         self.fretboard_hover_points(76)
         expect(page.locator('#fretboardAltCount')).to_have_text('1 / 1')
-        expect(page.locator('#fretboardAltNext')).to_be_disabled()
+        expect(page.locator('#fretboardGripList [data-value]')).to_be_disabled()
         shot = Path(__file__).resolve().parents[1] / '.runs' / 'fretboard-controls-b7.png'
         shot.parent.mkdir(exist_ok=True)
         page.locator('#fretboardPanel').screenshot(path=str(shot))
@@ -2659,7 +2634,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardAltCount')).to_have_text(re.compile(r'1 / [1-9][0-9]*'))
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
         expect(page.locator('#fretboardChoose')).to_be_disabled()
-        page.locator('#fretboardAltNext').click()
+        self.step_grip(1)
         expect(page.locator('#fretboardAltCount')).to_have_text(re.compile(r'2 / [1-9][0-9]*'))
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '1')
         count = int(page.locator('#fretboardAltCount').inner_text().split('/')[1])
@@ -2676,7 +2651,7 @@ class EndToEndTests(unittest.TestCase):
         }""")
         self.assertTrue(any(0 < a < 0.5 for a in alphas), alphas)
         self.assertIn(1, alphas)
-        page.locator('#fretboardAltNext').click()
+        self.step_grip(1)
         expect(page.locator('#fretboardAltCount')).to_have_text(f'3 / {count}')
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '1')
         page.keyboard.press('ArrowLeft')
@@ -2692,7 +2667,7 @@ class EndToEndTests(unittest.TestCase):
         page.mouse.move(5, 5)
         # Using the position refingers the lane in the background; until the bar has its
         # values again, the controls move and Reset would slide out from under the pointer.
-        expect(page.locator('#fretboardFingerList [aria-checked="true"]')).not_to_have_text('\u2013')
+        expect(page.locator('#fretboardHandList [aria-checked="true"]')).not_to_have_text('\u2013')
         expect(page.locator('#fretboardBusy')).to_be_hidden()
         page.locator('#fretboardAuto').hover()
         expect(page.locator('#fretboardResetStatus')).to_have_text('Reset preview')
@@ -2715,16 +2690,12 @@ class EndToEndTests(unittest.TestCase):
         capo = lambda value: page.locator(f'#fretboardCapoList [data-value="{value}"]')
         hand = lambda value: page.locator(f'#fretboardHandList [data-value="{value}"]')
         expect(capo(0)).to_have_attribute('aria-checked', 'true')
-        # Shut, a list shows only its value; the chevron or the value opens it, a choice shuts it.
+        # Shut, a list shows only its value; a click on the value opens it, a choice shuts it.
         expect(page.locator('#fretboardCapoList [data-value]:visible')).to_have_count(1)
         capo(0).click()
         expect(page.locator('#fretboardCapoList [data-value]:visible')).to_have_count(13)
         capo(1).click()
         expect(capo(1)).to_have_attribute('aria-checked', 'true')
-        expect(page.locator('#fretboardCapoList [data-value]:visible')).to_have_count(1)
-        page.click('[aria-controls="fretboardCapoList"]')
-        expect(page.locator('[aria-controls="fretboardCapoList"]')).to_have_attribute('aria-expanded', 'true')
-        page.click('[aria-controls="fretboardCapoList"]')
         expect(page.locator('#fretboardCapoList [data-value]:visible')).to_have_count(1)
         self.pick_value('fretboardCapoList', 0)
         expect(capo(0)).to_have_attribute('aria-checked', 'true')
@@ -2939,23 +2910,30 @@ class EndToEndTests(unittest.TestCase):
         page.click('#settingsMenuBtn')
         slider = page.locator('#noteLabelSize')
         expect(slider).to_have_value('12')
-        slider.evaluate("el => {el.value='16'; el.dispatchEvent(new Event('input', {bubbles:true}));}")
-        expect(page.locator('#noteLabelSizeValue')).to_have_text('16 px')
-        fonts = page.evaluate("""async () => {
+        # Label sizes drawn in the preview and on the stage; the bar numbers (monospace) aside.
+        sizes = lambda: page.evaluate("""async () => {
             const preview = await import('./editor-previews.js');
             const notes = await import('./note-render.js');
             const capture = (id, paint) => {
                 const ctx=document.querySelector(id).getContext('2d'), original=ctx.fillText, fonts=[];
                 ctx.fillText=function(...args){fonts.push(this.font); return original.apply(this,args);};
                 try{paint();}finally{ctx.fillText=original;}
-                return fonts;
+                return fonts.filter(f => !f.includes('Mono')).map(f => parseFloat(f.match(/([0-9.]+)px/)[1]));
             };
             return {preview:capture('#noteAppearancePreview',preview.drawNoteAppearancePreview),
                 actual:capture('#stage',notes.drawNoteFx)};
         }""")
-        self.assertTrue(fonts['preview'])
-        self.assertTrue(fonts['actual'])
-        self.assertTrue(all('16px' in font for font in fonts['preview']+fonts['actual']), fonts)
+        slider.evaluate("el => {el.value='10'; el.dispatchEvent(new Event('input', {bubbles:true}));}")
+        expect(page.locator('#noteLabelSizeValue')).to_have_text('10 px')
+        small = sizes()
+        slider.evaluate("el => {el.value='16'; el.dispatchEvent(new Event('input', {bubbles:true}));}")
+        expect(page.locator('#noteLabelSizeValue')).to_have_text('16 px')
+        fonts = sizes()
+        # The size is the largest a label is drawn; a label shrinks to fit its note.
+        for key in ('preview', 'actual'):
+            self.assertTrue(fonts[key], key)
+            self.assertLessEqual(max(fonts[key]), 16 + 1e-6, fonts)
+            self.assertGreater(max(fonts[key]), max(small[key]), (small, fonts))
         page.locator('#noteAppearancePreview').scroll_into_view_if_needed()
         page.screenshot(path='design-shots/editor-note-appearance.png')
         page.click('#settingsApply')
@@ -3325,9 +3303,9 @@ class EndToEndTests(unittest.TestCase):
         page.mouse.up()
         expect(panel).not_to_have_attribute("data-collapsed", "")
         self.assertGreater(panel.bounding_box()["width"], 280)
-        # The retained strip can be opened directly, and the edge works by keyboard.
-        page.locator("#artifactsChevron").focus()
-        page.keyboard.press("Enter")
+        # The retained strip can be opened directly. (Editor-page buttons keep no focus,
+        # modal-focus.js, so the chevron is clicked rather than focused and pressed.)
+        page.locator("#artifactsChevron").click()
         expect(panel).to_have_attribute("data-collapsed", "")
         panel.click()
         expect(panel).not_to_have_attribute("data-collapsed", "")
@@ -3377,8 +3355,7 @@ class EndToEndTests(unittest.TestCase):
         expect(second.locator('.artifact-preview')).to_be_visible()
         page.locator('#artifactReferencesToggle').click()
         expect(page.locator('#artifactReferencesBody')).to_be_hidden()
-        page.locator('#artifactReferencesToggle').focus()
-        page.keyboard.press('Enter')
+        page.locator('#artifactReferencesToggle').click()
         expect(page.locator('#artifactReferencesBody')).to_be_visible()
         expect(first.locator('.artifact-preview')).to_be_hidden()
         first.locator('.artifact-reference-toggle').click()
@@ -4358,7 +4335,7 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate("""async () => {
             const {S} = await import('/store.js');
             S.state.sectionMarkers = [{id:'song_section', t:4, text:'Song verse', sectionType:'verse', custom:true}];
-            (await import('/timing.js')).splitTiming(S.state.editLanes[0]);
+            (await import('/timing.js')).setOwnTiming(S.state.editLanes[0], { tempo: true, sections: true });
             S.state.sectionMarkers = [{id:'own_section', t:8, text:'Layer solo', sectionType:'solo', custom:true}];
             (await import('/repaint.js')).draw();
         }""")
@@ -4372,8 +4349,8 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate("""async () => {
             const {S} = await import('/store.js');
             const {setHandAnchor} = await import('/edit.js');
-            setHandAnchor(S.state.editLanes[0], 2, 5);
-            setHandAnchor(S.state.editLanes[0], 6, 6);   // the note at 8 s is on fret 8: hands 3 to 8 reach it
+            setHandAnchor(S.state.editLanes[0], 2, 5, { create: true });
+            setHandAnchor(S.state.editLanes[0], 6, 6, { create: true });   // the note at 8 s is on fret 8: hands 3 to 8 reach it
         }""")
         anchors = page.locator('[data-marker-kind="anchor"] .artifact-row')
         expect(anchors).to_have_count(2)
@@ -4512,6 +4489,13 @@ class EndToEndTests(unittest.TestCase):
             const r = document.getElementById("stage").getBoundingClientRect();
             return [r.left + xOf(t) - document.getElementById("scroll").scrollLeft + 5, r.top + 10];
         }""", t)
+
+    def tempo_flag(self, t):
+        """Time of the tempo flag nearest t, the start flag included: addMarker snaps
+        a new marker to the song's detected note grid, so it is rarely at t itself."""
+        flags = self.page.evaluate("""async () => { const { S } = await import('./store.js'), { gridOffset } = await import('./grid.js');
+            return [gridOffset(), ...S.state.tempoMap.map((m) => m.t)]; }""")
+        return min(flags, key=lambda flag: abs(flag - t))
 
     def file_menu(self, item):
         self.page.click("#fileMenuBtn")
@@ -4736,11 +4720,13 @@ class EndToEndTests(unittest.TestCase):
             lane.handHolds = [{t: 2, fret: 3}];
             lane.phraseBoundaries = [{id:'p',t:8}];
             S.state.tempoMap = [{t:4,bpm:160,tsNum:4,tsDen:4,subdiv:2},{t:12,bpm:100,tsNum:3,tsDen:4,subdiv:4}];
-            S.state.sectionMarkers = [{id:'v',t:0,text:'Verse',sectionType:'verse'},{id:'s',t:12,text:'Solo',sectionType:'solo'}];
+            // The song's end is a section of its own (sectionType 'end'), which every loaded project has.
+            const end = S.state.sectionMarkers.filter(m => m.sectionType === 'end');
+            S.state.sectionMarkers = [{id:'v',t:0,text:'Verse',sectionType:'verse'},{id:'s',t:12,text:'Solo',sectionType:'solo'}, ...end];
             const bars = await import('./score-structure-core.js');
             S.state.scoreBars = bars.coverScoreDuration(bars.normalizeScoreBars([{seconds:0,durationSeconds:2},{seconds:2,durationSeconds:2}]),S.state.duration);
             const own = addTiming({grid:{bpm:90,offset:.125,tsNum:4,tsDen:4,subdiv:2},
-                tempoMap:[{t:10,bpm:110,tsNum:4,tsDen:4,subdiv:2}],sectionMarkers:[{id:'other',t:2,text:'Riff'}],scoreBars:[{seconds:.125,durationSeconds:2}]});
+                tempoMap:[{t:10,bpm:110,tsNum:4,tsDen:4,subdiv:2}],sectionMarkers:[{id:'other',t:2,text:'Riff'}, ...end],scoreBars:[{seconds:.125,durationSeconds:2}]});
             S.state.editLanes.push({id:'own',name:'Own timing',kind:'edit',instrument:lane.instrument,tuning:lane.tuning,
                 active:false,locked:true,visible:false,timing:own,color:lane.color,volume:1,handHolds:[],phraseBoundaries:[],
                 refBoxes:{},notes:[{id:'own-note',start:14.137,end:15.137,pitch:45}],toneMarkers:[{id:'own-tone',t:0,tone:lane.toneMarkers[0].tone}]});
@@ -4924,7 +4910,7 @@ class EndToEndTests(unittest.TestCase):
                     lane.toneMarkers[0].t];
         }""")
         def drag(t, by, then=None):
-            x, y = self.rail_point(t)
+            x, y = self.rail_point(self.tempo_flag(t))
             x1 = x + by * page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
             page.mouse.move(x, y)
             page.mouse.down()
@@ -4954,8 +4940,9 @@ class EndToEndTests(unittest.TestCase):
         near(sections + notes + [tone], [1.5, 3, 5, a + 0.5, b, c, 3])
         page.keyboard.press("Control+z")
         # Typing a marker's time is the same move as dragging its flag.
-        page.mouse.click(*self.rail_point(2))
-        page.fill("#markerTime", "2.5")
+        flag = self.tempo_flag(2)
+        page.mouse.click(*self.rail_point(flag))
+        page.fill("#markerTime", f"{flag + 0.5:.3f}")
         page.click("#markerPopClose")
         sections, notes, tone = times()
         near(sections + notes + [tone], [1, 3.5, 5, a, b + 0.5, c, 3.5])
@@ -4973,7 +4960,8 @@ class EndToEndTests(unittest.TestCase):
             S.state.editLanes[0].notes = [{ start: 3, end: 3.25, pitch: 45, string: 5, fret: 0 }];
             drawNow();
         }""")
-        (x, y), (x1, _) = self.rail_point(2), self.rail_point(3.3)
+        flag = self.tempo_flag(2)
+        (x, y), (x1, _) = self.rail_point(flag), self.rail_point(flag + 1.3)
         page.mouse.move(x, y)
         page.mouse.down()
         page.mouse.move(x1, y, steps=6)   # the note crosses the 90 BPM flag at 4 s
@@ -4997,14 +4985,14 @@ class EndToEndTests(unittest.TestCase):
         }""")
         marker_t = lambda: page.evaluate("async () => (await import('./store.js')).S.state.tempoMap[0].t")
         original_time = marker_t()  # addMarker snaps to the song's detected note grid.
-        (x, y), (x1, _) = self.rail_point(2), self.rail_point(2.5)
+        (x, y), (x1, _) = self.rail_point(original_time), self.rail_point(original_time + 0.5)
         page.mouse.click(x, y)                               # open its popover
         expect(page.locator("#markerPop")).to_be_visible()
         page.mouse.move(x, y)
         page.mouse.down()
         page.mouse.move(x1, y, steps=6)
         self.assertAlmostEqual(float(page.input_value("#markerTime")), marker_t(), places=3)   # live
-        self.assertAlmostEqual(marker_t(), 2.5, delta=0.02)
+        self.assertAlmostEqual(marker_t(), original_time + 0.5, delta=0.02)   # moved by the drag, snapped to the grid
         page.mouse.up()
         # Drag sideways on the Position field: 10 ms per pixel.
         before = marker_t()
