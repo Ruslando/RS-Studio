@@ -74,8 +74,8 @@ export const trillOffsetAt = (n, sec, bpm = 120) => sec >= 0
 // Onto the next note (shift/legato) the slide runs from `slideStart` (the pick,
 // unless moved later) to the note's end, as Rocksmith plays it: the note's
 // sustain is the slide (rocksmith/chart.py). Out of a note (outDown/outUp) it
-// always runs over the whole note: Rocksmith's unpitched slide spans the sustain,
-// and a late start would need a linked note carrying it, untried in the game.
+// runs the same way from `slideStart`: Rocksmith's unpitched slide spans the
+// sustain, so a late one goes out on a linked note that carries it.
 // Into a note (inBelow/inAbove) it runs from the pick to `slideEnd`, by default an
 // eighth note at the song's tempo there (`eighth`, in seconds), never more than
 // half the note. Rocksmith has no slide-in: the export plays it as a short note
@@ -117,12 +117,12 @@ export function edgeSlideSpan(n, fret = n?.pos?.fret) {
   return SLIDE_SIGN[kind] * Math.min(frets, slideReach(kind, fret)) || 0;
 }
 
-// Where a shift/legato slide leaves its fret, as a fraction of the note: the
+// Where a shift/legato slide or a slide-out leaves its fret, as a fraction of the note: the
 // note is held until then and slides over the rest. `slideStart` is absent for a
 // slide over the whole note. Rocksmith has no such field; the export holds the
 // note and links it to a second one that slides (rocksmith/chart.py).
 export const SLIDE_START_MAX = 0.95;
-export const slideStartOf = (n) => SLIDES_TO_NEXT.has(n?.slide)
+export const slideStartOf = (n) => SLIDES_TO_NEXT.has(n?.slide) || SLIDE_OUT.has(n?.slide)
   ? Math.max(0, Math.min(SLIDE_START_MAX, Number(n.slideStart) || 0)) : 0;
 
 // Where a slide-in lands, as a fraction of the note.
@@ -203,7 +203,8 @@ export function slideRibbon(note, target, { fret = note?.pos?.fret, eighth = SLI
       const e = slideEndOf(note, note.end - note.start, eighth);
       return { end: note.end, points: [[0, span], [e, 0], [1, 0]] };
     }
-    return { end: note.end, points: [[0, 0], [1, span]] };
+    const s = slideStartOf(note);
+    return { end: note.end, points: s > 0 ? [[0, 0], [s, 0], [1, span]] : [[0, 0], [1, span]] };
   }
   if (!SLIDES_TO_NEXT.has(note.slide) || !target || target.start <= note.start) return null;
   const to = target.pitch - note.pitch, s = slideStartOf(note);

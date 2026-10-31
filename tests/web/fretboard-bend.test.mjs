@@ -101,7 +101,7 @@ import { voiceNotesFingered } from "../../web/voicing-core.js";
 import { slideAt, slideReach } from "../../web/bend.js";
 assert.equal(slideAt({ slide: "outDown", pos: { fret: 9 } }, 1, 1), -5);
 assert.equal(slideAt({ slide: "outDown", pos: { fret: 9 } }, 0.5, 1), -2, "on the way, a whole fret at a time");
-assert.equal(slideAt({ slide: "outDown", slideStart: 0.6, pos: { fret: 9 } }, 0.5, 1), -2, "never starts late");
+assert.equal(slideAt({ slide: "outDown", slideStart: 0.6, pos: { fret: 9 } }, 0.5, 1), 0, "held until it starts");
 assert.equal(slideAt({ slide: "inBelow" }, 0.1, 0.2, { eighth: 0.5 }), 0, "at most half the note");
 assert.equal(slideAt({ slide: "inBelow", slideEnd: 0.5, slideFrets: 2 }, 0, 1), -2, "starts its own frets away");
 assert.equal(slideAt({ slide: "inBelow", slideEnd: 0.5 }, 0.5, 1), 0, "lands where set");

@@ -444,8 +444,8 @@ export function init_interaction() {
         return;
       }
       // The far end of a slide into or out of a note: up and down sets how many
-      // frets it spans, left and right moves that edge of the note. A slide-out
-      // spans the whole note, so it grows with it; a slide-in keeps where it lands.
+      // frets it spans, left and right moves that edge of the note. Where the
+      // slide starts (out) or lands (in) stays put.
       const far = slideFretsAt(x, y);
       if (far) {
         const n = far.note, lane = laneOf(n), into = SLIDE_IN.has(n.slide), dur = n.end - n.start;

@@ -176,7 +176,7 @@ export function bendHandles(n) {
 // ribbon. `bar` is the row edge its stem starts from.
 export const SLIDE_HANDLE_GAP = 11;
 export function slideStartHandle(n, lane) {
-  const ribbon = !bendCurve(n) && lane && !SLIDE_OUT.has(n.slide) ? noteRibbon(lane, n) : null;
+  const ribbon = !bendCurve(n) && lane ? noteRibbon(lane, n) : null;
   if (!ribbon) return null;
   const into = SLIDE_IN.has(n.slide);
   const t = n.start + (into ? ribbon.points[1][0] : slideStartOf(n)) * (n.end - n.start), rowH = S.state.rowH;

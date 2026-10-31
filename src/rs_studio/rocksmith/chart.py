@@ -75,15 +75,15 @@ def _onset_counter(notes: list):
 def _late_cuts(n: dict) -> tuple[float | None, float | None]:
     """(slide cut, vibrato cut) in seconds, or None for an effect from the pick."""
     start, end = _f(n.get("start")), _f(n.get("end"))
-    to_next = n.get("slide") in ("shift", "legato")
+    sliding = n.get("slide") in ("shift", "legato", "outDown", "outUp")
 
     def cut(key: str) -> float | None:
         frac = _f(n.get(key))
         return start + frac * (end - start) if 0 < frac < 1 and end > start else None
 
-    slide = cut("slideStart") if to_next else None
+    slide = cut("slideStart") if sliding else None
     vibrato = cut("vibratoStart") if (n.get("fx") or {}).get("vibrato") else None
-    if vibrato is not None and to_next:
+    if vibrato is not None and sliding:
         # The slide's own piece can't be cut again: vibrato that starts later
         # covers the slide part, and a slide from the pick keeps it whole.
         vibrato = min(vibrato, slide) if slide is not None else None

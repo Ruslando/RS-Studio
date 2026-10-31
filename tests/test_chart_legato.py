@@ -99,6 +99,17 @@ def _late(slide, extra=None, slide_start=0.6):
 
 
 class LateSlideStartTest(unittest.TestCase):
+    def test_late_slide_out_is_hold_then_linked_unpitched_slide(self):
+        notes = [{"string": 3, "fret": 4, "start": 1.0, "end": 2.0, "pitch": 32,
+                  "slide": "outDown", "slideStart": 0.5}]
+        compiled = compile_track({"name": "Bass", "tuning": [43, 38, 33, 28], "notes": notes},
+                                 {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+        hold, glide = compiled.sng.levels[0].notes
+        self.assertFalse(hold.mask & S.UNPITCHEDSLIDE)
+        self.assertTrue(hold.mask & S.PARENT)
+        self.assertAlmostEqual(glide.time, 1.5)
+        self.assertTrue(glide.mask & S.CHILD and glide.mask & S.UNPITCHEDSLIDE)
+
     def test_late_legato_slide_is_hold_then_linked_slide(self):
         (hold, glide, target), _ = _late("legato", {"fx": {"accent": True, "vibrato": True}})
         self.assertAlmostEqual(hold.time, 1.0)
@@ -244,11 +255,6 @@ class EdgeSlideTest(unittest.TestCase):
         (n,), _ = _one({"fret": 9, "pitch": 54, "slide": "outDown", "slideFrets": 3})
         self.assertTrue(n.mask & S.UNPITCHEDSLIDE)
         self.assertEqual(n.slide_unpitch_to, 6)
-
-    def test_slide_out_is_never_cut(self):
-        (n,), _ = _one({"fret": 9, "pitch": 54, "slide": "outUp", "slideStart": 0.5})
-        self.assertTrue(n.mask & S.UNPITCHEDSLIDE)
-        self.assertFalse(n.mask & S.PARENT)
 
     def test_open_string_slide_out_is_dropped(self):
         (n,), compiled = _one({"fret": 0, "pitch": 45, "slide": "outDown"})
