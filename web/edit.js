@@ -1168,12 +1168,12 @@ export function clearOverrideAt(lane, colNotes, t) {
 //   field+set a variant on note[field]; renders as a radio submenu, `variants`
 //             being [value, label] pairs with null meaning "clear"
 //   only      "chord" or "single" — entries that make sense for only one
-//   rs        how Rocksmith takes it, when not natively: "absent" or "simulated"
+//   rs        "absent" when Rocksmith does not have it
 //             (on an item, or as a variant's third element). Native says nothing.
 //
 // Adding an effect is an entry here plus its setter; openNoteMenu below does not
 // need to know it exists.
-const RS_NOTE = { absent: "Not in Rocksmith", simulated: "Simulated in Rocksmith" };
+const RS_NOTE = { absent: "Not in Rocksmith" };
 // [short note in the row, tooltip] for an effect greyed out by another one.
 const NO_BEND_ON_NATURAL = ["Not on a natural harmonic",
   "A natural harmonic is only touched, so its string cannot be bent.\nUse a pinch harmonic to bend it."];
@@ -1192,7 +1192,7 @@ const EFFECT_MENU = [
     ] },
     { field: "slide", label: "Slide", kw: "glide glissando", set: setSlideOnSelection, variants: [
       [null, "None"], ["shift", "Shift → next"], ["legato", "Legato → next"],
-      ["inBelow", "In from below ↗", "simulated"], ["inAbove", "In from above ↘", "simulated"],
+      ["inBelow", "In from below ↗"], ["inAbove", "In from above ↘"],
       ["outDown", "Out downward ↓"], ["outUp", "Out upward ↑"],
     ] },
     { field: "whammy", rs: "absent", label: "Whammy bar", kw: "tremolo arm dive bar", set: (v) => setChoiceOnSelection("whammy", v), variants: [
@@ -1379,7 +1379,6 @@ export function openMotifMenu(clientX, clientY, id, lane) {
 
 // Human-readable names for the single-choice effects (used by the quick-remove
 // strip; fx flags use FX_LABELS, bend/slide/harmonic are named inline below).
-const CHOICE_NAME = { whammy: "Whammy bar", trill: "Trill", grace: "Grace note", tremPick: "Tremolo pick", slap: "Slap / pop", stroke: "Strum" };
 
 // Effects present on ANY selected note, each with a clear() that strips it from
 // the whole selection — powers the right-click quick-remove strip.
@@ -1387,11 +1386,14 @@ function appliedEffects(sel) {
   const any = (f) => sel.some(f), out = [];
   for (const k of FX_KEYS) if (any((n) => fxOn(n, k)))
     out.push({ label: FX_LABELS[k], clear: () => setFxOnSelection(k, false) });
-  if (any((n) => n.bend)) out.push({ label: "Bend", clear: () => setBendOnSelection(null) });
-  if (any((n) => n.slide)) out.push({ label: "Slide", clear: () => setSlideOnSelection(null) });
-  if (any((n) => n.harmonic)) out.push({ label: "Harmonic", clear: () => setHarmonicOnSelection(null) });
-  for (const f of ["whammy", "trill", "grace", "tremPick", "slap", "stroke"])
-    if (any((n) => n[f])) out.push({ label: CHOICE_NAME[f], clear: () => setChoiceOnSelection(f, null) });
+  // Variant pickers name the variant set, as their submenu does: "Slide: Shift → next".
+  for (const item of EFFECT_MENU.flatMap((g) => g.items)) {
+    if (!item.field) continue;
+    const kinds = [...new Set(sel.map((n) => n[item.field]).filter(Boolean))];
+    if (!kinds.length) continue;
+    const name = (k) => item.variants.find(([v]) => v != null && String(v) === String(k))?.[1] ?? k;
+    out.push({ label: `${item.label}: ${kinds.map(name).join(", ")}`, clear: () => item.set(null) });
+  }
   return out;
 }
 
