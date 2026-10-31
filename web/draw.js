@@ -12,7 +12,7 @@ import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGho
 
 import { bendCurve, bendPeak } from "./bend.js";
 import { BEND_HANDLE_R, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
-import { bendHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, noteRibbon, slideFretsHandle, regionEdgeAt } from "./note-render.js";
+import { bendHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, noteRibbon, slideFretsHandle, regionEdgeAt } from "./note-render.js";
 import { editorEl, minimap, overviewRuler, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
@@ -691,15 +691,24 @@ function paintFrame({ panels = true } = {}) {
   warningMarks = [];
   // tip: { title, body, tone } with tone "error" or "warning", which sets the colour.
   const frameWarning = (notes, tip) => {
-    sctx.strokeStyle = sctx.fillStyle = tip.tone === "error" ? PAINT.error : PAINT.warn;
+    const colour = tip.tone === "error" ? PAINT.error : PAINT.warn;
+    // The spectrogram runs from black to near white, so the frame rides on an
+    // underlay of the opposite brightness to its own colour.
+    const under = parseInt((grayHex(colour) || "#000000").slice(1, 3), 16) > 128 ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)";
     const left = xOf(Math.min(...notes.map(n => n.start))) - 3;
     const right = xOf(Math.max(...notes.map(n => n.end))) + 3;
     if (left > vx1 || right < vx0) return;
     const top = Math.min(...notes.map(n => yOf(n.pitch))) - 4;
     const bottom = Math.max(...notes.map(n => yOf(n.pitch))) + S.state.rowH + 4;
+    sctx.strokeStyle = under; sctx.lineWidth = 3.5;
+    sctx.strokeRect(left, top, right - left, bottom - top);
+    sctx.strokeStyle = sctx.fillStyle = colour; sctx.lineWidth = 1.5;
     sctx.setLineDash([4, 3]); sctx.strokeRect(left, top, right - left, bottom - top);
     sctx.setLineDash([]);
     const markX = Math.max(left, vx0 + 4);
+    sctx.strokeStyle = under; sctx.lineWidth = 3; sctx.lineJoin = "round";
+    sctx.strokeText("⚠", markX, top - 2);
+    sctx.lineWidth = 1.5;
     sctx.fillText("⚠", markX, top - 2);
     warningMarks.push({ x0: markX - 3, x1: markX + 17, y0: top - 19, y1: top + 1, tip });
   };
@@ -718,7 +727,8 @@ function paintFrame({ panels = true } = {}) {
     }
     // What the Rocksmith export would report about these notes (rocksmith-check.js).
     for (const { notes, issue } of rocksmithIssueNotes(lane))
-      frames.push([notes, { title: issue.title, body: issue.help, tone: issue.important ? "error" : "warning" }]);
+      // A dropped slide is the whole slide's problem: frame the note it lands on too.
+      frames.push([issue.code === "slide" ? [...notes, ...notes.map(n => laneSlides(lane).get(n)).filter(Boolean)] : notes, { title: issue.title, body: issue.help, tone: issue.important ? "error" : "warning" }]);
   }
   // Errors last, so a frame that is both shows red.
   for (const [notes, tip] of frames.sort((a, b) => (a[1].tone === "error") - (b[1].tone === "error"))) frameWarning(notes, tip);
