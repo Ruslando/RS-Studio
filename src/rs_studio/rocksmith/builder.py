@@ -17,7 +17,7 @@ import tempfile
 import unicodedata
 import uuid
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -654,6 +654,8 @@ class _Built:
 
     def issues(self) -> list[checker.Issue]:
         found = checker.check(self.compiled.sng, is_bass=self.is_bass, cent_offset=self.cent_offset)
+        # Found on a grace note, a slide-in's lead or a piece of a late effect: said at the editor's note.
+        found = [replace(i, time=self.compiled.editor_time(i.time)) for i in found]
         found += [checker.fixed(code, t) for code, t in self.compiled.fixes]
         return sorted(found, key=lambda issue: (issue.time is not None, issue.time or 0.0))
 

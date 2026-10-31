@@ -38,6 +38,57 @@ class LegatoSlideLinkTest(unittest.TestCase):
         self.assertEqual(target.parent_prev_note, -1)
 
 
+class SlideOntoOtherStringTest(unittest.TestCase):
+    def test_next_note_on_another_string_drops_the_slide(self):
+        # G#1 on the E string sliding, the next note pinned to the A string, and a
+        # later E-string note the slide must not jump to.
+        notes = [
+            {"string": 4, "fret": 4, "start": 1.0, "end": 1.3, "pitch": 32, "slide": "shift"},
+            {"string": 3, "fret": 4, "start": 1.5, "end": 2.0, "pitch": 37},
+            {"string": 4, "fret": 7, "start": 2.5, "end": 3.0, "pitch": 35},
+        ]
+        track = {"name": "Bass", "tuning": [43, 38, 33, 28], "notes": notes}
+        compiled = compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+        self.assertFalse(compiled.sng.levels[0].notes[0].mask & S.SLIDE)
+        self.assertIn("slide", [code for code, _ in compiled.fixes])
+
+    def test_late_slide_is_reported_at_its_note(self):
+        # Slide from 60% of the note: the export's slide piece starts later, but
+        # the editor frames notes by their own start.
+        notes = [
+            {"string": 4, "fret": 4, "start": 1.0, "end": 1.5, "pitch": 32, "slide": "shift", "slideStart": 0.6},
+            {"string": 3, "fret": 4, "start": 1.5, "end": 2.0, "pitch": 37},
+        ]
+        compiled = compile_track({"name": "Bass", "tuning": [43, 38, 33, 28], "notes": notes},
+                                 {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+        self.assertIn(("slide", 1.0), compiled.fixes)
+
+
+class EditorTimeTest(unittest.TestCase):
+    """Problems on notes the export adds are reported at the editor's note."""
+
+    def _bass(self, notes):
+        return compile_track({"name": "Bass", "tuning": [43, 38, 33, 28], "notes": notes},
+                             {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+
+    def test_added_notes_map_to_their_editor_note(self):
+        compiled = self._bass([
+            {"string": 3, "fret": 5, "start": 1.0, "end": 2.0, "pitch": 38, "slide": "inBelow"},
+            {"string": 3, "fret": 7, "start": 3.0, "end": 3.5, "pitch": 40, "grace": "whole"},
+        ])
+        sng_times = sorted(n.time for n in compiled.sng.levels[0].notes)
+        self.assertEqual(len(sng_times), 4)   # lead, slid-into note, grace, its note
+        self.assertEqual([compiled.editor_time(t) for t in sng_times], [1.0, 1.0, 3.0, 3.0])
+
+    def test_open_string_shift_is_dropped_and_said(self):
+        compiled = self._bass([
+            {"string": 4, "fret": 0, "start": 1.0, "end": 1.5, "pitch": 28, "slide": "shift"},
+            {"string": 4, "fret": 2, "start": 1.5, "end": 2.0, "pitch": 30},
+        ])
+        self.assertFalse(compiled.sng.levels[0].notes[0].mask & S.SLIDE)
+        self.assertIn(("slide-open", 1.0), compiled.fixes)
+
+
 def _late(slide, extra=None, slide_start=0.6):
     # Fret 5 held for 60% of the note, then sliding to fret 7.
     notes = _notes(slide)

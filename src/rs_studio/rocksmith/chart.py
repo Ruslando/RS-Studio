@@ -152,7 +152,7 @@ def _add_grace_notes(notes: list, grid: dict, fixes: list) -> list:
             continue
         grace = {k: n[k] for k in ("string", "hand") if k in n}
         grace.update(start=start - dur, end=start, fret=fret - step, pitch=_f(n.get("pitch")) - step,
-                     _helper=True)
+                     _helper=True, noteStart=_f(n.get("noteStart"), start))
         main = {k: v for k, v in n.items() if k != "grace"}
         main["fx"] = {**(n.get("fx") or {}), "hammer": True}
         out += [grace, main]
@@ -265,8 +265,17 @@ class Compiled:
     average_tempo: float
     warnings: list = field(default_factory=list)
     fixes: list = field(default_factory=list)   # (issue code, time): what the export changed, where
+    # ms of an exported note that starts away from its editor note -> that note's start.
+    origins: dict = field(default_factory=dict)
     dd_sng: S.SNG | None = None    # with difficulty levels, when made: what ships
     note_counts: tuple | None = None   # notes at the easy, medium and hard levels
+
+    def editor_time(self, t: float | None) -> float | None:
+        """`t` moved onto the editor note an exported note there comes from."""
+        if t is None:
+            return t
+        ms = round(t * 1000)
+        return next((self.origins[k] for k in (ms, ms - 1, ms + 1) if k in self.origins), t)
 
     @property
     def shipped(self) -> S.SNG:
@@ -1463,8 +1472,17 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
                 link_parents[string] = idx
                 linked = True
         slide = n.get("slide")
-        if slide in ("shift", "legato"):
+        if slide in ("shift", "legato", "outDown", "outUp") and fret == 0:
+            # A slide needs a finger on the string: from an open string it goes nowhere.
+            dropped_slides_fx.append(("slide-open", time))
+        elif slide in ("shift", "legato"):
+            # The target is the next onset, as the editor draws it (web/bend.js
+            # slideTargets). A later note on this string after notes on others
+            # used to be taken instead, sliding somewhere the editor never showed.
+            onset = next((e2.time for e2 in entities[idx + 1:] if e2.time > time + 1e-4), None)
             target = next_on_string(idx, string)
+            if target is not None and onset is not None and target[1] > onset + 1e-4:
+                target = None
             if target is not None and target[0] != fret and target[0] > 0:
                 sustain = max(sustain, SUSTAIN_MIN)
                 mask |= S.SLIDE | S.SUSTAIN
@@ -1479,8 +1497,6 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
                     link_parents[string] = idx
             else:
                 dropped_slides_fx.append(("slide", time))
-        elif slide in ("outDown", "outUp") and fret == 0:
-            dropped_slides_fx.append(("slide-open", time))
         elif slide in ("outDown", "outUp"):
             sustain = max(sustain, SUSTAIN_MIN)
             mask |= S.UNPITCHEDSLIDE | S.SUSTAIN
@@ -1795,9 +1811,17 @@ def compile_track(track: dict, grid: dict, song_length: float,
     capo = max(0, int(track.get("capo") or 0))
     # Grip-only notes are never played, so no grace note, slide-in or link is made from them.
     grip_only = [n for n in track.get("notes") or [] if n.get("gripOnly")]
-    notes = _add_grace_notes([n for n in track.get("notes") or [] if not n.get("gripOnly")], grid, fixes)
+    # noteStart: the editor note each exported note comes from. Grace notes, slide-ins
+    # and late effects add notes and pieces that start elsewhere; a problem found on
+    # one is reported at the editor's note (editor_time), where the editor finds it.
+    played = [{**n, "noteStart": _f(n.get("start"))} for n in track.get("notes") or [] if not n.get("gripOnly")]
+    notes = _add_grace_notes(played, grid, fixes)
     notes = _add_slide_ins(notes, grid, fixes, capo)
     notes = _link_bend_continuations(_split_late_effects(notes, fixes))
+    onsets = {round(_f(n.get("start")) * 1000) for n in notes if abs(_f(n.get("start")) - n["noteStart"]) < 1e-6}
+    # A time an editor note also starts at stays that note's.
+    origins = {ms: n["noteStart"] for n in notes
+               if (ms := round(_f(n.get("start")) * 1000)) not in onsets}
     track = {**track, "notes": notes + grip_only}
     voicing = _voiced_entities(track, n_str, tuning_low, warnings, fixes,
                                _sustain_rule(grid, song_length), capo)
@@ -1861,9 +1885,10 @@ def compile_track(track: dict, grid: dict, song_length: float,
     )
 
     compiled = Compiled(sng=sng_obj, note_count=len(notes), arr_props=emitted.arr_props,
-                        average_tempo=average_tempo, warnings=warnings,
-                        fixes=sorted(dict.fromkeys(fixes + [("I29", t) for t in voicing.dead_left_out]
-                                                   + emitted.dropped_slides), key=lambda f: f[1]))
+                        average_tempo=average_tempo, warnings=warnings, origins=origins)
+    compiled.fixes = sorted(dict.fromkeys((code, compiled.editor_time(t)) for code, t in
+                                          fixes + [("I29", t) for t in voicing.dead_left_out]
+                                          + emitted.dropped_slides), key=lambda f: f[1])
     if dynamic_difficulty:
         compiled.dd_sng, compiled.note_counts = _difficulty_levels(
             sng_obj, voicing, arr, capo, n_str == 4, chord_notes)
