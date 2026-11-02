@@ -833,7 +833,7 @@ def check_spec(spec: dict) -> list[dict]:
                            for t, code in song.events]
         issues = [issue.in_editor(lead) for issue in built.issues()]
         found["issues"] = [{"code": i.code, "time": i.time, "title": i.title, "help": i.help,
-                            "important": i.important} for i in issues]
+                            "important": i.important, "tone": i.tone} for i in issues]
     return out
 
 
@@ -910,7 +910,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
                 song.metadata.part = partition   # SNG and manifest agree, as in DLC Builder
             # Timed as in the editor, before the silence, like the live check.
             issues = built.issues()
-            warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in issues)
+            warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in issues if issue.tone != "note")
             blocking += _blocking(spec, issues)
             sng_packed = sng.pack(sng.serialize(built.compiled.shipped))
             if phrase_levels is not None:

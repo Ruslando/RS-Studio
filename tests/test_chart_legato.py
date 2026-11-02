@@ -274,6 +274,17 @@ class EdgeSlideTest(unittest.TestCase):
         self.assertTrue(main.mask & S.CHILD and main.mask & S.VIBRATO)
         self.assertFalse(main.mask & S.ACCENT)
 
+    def test_slide_in_and_out_of_one_note(self):
+        # Guitar Pro: slid into from below, then slid out late (web/bend.js slideInOf).
+        (lead, main, tail), _ = _one({"fret": 7, "pitch": 52, "slide": "outDown", "slideIn": "inBelow",
+                                      "slideEnd": 0.25, "slideStart": 0.75})
+        self.assertEqual(lead.fret, 3)
+        self.assertTrue(lead.mask & S.SLIDE)
+        self.assertEqual(lead.slide_to, 7)
+        self.assertAlmostEqual(main.time, 1.25)
+        self.assertAlmostEqual(tail.time, 1.75, msg="the slide-out still starts at its moment")
+        self.assertTrue(tail.mask & S.UNPITCHEDSLIDE)
+
     def test_slide_in_from_below_fret_one_is_left_out(self):
         (n,), compiled = _one({"fret": 1, "pitch": 46, "slide": "inBelow"})
         self.assertEqual(n.fret, 1)

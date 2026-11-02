@@ -139,7 +139,7 @@ def max_chord_strings(entities: list, templates: list) -> int:
 # mask; bend, slide target and vibrato count here too, since they are played
 # differently. Editor-only fields (finger, hand, shape, chord name) do not.
 _PLAYED = ("fx", "bend", "slide", "slideEnd", "slideFrets", "tremPick", "harmonic", "slap",
-           "linkNext", "ignore", "stroke", "trill", "whammy", "grace")
+           "linkNext", "ignore", "stroke", "trill", "whammy", "grace", "ornament")
 
 
 def _signature(n: dict) -> tuple:

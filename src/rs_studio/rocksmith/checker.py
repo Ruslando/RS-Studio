@@ -32,6 +32,17 @@ class Issue:
     help: str
     important: bool
 
+    @property
+    def tone(self) -> str:
+        # Keep DLC Builder's importance flag for compatibility; severity describes
+        # our export: notes explain adaptations, warnings lose information, errors
+        # may prevent a usable package or crash the game.
+        if self.code in {"I18", "I21", "I25", "I30", "I36"}:
+            return "error"
+        if self.code == "hand":
+            return "note"
+        return "warning"
+
     def in_editor(self, lead: float) -> "Issue":
         """The same issue timed before `lead` seconds of leading silence."""
         return self if self.time is None else replace(self, time=round(self.time - lead, 3))
@@ -135,6 +146,15 @@ FIXED = {
     "slide-in": ("Slide-in left out",
                  "Rocksmith plays a slide-in as a short note before this one, sliding into it, but there is "
                  "no room for it on that string or no fret to start it from."),
+    "whammy": ("Whammy left out",
+               "Rocksmith plays a whammy as slides along the string, but this one would slide past the "
+               "open string or fret 24, starts on an open string, or is on a bent note."),
+    "whammy-slide": ("Slide replaced by the whammy",
+                     "The whammy ends in a slide, so the note's own slide out is left out."),
+    "trill": ("Trill left out",
+              "Rocksmith plays a trill as hammer-ons and pull-offs a sixteenth apart, but the note is "
+              "shorter than two sixteenths or the upper note is above fret 24."),
+    "ornament": ("Ornament left out", "There is not enough time for the figure, or one of its notes is outside frets 0–24."),
     "slide-open": ("Slide dropped: open string", "An open string cannot slide. Fret the note to keep the slide."),
     "fret": ("Note moved down to fret 24", "Rocksmith has no frets above 24."),
     "unvoiced": ("Note skipped", "The note has no string or fret."),

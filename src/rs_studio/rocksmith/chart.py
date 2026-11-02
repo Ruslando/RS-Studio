@@ -61,7 +61,7 @@ ROCKSMITH_SECTION_NAMES = {
 # into notes linked one to the next: each later piece is a Child, not picked
 # again, carrying what starts at its cut. What belongs to the pick stays on the
 # first piece.
-_ATTACK_ONLY = ("grace", "slap", "stroke", "trill", "whammy", "harmonic")
+_ATTACK_ONLY = ("grace", "slap", "stroke", "trill", "whammy", "harmonic", "ornament")
 _SHAPE_FIELDS = ("shapeId", "shapeKind", "shapeName")
 _ATTACK_FX = ("hammer", "accent", "staccato", "ghost", "dead")
 _LINK_EPS = 0.002   # what counts as the same moment: onsets closer than this are one chord
@@ -112,6 +112,8 @@ def _split_late_effects(notes: list, fixes: list) -> list:
             if i:
                 piece = {k: v for k, v in piece.items() if k not in _ATTACK_ONLY}
                 fx = {k: v for k, v in fx.items() if k not in _ATTACK_FX}
+                if n.get("_pickSlide"):
+                    fx["dead"] = True
             if vib_cut is not None and a < vib_cut - 1e-9:
                 fx.pop("vibrato", None)
             piece.pop("fx", None)
@@ -173,9 +175,12 @@ def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
         by_string.setdefault(n.get("string"), []).append(n)
     out = []
     for n in notes:
-        kind = n.get("slide")
+        # A slide-in shares a note with a slide out or on in `slideIn` (web/bend.js
+        # slideInOf); alone it is the note's `slide`.
+        added = n.get("slideIn") in ("inBelow", "inAbove") and n.get("slide") not in ("inBelow", "inAbove")
+        kind = n["slideIn"] if added else n.get("slide")
         if kind not in ("inBelow", "inAbove") or n.get("string") is None or n.get("fret") is None:
-            out.append(n)
+            out.append({k: v for k, v in n.items() if k != "slideIn"} if "slideIn" in n else n)
             continue
         start, end, fret = _f(n.get("start")), _f(n.get("end")), int(n["fret"])
         frac = _f(n.get("slideEnd"))
@@ -186,8 +191,9 @@ def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
             frac = min(30.0 / bpm, (end - start) / 2) / (end - start)
         cut = start + frac * (end - start)
         reach = fret - 1 if kind == "inBelow" else MAX_FRET - capo - fret
-        step = min(max(1, round(_f(n.get("slideFrets")) or 4)), reach) if fret > 0 else 0
-        plain = {k: v for k, v in n.items() if k not in ("slide", "slideEnd", "slideFrets")}
+        step = min(max(1, round((not added and _f(n.get("slideFrets"))) or 4)), reach) if fret > 0 else 0
+        plain = {k: v for k, v in n.items()
+                 if k not in (("slideIn", "slideEnd") if added else ("slide", "slideIn", "slideEnd", "slideFrets"))}
         if step <= 0 or cut <= start + 1e-4 or any(
                 m is not n and _f(m.get("start")) < cut - _LINK_EPS and _f(m.get("end")) > start + _LINK_EPS
                 for m in by_string[n.get("string")]):
@@ -197,7 +203,7 @@ def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
         sign = -1 if kind == "inBelow" else 1
         fx = {k: v for k, v in (n.get("fx") or {}).items() if k != "vibrato"}
         lead = {k: v for k, v in plain.items()
-                if k not in ("bend", "bendPoints", "slideStart", "vibratoStart", "fx", *_SHAPE_FIELDS)}
+                if k not in ("bend", "bendPoints", "slideStart", "vibratoStart", "slideFrets", "fx", *_SHAPE_FIELDS)}
         lead.update(start=start, end=cut, fret=fret + sign * step, pitch=_f(n.get("pitch")) + sign * step, slide="legato",
                     _helper=True)
         if fx:
@@ -208,7 +214,169 @@ def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
         if main_fx:
             main["fx"] = main_fx
         main["start"] = cut
+        # Late effects are fractions of the whole note; the main note now starts at the cut.
+        for key in ("slideStart", "vibratoStart"):
+            if _f(main.get(key)) > 0:
+                at = start + _f(main[key]) * (end - start)
+                if at > cut + 1e-4 and end > cut:
+                    main[key] = (at - cut) / (end - cut)
+                else:
+                    main.pop(key)
         out += [lead, main]
+    return out
+
+
+_WHAMMY_PRESETS = {"dip": [[0, 0], [0.5, -2], [1, 0]], "dive": [[0, 0], [1, -2]]}   # web/whammy.js
+
+
+def _later_piece(n: dict, start: float, end: float, offset: int) -> dict:
+    """A piece of `n` after its pick, `offset` frets away: nothing of the attack."""
+    piece = {k: v for k, v in n.items() if k not in (*_ATTACK_ONLY, "slideStart", "vibratoStart", "slideIn")}
+    fx = {k: v for k, v in (n.get("fx") or {}).items() if k not in _ATTACK_FX}
+    piece.pop("fx", None)
+    if fx:
+        piece["fx"] = fx
+    piece.update(start=start, end=end, fret=int(n["fret"]) + offset, pitch=_f(n.get("pitch")) + offset)
+    return piece
+
+
+def _whammy_as_slides(notes: list, fixes: list) -> list:
+    """A whammy curve as Rocksmith can show it: slides along the string.
+
+    Rounded to whole frets. A part that rises or falls slides into the next part;
+    the last one, landing on no note, is an unpitched slide out. Not on a bent
+    note (the two curves cannot both be slides) or past the neck's ends.
+    """
+    out = []
+    for n in notes:
+        pts = n.get("whammyPoints") or _WHAMMY_PRESETS.get(n.get("whammy"))
+        if not pts or n.get("string") is None or n.get("fret") is None:
+            out.append(n)
+            continue
+        # A curve that starts late or ends early holds its pitch from the pick and to the end.
+        pts = [*([[0, pts[0][1]]] if _f(pts[0][0]) > 0 else []), *pts, *([[1, pts[-1][1]]] if _f(pts[-1][0]) < 1 else [])]
+        frets = [round(_f(v)) for _, v in pts]
+        if all(f == 0 for f in frets):
+            out.append({k: v for k, v in n.items() if k not in ("whammy", "whammyPoints")})
+            continue
+        fret = int(n["fret"])
+        if n.get("bend") or fret + min(frets) < 1 or fret + max(frets) > MAX_FRET or (fret == 0 and frets[0] == 0):
+            fixes.append(("whammy", _f(n.get("start"))))
+            out.append(n)
+            continue
+        start, end = _f(n.get("start")), _f(n.get("end"))
+        # (from, to, offset at its start, offset it goes to): runs of one offset merged.
+        parts = []
+        for (t0, _), (t1, _), f0, f1 in zip(pts, pts[1:], frets, frets[1:]):
+            a, b = start + _f(t0) * (end - start), start + _f(t1) * (end - start)
+            if b - a < 1e-6:
+                continue
+            if parts and f0 == f1 and parts[-1][2] == parts[-1][3] == f0:
+                parts[-1][1] = b
+            else:
+                parts.append([a, b, f0, f1])
+        for i, (a, b, f0, f1) in enumerate(parts):
+            piece = {k: v for k, v in n.items() if k not in ("whammy", "whammyPoints", "slideStart", "vibratoStart")}
+            if i:
+                piece = _later_piece(piece, a, b, f0)
+            else:
+                piece.update(start=a, end=b, fret=fret + f0, pitch=_f(n.get("pitch")) + f0)
+            last = i == len(parts) - 1
+            if f0 != f1:
+                piece["slide"] = "legato" if not last else ("outDown" if f1 < f0 else "outUp")
+                piece["slideFrets"] = abs(f1 - f0)
+                if last and n.get("slide"):
+                    fixes.append(("whammy-slide", start))
+            elif not last:
+                piece.pop("slide", None)
+                piece["linkNext"] = True
+            out.append(piece)
+    return out
+
+
+def _hammered(n: dict, times: list, offsets: list) -> list:
+    """`n` as notes picked once: between `times` (its start, ..., its end) each the
+    fret `offsets` away from its own, hammered on or pulled off from the one before."""
+    out = []
+    for i, (a, b) in enumerate(zip(times, times[1:])):
+        if i:
+            piece = _later_piece(n, a, b, offsets[i])
+            piece["fx"] = {**(piece.get("fx") or {}), "hammer": True}
+        else:
+            piece = {k: v for k, v in n.items() if k not in ("trill", "ornament", "slideStart", "vibratoStart")}
+            piece.update(end=b, fret=int(n["fret"]) + offsets[0], pitch=_f(n.get("pitch")) + offsets[0])
+        if b < times[-1]:
+            piece.pop("slide", None)
+        out.append(piece)
+    return out
+
+
+def _bpm_at(segments: list, t: float) -> float:
+    return next((b for t0, b, _ in reversed(segments) if t0 <= t + 1e-4), segments[0][1])
+
+
+def _trill_as_hammers(notes: list, grid: dict, fixes: list) -> list:
+    """A trill as Rocksmith charts one: the note and the one above it, a
+    sixteenth each (web/bend.js trillOffsetAt), hammered on and pulled off.
+    """
+    segments = _tempo_segments(grid)
+    out = []
+    for n in notes:
+        interval = {"half": 1, "whole": 2}.get(n.get("trill"), 0)
+        if not interval or n.get("string") is None or n.get("fret") is None:
+            out.append(n)
+            continue
+        start, end, fret = _f(n.get("start")), _f(n.get("end")), int(n["fret"])
+        step = 15.0 / _bpm_at(segments, start)
+        if end - start < 2 * step - 1e-6 or fret + interval > MAX_FRET:
+            fixes.append(("trill", start))
+            out.append(n)
+            continue
+        # A last part shorter than half a sixteenth stays with the one before.
+        times = [start + i * step for i in range(math.ceil((end - start) / step - 0.5))] + [end]
+        out += _hammered(n, times, [interval * (i % 2) for i in range(len(times) - 1)])
+    return out
+
+
+# An ornament's figure, frets from the note, a thirty-second each, the last held
+# (web/bend.js ORNAMENT_FIGURES).
+_ORNAMENTS = {"upperMordent": [0, 2, 0], "lowerMordent": [0, -1, 0], "turn": [2, 0, -1, 0], "invertedTurn": [-1, 0, 2, 0]}
+
+
+def _ornament_as_hammers(notes: list, grid: dict, fixes: list) -> list:
+    """A turn or mordent written out as Rocksmith charts a trill: hammered notes."""
+    segments = _tempo_segments(grid)
+    out = []
+    for n in notes:
+        figure = _ORNAMENTS.get(n.get("ornament"))
+        if not figure or n.get("string") is None or n.get("fret") is None:
+            out.append(n)
+            continue
+        start, end, fret = _f(n.get("start")), _f(n.get("end")), int(n["fret"])
+        step = 7.5 / _bpm_at(segments, start)
+        if end - start < len(figure) * step - 1e-6 or fret + min(figure) < 0 or fret + max(figure) > MAX_FRET:
+            fixes.append(("ornament", start))
+            out.append({k: v for k, v in n.items() if k != "ornament"})
+            continue
+        out += _hammered(n, [start + i * step for i in range(len(figure))] + [end], figure)
+    return out
+
+
+# A pick slide as Ubisoft charts one (CustomsForge "pick scrape"): a tapped,
+# fret-hand-muted unpitched slide high on the neck, from fret 22 down or 17 up.
+_PICK_SLIDES = {"pickDown": (22, "outDown"), "pickUp": (17, "outUp")}
+
+
+def _pick_slides(notes: list) -> list:
+    out = []
+    for n in notes:
+        kind = _PICK_SLIDES.get(n.get("slide"))
+        if not kind or n.get("string") is None or n.get("fret") is None:
+            out.append(n)
+            continue
+        fret, slide = kind
+        out.append({**n, "fret": fret, "pitch": _f(n.get("pitch")) - int(n["fret"]) + fret, "slide": slide,
+                    "slideFrets": 5, "slap": "tap", "_pickSlide": True, "fx": {**(n.get("fx") or {}), "dead": True}})
     return out
 
 
@@ -415,10 +583,10 @@ def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
 #   tremPick    -> Tremolo    harmonic -> Harmonic / PinchHarmonic ("pinch")
 #   slide       -> Slide / UnpitchedSlide     bend -> Bend
 #   slap        -> Slap / Pluck / Tap
-# fx.ghost, fx.letRing, fx.staccato have no Rocksmith equivalent — confirmed
-# against the full NoteMask enum, nothing matches — so they're dropped with an
-# export warning instead of silently disappearing (see the voiced-notes loop
-# below).
+# fx.letRing and fx.staccato have no Rocksmith equivalent and are dropped.
+# Ghost notes are shown with Ignore enabled; strum direction is not an editor effect.
+# the editor warns at the note (web/note-issues.js DROPPED_TEXT). A whammy goes out
+# as slides, a trill as hammer-ons (_whammy_as_slides, _trill_as_hammers).
 def _base_note_mask(n: dict, fret: int, sustain: float) -> tuple[int, int]:
     """Mask bits + companion fields shared by single notes and chord notes."""
     mask = 0
@@ -440,7 +608,7 @@ def _base_note_mask(n: dict, fret: int, sustain: float) -> tuple[int, int]:
     if n.get("tremPick"):
         mask |= S.TREMOLO
     harmonic = n.get("harmonic")
-    if harmonic == "pinch":
+    if harmonic in ("pinch", "artificial"):
         mask |= S.PINCHHARMONIC
     elif harmonic:
         mask |= S.HARMONIC
@@ -481,7 +649,8 @@ def _bend_curve(n: dict, time: float, sustain: float) -> tuple[list, float]:
 
 def _chord_name(notes) -> str:
     """The name the editor gave these notes' chord, or "" when it gave none."""
-    return next((str(n["chordName"]) for n in notes if n.get("chordName")), "")
+    name = next((str(n["chordName"]) for n in notes if n.get("chordName")), "")
+    return name.replace("♯", "#").replace("♭", "b")   # a Guitar Pro import keeps the file's spelling
 
 
 def _finger(n: dict, fret: int) -> int:
@@ -1349,12 +1518,14 @@ def _ignored(e: _Entity, note: S.Note) -> bool:
 
     Frets 23 and 24 are not detected reliably, nor is a 7th fret natural
     harmonic held on (DLC Builder's I13); and the user can leave out any note
-    (EOF's Ignore status). A chord is ignored when any of its notes is; its
+    (EOF's Ignore status), which a ghost note gets. A chord is ignored when any of its notes is; its
     chord notes carry no flag of their own.
     """
     def unscorable(fret: int, n: dict) -> bool:
-        harmonic = n.get("harmonic") and n.get("harmonic") != "pinch"
-        return bool(n.get("ignore")) or fret >= 23 or (fret == 7 and harmonic and note.sustain > 0)
+        harmonic = n.get("harmonic") and n.get("harmonic") not in ("pinch", "artificial")
+        # A ghost note is played too quietly to detect: shown, not scored.
+        ghost = (n.get("fx") or {}).get("ghost")
+        return bool(n.get("ignore") or ghost) or fret >= 23 or (fret == 7 and harmonic and note.sustain > 0)
     return any(unscorable(fret, n) for _, fret, n in e.notes)
 
 
@@ -1814,9 +1985,12 @@ def compile_track(track: dict, grid: dict, song_length: float,
     # noteStart: the editor note each exported note comes from. Grace notes, slide-ins
     # and late effects add notes and pieces that start elsewhere; a problem found on
     # one is reported at the editor's note (editor_time), where the editor finds it.
-    played = [{**n, "noteStart": _f(n.get("start"))} for n in track.get("notes") or [] if not n.get("gripOnly")]
+    played = [{**n, "noteStart": _f(n.get("start")),
+               "ignore": bool(n.get("ignore") or (n.get("fx") or {}).get("ghost"))} for n in track.get("notes") or [] if not n.get("gripOnly")]
     notes = _add_grace_notes(played, grid, fixes)
     notes = _add_slide_ins(notes, grid, fixes, capo)
+    notes = _trill_as_hammers(_whammy_as_slides(notes, fixes), grid, fixes)
+    notes = _pick_slides(_ornament_as_hammers(notes, grid, fixes))
     notes = _link_bend_continuations(_split_late_effects(notes, fixes))
     onsets = {round(_f(n.get("start")) * 1000) for n in notes if abs(_f(n.get("start")) - n["noteStart"]) < 1e-6}
     # A time an editor note also starts at stays that note's.
