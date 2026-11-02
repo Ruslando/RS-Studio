@@ -81,7 +81,7 @@ export function defaultRsKind(track, used) {
 // The staves of one Guitar Pro track are one part and share theirs. Returns true
 // when a layer changed.
 export function assignRsKinds(lanes, tuningOf) {
-  const partOf = (lane) => (lane.sourceTrackIndex == null ? lane : `track:${lane.sourceTrackIndex}`);
+  const partOf = (lane) => lane.gpSource?.part ?? lane;
   const kinds = new Map(), used = new Set(), waiting = [];
   for (const lane of lanes) {
     const part = partOf(lane), kind = lane.rocksmithArrangement;

@@ -270,7 +270,7 @@ export function assignSectionsToBars(bars, markers) {
       warnings.push(`Section “${section.text}” moved to bar ${target + 1}; bar ${best + 1} already has a section.`);
     }
     out[target].section = {
-      marker: section.marker || section.text,
+      marker: section.marker || "",   // Guitar Pro's letter: a section may have none
       text: section.text,
     };
   }

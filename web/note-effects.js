@@ -1,4 +1,3 @@
-import { WHAMMY_TAG } from "./whammy.js";
 
 // Note-attached metadata shared by editing, references, tracing, and export.
 // Keep this module DOM-free so copying/signature behavior can be tested directly.
@@ -7,6 +6,7 @@ import { WHAMMY_TAG } from "./whammy.js";
 export const EFFECT_FIELDS = [
   "slide", "fx", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick", "slap",
   "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart", "slideEnd", "slideFrets",
+  "slideIn", "whammyPoints", "ornament",
   // Rocksmith only: how the chord the note is in is drawn ("full" or "repeat",
   // chart._chord_display), a note left out of the score (`ignore`), a chord shown
   // without fingers (`fingerless`), a note only shown in a grip (`gripOnly`, EOF's
@@ -37,7 +37,7 @@ export const SIGNATURE_EFFECT_FIELDS = [
 ];
 // Fields added after projects already stored signatures. They join the signature
 // only when set, so a note without them hashes as it always did.
-export const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart", "slideEnd", "slideFrets"];
+export const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart", "slideEnd", "slideFrets", "slideIn", "whammyPoints", "ornament"];
 
 // `{ slide: …, bend: …, … }` with an explicit null for anything absent, so a
 // removed effect changes the signature as surely as an added one does. Three
@@ -69,7 +69,7 @@ export const FX_LABELS = {
 
 export const FX_GLYPHS = { hammer: "H", palmMute: "PM", ghost: "( )", letRing: "LR", vibrato: "~", staccato: "·", accent: ">", dead: "X" };
 
-export const HARMONIC_TAG = { natural: "◎", pinch: "Pnch. harm." };
+export const HARMONIC_TAG = { natural: "◎", pinch: "Pnch. harm.", artificial: "Art. harm." };
 
 export const SLAP_TAG = { tap: "tap", slap: "slap", pop: "pop" };
 
@@ -93,15 +93,14 @@ export function noteMarks(n) {
   if (n.trill) m.push("Trill");
   if (n.tremPick) m.push("≣");
   if (n.slap) m.push(SLAP_TAG[n.slap]);
-  if (n.stroke) m.push(n.stroke === "up" ? "⤴" : "⤵");
-  if (WHAMMY_TAG[n.whammy]) m.push(WHAMMY_TAG[n.whammy]);
+  if (n.ornament) m.push(n.ornament.replace(/([A-Z])/g, " $1"));
   if (n.ignore) m.push("Not scored");
   if (n.fingerless) m.push("No fingers");
   if (n.gripOnly) m.push("Grip only");
   return m;
 }
 
-export const hasNoteEffects = (n) => !!(n.slide || n.bend || n.harmonic || noteMarks(n).length);
+export const hasNoteEffects = (n) => !!(n.slide || n.slideIn || n.bend || n.whammy || n.harmonic || noteMarks(n).length);
 
 export const cloneFx = (fx) => (fx ? { ...fx } : undefined);
 
@@ -121,7 +120,7 @@ export function copyEffects(src, dst = {}) {
   for (const key of EFFECT_FIELDS) {
     if (src[key] == null) continue;
     if (key === "fx") dst[key] = cloneFx(src[key]);
-    else if (key === "bendPoints") dst[key] = src[key].map((point) => [...point]);
+    else if (key === "bendPoints" || key === "whammyPoints") dst[key] = src[key].map((point) => [...point]);
     else if (key === "pos") dst[key] = { ...src[key] };
     else if (key === "arrangement") dst[key] = cloneArrangement(src[key]);
     else dst[key] = src[key];

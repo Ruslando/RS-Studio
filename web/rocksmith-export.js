@@ -1,3 +1,4 @@
+import { issueTone } from "./issue-tone.js";
 // Rocksmith CDLC export UI: the arrangement picker, the metadata form and the
 // POST that builds the .psarc. The File-menu entry is wired in ui.js with the
 // other exports.
@@ -496,19 +497,20 @@ const rsPickedLanes = () => [...$("rsArrangements").querySelectorAll(".rs-arr-ro
 function renderRsIssues() {
   const kinds = [...rocksmithIssueKinds(rsPickedLanes())].sort(([, a], [, b]) => a.title.localeCompare(b.title));
   for (const group of $("rsIssues").querySelectorAll(".sound-section")) {
-    const mine = kinds.filter(([, kind]) => kind.important === (group.dataset.tone === "error"));
+    const mine = kinds.filter(([, kind]) => issueTone(kind) === group.dataset.tone);
     group.hidden = !mine.length;
     group.querySelector(".rs-issue-count").textContent = String(mine.length);
-    group.querySelector(".sub-list").replaceChildren(...mine.map(([key, { title, help, count, important }]) => {
+    group.querySelector(".sub-list").replaceChildren(...mine.map(([key, { title, help, count, tone }]) => {
       const row = document.createElement("div");
       row.className = "list-row list-row--fields artifact-issue-row rs-issue-row";
-      row.toggleAttribute("data-important", important);
+      row.toggleAttribute("data-important", tone === "error");
+      row.dataset.tone = tone;
       // Rule 19: the sentence is the row's tooltip; DLC Builder's codes stay internal (10).
       row.dataset.tip = help ? `${title}\n${help}` : title;
-      row.dataset.tipTone = important ? "error" : "warning";
+      row.dataset.tipTone = tone;
       const mark = document.createElement("span");
       mark.className = "artifact-issue-mark";
-      mark.innerHTML = WARN_ICON;
+      mark.innerHTML = tone === "note" ? icon("info", 14) : WARN_ICON;
       const name = document.createElement("span");
       name.className = "rs-arr-name rs-issue-name";
       name.textContent = title;
@@ -525,10 +527,12 @@ function renderRsIssues() {
         renderRsIssues();
       });
       label.append(input, " Ignore");
+      label.hidden = tone === "note";
       row.append(mark, name, times, label);
       return row;
     }));
     const all = group.querySelector(".rs-issue-all"), ignored = mine.filter(([key]) => rsIgnored.has(key)).length;
+    all.closest("label").hidden = group.dataset.tone === "note";
     all.checked = !!mine.length && ignored === mine.length;
     all.indeterminate = ignored > 0 && ignored < mine.length;
     all.onchange = () => {
@@ -541,7 +545,7 @@ function renderRsIssues() {
 }
 
 // The issue kinds neither fixed nor ignored.
-const rsOpenIssues = () => [...rocksmithIssueKinds(rsPickedLanes()).keys()].filter((key) => !rsIgnored.has(key));
+const rsOpenIssues = () => [...rocksmithIssueKinds(rsPickedLanes())].filter(([key, issue]) => issueTone(issue) !== "note" && !rsIgnored.has(key)).map(([key]) => key);
 function leadIn(raw) {
   const value = raw === null || raw === "" ? NaN : Number(raw);
   return Number.isFinite(value) ? Math.min(30, Math.max(0, value)) : LEAD_IN_DEFAULT;

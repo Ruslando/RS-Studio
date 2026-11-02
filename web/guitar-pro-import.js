@@ -1,16 +1,17 @@
 // Browser-facing Guitar Pro import flow. Parsing stays client-side in alphaTab;
-// the backend only stores the untouched source file with the normal project.
+// the chosen staves come in as new layers, each keeping its part of the file.
 
 import { bpmInput, gpImportBackdrop, gpImportClose, gpImportConfirm, gpImportFile, gpImportStatus, gpImportSummary, gpImportTracks, importGpBtn, offsetInput, tsDenInput, tsNumInput, welcomeGpBtn } from "./dom.js";
 import { draw } from "./repaint.js";
-import { convertGpScore, inspectGpScore } from "./guitar-pro-core.js";
+import { convertGpScore, gpProjectionSignature, inspectGpScore, packLaneSource, textComments } from "./guitar-pro-core.js";
 import { currentGridState, setSubdiv } from "./grid.js";
 import { rebuildLanes, refreshCounts, renderLanes } from "./lanes.js";
 import { loadWithScreen } from "./project-loading.js";
 import { applyProject, markSaved, mapLane, refreshSaveState, saveToServer } from "./project.js";
 import { S } from "./store.js";
+import { dedupeIds } from "./ids.js";
 import { projectShiftPlan, projectStart } from "./project-position-core.js";
-import { addTiming, syncTiming } from "./timing.js";
+import { addTiming, syncTiming, timingIdOf } from "./timing.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { sectionMarkersFromScoreBars } from "./section-marker-core.js";
 import { loadAlphaTab, refreshTabIfOpen } from "./tablature.js";
@@ -26,7 +27,7 @@ let importing = false;
 // Bars, keys and repeats ride along with an imported score. They used to be
 // installed by the Score structure overlay, which the design system deletes;
 // this is the only caller, so the function lives at its call site now.
-function importedStructure(converted) {
+export function importedStructure(converted) {
   const target = Math.max(Number(converted?.duration) || 0, Number(S.state.duration) || 0,
     ...S.state.editLanes.flatMap((lane) => lane.notes.map((note) => Number(note.end) || 0)));
   const scoreBars = coverScoreDuration(
@@ -119,7 +120,7 @@ async function chooseFile(file) {
     const supported = inspection.tracks.filter((track) => track.supported).length;
     gpImportSummary.textContent = `${inspection.title || file.name} · ${inspection.bars} bars · ` +
       `${inspection.tracks.length} tracks (${supported} guitar/bass available)` +
-      (S.state?.guitarPro ? " · replaces the previous Guitar Pro tracks" : "");
+      (S.state ? " · added as new layers" : "");
     renderTracks(inspection);
     setImportStatus();
     gpImportConfirm.disabled = supported === 0;
@@ -130,12 +131,6 @@ async function chooseFile(file) {
     setImportStatus(`Could not read this Guitar Pro file: ${error.message}`, true);
     gpImportConfirm.disabled = true;
   }
-}
-
-function importedLane(lane) {
-  // An imported lane stays imported even after the user deletes every note.
-  // Re-import must replace that empty source lane instead of retaining a ghost.
-  return lane.sourceTrackIndex != null;
 }
 
 function applyImportedGrid(grid) {
@@ -179,24 +174,20 @@ async function confirmImport() {
         if (!created.ok) throw new Error("Could not create the project");
         job = (await created.json()).job;
       }
-      const body = new FormData();
-      body.append("file", pending.file);
-      body.append("summary", JSON.stringify(converted.guitarPro));
-      const response = await fetch(`/api/projects/${job}/guitar-pro`, { method: "POST", body });
-      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "source upload failed");
-      const stored = await response.json();
-
       if (standalone) {
         const title = converted.guitarPro.score?.title || pending.file.name.replace(/\.(?:gp|gpx|gp[345])$/i, "");
         const finalized = await fetch(`/api/projects/${job}/finalize`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: title }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: title, filename: pending.file.name,
+            scoreDuration: converted.duration, tempo: converted.guitarPro.score?.tempo }),
         });
         if (!finalized.ok) throw new Error((await finalized.json().catch(() => ({}))).detail || "Could not finalize the project");
         await applyProject(await finalized.json());
         S.state.metadata = { ...S.state.metadata, ...(converted.metadata || {}) };
       }
 
-      const retained = S.state.editLanes.filter((lane) => !importedLane(lane));
+      // Every layer already in the project stays; the file's layers come in beside them.
+      const retained = S.state.editLanes;
       // Remove only the untouched initial placeholder. Empty user-created/configured
       // lanes are real project content and should survive an import.
       const lonePlaceholder = retained.length === 1 && !retained[0].notes.length
@@ -205,13 +196,24 @@ async function confirmImport() {
       for (const lane of base) lane.active = false;
       const imported = converted.editLanes.map(lane => mapLane(lane, projectStart(S.state)));
       if (imported[0]) imported[0].active = true;
+      // Each layer keeps its staff of the file (guitar-pro-core.js packLaneSource);
+      // the file itself is not kept. The staves of one track stay one part.
+      const full = JSON.parse(alphaTab.model.JsonConverter.scoreToJson(pending.score));
+      const importId = Date.now().toString(36);
+      const sources = await Promise.all(converted.editLanes.map((lane) =>
+        packLaneSource(full, lane.sourceTrackIndex, lane.sourceStaffIndex)));
       // Into an existing project the file's layers bring their own timing, so the
       // song's tempo markers and sections stay untouched (Layer settings can make
       // them follow the song). A project made from the file takes the file's timing.
       const own = !standalone;
       if (own) ownImportedTiming(converted, imported);
+      imported.forEach((lane, i) => {
+        lane.gpSource = { data: sources[i], part: `${importId}:${converted.editLanes[i].sourceTrackIndex}`,
+          timing: timingIdOf(lane), projection: gpProjectionSignature(lane) };
+      });
       S.state.editLanes = [...base, ...imported];
-      S.state.guitarPro = stored.guitarPro;
+      S.state.comments = [...(S.state.comments || []), ...textComments(imported, S.state.comments)];
+      dedupeIds();   // the same file again brings the same layer and note ids; the new copies get fresh ones
       syncTiming();   // live: the first imported layer's timing
       if (!own) { installImportedScoreBars(converted); applyImportedGrid(converted.grid); }
 

@@ -62,8 +62,9 @@ function projectBody() {
     ...(timingIdOf(l) !== SONG ? { timing: l.timing } : {}),   // absent: follows the song's timing
     ...normalizedLaneFields(l, Number(S.state.duration) || Infinity),
     ...(Number.isFinite(l.gmProgram) ? { gmProgram: l.gmProgram } : {}),
-    ...(Number.isFinite(l.sourceTrackIndex) ? { sourceTrackIndex: l.sourceTrackIndex } : {}),
-    ...(Number.isFinite(l.sourceStaffIndex) ? { sourceStaffIndex: l.sourceStaffIndex } : {}),
+    ...(l.gpSource ? { gpSource: l.gpSource } : {}),
+    ...(l.scoreText?.length ? { scoreText: l.scoreText } : {}),
+    ...(l.gpTrack ? { gpTrack: l.gpTrack } : {}),
     ...(Number.isFinite(l.capo) ? { capo: l.capo } : {}),
     ...(Number.isFinite(l.transpositionPitch) ? { transpositionPitch: l.transpositionPitch } : {}),
     ...(Number.isFinite(l.displayTranspositionPitch) ? { displayTranspositionPitch: l.displayTranspositionPitch } : {}),
@@ -84,7 +85,6 @@ function projectBody() {
     mix: normMix(S.state.mix),   // the two buses: all note layers, all audio layers
     projectStart: Number(S.state.projectStart) || 0,
     editLanes: S.state.editLanes.map(serialize),
-    ...(S.state.guitarPro ? { guitarPro: S.state.guitarPro } : {}),
     // The project's own grid, sections and bars are the SONG's timing — whichever
     // layer is active; layers with their own timing save theirs under `timings`.
     sectionMarkers: normalizeSectionMarkers(song.sectionMarkers || [], Number(S.state.duration) || Infinity),
@@ -295,8 +295,13 @@ export function mapLane(l, startAt = 0) {
         .sort((a, b) => a.t - b.t)
       : [],
     gmProgram: Number.isFinite(l.gmProgram) ? l.gmProgram : undefined,
-    sourceTrackIndex: Number.isFinite(l.sourceTrackIndex) ? l.sourceTrackIndex : undefined,
-    sourceStaffIndex: Number.isFinite(l.sourceStaffIndex) ? l.sourceStaffIndex : undefined,
+    // Its part of the Guitar Pro file it was imported from (guitar-pro-core.js
+    // packLaneSource). Older projects linked layers to one file kept with the
+    // project instead; those load as ordinary layers.
+    gpSource: typeof l.gpSource?.data === "string" ? l.gpSource : undefined,
+    // A file's text and chord names over rests: kept for the Guitar Pro export, not shown.
+    scoreText: Array.isArray(l.scoreText) && l.scoreText.length ? l.scoreText : undefined,
+    gpTrack: l.gpTrack && typeof l.gpTrack === "object" ? l.gpTrack : undefined,
     timing: typeof l.timing === "string" ? l.timing : undefined,
     capo: Number.isFinite(l.capo) ? l.capo : 0,
     transpositionPitch: Number.isFinite(l.transpositionPitch) ? l.transpositionPitch : 0,
@@ -372,7 +377,6 @@ export async function applyProject(data) {
     separator: data.separator,
     metadata: normalizeMetadata(data.metadata || {}),
     tuning: { estimate: null, reference: 0, shift: 0, ...data.tuning },   // cents from A440 (server.py _tuning)
-    guitarPro: data.guitarPro || null,
     sectionMarkers: restoredSections,
     comments: normalizeComments(data.comments),
     timings: loadTimings(data.timings, Number(data.songEnd) || Number(data.duration) || Number(data.scoreDuration),

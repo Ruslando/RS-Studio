@@ -4,6 +4,7 @@
 
 import { effectSignatureFields } from "./note-effects.js";
 import { defaultPinFlags } from "./voicing-core.js";
+import { whammyKind } from "./whammy.js";
 
 const GP_SCHEMA_VERSION = 2;
 const QUARTER_TICKS = 960;
@@ -18,48 +19,64 @@ function projectionHash(value) {
   return `fnv1a32:${(hash >>> 0).toString(16).padStart(8, "0")}:${text.length}`;
 }
 
-// Lightweight integrity marker for deciding whether the original alphaTab score
-// still represents the imported lanes. It is not a security hash; it catches
-// normal edits/additions/deletions so modern export never silently ignores them.
-export function gpProjectionSignature(lanes) {
-  const projection = lanes
-    .filter((lane) => lane.sourceTrackIndex != null)
-    .map((lane) => ({
-      sourceTrackIndex: lane.sourceTrackIndex,
-      sourceStaffIndex: lane.sourceStaffIndex,
-      name: lane.name,
-      gmProgram: lane.gmProgram,
-      // The strings are customTuning. The key naming them changes on load (mapLane
-      // finds "custom" E A D G B E is E Standard), and that is no edit.
-      tuning: "custom",
-      customTuning: lane.customTuning,
-      capo: lane.capo || 0,
-      notes: lane.notes.map((note) => ({
-        sourceNoteId: note.gp?.noteId ?? null,
-        start: note.start, end: note.end, pitch: note.pitch,
-        soundingPitch: note.soundingPitch ?? null,
-        string: note.pos?.string ?? null, fret: note.pos?.fret ?? null,
-        ...effectSignatureFields(note),
-      })),
-    }));
-  return projectionHash(projection);
+// Whether an imported layer still says what its source says. A layer that does
+// exports its source track untouched; otherwise its edits are written into it.
+// Not a security hash: it catches normal edits, additions and deletions.
+export function gpProjectionSignature(lane) {
+  return projectionHash({
+    name: lane.name,
+    gmProgram: lane.gmProgram,
+    // The strings are customTuning. The key naming them changes on load (mapLane
+    // finds "custom" E A D G B E is E Standard), and that is no edit.
+    customTuning: lane.customTuning,
+    capo: lane.capo || 0,
+    notes: lane.notes.map((note) => ({
+      sourceNoteId: note.gp?.noteId ?? null,
+      start: note.start, end: note.end, pitch: note.pitch,
+      soundingPitch: note.soundingPitch ?? null,
+      string: note.pos?.string ?? null, fret: note.pos?.fret ?? null,
+      ...effectSignatureFields(note),
+      ...(note.finger != null ? { finger: note.finger } : {}),
+    })),
+  });
 }
 
-// Fields we cannot yet apply safely to an existing alphaTab hierarchy. String,
-// fret, pitch, lane name/program, tuning and capo are deliberately excluded so
-// those non-structural edits can use modern export.
-export function gpStructuralSignature(lanes) {
-  return projectionHash(lanes
-    .filter((lane) => lane.sourceTrackIndex != null)
-    .map((lane) => ({
-      sourceTrackIndex: lane.sourceTrackIndex,
-      sourceStaffIndex: lane.sourceStaffIndex,
-      notes: lane.notes.map((note) => ({
-        sourceNoteId: note.gp?.noteId ?? null,
-        start: note.start, end: note.end,
-        ...effectSignatureFields(note),
-      })),
-    })));
+// An imported layer's source: its one staff of the file, with the file's bars and
+// everything the editor does not show (lyrics, notation, automations), as alphaTab
+// JSON, gzipped and base64'd so it is saved inside the layer. `full` is the file's
+// score as parsed JSON (JsonConverter.scoreToJson), made once per import.
+// ponytail: alphaTab's JSON is version-specific; a vendored alphaTab update must read the old one.
+// The file's texts as song comments (comments.js), over the highest note the beat
+// plays, or the note nearest in time on a rest. One already there is not added again.
+export function textComments(lanes, existing = []) {
+  const have = new Set(existing.map((c) => `${c.t}|${c.text}`));
+  const out = [];
+  for (const lane of lanes) for (const item of lane.scoreText || []) {
+    if (!item.text || !lane.notes.length || have.has(`${item.t}|${item.text}`)) continue;
+    const onBeat = lane.notes.filter((n) => Math.abs(n.start - item.t) < 1e-6);
+    const pitch = onBeat.length ? Math.max(...onBeat.map((n) => n.pitch))
+      : lane.notes.reduce((a, b) => Math.abs(b.start - item.t) < Math.abs(a.start - item.t) ? b : a).pitch;
+    have.add(`${item.t}|${item.text}`);
+    out.push({ id: `comment_gp_${Date.now().toString(36)}_${out.length}`, t: item.t, pitch, text: item.text });
+  }
+  return out;
+}
+
+export async function packLaneSource(full, trackIndex, staffIndex) {
+  const track = full.tracks[trackIndex];
+  const json = JSON.stringify({ ...full, tracks: [{ ...track, staves: [track.staves[staffIndex]] }] });
+  const zipped = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(zipped);
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+// The score packLaneSource saved: one track with one staff.
+export async function unpackLaneSource(alphaTab, data) {
+  const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+  const json = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+  return alphaTab.model.JsonConverter.jsonToScore(json, new alphaTab.Settings());
 }
 
 // Cache identity for the app-authored score preview. Unlike the import
@@ -70,8 +87,7 @@ export function scoreProjectionSignature(lanes) {
   return projectionHash((lanes || []).map((lane) => ({
     id: lane.id,
     tablatureEnabled: lane.tablatureEnabled !== false,
-    sourceTrackIndex: lane.sourceTrackIndex ?? null,
-    sourceStaffIndex: lane.sourceStaffIndex ?? null,
+    source: !!lane.gpSource,
     name: lane.name,
     instrument: lane.instrument,
     gmProgram: lane.gmProgram ?? null,
@@ -222,38 +238,25 @@ function instrumentFor(program, family) {
   return { instrument: "electric" };
 }
 
-function slideKind(note) {
-  if (note.slideInType === 1) return "inBelow";
-  if (note.slideInType === 2) return "inAbove";
-  if (note.slideOutType === 1) return "shift";
-  if (note.slideOutType === 2) return "legato";
-  if (note.slideOutType === 3) return "outUp";
-  if (note.slideOutType === 4) return "outDown";
-  return null;
-}
+// Where in its note a slide starts when Guitar Pro plays it: the file only says that
+// a note slides. Measured from alphaTab's own playback over real files
+// (tools/gp-audit): a slide out of the note moves in the last quarter, a slide onto
+// the next note in the second half. The export reverses it (guitar-pro-edit.js).
+export const GP_SLIDE_AT = { out: 0.75, next: 0.5 };
+export const gpSlideAt = (kind) => ["outUp", "outDown", "pickUp", "pickDown"].includes(kind) ? GP_SLIDE_AT.out : GP_SLIDE_AT.next;
+
+const SLIDE_INTO = { 1: "inBelow", 2: "inAbove" };
+const SLIDE_ON = { 1: "shift", 2: "legato", 3: "outUp", 4: "outDown", 5: "pickDown", 6: "pickUp" };
 
 function bendPreset(note) {
   if (!note.hasBend || !note.bendPoints?.length) return null;
   const peak = Math.max(...note.bendPoints.map((p) => Number(p.value) || 0));
-  if (note.bendType === 4 || note.bendType === 8) return "release";
+  if (note.bendType === 8) return "prebendRelease";
+  if (note.bendType === 4) return "release";   // the editor's "Bend & release"
+
   if (note.bendType === 6 || note.bendType === 7) return "prebend";
   if (peak >= 6) return "onehalf";
   return peak <= 2 ? "half" : "full";
-}
-
-// The imported curve, verbatim: alphaTab offsets 0..60 and quarter-tone values ->
-// the editor's [t, semitones]. The preset above is only a label; carrying the
-// real points is what lets a source file's hand-drawn bend survive a round trip
-// (and show up draggable on the spectrogram) instead of snapping to a preset.
-function bendCurvePoints(note) {
-  if (!note.hasBend || !note.bendPoints?.length) return null;
-  const pts = [];
-  for (const p of note.bendPoints) {
-    const point = [(Number(p.offset ?? p.position) || 0) / 60, (Number(p.value) || 0) / 2];
-    const last = pts[pts.length - 1];
-    if (!last || last[0] !== point[0] || last[1] !== point[1]) pts.push(point);
-  }
-  return pts.length >= 2 ? pts : null;
 }
 
 function compactPoint(point) {
@@ -319,7 +322,43 @@ function exactGpBeat(beat, track, staff, bar, voice) {
   return out;
 }
 
-function exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, tieSegments) {
+// What else the file says on a beat or note, beyond the editor's fields and the beat's
+// timing: every field that differs from a new one (alphaTab's own defaults), so the
+// export can write it back on a beat or note it builds anew (guitar-pro-edit.js
+// restoreFileExtras). Read from the object, not listed: a field a later alphaTab adds
+// is kept too.
+const BEAT_OWN = new Set(["id", "index", "voice", "notes", "noteStringLookup", "noteValueLookup", "previousBeat", "nextBeat",
+  "duration", "dots", "tupletNumerator", "tupletDenominator", "tupletGroup", "displayStart", "playbackStart", "displayDuration",
+  "playbackDuration", "absolutePlaybackStart", "absoluteDisplayStart", "graceType", "graceGroup", "graceIndex", "isEmpty",
+  "maxNote", "minNote", "maxStringNote", "minStringNote", "onNotes", "tap", "slap", "pop",
+  "brushDuration", "whammyBarType", "whammyStyle", "isContinuedWhammy", "whammyBarPoints", "maxWhammyPoint", "minWhammyPoint",
+  "tremoloPicking", "text", "chordId", "automations", "effectSlurOrigin", "effectSlurDestination", "isEffectSlurOrigin",
+  "isLetRing", "isPalmMute", "fermata", "isLegatoDestination"]);
+const NOTE_OWN = new Set(["id", "index", "beat", "string", "fret", "octave", "tone", "realValue", "realValueWithoutHarmonic",
+  "displayValue", "displayValueWithoutBend", "isDead", "isGhost", "isLetRing", "isPalmMute", "isStaccato", "vibrato", "accentuated",
+  "isHammerPullOrigin", "isHammerPullDestination", "hammerPullOrigin", "hammerPullDestination", "slideInType", "slideOutType",
+  "slideTarget", "slideOrigin", "harmonicType", "harmonicValue", "hasBend", "bendType", "bendStyle", "bendPoints", "maxBendPoint",
+  "bendOrigin", "isContinuedBend", "trillValue", "trillSpeed", "isTieDestination", "tieOrigin", "tieDestination", "isTieOrigin",
+  "effectSlur", "hasEffectSlur", "isEffectSlurOrigin", "isEffectSlurDestination", "effectSlurOrigin", "effectSlurDestination",
+  "slurOrigin", "slurDestination", "isSlurDestination", "isSlurOrigin", "letRingDestination", "palmMuteDestination",
+  "chord", "lyrics"]);
+// ponytail: port and channels stay the export's: two layers from two files could clash on them.
+const TRACK_OWN = new Set(["index", "score", "staves", "playbackInfo", "color", "name", "percussionArticulations", "systemsLayout", "lyrics"]);
+const CHORD_OWN = new Set(["name", "staff"]);
+const PLAYBACK_OWN = new Set(["program", "port", "primaryChannel", "secondaryChannel"]);
+const STAFF_OWN = new Set(["index", "track", "bars", "chords", "stringTuning", "capo", "transpositionPitch", "displayTranspositionPitch", "isPercussion"]);
+export function fileExtras(object, own) {
+  const fresh = new object.constructor(), out = {};
+  for (const key of Object.keys(object)) {
+    if (own.has(key)) continue;
+    const value = object[key];
+    if (Array.isArray(value) ? value.length && value.every((v) => v == null || typeof v !== "object") && JSON.stringify(value) !== JSON.stringify(fresh[key])
+      : (value == null || typeof value !== "object") && !Object.is(value, fresh[key])) out[key] = Array.isArray(value) ? [...value] : value;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, tieSegments, effects) {
   const out = {
     track: track.index,
     staff: staff.index,
@@ -341,12 +380,23 @@ function exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, t
     // the editor-facing projection.  Export can then distinguish "untouched"
     // from "the user cleared this effect" without rewriting custom source
     // curves merely because the editor showed their nearest preset.
-    editorEffects: editorEffects(note, beat),
+    editorEffects: effects,
   };
   const put = (key, value, defaultValue) => {
     if (value !== undefined && value !== null && !Object.is(value, defaultValue)) out[key] = value;
   };
   if (tieSegments.length > 1) out.tieSegments = tieSegments;
+  // A grace note plays before its beat; the export writes it back as one (guitar-pro-edit.js).
+  if (beat.graceType) { out.graceType = beat.graceType; out.graceDuration = beat.duration; }
+  // A strum written as a brush goes back out as one (guitar-pro-edit.js applyEditorEffects).
+  if (beat.brushType) { out.brushType = beat.brushType; out.brushDuration = beat.brushDuration; }
+  const beatExtras = fileExtras(beat, BEAT_OWN), noteExtras = fileExtras(note, NOTE_OWN);
+  if (beatExtras) out.beatExtras = beatExtras;
+  if (noteExtras) out.noteExtras = noteExtras;
+  // The chord's diagram, beside its name (the frets, where it starts, its barre).
+  if (beat.chord) { const diagram = fileExtras(beat.chord, CHORD_OWN); if (diagram) out.chordDiagram = { ...diagram, name: beat.chord.name }; }
+  // A tuplet other than the triplet the export writes by default (a 6:4, a 5:4).
+  if (beat.tupletNumerator > 0) out.tuplet = [beat.tupletNumerator, beat.tupletDenominator];
   for (const [key, value, defaultValue] of [
     ["accentuated", note.accentuated, 0], ["bendType", note.bendType, 0],
     ["bendStyle", note.bendStyle, 0], ["harmonicType", note.harmonicType, 0],
@@ -370,7 +420,11 @@ function exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, t
   return out;
 }
 
-function editorEffects(note, beat) {
+// A tied note is one note in the editor, so what Guitar Pro writes on its tied
+// parts belongs to it too: `chain` is every part, { note, beat, from, to } with
+// from/to the part's place in the whole note (0..1). A slide-out sits on the last
+// part, vibrato or a whammy may start on a later one.
+function editorEffects(note, beat, chain = [{ note, beat, from: 0, to: 1 }]) {
   const out = {};
   const fx = {};
   // WHICH END OF THE HAMMER THIS IS, not just that there is one. Both roles used to
@@ -384,61 +438,160 @@ function editorEffects(note, beat) {
   // in edit.js, the `!!fx.hammer` write-back in guitar-pro-edit.js and tab.py's
   // `if fx.get(key)` all see what they saw before. A hammer the USER turns on stays
   // plain `true` — the app has no way to author a role and should not invent one.
-  if (note.isHammerPullOrigin && note.isHammerPullDestination) fx.hammer = "both";
-  else if (note.isHammerPullOrigin) fx.hammer = "origin";
+  const tail = chain.at(-1).note, origin = tail.isHammerPullOrigin;
+  if (origin && note.isHammerPullDestination) fx.hammer = "both";
+  else if (origin) fx.hammer = "origin";
   else if (note.isHammerPullDestination) fx.hammer = "dest";
   if (note.isPalmMute) fx.palmMute = true;
   if (note.isGhost) fx.ghost = true;
   if (note.isLetRing) fx.letRing = true;
-  if (note.vibrato) fx.vibrato = true;
+  const vibrato = chain.find((part) => part.note.vibrato);
+  if (vibrato) { fx.vibrato = true; if (vibrato.from > 1e-6) out.vibratoStart = vibrato.from; }
   if (note.isStaccato) fx.staccato = true;
   if (note.accentuated) fx.accent = true;
   if (note.isDead) fx.dead = true;
   if (Object.keys(fx).length) out.fx = fx;
-  const slide = slideKind(note); if (slide) out.slide = slide;
-  const bend = bendPreset(note);
-  if (bend) { out.bend = bend; const pts = bendCurvePoints(note); if (pts) out.bendPoints = pts; }
+  const into = SLIDE_INTO[note.slideInType], on = chain.findLast((part) => SLIDE_ON[part.note.slideOutType]);
+  if (on) {
+    out.slide = SLIDE_ON[on.note.slideOutType];
+    // In the part that slides (a later tied part, or the whole note), where the player starts it.
+    out.slideStart = on.from + gpSlideAt(out.slide) * (on.to - on.from);
+    if (into) out.slideIn = into;
+  } else if (into) out.slide = into;
+  // A bend runs over the parts it is written on and holds after (a bend on the first
+  // part only bends during that part); later parts can hold or release it.
+  const bent = chain.find((part) => part.note.hasBend && part.note.bendPoints?.length);
+  const bendPoints = bent && chainCurve(chain, (part) => part.note.hasBend ? part.note.bendPoints : null);
+  if (bendPoints) { out.bend = bendPreset(bent.note) || "custom"; out.bendPoints = bendPoints; }
+  // The file's fretting finger is the note's typed finger (laid over the engine's own).
+  if (note.fret > 0 && note.leftHandFinger >= 0 && note.leftHandFinger <= 4) out.finger = note.leftHandFinger;
   if (note.harmonicType === 1) out.harmonic = "natural";
   else if (note.harmonicType === 3) out.harmonic = "pinch";
+  else if (note.harmonicType === 2) out.harmonic = "artificial";
+  const decorated = chain.find((p) => p.note.ornament);
+  if (decorated) out.ornament = { 1: "invertedTurn", 2: "turn", 3: "upperMordent", 4: "lowerMordent" }[decorated.note.ornament];
   if (note.trillValue >= 0) out.trill = note.trillValue - note.fret >= 2 ? "whole" : "half";
   const tremoloDuration = beat.tremoloPicking?.getDuration?.(beat.duration);
   if ([8, 16, 32].includes(tremoloDuration)) out.tremPick = String(tremoloDuration);
-  if (beat.tap) out.slap = "tap";
+  if (beat.tap || chain.some((p) => p.note.isLeftHandTapped)) out.slap = "tap";
   else if (beat.slap) out.slap = "slap";
   else if (beat.pop) out.slap = "pop";
-  if (beat.pickStroke === 1) out.stroke = "up";
-  else if (beat.pickStroke === 2) out.stroke = "down";
-  if (beat.whammyBarType === 3) out.whammy = "dip";
-  else if (beat.whammyBarType === 2) out.whammy = "dive";
+  if (chain.some((p) => p.beat.deadSlapped)) {
+    out.slap = "slap";
+    out.fx = { ...out.fx, dead: true };
+  }
+  // Strum directions stay in the Guitar Pro data, outside the editor's effects.
+  const whammy = whammyPoints(chain);
+  if (whammy) { out.whammy = whammyKind(whammy); out.whammyPoints = whammy; }
+  return out;
+}
+
+// The whammy over the whole note, from every part's curve; null when there is none.
+const whammyPoints = (chain) => chainCurve(chain, (part) => part.beat.whammyBarPoints);
+
+// One curve over the whole note from each part's own points (offsets 0..60, values
+// in quarter-tones), as [t, semitones]; null when it never leaves 0.
+function chainCurve(chain, pointsOf) {
+  const points = [[0, 0]];   // nothing before the first part that has points
+  for (const part of chain) {
+    const { from, to } = part;
+    const own = (pointsOf(part) || []).map((p) =>
+      [from + (Number(p.offset ?? p.position) || 0) / 60 * (to - from), (Number(p.value) || 0) / 2]);
+    // A part's curve holds its first value from the part's start (a continued dive starts down).
+    if (own.length && own[0][0] > from + 1e-6) own.unshift([from, own[0][1]]);
+    points.push(...own);
+  }
+  if (points.every(([, v]) => Math.abs(v) < 1e-6)) return null;
+  if (points.length > 1 && points[1][0] < 1e-6) points.shift();
+  return points.filter((p, i) => !i || p[0] !== points[i - 1][0] || p[1] !== points[i - 1][1]);
+}
+
+// What Guitar Pro marks on one tied part, which the editor marks once for the whole
+// note: kept so the export writes each part as the file had it (guitar-pro-edit.js).
+function partFlags(note) {
+  const out = {};
+  for (const [key, on] of [["letRing", note.isLetRing], ["palmMute", note.isPalmMute],
+    ["dead", note.isDead], ["ghost", note.isGhost], ["staccato", note.isStaccato],
+    ["bend", note.hasBend]]) if (on) out[key] = true;
+  if (note.accentuated) out.accent = note.accentuated;   // how strong
+  if (note.trillValue >= 0) { out.trillValue = note.trillValue; out.trillSpeed = note.trillSpeed; }
+  // The part's own beat and note details (lyrics and dynamics on a tied beat, a finger).
+  const beatExtras = fileExtras(note.beat, BEAT_OWN), noteExtras = fileExtras(note, NOTE_OWN);
+  if (beatExtras) out.beatExtras = beatExtras;
+  if (noteExtras) out.noteExtras = noteExtras;
+  if (note.vibrato) out.vibrato = note.vibrato;   // its width (slight, wide)
+  if (note.harmonicType) out.harmonicType = note.harmonicType;
+  if (note.slideOutType) out.slideOutType = note.slideOutType;
+  if (note.slideInType) out.slideInType = note.slideInType;
   return out;
 }
 
 function tiedEnd(note) {
-  const segments = [];
+  const segments = [], chain = [];
   let tail = note, endTick = note.beat.absolutePlaybackStart + note.beat.playbackDuration;
   const seen = new Set();
   while (tail && !seen.has(tail.id)) {
     seen.add(tail.id);
+    chain.push(tail);
     segments.push({ noteId: tail.id, beatId: tail.beat.id, bar: tail.beat.voice.bar.index,
       voice: tail.beat.voice.index, startTick: tail.beat.absolutePlaybackStart,
-      durationTicks: tail.beat.playbackDuration });
+      durationTicks: tail.beat.playbackDuration, ...partFlags(tail) });
     endTick = Math.max(endTick, tail.beat.absolutePlaybackStart + tail.beat.playbackDuration);
     tail = tail.isTieOrigin ? tail.tieDestination : null;
   }
-  return { endTick, segments };
+  return { endTick, segments, chain };
 }
+
+export const GM_GUITARS = ["Nylon Guitar", "Steel Guitar", "Jazz Guitar", "Clean Guitar", "Muted Guitar",
+  "Overdriven Guitar", "Distortion Guitar", "Guitar Harmonics", "Acoustic Bass", "Fingered Bass",
+  "Picked Bass", "Fretless Bass", "Slap Bass 1", "Slap Bass 2", "Synth Bass 1", "Synth Bass 2"];
+// A tone switch for each instrument change in the file. Its key names no preset of
+// the sound library on purpose: the file cannot know which tones the user has, so the
+// switch shows as "Tone preset missing" (marker-artifacts.js) until the user picks one.
+function toneSwitches(track, staff, timeline) {
+  const key = (program) => `guitar pro: ${GM_GUITARS[program - 24] || `program ${program}`}`;
+  const changes = [];
+  let current = track.playbackInfo?.program ?? 0;
+  for (const bar of staff.bars || []) for (const beat of bar.voices?.[0]?.beats || [])
+    for (const automation of beat.automations || []) {
+      if (automation.type !== 2 /* AutomationType.Instrument */ || automation.value === current) continue;
+      current = automation.value;
+      changes.push({ t: tickToSeconds(beat.absolutePlaybackStart, timeline), program: current });
+    }
+  if (!changes.length) return [];   // one sound throughout: the app's start tone is as good a guess
+  return [{ t: 0, program: track.playbackInfo?.program ?? 0 }, ...changes]
+    .map(({ t, program }, i) => ({ id: `tone_gp_${i}`, t, tone: key(program), gpProgram: program }));
+}
+
+// As the file spells it (♯, ♭): Rocksmith gets # and b (rocksmith/chart.py _chord_name).
+const chordNameOf = (beat) => beat.chord?.name || "";
 
 function staffLane(track, staff, classification, timeline, laneNumber, beatRecords) {
   const tuning = [...(staff.stringTuning?.tunings || [])];
-  const notes = [];
+  const notes = [], scoreText = [];
   for (const bar of staff.bars || []) for (const voice of bar.voices || []) {
     if (voice.isEmpty) continue;
     for (const beat of voice.beats || []) {
       beatRecords.push(exactGpBeat(beat, track, staff, bar, voice));
+      // Text, and a chord name over a rest: nothing in the editor to hang them on.
+      const restLyrics = !beat.notes.length && beat.lyrics?.some((l) => l) ? beat.lyrics : null;
+      if (beat.text || (chordNameOf(beat) && !beat.notes.length) || restLyrics)
+        scoreText.push({ t: tickToSeconds(beat.absolutePlaybackStart, timeline), voice: voice.index,
+          ...(beat.text ? { text: beat.text } : {}), ...(chordNameOf(beat) && !beat.notes.length ? { chord: chordNameOf(beat) } : {}),
+          ...(restLyrics ? { lyrics: [...restLyrics] } : {}) });
+      // The file's chord name, given to these tones (chord-names.js setChordName).
+      const chordName = chordNameOf(beat);
+      const chordNameFor = [...new Set(beat.notes.filter((n) => !n.isDead).map((n) => n.realValueWithoutHarmonic))]
+        .sort((a, b) => a - b).join(",");
       for (const note of beat.notes || []) {
       if (note.isTieDestination) continue; // represented by the origin's exact tieSegments
       const startTick = beat.absolutePlaybackStart;
-      const { endTick, segments } = tiedEnd(note);
+      const { endTick, segments, chain } = tiedEnd(note);
+      const startSeconds = tickToSeconds(startTick, timeline), endSeconds = tickToSeconds(endTick, timeline);
+      const at = (tick) => endSeconds > startSeconds ? (tickToSeconds(tick, timeline) - startSeconds) / (endSeconds - startSeconds) : 0;
+      const parts = chain.map((part) => ({ note: part, beat: part.beat, from: at(part.beat.absolutePlaybackStart),
+        to: at(part.beat.absolutePlaybackStart + part.beat.playbackDuration) }));
+      const effects = editorEffects(note, beat, parts);
       // alphaTab numbers internal strings low-to-high (1 = lowest), while the
       // editor and GP5 adapter use 0 = highest. Do not use note.string - 1 here.
       const editorString = tuning.length - note.string;
@@ -450,8 +603,9 @@ function staffLane(track, staff, classification, timeline, laneNumber, beatRecor
         pitch: basePitch,
         soundingPitch: note.realValue,
         pos: { string: editorString, fret: note.fret, scope: "local", ...defaultPinFlags() },
-        ...editorEffects(note, beat),
-        gp: exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, segments),
+        ...effects,
+        ...(chordName ? { chordName, chordNameFor } : {}),
+        gp: exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, segments, effects),
       });
     }
     }
@@ -476,6 +630,11 @@ function staffLane(track, staff, classification, timeline, laneNumber, beatRecor
     volume: 1,
     muted: false,
     tablatureEnabled: true,
+    toneMarkers: toneSwitches(track, staff, timeline),
+    // The track's own settings (its short name, mixer, how the staff is shown), for an
+    // export that writes the layer from its notes.
+    gpTrack: { track: fileExtras(track, TRACK_OWN), playback: fileExtras(track.playbackInfo, PLAYBACK_OWN), staff: fileExtras(staff, STAFF_OWN) },
+    ...(scoreText.length ? { scoreText } : {}),
     sourceTrackIndex: track.index,
     sourceStaffIndex: staff.index,
     notes,
@@ -491,6 +650,7 @@ function compactMasterBars(score, timeline) {
     timeSignatureDenominator: bar.timeSignatureDenominator,
     keySignature: bar.keySignature,
     keySignatureType: bar.keySignatureType,
+    isDoubleBar: !!bar.isDoubleBar,
     isRepeatStart: !!bar.isRepeatStart,
     repeatCount: bar.repeatCount,
     alternateEndings: bar.alternateEndings,
@@ -575,8 +735,6 @@ export function convertGpScore(score, selectedTrackIndexes, alphaTabVersion = ""
       tempo: score.tempo, durationSeconds: duration, masterBars, beats: beatRecords,
     },
   };
-  guitarPro.projectionSignature = gpProjectionSignature(lanes);
-  guitarPro.structuralSignature = gpStructuralSignature(lanes);
   return {
     name: score.title || "Imported Guitar Pro",
     duration,

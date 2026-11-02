@@ -7,6 +7,7 @@
 // Results are listed for the active layer in the artifact pane under Errors and
 // Warnings, with the editor's own note problems (note-issues.js) and the flags'
 // (design.md 10), and framed on the stage around the notes they concern.
+import { issueTone, toneRank } from './issue-tone.js';
 import { $, scroll } from './dom.js';
 import { S } from './store.js';
 import { buildSpecForLanesAsync, laneFretCount, laneFretTuning, laneTuning } from './tablature.js';
@@ -30,7 +31,7 @@ const clock = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, '0')
 
 let results = new Map();          // lane id -> { issues, warnings, error }
 let lastKey = null, timer = 0, inFlight = null;
-const lists = new Map();         // 'error' | 'warning' -> { list, count, head, body, shown }
+const lists = new Map();         // 'error' | 'warning' | 'note' -> { list, count, head, body, shown }
 
 // Layers the export would offer with their own arrangement.
 const checkedLanes = () => (S.state?.editLanes || []).filter(lane =>
@@ -156,25 +157,25 @@ export function rocksmithShapeProblems(lane) {
 function rowsFor(lane) {
   const found = results.get(lane?.id);
   const rows = [];
-  if (found?.error) rows.push({ key: 'not-exported', title: `Not exported: ${found.error}`, help: '', important: true, time: null });
-  for (const text of found?.warnings || []) rows.push({ key: text, title: text, help: '', important: false, time: null });
-  for (const issue of found?.issues || []) rows.push({ ...issue, key: issue.code });
+  if (found?.error) rows.push({ key: 'not-exported', title: `Not exported: ${found.error}`, help: '', tone: 'error', time: null });
+  for (const text of found?.warnings || []) rows.push({ key: text, title: text, help: '', tone: 'warning', time: null });
+  for (const issue of found?.issues || []) rows.push({ ...issue, tone: issueTone(issue), key: issue.code });
   if (lane) for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision))
-    rows.push({ key: issue.title, title: issue.title, help: issue.help, important: issue.tone === 'error', time: issue.time });
+    rows.push({ key: issue.title, title: issue.title, help: issue.help, tone: issue.tone, time: issue.time });
   // ponytail: flags are only built for the active layer, so another layer's flag problems are not here.
   for (const entry of markerArtifacts()) if (entry.issue && entry.lane === lane)
-    rows.push({ key: `flag-${entry.kind}`, title: entry.issue.title, help: entry.issue.help, important: entry.issue.tone === 'error', time: entry.t });
+    rows.push({ key: `flag-${entry.kind}`, title: entry.issue.title, help: entry.issue.help, tone: entry.issue.tone, time: entry.t });
   return rows.sort((a, b) => (a.time ?? -1) - (b.time ?? -1));
 }
 
 // Every problem the pane lists for these layers, by kind: what the export
-// window asks to fix or ignore before it exports. key -> { title, help, count, important }.
+// window asks to fix or ignore before it exports. key -> { title, help, count, tone }.
 export function rocksmithIssueKinds(lanes) {
   const kinds = new Map();
   for (const lane of lanes) for (const row of rowsFor(lane)) {
-    const seen = kinds.get(row.key) || { title: row.title, help: row.help || '', count: 0, important: false };
+    const seen = kinds.get(row.key) || { title: row.title, help: row.help || '', count: 0, tone: 'note' };
     seen.count += 1;
-    seen.important ||= !!row.important;
+    if (toneRank[row.tone] > toneRank[seen.tone]) seen.tone = row.tone;
     kinds.set(row.key, seen);
   }
   return kinds;
@@ -190,11 +191,12 @@ function moveTo(t) {
 function issueRow(entry) {
   const row = document.createElement('li');
   row.className = 'artifact-row artifact-marker-row artifact-issue-row';
-  row.toggleAttribute('data-important', !!entry.important);
+  row.toggleAttribute('data-important', entry.tone === 'error');
+  row.dataset.tone = entry.tone;
   row.dataset.tip = entry.help ? `${entry.title}\n${entry.help}` : entry.title;
-  row.dataset.tipTone = entry.important ? 'error' : 'warning';
-  row.setAttribute('aria-description', `${entry.important ? 'Error' : 'Warning'}: ${row.dataset.tip}`);
-  const mark = document.createElement('span'); mark.className = 'artifact-issue-mark'; mark.innerHTML = icon('warning', 14);
+  row.dataset.tipTone = entry.tone;
+  row.setAttribute('aria-description', `${entry.tone[0].toUpperCase() + entry.tone.slice(1)}: ${row.dataset.tip}`);
+  const mark = document.createElement('span'); mark.className = 'artifact-issue-mark'; mark.innerHTML = icon(entry.tone === 'note' ? 'info' : 'warning', 14);
   const copy = document.createElement('div'); copy.className = 'artifact-copy';
   const name = document.createElement('span'); name.className = 'artifact-name'; name.textContent = entry.title;
   copy.append(name);
@@ -220,7 +222,7 @@ export function renderRocksmithIssues() {
   const lane = S.state?.editLanes.find(item => item.active);
   const rows = S.state ? rowsFor(lane) : [];
   for (const [tone, section] of lists) {
-    const mine = rows.filter(row => !!row.important === (tone === 'error'));
+    const mine = rows.filter(row => row.tone === tone);
     const key = JSON.stringify([lane?.id, mine]);
     if (key === section.shown) continue;
     section.shown = key;
@@ -254,7 +256,7 @@ function issueSection(tone, label) {
 export function initRocksmithIssues() {
   // First in the pane: what stops a clean export matters before what indexes the song.
   $('artifactsContent').querySelector('.artifact-sections').prepend(
-    ...issueSection('error', 'Errors'), ...issueSection('warning', 'Warnings'));
+    ...issueSection('error', 'Errors'), ...issueSection('warning', 'Warnings'), ...issueSection('note', 'Notes'));
   const reset = () => {
     inFlight?.abort(); clearTimeout(timer);
     results = new Map(); lastKey = null;

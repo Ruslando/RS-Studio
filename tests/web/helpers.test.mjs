@@ -107,7 +107,9 @@ import { fmtTime, followerTrim, isAudioFile, isGuitarProFile, noteName, noteToMi
   const seven = kindsOf(Array.from({ length: 7 }, () => g()));
   assert.deepEqual(seven, ["lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm", "none"], "past the six guitar parts a layer is not exported");
   // The staves of one Guitar Pro track are one part.
-  assert.deepEqual(kindsOf([g({ sourceTrackIndex: 0 }), g({ sourceTrackIndex: 0 }), g({ sourceTrackIndex: 1 })]), ["lead", "lead", "rhythm"]);
+  const part = (p) => ({ gpSource: { data: "", part: p } });
+  assert.deepEqual(kindsOf([g(part("a:0")), g(part("a:0")), g(part("a:1")), g(part("b:0"))]), ["lead", "lead", "rhythm", "alt_lead"],
+    "track 0 of another file is another part");
   const settled = [g(), b()];
   assert.equal(assignRsKinds(settled, (lane) => lane.strings), true);
   assert.equal(assignRsKinds(settled, (lane) => lane.strings), false, "nothing to do the second time");

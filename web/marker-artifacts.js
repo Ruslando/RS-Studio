@@ -64,7 +64,7 @@ export function markerArtifacts() {
         key: `anchor:${lane.id}:${index}`, kind: 'anchor', lane, owner: lane.name,
         marker, t: marker.t, name: `${lost ? '⚠ ' : ''}Fret ${fret}${lost ? " · can't reach" : ''}`,
         // Listed again under Errors (rocksmith-check.js), where every problem goes.
-        issue: lost ? { tone: 'error', title: `Hand anchor on fret ${fret} can't reach its note`,
+        issue: lost ? { tone: 'warning', title: `Hand anchor on fret ${fret} can't reach its note`,
           help: 'The hand cannot play the note there, so the anchor is ignored. Move it or choose another fret.' } : null,
       });
     });

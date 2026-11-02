@@ -5,7 +5,7 @@
 import { placeFloating } from './floating-position.js';
 import { icon } from './icons.js';
 
-const TONES = { error: 'Error', warning: 'Warning' };
+const TONES = { error: 'Error', warning: 'Warning', note: 'Note' };
 
 const DELAY_MS = 400;
 let tip = null, timer = 0, shownText = '', owner = null;
@@ -29,7 +29,7 @@ function fill(blocks) {
       const kind = document.createElement('div');
       kind.className = 'app-tooltip-kind';
       kind.dataset.tone = tone;
-      kind.innerHTML = icon('warning', 14);
+      kind.innerHTML = icon(tone === 'note' ? 'info' : 'warning', 14);
       kind.append(TONES[tone]);
       part.append(kind);
     }

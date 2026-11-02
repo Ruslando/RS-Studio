@@ -27,6 +27,7 @@ export function normalizeScoreBars(bars, duration = 0) {
       timeSignatureDenominator: Math.max(1, Number(bar.timeSignatureDenominator) || 4),
       keySignature: Math.max(-7, Math.min(7, Number(bar.keySignature) || 0)),
       keySignatureType: Number(bar.keySignatureType) === 1 ? 1 : 0,
+      isDoubleBar: !!bar.isDoubleBar,
       isRepeatStart: !!bar.isRepeatStart, repeatCount: Math.max(0, Number(bar.repeatCount) || 0),
       alternateEndings: Math.max(0, Number(bar.alternateEndings) || 0),
       section: bar.section ? { marker: String(bar.section.marker || ""), text: String(bar.section.text || "") } : null,

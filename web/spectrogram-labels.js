@@ -32,7 +32,7 @@ export function resolveNoteAppearance(options, hovered = false) {
 }
 
 export function edgeSlide(slide) {
-  const glyph = { inBelow: '↗', inAbove: '↘', outDown: '↘', outUp: '↗' }[slide];
+  const glyph = { inBelow: '↗', inAbove: '↘', outDown: '↘', outUp: '↗', pickDown: '↘', pickUp: '↗' }[slide];
   return glyph ? { glyph, side: slide.startsWith('in') ? 'left' : 'right' } : null;
 }
 

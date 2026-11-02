@@ -3,11 +3,8 @@ export const tremoloStep = (n, bpm = 120) => ["8", "16", "32"].includes(n?.tremP
   ? 240 / ((bpm || 120) * Number(n.tremPick)) : 0;
 
 export function strumOffset(n, column, duration = n.end - n.start) {
-  if (!n.stroke) return 0;
-  const order = [...column].sort((a, b) => a.pitch - b.pitch);
-  const rank = order.indexOf(n);
-  return Math.min(0.04, 0.12 / Math.max(1, order.length - 1), duration / Math.max(2, order.length * 2))
-    * (n.stroke === "up" ? order.length - 1 - rank : rank);
+  // Legacy projects may carry a stroke; the editor no longer interprets it.
+  return 0;
 }
 
 export function hammerLink(a, b) {

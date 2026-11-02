@@ -424,6 +424,7 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .app-tooltip-title { color: var(--text); font-weight: 600; }
 .app-tooltip-kind { display: flex; align-items: center; gap: 4px; font-size: var(--text-caption); color: var(--label); }
 .app-tooltip-kind svg { color: var(--warn); }
+.app-tooltip-kind[data-tone="note"] svg { color: var(--accent); }
 .app-tooltip-kind[data-tone="error"] svg { color: var(--error); }
 .app-tooltip-block + .app-tooltip-block { margin-top: var(--s-sibling); padding-top: var(--s-sibling);
                     border-top: 1px solid var(--line); }
@@ -654,6 +655,7 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 /* A Rocksmith issue (rocksmith-check.js): a marker row led by a warning triangle
    instead of a flag; the sentence that explains it is its tooltip (3, rule 19). */
 .artifact-issue-mark { display: inline-flex; flex: none; color: var(--warn); }
+.artifact-issue-row[data-tone="note"] .artifact-issue-mark { color: var(--accent); }
 .artifact-issue-row[data-important] .artifact-issue-mark { color: var(--error); }
 .artifact-issue-row .artifact-copy { justify-content: center; }
 .artifact-issue-row .artifact-name {

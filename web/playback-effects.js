@@ -1,6 +1,6 @@
 // Sample articulations. Times remain in song seconds until the audio scheduler.
 import { hammerLink, letRingEnd, strumOffset, tremoloStep } from "./articulations.js";
-import { noteOffsetAt, slideTargets, trillOffsetAt } from "./bend.js";
+import { noteOffsetAt, slideTargets, trillOffsetAt, ornamentOffsetAt } from "./bend.js";
 
 import { whammyAt } from "./whammy.js";
 import { fxOn } from "./note-effects.js";
@@ -22,7 +22,7 @@ export function articulation(n) {
 // Natural harmonics use the touched fret's node. At the octave fret the heard
 // pitch is already the written pitch; a pinch is approximated by its octave.
 export function harmonicOffset(n) {
-  if (n.harmonic === "pinch") return 12;
+  if (["pinch", "artificial"].includes(n.harmonic)) return 12;
   if (n.harmonic !== "natural") return 0;
   const fret = n.pos?.fret;
   const partial = { 3: 7, 4: 5, 5: 4, 7: 3, 9: 5, 12: 2, 16: 5, 19: 3, 24: 4 }[fret];
@@ -34,9 +34,9 @@ export function eventOffsetAt(event, sec) {
   const seg = event.segments.find((s) => t < s.end - 1e-8) || event.segments.at(-1);
   const n = seg.note, local = Math.max(0, t - n.start), own = n.end - n.start;
   const u = own > 0 ? Math.min(1, local / own) : 0;
-  const whammy = whammyAt(n.whammy, u);
+  const whammy = whammyAt(n, u);
   const trill = trillOffsetAt(n, local, seg.bpm);
-  return n.pitch - event.pitch + harmonicOffset(n) + whammy + trill
+  return n.pitch - event.pitch + harmonicOffset(n) + whammy + trill + ornamentOffsetAt(n, local, seg.bpm)
     + noteOffsetAt(n, local, own, seg.slide);
 }
 

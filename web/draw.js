@@ -1,6 +1,7 @@
 import { paintIntensity } from './spectrogram-intensity.js';
 import { paintBarNumber, paintNoteRow } from './timeline-paint.js';
 import { createOverview } from './overview.js';
+import { issueTone } from "./issue-tone.js";
 import { ISSUE_TEXT, laneIssues } from "./note-issues.js";
 import { hideTooltip, showTooltip } from "./tooltip.js";
 import { rocksmithIssueNotes, rocksmithShapeProblems } from "./rocksmith-check.js";
@@ -12,7 +13,8 @@ import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGho
 
 import { bendCurve, bendPeak } from "./bend.js";
 import { BEND_HANDLE_R, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
-import { bendHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, noteRibbon, slideFretsHandle, regionEdgeAt } from "./note-render.js";
+import { pitchCurve } from "./whammy.js";
+import { bendHandles, curveHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, legatoTargets, noteRibbon, slideFretsHandle, regionEdgeAt } from "./note-render.js";
 import { editorEl, minimap, overviewRuler, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
 import { hideNoteMenu } from "./edit.js";
@@ -44,6 +46,7 @@ import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from
 const omittedArrangementCache = new WeakMap();
 const staleCache = new WeakMap(), staleJobs = new WeakMap();
 const STALE_DELAY = 700;   // ms after edits settle, like the Rocksmith check
+const FLAT = [[0, 0], [1, 0]];   // a curve that stays on the note's row
 
 // Kept positions the engine would place elsewhere today (staleKept): one whole-lane
 // pass in a worker, started once edits settle, reused until the next edit.
@@ -128,23 +131,23 @@ function drawOmittedNoteCrosses(items) {
   sctx.restore();
 }
 
-// A hatched red overlay, deliberately unlike the dark crossed-out wash that
+// A hatched warning overlay, deliberately unlike the dark crossed-out wash that
 // marks a note the arrangement drops on purpose: this one is not a choice, and
-// it is an error (note-issues.js).
+// it loses a note on export (note-issues.js).
 function drawOutOfRangeNotes(items) {
   sctx.save();
   for (const { x, y, w, h, alpha } of items) {
     sctx.globalAlpha = alpha;
     sctx.save();
     sctx.beginPath(); sctx.rect(x, y, w, h); sctx.clip();
-    sctx.fillStyle = hexA(PAINT.error, 0.22);
+    sctx.fillStyle = hexA(PAINT.warn, 0.22);
     sctx.fillRect(x, y, w, h);
-    sctx.lineWidth = 1.5; sctx.strokeStyle = hexA(PAINT.error, 0.85);
+    sctx.lineWidth = 1.5; sctx.strokeStyle = hexA(PAINT.warn, 0.85);
     sctx.beginPath();
     for (let o = -h; o < w; o += 5) { sctx.moveTo(x + o, y + h); sctx.lineTo(x + o + h, y); }
     sctx.stroke();
     sctx.restore();
-    sctx.lineWidth = 1.5; sctx.strokeStyle = PAINT.error;
+    sctx.lineWidth = 1.5; sctx.strokeStyle = PAINT.warn;
     sctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
   }
   sctx.restore();
@@ -199,10 +202,12 @@ function traceBendPath(x, w, ym, pts, rowH) {
 
 // Screen positions of a note's bend control points, in world px. Shared with
 // interaction.js, which hit-tests these to drag / add / remove them.
-// Handles for the selected notes only — the curve is otherwise just drawn, so an
-// unselected lane full of bends stays readable.
-function drawBendHandles() {
-  for (const n of S.selection) {
+// Every curve shows its points, so a bend can be reshaped without selecting it
+// first; the selection's slide and vibrato handles too.
+function drawBendHandles(vx0, vx1) {
+  const curved = S.state.lanes.filter((lane) => lane.visible).flatMap((lane) => lane.notes.filter((n) =>
+    (n.bend || n.whammy) && !S.selection.has(n) && xOf(n.end) >= vx0 && xOf(n.start) <= vx1));
+  for (const n of [...curved, ...S.selection]) {
     // Where a slide leaves or vibrato sets in only moves in time: a stem from
     // the note to an upright grip beside it (note-render.js).
     for (const slide of effectStartHandles(n, laneOf(n))) {
@@ -224,13 +229,16 @@ function drawBendHandles() {
       sctx.fill(); sctx.stroke();
       sctx.restore();
     }
-    if (!n.bend) continue;
-    const handles = bendHandles(n);
+    const handles = curveHandles(n), lane = laneOf(n);
     if (!handles.length) continue;
     sctx.save();
+    if (!lane?.active || lane.locked) sctx.globalAlpha = 0.5;   // faded with its layer's notes
     sctx.lineWidth = 1.5; sctx.strokeStyle = halo(); sctx.fillStyle = PAINT.accent;
+    // A bend's points are round, a whammy's square: on a note with both, which is which.
     for (const h of handles) {
-      sctx.beginPath(); sctx.arc(h.x, h.y, BEND_HANDLE_R, 0, Math.PI * 2);
+      sctx.beginPath();
+      if (h.kind === "whammy") sctx.rect(h.x - BEND_HANDLE_R, h.y - BEND_HANDLE_R, 2 * BEND_HANDLE_R, 2 * BEND_HANDLE_R);
+      else sctx.arc(h.x, h.y, BEND_HANDLE_R, 0, Math.PI * 2);
       sctx.fill(); sctx.stroke();
     }
     sctx.restore();
@@ -525,13 +533,14 @@ function paintFrame({ panels = true } = {}) {
     const reattackEdges = new Set(lane.notes.map((note) => edgeKey(note.pitch, note.end)));
     sctx.globalAlpha = laneAlpha;
     const stale = lane.notes.some((n) => n.auto && !n.pos) ? staleForLane(lane) : null;
+    const slurred = legatoTargets(lane);
     for (const n of lane.notes) {
       const motion = noteMotion(lane, n);
       const ribbon = noteRibbon(lane, n);
       const x = xOf(motion.start), w = Math.max(2, xOf(ribbon?.end ?? motion.end) - x), y = yOf(n.pitch);
       if (x > vx1 || x + w < vx0) continue; // off-screen
       const rowH = S.state.rowH;
-      const fill = stackCount.has(n) ? PAINT.error : laneColor;
+      const fill = stackCount.has(n) ? PAINT.warn : laneColor;
       sctx.save();
       sctx.translate(x + w / 2, y + rowH / 2);
       sctx.scale(motion.scaleX, motion.scale);
@@ -540,7 +549,8 @@ function paintFrame({ panels = true } = {}) {
       // traces the bend curve instead of staying a flat rect with a glyph on top,
       // so the drawn pitch always matches what's exported. A prebend's bar sits
       // flat but *above* the fretted row, which is what it actually sounds.
-      const curve = bendCurve(n) || ribbon?.points;
+      // A note a legato slide lands on is not picked: drawn flat, as the slide's ribbon goes on.
+      const curve = pitchCurve(n) || ribbon?.points || (slurred.has(n) ? FLAT : null);
       const active = editTargets.has(n);
       const glow = notePlaybackGlow(lane, n);
       if (glow > 0) {
@@ -551,7 +561,8 @@ function paintFrame({ panels = true } = {}) {
       }
       // Selection uses an opaque, patterned body, including on curved notes.
       sctx.globalAlpha = S.selection.has(n) ? 1 : laneAlpha * motion.alpha;
-      const drop = curve ? bendPeak(curve) * rowH : 0;
+      // How far the curve leaves the row: up for a bend, down for a whammy dip.
+      const drop = curve ? bendPeak(curve) * rowH : 0, dip = curve ? Math.max(0, -Math.min(...curve.map(([, v]) => v))) * rowH : 0;
       // Dashed outer frames mark edit recipients, including distant occurrences
       // in a shared selection. Playback retains its separate soft glow.
       if (active && curve) {
@@ -649,10 +660,10 @@ function paintFrame({ panels = true } = {}) {
       }
       if (omittedNotes.has(n)) {
         const crossY = drop ? y - drop : y;
-        omittedCrosses.push({ x, y: crossY, w, h: rowH + drop, alpha: laneAlpha });
+        omittedCrosses.push({ x, y: crossY, w, h: rowH + drop + dip, alpha: laneAlpha });
       }
       if (outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)))
-        outOfRange.push({ x, y: drop ? y - drop : y, w, h: rowH + drop, alpha: laneAlpha });
+        outOfRange.push({ x, y: drop ? y - drop : y, w, h: rowH + drop + dip, alpha: laneAlpha });
       sctx.restore();
     }
   }
@@ -664,7 +675,7 @@ function paintFrame({ panels = true } = {}) {
     if (x > vx1 || x + w < vx0) continue;
     const h = S.state.rowH, inset = Math.min(2, h * .12) * shrink;
     sctx.save(); sctx.globalAlpha = alpha;
-    const curve = bendCurve(note);
+    const curve = pitchCurve(note);
     if (curve) {
       sctx.beginPath(); traceBendPath(x, w, y + h / 2, curve, h);
       sctx.lineWidth = Math.max(1, h - 2 * inset); sctx.strokeStyle = lane.color; sctx.stroke();
@@ -681,8 +692,8 @@ function paintFrame({ panels = true } = {}) {
   drawShapes(vx0, vx1);
   drawDropPreview();
   drawStackBadges(stackBadges, vx0, vx1);
-  drawBendHandles();
   drawNoteFx();
+  drawBendHandles(vx0, vx1);   // over the names, which would hide them
   drawOmittedNoteCrosses(omittedCrosses);
   drawOutOfRangeNotes(outOfRange);
   sctx.save();
@@ -691,7 +702,7 @@ function paintFrame({ panels = true } = {}) {
   warningMarks = [];
   // tip: { title, body, tone } with tone "error" or "warning", which sets the colour.
   const frameWarning = (notes, tip) => {
-    const colour = tip.tone === "error" ? PAINT.error : PAINT.warn;
+    const colour = tip.tone === "error" ? PAINT.error : tip.tone === "note" ? PAINT.accent : PAINT.warn;
     // The spectrogram runs from black to near white, so the frame rides on an
     // underlay of the opposite brightness to its own colour.
     const under = parseInt((grayHex(colour) || "#000000").slice(1, 3), 16) > 128 ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)";
@@ -707,9 +718,9 @@ function paintFrame({ panels = true } = {}) {
     sctx.setLineDash([]);
     const markX = Math.max(left, vx0 + 4);
     sctx.strokeStyle = under; sctx.lineWidth = 3; sctx.lineJoin = "round";
-    sctx.strokeText("⚠", markX, top - 2);
+    sctx.strokeText(tip.tone === "note" ? "ⓘ" : "⚠", markX, top - 2);
     sctx.lineWidth = 1.5;
-    sctx.fillText("⚠", markX, top - 2);
+    sctx.fillText(tip.tone === "note" ? "ⓘ" : "⚠", markX, top - 2);
     warningMarks.push({ x0: markX - 3, x1: markX + 17, y0: top - 19, y1: top + 1, tip });
   };
   const frames = [];
@@ -717,18 +728,18 @@ function paintFrame({ panels = true } = {}) {
   for (const m of staleMarks) hoverMark(m.x, m.y, 10, 12, m.tip);
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
-    // The editor's own problems (note-issues.js): a shape is framed; the others
-    // have their own mark on the note already and explain it on hover.
+    // The editor's own problems (note-issues.js): those with their own mark on the
+    // note explain it on hover; the others (a shape, a Guitar Pro-only technique) are framed.
     for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)) {
       const tip = { title: issue.title, body: issue.help, tone: issue.tone }, n = issue.notes[0];
-      if (issue.kind === "shape") frames.push([issue.notes, tip]);
-      else if (issue.kind === "outOfRange") hoverMark(xOf(n.start), yOf(n.pitch), Math.max(2, xOf(n.end) - xOf(n.start)), S.state.rowH, tip);
+      if (issue.kind === "outOfRange") hoverMark(xOf(n.start), yOf(n.pitch), Math.max(2, xOf(n.end) - xOf(n.start)), S.state.rowH, tip);
       else if (issue.kind === "stack") hoverMark(xOf(n.start), yOf(n.pitch) + S.state.rowH / 2 - 9, 18, 18, tip);
+      else if (issue.kind !== "bendStack") frames.push([issue.notes, tip]);   // a shape, a Guitar Pro-only technique
     }
     // What the Rocksmith export would report about these notes (rocksmith-check.js).
     for (const { notes, issue } of rocksmithIssueNotes(lane))
       // A dropped slide is the whole slide's problem: frame the note it lands on too.
-      frames.push([issue.code === "slide" ? [...notes, ...notes.map(n => laneSlides(lane).get(n)).filter(Boolean)] : notes, { title: issue.title, body: issue.help, tone: issue.important ? "error" : "warning" }]);
+      frames.push([issue.code === "slide" ? [...notes, ...notes.map(n => laneSlides(lane).get(n)).filter(Boolean)] : notes, { title: issue.title, body: issue.help, tone: issueTone(issue) }]);
   }
   // Errors last, so a frame that is both shows red.
   for (const [notes, tip] of frames.sort((a, b) => (a[1].tone === "error") - (b[1].tone === "error"))) frameWarning(notes, tip);

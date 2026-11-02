@@ -350,9 +350,9 @@ function setLaneVisible(lane, visible) {
 }
 
 function setLaneArrangement(lane, arrangement) {
-  const sourceTrack = lane.sourceTrackIndex;
-  const targets = sourceTrack == null ? [lane]
-    : editLanes().filter((candidate) => candidate.sourceTrackIndex === sourceTrack);
+  const part = lane.gpSource?.part;
+  const targets = part == null ? [lane]
+    : editLanes().filter((candidate) => candidate.gpSource?.part === part);
   for (const target of targets) {
     target.rocksmithArrangement = arrangement;
     target.tablatureEnabled = arrangement !== "none";
@@ -419,7 +419,7 @@ function tuningLabel(lane) {
 // The layers that hold an arrangement: every one in the project, and the one being
 // made in the dialog, which is not in the project until it is saved.
 const arrangedLanes = () => [...editLanes(), ...(newLaneDraft ? [newLaneDraft] : [])];
-const samePart = (a, b) => a === b || (a.sourceTrackIndex != null && a.sourceTrackIndex === b.sourceTrackIndex);
+const samePart = (a, b) => a === b || (a.gpSource?.part != null && a.gpSource.part === b.gpSource?.part);
 
 export function refreshCounts() {
   // Here because every change that can leave a layer without a valid arrangement

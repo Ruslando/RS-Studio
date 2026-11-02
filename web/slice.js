@@ -1,10 +1,11 @@
 // Splitting a sustained editor note into two attacks. Kept DOM-free so the
 // musical-data rules can be tested without constructing the editor shell.
 
-import { bendAt, bendCurve, normalizeCurve } from "./bend.js";
+import { bendAt, bendCurve, normalizeCurve, slideInOf } from "./bend.js";
 import { copyEffects } from "./note-effects.js";
+import { whammyCurve, whammyKind } from "./whammy.js";
 
-const ATTACK_ONLY_FIELDS = ["slide", "grace", "trill", "tremPick", "slap", "stroke", "whammy"];
+const ATTACK_ONLY_FIELDS = ["slide", "slideIn", "grace", "trill", "tremPick", "slap", "stroke", "whammy", "whammyPoints"];
 
 // X coordinate where a freehand cut segment crosses a note's pitch-row centre.
 // The caller snaps this *time* afterward; y deliberately remains continuous.
@@ -64,7 +65,10 @@ export function splitNote(note, at, minDuration, newId) {
   } else if (slideAt != null) left.slideStart = (slideAt - note.start) / (at - note.start);
   // Where a slide-in lands stays at its moment too, within the left half.
   if (note.slideEnd != null) left.slideEnd = Math.min(0.95, note.slideEnd * (note.end - note.start) / (at - note.start));
-  for (const half of [left, right]) if (!half.slide) { delete half.slideEnd; delete half.slideFrets; }
+  for (const half of [left, right]) {
+    if (!half.slide) delete half.slideFrets;
+    if (!slideInOf(half)) delete half.slideEnd;
+  }
 
   // Late vibrato likewise: cut before it, the left half is plain.
   const vibratoAt = note.fx?.vibrato && note.vibratoStart != null
@@ -75,6 +79,17 @@ export function splitNote(note, at, minDuration, newId) {
     if (Object.keys(fx).length) left.fx = fx; else delete left.fx;
     if (vibratoAt - at > 1e-9) right.vibratoStart = (vibratoAt - at) / (note.end - at);
   } else if (vibratoAt != null) left.vibratoStart = (vibratoAt - note.start) / (at - note.start);
+
+  // The whammy is one gesture over the note: each half keeps its part of the curve.
+  const whammy = whammyCurve(note);
+  if (whammy) {
+    const fraction = (at - note.start) / (note.end - note.start);
+    for (const [half, from, to] of [[left, 0, fraction], [right, fraction, 1]]) {
+      const points = curveSegment(whammy, from, to), kind = whammyKind(points);
+      delete half.whammy; delete half.whammyPoints;
+      if (kind) { half.whammy = kind; half.whammyPoints = points; }
+    }
+  }
 
   const curve = bendCurve(note);
   if (curve) {

@@ -7,7 +7,8 @@ import { automaticHandSeat } from './hand-anchor-core.js';
 
 import { wireContextSubmenu } from "./context-submenu.js";
 import { hoveredStageNote } from "./interaction.js";
-import { MAX_POINTS, SLIDE_END_MIN, SLIDE_IN, SLIDE_OUT, SLIDE_START_MAX, bendAt, slideReach, bendCurve, normalizeCurve } from "./bend.js";
+import { whammyCurve, whammyKind } from "./whammy.js";
+import { MAX_POINTS, SLIDE_END_MIN, SLIDE_IN, SLIDE_OUT, SLIDES_TO_NEXT, SLIDE_START_MAX, bendAt, slideReach, bendCurve, normalizeCurve, slideInOf } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
 import { icon } from "./icons.js";
@@ -554,9 +555,26 @@ function setSlideOnSelection(kind) {
   const prev = snapshotEdit();
   let cleared = false;
   for (const n of notes) {
-    // Timing and reach belong to one kind of slide; a new kind starts from its defaults.
-    if (n.slide !== kind) { delete n.slideStart; delete n.slideEnd; delete n.slideFrets; }
-    if (kind) { cleared = clearConflicts(n, "slide") || cleared; n.slide = kind; } else delete n.slide;
+    if (!kind) { for (const k of ["slide", "slideIn", "slideStart", "slideEnd", "slideFrets"]) delete n[k]; continue; }
+    cleared = clearConflicts(n, "slide") || cleared;
+    // A slide in and a slide out or on can share a note (bend.js slideInOf): picking
+    // one kind keeps the other. Timing and reach belong to one kind; a new kind
+    // starts from its defaults.
+    const into = SLIDE_IN.has(kind), had = slideInOf(n);
+    if (into && n.slide && !SLIDE_IN.has(n.slide)) {
+      if (n.slideIn !== kind) delete n.slideEnd;
+      n.slideIn = kind;
+      continue;
+    }
+    if (!into && had) {
+      if (n.slide === had) delete n.slideFrets;   // the in-slide's reach
+      n.slideIn = had;
+    }
+    // Shift and legato are the same slide onto the next note, picked or not: it keeps its shape.
+    const sameShape = SLIDES_TO_NEXT.has(n.slide) && SLIDES_TO_NEXT.has(kind);
+    if (n.slide !== kind && !sameShape) { delete n.slideStart; delete n.slideFrets; if (into) delete n.slideEnd; }
+    n.slide = kind;
+    if (into) delete n.slideIn;
   }
   commit(prev); draw();
   if (cleared) toast("Cleared conflicting effects");
@@ -614,29 +632,54 @@ function setBendOnSelection(kind) {
   if (cleared) toast("Cleared conflicting effects");
 }
 
+// Put (truthy) a half step down on every selected note, or clear the whammy (null).
+const WHAMMY_START = [[0, 0], [0.5, -1], [1, -1]];
+function setWhammyOnSelection(on) {
+  const notes = [...S.selection].filter((n) => laneOf(n));
+  if (!notes.length) return;
+  const prev = snapshotEdit();
+  let cleared = false;
+  for (const n of notes) {
+    delete n.whammyPoints;
+    if (!on) { delete n.whammy; continue; }
+    cleared = clearConflicts(n, "whammy") || cleared;
+    n.whammyPoints = WHAMMY_START.map((p) => [...p]);
+    n.whammy = whammyKind(n.whammyPoints);
+  }
+  commit(prev); draw();
+  if (cleared) toast("Cleared conflicting effects");
+}
+
 // Replace one note's curve (points are never mutated in place — see bend.js).
-export function setBendCurve(n, pts) {
-  n.bendPoints = normalizeCurve(pts);
+// `kind` "whammy" is the whammy bar's curve: a preset (dip, dive) is where it starts,
+// and once a point is dragged the note carries its own curve, named by its shape.
+// A bend only raises the string's pitch, so its curve stays at or above the
+// fretted note; lower is a whammy or a slide, picked from the note menu.
+export function setBendCurve(n, pts, kind = "bend") {
+  pts = normalizeCurve(pts);
+  if (kind === "whammy") { n.whammyPoints = pts; n.whammy = whammyKind(pts) || "custom"; return; }
+  n.bendPoints = pts.map(([t, v]) => [t, Math.max(0, v)]);
   n.bend = "custom";
 }
+export const curveOf = (n, kind = "bend") => kind === "whammy" ? whammyCurve(n) : bendCurve(n);
 
 // Add a control point where the curve already runs at `t`, so the new handle
 // starts on the line and only moves when dragged.
-export function addBendPoint(n, t) {
-  const pts = bendCurve(n);
+export function addBendPoint(n, t, kind = "bend") {
+  const pts = curveOf(n, kind);
   if (!pts || pts.length >= MAX_POINTS) return;
   const prev = snapshotEdit();
-  setBendCurve(n, [...pts.map((p) => [...p]), [t, bendAt(pts, t)]]);
+  setBendCurve(n, [...pts.map((p) => [...p]), [t, bendAt(pts, t)]], kind);
   commit(prev); draw();
 }
 
 // Remove a control point. The first and last pin the curve to the note's edges,
 // so they stay — only the ones in between can go.
-export function removeBendPoint(n, i) {
-  const pts = bendCurve(n);
+export function removeBendPoint(n, i, kind = "bend") {
+  const pts = curveOf(n, kind);
   if (!pts || pts.length <= 2 || i === 0 || i === pts.length - 1) return;
   const prev = snapshotEdit();
-  setBendCurve(n, pts.filter((_, k) => k !== i).map((p) => [...p]));
+  setBendCurve(n, pts.filter((_, k) => k !== i).map((p) => [...p]), kind);
   commit(prev); draw();
 }
 
@@ -672,6 +715,7 @@ function dropEffect(n, name) {
   } else if (n[name] != null) {
     delete n[name];
     if (name === "bend") delete n.bendPoints;   // the curve is meaningless without it
+    if (name === "whammy") delete n.whammyPoints;
     if (name === "slide") { delete n.slideStart; delete n.slideEnd; delete n.slideFrets; }
   }
 }
@@ -1173,7 +1217,9 @@ export function clearOverrideAt(lane, colNotes, t) {
 //
 // Adding an effect is an entry here plus its setter; openNoteMenu below does not
 // need to know it exists.
-const RS_NOTE = { absent: "Not in Rocksmith" };
+// What the Rocksmith chart makes of an effect it has no field for (rocksmith/chart.py).
+const RS_NOTE = { ignore: "Shown but not scored in Rocksmith", pinch: "As pinch harmonic in Rocksmith", absent: "Not in Rocksmith", slides: "As slides in Rocksmith",
+  hammers: "As hammer-ons in Rocksmith", grace: "As a hammer-on in Rocksmith" };
 // [short note in the row, tooltip] for an effect greyed out by another one.
 const NO_BEND_ON_NATURAL = ["Not on a natural harmonic",
   "A natural harmonic is only touched, so its string cannot be bent.\nUse a pinch harmonic to bend it."];
@@ -1182,32 +1228,26 @@ const NO_NATURAL_WITH_BEND = ["Not with a bend",
 const EFFECT_MENU = [
   { label: "Bends & slides", kw: "pitch expression", items: [
     { toggle: "vibrato", kw: "wobble" },
-    // Presets seed the curve; drag its points on the spectrogram to fit the audio.
-    { field: "bend", label: "Bend", kw: "pitch curve", set: setBendOnSelection, variants: [
-      [null, "None"], ["quarter", "¼ bend"], ["half", "½ bend"], ["full", "Full bend"],
-      ["onehalf", "1½ bend"], ["twostep", "2-step bend"],
-      ["release", "Bend & release"], ["bendReleaseBend", "Bend, release, bend"],
-      ["prebend", "Prebend"], ["prebendRelease", "Prebend & release"],
-      ["custom", "Custom curve"],
-    ] },
+    // On/off: a half-step bend, shaped by dragging its points on the spectrogram.
+    { field: "bend", on: "half", label: "Bend", kw: "pitch curve", set: setBendOnSelection },
     { field: "slide", label: "Slide", kw: "glide glissando", set: setSlideOnSelection, variants: [
       [null, "None"], ["shift", "Shift → next"], ["legato", "Legato → next"],
       ["inBelow", "In from below ↗"], ["inAbove", "In from above ↘"],
       ["outDown", "Out downward ↓"], ["outUp", "Out upward ↑"],
+      ["pickDown", "Pick slide down"], ["pickUp", "Pick slide up"],
     ] },
-    { field: "whammy", rs: "absent", label: "Whammy bar", kw: "tremolo arm dive bar", set: (v) => setChoiceOnSelection("whammy", v), variants: [
-      [null, "None"], ["dip", "Dip"], ["dive", "Dive"],
-    ] },
-    { only: "single", field: "trill", rs: "absent", label: "Trill", kw: "ornament", set: (v) => setChoiceOnSelection("trill", v), variants: [
+    // Like a bend, a half step down.
+    { field: "whammy", on: true, rs: "slides", label: "Whammy bar", kw: "tremolo arm dive bar dip", set: setWhammyOnSelection },
+    { only: "single", field: "trill", rs: "hammers", label: "Trill", kw: "ornament", set: (v) => setChoiceOnSelection("trill", v), variants: [
       [null, "None"], ["half", "½-step"], ["whole", "Whole-step"],
     ] },
-    { only: "single", field: "grace", rs: "absent", label: "Grace note", kw: "ornament acciaccatura lead-in", set: (v) => setChoiceOnSelection("grace", v), variants: [
+    { only: "single", field: "grace", rs: "grace", label: "Grace note", kw: "ornament acciaccatura lead-in", set: (v) => setChoiceOnSelection("grace", v), variants: [
       [null, "None"], ["half", "½-step below"], ["whole", "Whole-step below"],
     ] },
   ] },
   { label: "Muting & dynamics", kw: "attack volume", items: [
     { toggle: "accent", kw: "loud emphasis" },
-    { toggle: "ghost", rs: "absent", kw: "quiet" },
+    { toggle: "ghost", rs: "ignore", kw: "quiet" },
     { toggle: "dead", kw: "x mute muted choke" },
     { toggle: "staccato", rs: "absent", kw: "short detached" },
     { toggle: "palmMute", kw: "pm damp" },
@@ -1216,7 +1256,7 @@ const EFFECT_MENU = [
   { label: "Picking & tapping", kw: "technique hand", items: [
     { toggle: "hammer", kw: "ho po legato pull-off" },
     { field: "harmonic", label: "Harmonic", kw: "chime", set: setHarmonicOnSelection, variants: [
-      [null, "None"], ["natural", "Natural ◇"], ["pinch", "Pinch (P.H.)"],
+      [null, "None"], ["natural", "Natural ◇"], ["pinch", "Pinch (P.H.)"], ["artificial", "Artificial", "pinch"],
     ] },
     { field: "tremPick", label: "Tremolo pick", kw: "repick", set: (v) => setChoiceOnSelection("tremPick", v), variants: [
       [null, "None"], ["8", "8th"], ["16", "16th"], ["32", "32nd"],
@@ -1224,8 +1264,9 @@ const EFFECT_MENU = [
     { field: "slap", label: "Slap / pop", kw: "thumb bass tapping", set: (v) => setChoiceOnSelection("slap", v), variants: [
       [null, "None"], ["tap", "Tapping"], ["slap", "Slapping"], ["pop", "Popping"],
     ] },
-    { only: "chord", field: "stroke", rs: "absent", label: "Strum", kw: "brush rake chord", set: (v) => setChoiceOnSelection("stroke", v), variants: [
-      [null, "None"], ["up", "Strum up ⤴"], ["down", "Strum down ⤵"],
+    { only: "single", field: "ornament", rs: "hammers", label: "Ornament", kw: "turn mordent", set: (v) => setChoiceOnSelection("ornament", v), variants: [
+      [null, "None"], ["upperMordent", "Upper mordent"], ["lowerMordent", "Lower mordent"],
+      ["turn", "Turn"], ["invertedTurn", "Inverted turn"],
     ] },
   ] },
 ];
@@ -1389,8 +1430,9 @@ function appliedEffects(sel) {
   // Variant pickers name the variant set, as their submenu does: "Slide: Shift → next".
   for (const item of EFFECT_MENU.flatMap((g) => g.items)) {
     if (!item.field) continue;
-    const kinds = [...new Set(sel.map((n) => n[item.field]).filter(Boolean))];
+    const kinds = [...new Set(sel.flatMap((n) => [n[item.field], item.field === "slide" ? n.slideIn : null]).filter(Boolean))];
     if (!kinds.length) continue;
+    if (item.on) { out.push({ label: item.label, clear: () => item.set(null) }); continue; }
     const name = (k) => item.variants.find(([v]) => v != null && String(v) === String(k))?.[1] ?? k;
     out.push({ label: `${item.label}: ${kinds.map(name).join(", ")}`, clear: () => item.set(null) });
   }
@@ -1455,6 +1497,12 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
           disabled: !!block, fn: () => set(v) };
       }) };
   };
+  // An effect that is just on or off (a bend: its shape is dragged on the stage).
+  const onOff = (item) => {
+    const on = sel.every((n) => n[item.field]), block = on ? null : blocked(item.field, item.on);
+    return { label: (on ? "✓ " : "") + item.label, kw: item.kw, note: block?.[0] || RS_NOTE[item.rs], tip: block?.[1],
+      disabled: !!block, fn: () => item.set(on ? null : item.on) };
+  };
   // A natural harmonic is only touched, never pressed, so its string cannot be
   // bent; the two exclude each other. A pinch harmonic can be bent.
   const natural = sel.some((n) => n.harmonic === "natural"), bent = sel.some((n) => n.bend);
@@ -1469,8 +1517,8 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
       family: true, label: family.label, kw: family.kw,
       children: family.items
         .filter((item) => !item.only || item.only === (isChord ? "chord" : "single"))
-        .map((item) => (item.toggle
-          ? fxItem(item.toggle, item.kw, item.rs)
+        .map((item) => (item.toggle ? fxItem(item.toggle, item.kw, item.rs)
+          : item.on ? onOff(item)
           : pick(item.field, item.label, item.kw, item.set, item.variants, item.rs))),
     }));
 

@@ -118,7 +118,10 @@ export function unstacked(notes) {
     same.sort((a, b) => a.start - b.start);
     for (let i = 0; i < same.length;) {
       let j = i + 1, end = same[i].end, keep = same[i];
-      while (j < same.length && same[j].start < end - OVERLAP_EPS) {
+      // Two strings tuned alike (a 12-string's unisons) sound one pitch twice: placed on
+      // different strings, they are two notes, not one struck twice.
+      const apart = (m) => Number.isInteger(keep.pos?.string) && Number.isInteger(m.pos?.string) && m.pos.string !== keep.pos.string;
+      while (j < same.length && same[j].start < end - OVERLAP_EPS && !apart(same[j])) {
         if (same[j].end - same[j].start > keep.end - keep.start) keep = same[j];
         end = Math.max(end, same[j].end); j++;
       }
@@ -134,7 +137,9 @@ export function chordColumns(notes, cap = Infinity) {
   const cols = [];
   for (const n of sorted) {
     const last = cols[cols.length - 1];
-    if (last && n.start - last.t0 <= CHORD_GAP) last.notes.push(n);
+    // A chord's notes sound together: one that has ended when this starts (a grace
+    // note before its beat, a fast run) is a step before it, however close.
+    if (last && n.start - last.t0 <= CHORD_GAP && last.notes.every((m) => m.end > n.start + OVERLAP_EPS)) last.notes.push(n);
     else if (cols.length < cap) cols.push({ t0: n.start, notes: [n] });
   }
   return cols;

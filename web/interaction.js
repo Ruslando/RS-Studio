@@ -4,14 +4,15 @@ import { makeResizeRoom } from "./note-merge.js";
 // the sidebar drag-to-resize / collapse.
 
 import { graceBefore } from "./grace.js";
-import { SLIDE_IN, SNAP_SEMI, SNAP_T, bendCurve, slideEndOf, slideStartOf, clampSemi, easedCurveAt, snapTo } from "./bend.js";
+import { pitchCurve, whammyCurve } from "./whammy.js";
+import { SLIDE_IN, SNAP_SEMI, bendAt, bendCurve, slideEndOf, slideStartOf, clampSemi, easedCurveAt, snapTo } from "./bend.js";
 import { AUTOSCROLL_MAX, AUTOSCROLL_ZONE, BEND_HANDLE_R, EDGE_PX, MIN_DUR, MIN_REGION, ZOOM_STEP } from "./constants.js";
 import { updateDetectStatus } from "./detect.js";
-import { bendHandles, effectStartHandles, noteRibbon, slideFretOf, slideFretsHandle, regionEdgeAt } from "./note-render.js";
+import { curveHandles, effectStartHandles, noteRibbon, slideFretOf, slideFretsHandle, regionEdgeAt } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
 import { withMemo } from "./paint-memo.js";
-import { addBendPoint, commit, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts, snapshotEdit } from "./edit.js";
+import { addBendPoint, commit, curveOf, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { cursorTimeAt, pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
 import { noteLength } from './note-length.js';
@@ -48,8 +49,8 @@ function noteAt(lane, t, pitch, exact = pitch) {
   for (let i = lane.notes.length - 1; i >= 0; i--) {
     const n = lane.notes[i];
     const ribbon = noteRibbon(lane, n);
-    const curve = bendCurve(n) || ribbon?.points;
-    const end = !bendCurve(n) && ribbon ? ribbon.end : n.end;
+    const curve = pitchCurve(n) || ribbon?.points;
+    const end = !pitchCurve(n) && ribbon ? ribbon.end : n.end;
     if (t < n.start || t > end) continue;
     if (!curve) { if (n.pitch === pitch) return n; continue; }
     const at = n.pitch + easedCurveAt(curve, (t - n.start) / Math.max(1e-6, end - n.start));
@@ -79,19 +80,41 @@ function pickNoteNow(t, pitch, exact) {
   return null;
 }
 
+// Dragging a note's edge: every selected note of its lane resizes with it.
+function resizeDrag(note, lane, edge, x, t, free, prev) {
+  return {
+    mode: "resize", edge, note, prev, startX: x, freeResize: !!free,
+    notes: [...S.selection].filter((n) => lane.notes.includes(n) && !boxOfNote(n)?.group.locked),
+    resizeGrab: t - (edge === 'r' ? note.end : note.start),
+    lane, resizeLaneNotes: [...lane.notes],
+    orig: new Map(lane.notes.map((n) => [n, { start: n.start, end: n.end }])),
+  };
+}
+
 export function edgeOf(note, x) {
   if (Math.abs(x - xOf(note.start)) <= EDGE_PX) return "l";
   if (Math.abs(x - xOf(note.end)) <= EDGE_PX) return "r";
   return null;
 }
 
-// A bend control point under the cursor, on a selected + editable note. Only the
-// selection draws handles, so that's the only place they can be grabbed.
+// Where a curve point goes in time: on the grid, or free with Alt.
+const pointTime = (x, free) => free ? timeAt(x) : snap(timeAt(x));
+
+// A bend or whammy control point under the cursor, on an editable note. Every
+// curve shows its points (draw.js), so any of them can be grabbed; the selection's
+// come first, as they are drawn on top.
+// The selection first, then every editable note around x (draw.js shows each curve).
+function notesNear(x, grab) {
+  const t0 = timeAt(x - grab), t1 = timeAt(x + grab);
+  const lanes = S.state.lanes.filter((lane) => lane.visible && canEditLane(lane));
+  return [...S.selection, ...lanes.flatMap((lane) => lane.notes.filter((n) => n.start <= t1 && n.end >= t0))];
+}
+
 function bendHandleAt(x, y) {
   const grab = BEND_HANDLE_R + 3;
-  for (const n of S.selection) {
-    if (!n.bend || !canEditLane(laneOf(n)) || boxOfNote(n)?.group.locked) continue;
-    for (const h of bendHandles(n)) {
+  for (const n of notesNear(x, grab)) {
+    if (!(n.bend || n.whammy) || !canEditLane(laneOf(n)) || boxOfNote(n)?.group.locked) continue;
+    for (const h of curveHandles(n)) {
       if (Math.abs(x - h.x) <= grab && Math.abs(y - h.y) <= grab) return h;
     }
   }
@@ -123,17 +146,18 @@ function slideFretsAt(x, y) {
   return null;
 }
 
-// The selected note whose bend curve passes within `grab` px of (x, y) — what
-// double-click adds a control point to.
+// An editable note whose bend or whammy curve passes within `grab` px of (x, y) —
+// what double-click adds a control point to. The line drawn is both together; a
+// note with both gets the point on its bend.
 function bendCurveAt(x, y, grab = 6) {
-  for (const n of S.selection) {
-    const pts = bendCurve(n);
+  for (const n of notesNear(x, grab)) {
+    const pts = pitchCurve(n);
     if (!pts || !canEditLane(laneOf(n)) || boxOfNote(n)?.group.locked) continue;
     const x0 = xOf(n.start), w = Math.max(2, xOf(n.end) - x0);
     if (x < x0 - grab || x > x0 + w + grab) continue;
     const t = clamp((x - x0) / w, 0, 1);
     const cy = yOf(n.pitch) + S.state.rowH / 2 - easedCurveAt(pts, t) * S.state.rowH;
-    if (Math.abs(y - cy) <= grab) return { note: n, t };
+    if (Math.abs(y - cy) <= grab) return { note: n, t, kind: bendCurve(n) ? "bend" : "whammy" };
   }
   return null;
 }
@@ -213,14 +237,30 @@ function updateDrag(x, y) {
     draw(); return;
   }
   if (S.drag.mode === "bendPoint") {
-    // Drag one control point of the curve. Snapping lands on Guitar Pro's own
-    // bend grid (12 columns x quarter-tones), which is all .gp5 can store; Alt
-    // frees it, which float-time targets keep exactly and .gp5 rounds.
-    const n = S.drag.note, rowH = S.state.rowH, pts = bendCurve(n).map((p) => [...p]);
+    // Drag one control point of the curve: its time snaps to the grid, its pitch
+    // to quarter tones; Alt frees both.
+    // A whammy point under a bend (or the other way round) is drawn on both together:
+    // what the pointer sets is its own part.
+    const kind = S.drag.kind || "bend", other = kind === "whammy" ? bendCurve(S.drag.note) : whammyCurve(S.drag.note);
+    const n = S.drag.note, rowH = S.state.rowH, pts = curveOf(n, kind).map((p) => [...p]);
     const i = S.drag.i, dur = Math.max(1e-6, n.end - n.start);
-    let t = (timeAt(x) - n.start) / dur;
-    let semi = (yOf(n.pitch) + rowH / 2 - y) / rowH;
-    if (!S.drag.free) { t = snapTo(t, SNAP_T); semi = snapTo(semi, SNAP_SEMI); }
+    // An end point sits on the note's edge and only moves in pitch: dragged
+    // sideways it is that edge, and resizes the note.
+    const edge = i === 0 ? "l" : i === pts.length - 1 ? "r" : null;
+    if (edge && !S.drag.axis) {
+      const dx = Math.abs(x - S.drag.x0), dy = Math.abs(y - S.drag.y0);
+      if (Math.max(dx, dy) < 4) return;
+      S.drag.axis = dx > dy ? "x" : "y";
+      if (S.drag.axis === "x") {
+        const lane = laneOf(n);
+        S.drag = resizeDrag(n, lane, edge, S.drag.x0, timeAt(S.drag.x0), S.drag.free, S.drag.prev);
+        beginNoteGesture(S.state, lane, S.drag.notes, "resize");
+        updateDrag(x, y); return;
+      }
+    }
+    let t = (pointTime(x, S.drag.free) - n.start) / dur;
+    let semi = (yOf(n.pitch) + rowH / 2 - y) / rowH - (other ? bendAt(other, clamp(t, 0, 1)) : 0);
+    if (!S.drag.free) semi = snapTo(semi, SNAP_SEMI);
     // The end points pin the curve to the note's edges — only their pitch moves.
     // Middle points stay between their neighbors so the drag can't reorder them
     // out from under the cursor.
@@ -228,7 +268,7 @@ function updateDrag(x, y) {
     else if (i === pts.length - 1) t = 1;
     else t = clamp(t, pts[i - 1][0], pts[i + 1][0]);
     pts[i] = [t, clampSemi(semi)];
-    setBendCurve(n, pts);
+    setBendCurve(n, pts, kind);
     draw(); return;
   }
   if (S.drag.mode === "marquee") { S.marquee.x1 = x; S.marquee.y1 = y; draw(); return; }
@@ -435,7 +475,8 @@ export function init_interaction() {
     if (plainSelect) {
       const handle = bendHandleAt(x, y);
       if (handle) {
-        S.drag = { mode: "bendPoint", note: handle.note, i: handle.i, free: e.altKey, prev: snapshotEdit() };
+        if (!S.selection.has(handle.note)) setSelection(new Set([handle.note]));
+        S.drag = { mode: "bendPoint", note: handle.note, i: handle.i, kind: handle.kind, free: e.altKey, prev: snapshotEdit(), x0: x, y0: y };
         return;
       }
       const start = effectStartAt(x, y);
@@ -576,13 +617,7 @@ export function init_interaction() {
       if (boxOfNote(hit.note)?.group.locked) { draw(); return; }
       const edge = hit.grace ? null : edgeOf(hit.note, x);
       if (edge) {
-        const notes = [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked);
-        S.drag = {
-          mode: "resize", edge, note: hit.note, prev: snapshotEdit(), notes,
-          startX: x, resizeGrab: t - (edge === 'r' ? hit.note.end : hit.note.start), freeResize: !!e.altKey,
-          lane: hit.lane, resizeLaneNotes: [...hit.lane.notes],
-          orig: new Map(hit.lane.notes.map((n) => [n, { start: n.start, end: n.end }])),
-        };
+        S.drag = resizeDrag(hit.note, hit.lane, edge, x, t, e.altKey, snapshotEdit());
         S.lastPointerX = e.clientX; S.lastPointerY = e.clientY;
       } else {
         S.drag = {
@@ -635,7 +670,13 @@ export function init_interaction() {
     }
     if (bendHandleAt(x, y)) return;              // already a point here
     const hit = bendCurveAt(x, y);
-    if (hit) { e.preventDefault(); addBendPoint(hit.note, hit.t); }
+    // Double-click a curve: a point there, on the grid.
+    if (hit) {
+      e.preventDefault();
+      const n = hit.note, at = (time) => (time - n.start) / Math.max(1e-6, n.end - n.start), snapped = at(pointTime(x, e.altKey));
+      // A grid line on or past the note's edge would stack the point on an end one: then where clicked.
+      addBendPoint(n, snapped > 0.01 && snapped < 0.99 ? snapped : hit.t, hit.kind);
+    }
     else if (["trace", "pan"].includes(S.toolMode) && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
              !pickNote(timeAt(x), pitchAt(y), pitchAtExact(y))) {
       const lane = targetLane(), step = minDur();
@@ -665,7 +706,7 @@ export function init_interaction() {
     // Right-click a bend control point removes it (the two end points pin the
     // curve to the note and stay) — otherwise fall through to the note menu.
     const handle = bendHandleAt(x, y);
-    if (handle) { removeBendPoint(handle.note, handle.i); return; }
+    if (handle) { removeBendPoint(handle.note, handle.i, handle.kind); return; }
     // Right-click a slide- or vibrato-start handle moves it back to the pick.
     const start = effectStartAt(x, y);
     if (start && (start.note[`${start.kind}Start`] ?? (start.kind === "slide" ? start.note.slideEnd : null)) != null) {

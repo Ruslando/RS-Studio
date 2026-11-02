@@ -14,9 +14,12 @@ const stage = new Surface(), win = new Surface();
 const scroll = Object.assign(new Surface(), { scrollLeft: 0, scrollTop: 0 });
 const note = { id: 'n', start: 1.031, end: 1.5, pitch: 64 };
 const lane = { id: 'lane', active: true, visible: true, notes: [note] };
-const S = { pxPerSec: 100, toolMode: 'pan', state: { projectStart: 0, duration: 10, lanes: [lane], tempoMap: [] },
+const S = { pxPerSec: 100, toolMode: 'pan', state: { projectStart: 0, duration: 10, lanes: [lane], tempoMap: [], rowH: 10 },
   matches: [], selection: new Set(), detectRegion: null };
 const noop = () => {}, commits = [];
+// A dip's end handles sit on the note's edges, on its row (y 100).
+const endHandles = n => n.whammy ? [{ i: 0, kind: 'whammy', note: n, x: n.start * 100, y: 100 }, { i: 2, kind: 'whammy', note: n, x: n.end * 100, y: 100 },
+  { i: 1, kind: 'whammy', note: n, x: (n.start + n.end) * 50, y: 300 }] : [];
 const oldWindow = globalThis.window;
 try {
   globalThis.window = win;
@@ -32,12 +35,13 @@ try {
     './lanes.js': { activeLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible },
     './geometry.js': { timeAt: x => x / 100, xOf: t => t * 100, pitchAt: () => 64, pitchAtExact: () => 64, yOf: () => 100 },
     './markers.js': { markerMouseDown: () => false }, './comments.js': { commentMouseDown: () => false }, './marker-rails.js': { markerRails: () => [] },
-    './note-render.js': { regionEdgeAt: () => null, noteRibbon: () => null, slideFretsHandle: () => null }, './grace.js': { graceBefore: () => null },
+    './note-render.js': { regionEdgeAt: () => null, noteRibbon: () => null, slideFretsHandle: () => null, curveHandles: endHandles }, './grace.js': { graceBefore: () => null },
     './references.js': { boxOfNote: () => null, refLockAt: () => null, refBadgeAt: () => null, refBoxEdgeAt: () => null },
     './playback.js': { auditionNote: noop },
     './note-motion.js': { beginNoteGesture: noop, updateNoteGesture: noop, finishNoteGesture: noop },
-    './edit.js': { snapshotEdit: () => structuredClone(lane.notes), commit: (...args) => commits.push(args) },
-  }, { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true,
+    './edit.js': { snapshotEdit: () => structuredClone(lane.notes), commit: (...args) => commits.push(args),
+      curveOf: n => n.whammyPoints || [[0, 0], [0.5, -2], [1, 0]], setBendCurve: (n, pts) => { n.whammyPoints = pts; } },
+  }, { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true, './whammy.js': true,
     './project-position-core.js': true });
   init_interaction();
   stage.emit('mousedown', { clientX: 149 });
@@ -58,6 +62,28 @@ try {
   assert.ok(Math.abs(note.end - 2.05) < 1e-9);
   win.emit('mouseup', { clientX: 204, altKey: true });
   assert.ok(Math.abs(note.end - 2.05) < 1e-9, 'mouse release retains the free placement');
+
+  // A whammy note: its end handle is on the right edge. Sideways it resizes the
+  // note, up and down it moves the curve's end.
+  note.whammy = 'dip';
+  stage.emit('mousedown', { clientX: 205 });
+  assert.equal(S.drag.mode, 'bendPoint');
+  win.emit('mousemove', { clientX: 240 });
+  assert.equal(S.drag.mode, 'resize', 'a sideways drag on an end handle resizes');
+  assert.equal(note.end, 2.375);
+  win.emit('mouseup', { clientX: 240 });
+  stage.emit('mousedown', { clientX: 237.5 });
+  win.emit('mousemove', { clientX: 237.5, clientY: 120 });
+  assert.equal(S.drag.mode, 'bendPoint', 'an up/down drag stays on the point');
+  assert.deepEqual(note.whammyPoints.at(-1), [1, -1.5]);
+  win.emit('mouseup', { clientX: 237.5, clientY: 120 });
+  assert.equal(note.end, 2.375);
+  // A middle point's time lands on the grid (1.70 s -> 1.75 s).
+  stage.emit('mousedown', { clientX: 170.3, clientY: 300 });
+  win.emit('mousemove', { clientX: 170, clientY: 300 });
+  assert.ok(Math.abs(note.whammyPoints[1][0] - (1.75 - 1.031) / (2.375 - 1.031)) < 1e-9, 'a dragged point snaps to the grid');
+  win.emit('mouseup', { clientX: 170, clientY: 300 });
+  delete note.whammy; delete note.whammyPoints;
 
   const before = { lane: structuredClone(lane.notes) };
   grid.snapStrayNotes([lane], before);

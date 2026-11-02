@@ -196,7 +196,9 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <button class="menu-item" id="menuDetectTempo">Detect tempo map</button>
           <div class="menu-sep"></div>
           <button class="menu-item" id="menuPreviewTab">Tablature view</button>
+          <button class="menu-item" id="menuPreviewTabSeen" title="Debug: the layer written from what the editor holds, ignoring the imported file data">Tablature view as the editor sees it (debug)</button>
           <button class="menu-item" id="menuExportModernGp">Export Guitar Pro (.gp)&hellip;</button>
+          <button class="menu-item" id="menuExportGpAsSeen" title="Debug: every layer written from what the editor holds, ignoring the imported file data">Export Guitar Pro as the editor sees it (debug)&hellip;</button>
           <button class="menu-item" id="menuExportTab">Export legacy Guitar Pro (.gp5)…</button>
           <button class="menu-item" id="menuExportRocksmith">Export Rocksmith CDLC (.psarc)…</button>
           <div class="menu-sep"></div>
@@ -1567,6 +1569,13 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 <label class="chk"><input type="checkbox" class="rs-issue-all" /> Ignore all</label>
               </div>
               <div class="sound-section-body" id="rsIssueWarnings"><div class="sound-section-inner"><div class="sub-list"></div></div></div>
+            </section>
+            <section class="sound-section" data-section="notes" data-tone="note">
+              <div class="sound-section-head">
+                <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="rsIssueNotes"><span class="sound-section-title">Notes</span><span class="sp-note rs-issue-count"></span></button>
+                <label class="chk" hidden><input type="checkbox" class="rs-issue-all" /> Ignore all</label>
+              </div>
+              <div class="sound-section-body" id="rsIssueNotes"><div class="sound-section-inner"><div class="sub-list"></div></div></div>
             </section>
             <p class="rs-issue-none sp-note">No issues found.</p>
           </div>

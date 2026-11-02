@@ -24,6 +24,8 @@ export function normalizeToneMarkers(markers, duration = Infinity, presets = rea
       t: Math.max(0, Math.min(limit, t)),
       tone,
       ...(toneData ? { toneData } : {}),
+      // The Guitar Pro instrument it came from: written back on export, whatever tone is picked.
+      ...(Number.isInteger(raw?.gpProgram) ? { gpProgram: raw.gpProgram } : {}),
     });
   }
   out.sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));

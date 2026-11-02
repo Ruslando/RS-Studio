@@ -1,25 +1,15 @@
-// Runtime bridge back to alphaTab's full score model. The app persists its own
-// versioned schema plus the untouched source bytes; alphaTab's version-specific
-// JSON format is used only transiently to clone/filter a score in this runtime.
+// The project's layers as an alphaTab score, for the Guitar Pro export and the
+// tab preview.
 
 import { MAX_BARS_SCANNED } from "./constants.js";
-import { gpProjectionSignature, gpStructuralSignature } from "./guitar-pro-core.js";
-import { appendCreatedLanes, applyImportedProjection, applyScoreStructure, validateImportedProjection } from "./guitar-pro-edit.js";
+import { gpProjectionSignature, unpackLaneSource } from "./guitar-pro-core.js";
+import { appendCreatedLanes, applyImportedProjection, applyScoreStructure, renumberScoreIds, validateImportedProjection } from "./guitar-pro-edit.js";
 import { songBarStarts } from "./song-bars.js";
 import { isTablatureLane } from "./layer-role.js";
 import { assignSectionsToBars } from "./section-marker-core.js";
 import { S } from "./store.js";
-import { onLiveTiming } from "./timing.js";
+import { onLiveTiming, timingIdOf } from "./timing.js";
 import { laneFingering } from "./tablature.js";
-
-let cacheKey = "";
-let cachedSelectedJson = "";
-
-function currentKey() {
-  const gp = S.state?.guitarPro;
-  return gp ? `${S.state.job}:${gp.sourceRel || ""}:${gp.importedAt || ""}:` +
-    `${(gp.selectedTrackIndexes || []).join(",")}` : "";
-}
 
 // Visibility and playback are independent from score membership. Apply this
 // explicit role before alphaTab construction or automatic fingering begins.
@@ -28,17 +18,14 @@ function enabledScoreLanes() {
   return (S.state?.editLanes || []).filter((lane) => isTablatureLane(lane) && lane.notes?.length && onLiveTiming(lane));
 }
 
-// The original file's bars and tempo are its imported layers' timing; build on it
-// only when those layers are in this export.
-function exportsFromSource() {
-  if (!S.state?.guitarPro?.sourceRel) return false;
-  const imported = (S.state.editLanes || []).filter((lane) => lane.sourceTrackIndex != null);
-  return !imported.length || imported.some(onLiveTiming);
-}
-
-function importedLanes() {
-  return enabledScoreLanes().filter((lane) => lane.sourceTrackIndex != null);
-}
+// A layer imported from a Guitar Pro file carries its source track (gpSource,
+// guitar-pro-core.js packLaneSource) and is exported from it: what the editor
+// shows is written into the track, everything else in it stays as imported. Only
+// on the timing it came in with, whose bars are its file's bars.
+// Debug export (File menu): ignore the stored sources and write every layer from
+// what the editor holds, to see what an import missed.
+export const gpDebug = { asSeen: false, rebuildAll: false };
+const sourced = (lane) => !gpDebug.asSeen && !!lane.gpSource?.data && timingIdOf(lane) === lane.gpSource.timing;
 
 function effectiveScoreProjection(sourceBars = S.state?.scoreBars || []) {
   const base = S.appliedGrid || S.state?.baseGrid || {};
@@ -67,66 +54,20 @@ function appendSectionWarnings(score, warnings) {
   score.cwWarnings = [...(score.cwWarnings || []), ...warnings];
 }
 
-export function selectGpScoreTracks(alphaTabRuntime, fullScore, selectedTrackIndexes) {
-  const selected = new Set((selectedTrackIndexes || []).map(Number));
-  const serialized = JSON.parse(alphaTabRuntime.model.JsonConverter.scoreToJson(fullScore));
-  serialized.tracks = (serialized.tracks || []).filter((_, index) => selected.has(index));
-  if (!serialized.tracks.length) throw new Error("The imported project no longer identifies any source tracks");
-  return alphaTabRuntime.model.JsonConverter.jsonToScore(
-    JSON.stringify(serialized), new alphaTabRuntime.Settings(),
-  );
-}
-
-// Clone a single authored staff out of a selected Guitar Pro score. Imported
-// tracks can contain several staves, while one app layer represents exactly
-// one of them; filtering only the track would still render sibling layers.
-export function selectGpScoreLane(alphaTabRuntime, score, trackPosition, staffPosition = 0) {
-  const serialized = JSON.parse(alphaTabRuntime.model.JsonConverter.scoreToJson(score));
-  const track = serialized.tracks?.[Number(trackPosition)];
-  const staff = track?.staves?.[Number(staffPosition)];
-  if (!track || !staff) throw new Error("The selected Guitar Pro layer is no longer present in its source score");
-  track.staves = [staff];
-  serialized.tracks = [track];
-  return alphaTabRuntime.model.JsonConverter.jsonToScore(
-    JSON.stringify(serialized), new alphaTabRuntime.Settings(),
-  );
-}
-
-export function originalGpProjectionStatus() {
-  const gp = S.state?.guitarPro;
-  if (!gp?.sourceRel) return { available: false, pristine: false, reason: "This project has no imported Guitar Pro source." };
-  if (!gp.projectionSignature || !gp.structuralSignature)
-    return { available: true, pristine: false, exportable: false, reason: "No modern-export integrity markers — re-import the score." };
-  const lanes = importedLanes();
-  const manualLanes = enabledScoreLanes().filter((lane) => lane.sourceTrackIndex == null);
-  if (!lanes.length && !manualLanes.length) return { available: true, pristine: false, exportable: false, reason: "No tablature tracks remain to export." };
-  const scoreDuration = Number(S.state?.scoreDuration) || Number(gp.score?.durationSeconds);
-  if (Number.isFinite(scoreDuration) && lanes.some((lane) => lane.notes.some((note) => note.start < 0 || note.end > scoreDuration + 1e-6)))
+export function modernGpProjectionStatus() {
+  const lanes = enabledScoreLanes();
+  if (!lanes.length) return { available: false, pristine: false, exportable: false, reason: "No tablature tracks remain to export." };
+  const fromSource = lanes.filter(sourced);
+  const scoreDuration = Number(S.state?.scoreDuration);
+  if (Number.isFinite(scoreDuration) && scoreDuration > 0
+    && fromSource.some((lane) => lane.notes.some((note) => note.start < 0 || note.end > scoreDuration + 1e-6)))
     return { available: true, pristine: false, exportable: false,
-      reason: "Modern export cannot place notes before the first or beyond the final imported score bar." };
-  for (const track of gp.selectedTracks || []) {
-    const present = new Set(lanes.filter((lane) => lane.sourceTrackIndex === track.index).map((lane) => lane.sourceStaffIndex));
-    if (present.size && (track.staves || []).some((staff) => !present.has(staff.index)))
-      return { available: true, pristine: false, exportable: false,
-        reason: `Keep or remove all staves of “${track.name}” together for modern export.` };
-  }
-  const pristine = !manualLanes.length && gpProjectionSignature(importedLanes()) === gp.projectionSignature;
-  if (pristine) return { available: true, pristine: true, exportable: true, reason: "" };
-  if ((gp.schemaVersion || 1) < 2 && gpStructuralSignature(importedLanes()) !== gp.structuralSignature)
-    return { available: true, pristine: false, exportable: false,
-      reason: "Re-import this Guitar Pro file once before exporting timing or effect edits." };
+      reason: "Notes lie before the first or beyond the last bar of the imported score." };
   try {
-    validateImportedProjection(importedLanes());
+    validateImportedProjection(fromSource);
   } catch (error) {
     return { available: true, pristine: false, exportable: false, reason: error.message };
   }
-  return { available: true, pristine: false, exportable: true, reason: "" };
-}
-
-export function modernGpProjectionStatus() {
-  if (exportsFromSource()) return originalGpProjectionStatus();
-  const lanes = enabledScoreLanes();
-  if (!lanes.length) return { available: false, pristine: false, exportable: false, reason: "No tablature tracks remain to export." };
   return { available: true, pristine: false, exportable: true, reason: "" };
 }
 
@@ -193,34 +134,21 @@ function projectStructureForGeneratedScore(score) {
   };
 }
 
-export function applyProjectionToGpScore(alphaTabRuntime, score, lanes, selectedTrackIndexes) {
-  return applyImportedProjection(alphaTabRuntime, score, lanes, selectedTrackIndexes);
-}
-
-async function selectedOriginalGpScore(alphaTabRuntime, signal) {
-  const key = currentKey();
-  if (!key) throw new Error("This project has no imported Guitar Pro source");
-  if (key === cacheKey && cachedSelectedJson)
-    return alphaTabRuntime.model.JsonConverter.jsonToScore(cachedSelectedJson, new alphaTabRuntime.Settings());
-  const response = await fetch(`/api/projects/${S.state.job}/guitar-pro/source`, { signal });
-  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Guitar Pro source is unavailable");
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const settings = new alphaTabRuntime.Settings();
-  const full = alphaTabRuntime.importer.ScoreLoader.loadScoreFromBytes(bytes, settings);
-  const selected = selectGpScoreTracks(alphaTabRuntime, full, S.state.guitarPro.selectedTrackIndexes);
-  cachedSelectedJson = alphaTabRuntime.model.JsonConverter.scoreToJson(selected);
-  cacheKey = key;
-  return selected;
-}
-
-export async function selectedOriginalGpLaneScore(alphaTabRuntime, lane, signal) {
-  if (lane?.sourceTrackIndex == null)
-    throw new Error("The selected layer was not part of the imported Guitar Pro file");
-  const selectedIndexes = (S.state?.guitarPro?.selectedTrackIndexes || []).map(Number);
-  const trackPosition = selectedIndexes.indexOf(Number(lane.sourceTrackIndex));
-  if (trackPosition < 0) throw new Error("The selected layer's source track is no longer imported");
-  const score = await selectedOriginalGpScore(alphaTabRuntime, signal);
-  return selectGpScoreLane(alphaTabRuntime, score, trackPosition, Number(lane.sourceStaffIndex) || 0);
+// One imported layer's score: its source track with the project's bars and the
+// layer's edits written in. `played` is the layer fingered (fingered below).
+const sourceScores = new Map();   // ponytail: one unpacked JSON per source, kept for the session
+async function sourcedLaneScore(alphaTabRuntime, lane, played) {
+  const data = lane.gpSource.data;
+  if (!sourceScores.has(data)) {
+    const score = await unpackLaneSource(alphaTabRuntime, data);
+    sourceScores.set(data, alphaTabRuntime.model.JsonConverter.scoreToJson(score));
+  }
+  const score = alphaTabRuntime.model.JsonConverter.jsonToScore(sourceScores.get(data), new alphaTabRuntime.Settings());
+  applyScoreStructure(alphaTabRuntime, score, effectiveScoreBars());
+  if (gpDebug.rebuildAll || gpProjectionSignature(lane) !== lane.gpSource.projection || movedOff([lane], [played]))
+    applyImportedProjection(alphaTabRuntime, score, [{ ...played, sourceTrackIndex: 0, sourceStaffIndex: 0 }], [0],
+      { rebuildAll: gpDebug.rebuildAll });
+  return score;
 }
 
 // Every note on the position laneFingering gives it — the one the fretboard, the tab
@@ -255,43 +183,7 @@ export async function modernGpResult(alphaTabRuntime, signal) {
 export async function projectedGpScore(alphaTabRuntime, signal) {
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) throw new Error(status.reason);
-  if (!exportsFromSource()) {
-    const lanes = await fingered(enabledScoreLanes(), signal);
-    const score = blankProjectScore(alphaTabRuntime);
-    appendCreatedLanes(alphaTabRuntime, score, lanes, songBarStarts());
-    const structure = projectStructureForGeneratedScore(score);
-    applyScoreStructure(alphaTabRuntime, score, structure.bars);
-    appendSectionWarnings(score, structure.warnings);
-    return score;
-  }
-  let score = await selectedOriginalGpScore(alphaTabRuntime, signal);
-  const originalSelection = S.state.guitarPro.selectedTrackIndexes.map(Number);
-  const liveSet = new Set(importedLanes().map((lane) => Number(lane.sourceTrackIndex)));
-  const liveSelection = originalSelection.filter((index) => liveSet.has(index));
-  if (liveSelection.length && liveSelection.length !== originalSelection.length) {
-    const serialized = JSON.parse(alphaTabRuntime.model.JsonConverter.scoreToJson(score));
-    serialized.tracks = serialized.tracks.filter((_, position) => liveSet.has(originalSelection[position]));
-    score = alphaTabRuntime.model.JsonConverter.jsonToScore(JSON.stringify(serialized), new alphaTabRuntime.Settings());
-  }
-  const structure = effectiveScoreProjection();
-  applyScoreStructure(alphaTabRuntime, score, structure.bars);
-  appendSectionWarnings(score, structure.warnings);
-  if (!liveSelection.length) score.tracks = [];
-  const imported = await fingered(importedLanes(), signal);
-  if ((!status.pristine || movedOff(importedLanes(), imported)) && liveSelection.length)
-    applyProjectionToGpScore(alphaTabRuntime, score, imported, liveSelection);
-  const created = await fingered(enabledScoreLanes().filter((lane) => lane.sourceTrackIndex == null), signal);
-  const importedTracks = new Map(liveSelection.map((sourceIndex, index) => [sourceIndex, score.tracks[index]]));
-  appendCreatedLanes(alphaTabRuntime, score, created, songBarStarts());
-  const createdTracks = new Map(created.map((lane, index) => [lane.id, score.tracks[liveSelection.length + index]]));
-  const ordered = [], seen = new Set();
-  for (const lane of S.state.editLanes || []) {
-    const track = lane.sourceTrackIndex == null ? createdTracks.get(lane.id) : importedTracks.get(Number(lane.sourceTrackIndex));
-    if (track && !seen.has(track)) { seen.add(track); ordered.push(track); }
-  }
-  score.tracks = ordered;
-  score.finish(new alphaTabRuntime.Settings());
-  return score;
+  return layersScore(alphaTabRuntime, enabledScoreLanes(), signal);
 }
 
 // Preview is intentionally lane-scoped. Export continues through
@@ -299,41 +191,44 @@ export async function projectedGpScore(alphaTabRuntime, signal) {
 export async function projectedGpLaneScore(alphaTabRuntime, lane, signal) {
   if (!isTablatureLane(lane) || !lane?.notes?.length)
     throw new Error("The selected layer has no enabled tablature to preview");
+  return layersScore(alphaTabRuntime, [lane], signal);
+}
 
-  if (!exportsFromSource()) {
-    const score = blankProjectScore(alphaTabRuntime);
-    appendCreatedLanes(alphaTabRuntime, score, await fingered([lane], signal), songBarStarts());
+// Imported layers come from their sources, the rest are written from their notes.
+// The first imported layer's score takes in every other track: their bars are the
+// same project bars (applyScoreStructure), so the tracks line up bar for bar.
+async function layersScore(alphaTabRuntime, lanes, signal) {
+  const played = await fingered(lanes, signal);
+  const tracks = new Map();
+  let score = null;
+  for (const [i, lane] of lanes.entries()) {
+    if (!sourced(lane)) continue;
+    const own = await sourcedLaneScore(alphaTabRuntime, lane, played[i]);
+    if (score && own.masterBars.length !== score.masterBars.length) {
+      // ponytail: layers from files with different bars cannot share one score; written from notes instead
+      score.cwWarnings = [...(score.cwWarnings || []), `${lane.name}: its file's bars differ from the other imported layers; written from its notes`];
+      continue;
+    }
+    if (!score) score = own;
+    else score.addTrack(own.tracks[0]);
+    tracks.set(lane, score.tracks.at(-1));
+  }
+  const created = lanes.map((lane, i) => [lane, played[i]]).filter(([lane]) => !tracks.has(lane));
+  if (!score) {
+    score = blankProjectScore(alphaTabRuntime);
+    appendCreatedLanes(alphaTabRuntime, score, created.map(([, p]) => p), songBarStarts());
     const structure = projectStructureForGeneratedScore(score);
     applyScoreStructure(alphaTabRuntime, score, structure.bars);
     appendSectionWarnings(score, structure.warnings);
     return score;
   }
-
-  let score = await selectedOriginalGpScore(alphaTabRuntime, signal);
-
-  if (lane.sourceTrackIndex == null) {
-    // A layer created after GP import shares the imported bar structure but is
-    // not represented by any original track.
-    score = selectGpScoreLane(alphaTabRuntime, score, 0, 0);
-    applyScoreStructure(alphaTabRuntime, score, effectiveScoreBars());
-    score.tracks = [];
-    appendCreatedLanes(alphaTabRuntime, score, await fingered([lane], signal), songBarStarts());
-    score.finish(new alphaTabRuntime.Settings());
-    return score;
-  }
-
-  const selectedIndexes = S.state.guitarPro.selectedTrackIndexes.map(Number);
-  const trackPosition = selectedIndexes.indexOf(Number(lane.sourceTrackIndex));
-  if (trackPosition < 0) throw new Error("The selected layer's source track is no longer imported");
-  score = selectGpScoreLane(alphaTabRuntime, score, trackPosition, Number(lane.sourceStaffIndex) || 0);
-  applyScoreStructure(alphaTabRuntime, score, effectiveScoreBars());
-  const [played] = await fingered([lane], signal);
-  applyProjectionToGpScore(alphaTabRuntime, score,
-    [{ ...played, sourceStaffIndex: 0 }], [Number(lane.sourceTrackIndex)]);
+  appendSectionWarnings(score, effectiveScoreProjection().warnings);
+  const before = score.tracks.length;
+  appendCreatedLanes(alphaTabRuntime, score, created.map(([, p]) => p), songBarStarts());
+  created.forEach(([lane], i) => tracks.set(lane, score.tracks[before + i]));
+  score.tracks = lanes.map((lane) => tracks.get(lane)).filter(Boolean);
+  score.tracks.forEach((track, index) => { track.index = index; });
+  renumberScoreIds(score);
+  score.finish(new alphaTabRuntime.Settings());
   return score;
-}
-
-export function clearOriginalGpScoreCache() {
-  cacheKey = "";
-  cachedSelectedJson = "";
 }

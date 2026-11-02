@@ -1,11 +1,8 @@
 // Bend curves. A bend is a list of [t, semi] control points: t = 0..1 across the
-// note's duration, semi = semitones above the fretted pitch. Guitar Pro's own
-// bend editor is a 12-column x quarter-tone grid and .gp5 stores exactly that, so
-// snapping to SNAP_T/SNAP_SEMI keeps the round-trip lossless; targets that store
-// float times and arbitrary values lose nothing either way, so free (Alt)
-// dragging only costs .gp5 precision. DOM-free so the math stays testable.
+// note's duration, semi = semitones above the fretted pitch. Rocksmith stores
+// float times and steps, so a point's time is free; its pitch snaps to quarter
+// tones (SNAP_SEMI), which Guitar Pro stores too. DOM-free so the math stays testable.
 
-export const SNAP_T = 1 / 12;
 export const SNAP_SEMI = 0.5;        // a quarter tone — the finest unit either format has
 export const MAX_SEMI = 6;           // BendPoint.MaxValue is 12 quarter-tones in GP and alphaTab
 export const MAX_POINTS = 32;        // the tightest per-note cap any export target imposes
@@ -23,12 +20,6 @@ export const BEND_PRESETS = {
   prebend: [[0, 2], [1, 2]],
   prebendRelease: [[0, 2], [0.5, 2], [1, 0]],
   bendReleaseBend: [[0, 0], [1 / 3, 2], [2 / 3, 0], [1, 2]],
-};
-
-export const BEND_TAG = {
-  quarter: "¼", half: "½", full: "full", onehalf: "1½", twostep: "2",
-  release: "b·r", prebend: "pre", prebendRelease: "pre·r", bendReleaseBend: "b·r·b",
-  custom: "cust",
 };
 
 // The curve a note actually sounds: its own dragged points, else its preset's.
@@ -91,9 +82,13 @@ export const trillOffsetAt = (n, sec, bpm = 120) => sec >= 0
 export const SLIDE = { eighth: 0.25 };   // 120 BPM, when no tempo is known
 export const SLIDES_TO_NEXT = new Set(["shift", "legato"]);
 export const SLIDE_IN = new Set(["inBelow", "inAbove"]);
-export const SLIDE_OUT = new Set(["outDown", "outUp"]);
-export const SLIDE_FRETS = { inBelow: 4, inAbove: 4, outDown: 5, outUp: 5 };
-const SLIDE_SIGN = { inBelow: -1, inAbove: 1, outDown: -1, outUp: 1 };   // where the far end sits
+export const SLIDE_OUT = new Set(["outDown", "outUp", "pickDown", "pickUp"]);
+// A note can slide in and then on or out (Guitar Pro allows both): `slide` holds
+// the slide out or onto the next note and `slideIn` the slide into it. A note with
+// only a slide-in keeps it in `slide`, as it always did.
+export const slideInOf = (n) => SLIDE_IN.has(n?.slide) ? n.slide : SLIDE_IN.has(n?.slideIn) ? n.slideIn : null;
+export const SLIDE_FRETS = { inBelow: 4, inAbove: 4, outDown: 5, outUp: 5, pickDown: 5, pickUp: 5 };
+const SLIDE_SIGN = { inBelow: -1, inAbove: 1, outDown: -1, outUp: 1, pickDown: -1, pickUp: 1 };   // where the far end sits
 // ponytail: Rocksmith's neck, not the lane's; a shorter neck is clamped by the export.
 export const MAX_FRET = 24;
 
@@ -110,10 +105,10 @@ export function slideReach(kind, fret) {
 
 // Semitones from the note to its slide's far end (where a slide-in comes from,
 // where a slide-out goes): signed, 0 when the slide cannot go anywhere.
-export function edgeSlideSpan(n, fret = n?.pos?.fret) {
-  const kind = n?.slide;
+export function edgeSlideSpan(n, fret = n?.pos?.fret, kind = n?.slide) {
   if (!SLIDE_SIGN[kind]) return 0;
-  const frets = Math.max(1, Math.round(Number(n.slideFrets) || SLIDE_FRETS[kind]));
+  // ponytail: an added slide-in (`slideIn`) spans the default frets; slideFrets is the main slide's.
+  const frets = Math.max(1, Math.round((kind === n.slide && Number(n.slideFrets)) || SLIDE_FRETS[kind]));
   return SLIDE_SIGN[kind] * Math.min(frets, slideReach(kind, fret)) || 0;
 }
 
@@ -128,7 +123,7 @@ export const slideStartOf = (n) => SLIDES_TO_NEXT.has(n?.slide) || SLIDE_OUT.has
 // Where a slide-in lands, as a fraction of the note.
 export const SLIDE_END_MIN = 0.05;
 export function slideEndOf(n, dur, eighth = SLIDE.eighth) {
-  if (!SLIDE_IN.has(n?.slide)) return 0;
+  if (!slideInOf(n)) return 0;
   const set = Number(n.slideEnd);
   if (set > 0) return Math.max(SLIDE_END_MIN, Math.min(SLIDE_START_MAX, set));
   return dur > 0 ? Math.min(eighth, dur / 2) / dur : 0.5;
@@ -136,22 +131,24 @@ export function slideEndOf(n, dur, eighth = SLIDE.eighth) {
 
 export function slideAt(n, sec, dur, { to = 0, steps = true, eighth = SLIDE.eighth, fret = n?.pos?.fret } = {}) {
   const round = steps ? Math.round : (v) => v;
-  const kind = n?.slide;
+  const kind = n?.slide, inKind = slideInOf(n);
   if (!kind) return 0;
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
-  if (SLIDE_IN.has(kind)) {
+  let into = 0;
+  if (inKind) {
     const len = dur * slideEndOf(n, dur, eighth);
     const p = len > 0 ? clamp01(sec / len) : 1;
-    return round(edgeSlideSpan(n, fret) * (1 - p)) || 0;
+    into = edgeSlideSpan(n, fret, inKind) * (1 - p);
+    if (inKind === kind) return round(into) || 0;
   }
   const len = dur * (1 - slideStartOf(n));
   const p = len > 0 ? clamp01((sec - (dur - len)) / len) : 1;
   const span = SLIDE_OUT.has(kind) ? edgeSlideSpan(n, fret) : to;
-  return round(span * p) || 0;   // never -0
+  return round(into + span * p) || 0;   // never -0
 }
 
 // Bend, vibrato and slide together: the whole pitch offset of a note at `sec`.
-export const pitchMoves = (n) => !!(bendCurve(n) || n?.fx?.vibrato || n?.slide);
+export const pitchMoves = (n) => !!(bendCurve(n) || n?.fx?.vibrato || n?.slide || n?.slideIn);
 export const noteOffsetAt = (n, sec, dur, slide = {}) =>
   pitchOffsetAt(n, dur > 0 ? Math.min(1, sec / dur) : 0, sec) + slideAt(n, sec, dur, slide);
 
@@ -164,6 +161,12 @@ export const noteOffsetAt = (n, sec, dur, slide = {}) =>
 // same size moves as a shape (k-th voice from the bottom onto the k-th), and
 // anything else takes the nearest unclaimed pitch. The shape rule covers callers
 // that know no strings.
+export const ORNAMENT_FIGURES = { upperMordent: [0, 2, 0], lowerMordent: [0, -1, 0], turn: [2, 0, -1, 0], invertedTurn: [-1, 0, 2, 0] };
+export function ornamentOffsetAt(n, sec, bpm = 120) {
+  const figure = ORNAMENT_FIGURES[n.ornament];
+  return figure ? figure[Math.min(figure.length - 1, Math.floor(sec / (7.5 / (bpm || 120))))] : 0;
+}
+
 export function slideTargets(notes, positionOf = (n) => n.pos) {
   const out = new Map();
   if (!notes.some((n) => SLIDES_TO_NEXT.has(n.slide))) return out;
@@ -196,6 +199,18 @@ export function slideTargets(notes, positionOf = (n) => n.pos) {
 // A slide into or out of the note stays within it, from or to its far end;
 // `fret` and `eighth` are what slideAt takes.
 export function slideRibbon(note, target, { fret = note?.pos?.fret, eighth = SLIDE.eighth } = {}) {
+  const main = mainSlideRibbon(note, target, fret, eighth);
+  const inKind = note.slideIn && !SLIDE_IN.has(note.slide) ? slideInOf(note) : null;
+  const span = inKind ? edgeSlideSpan(note, fret, inKind) : 0;
+  if (!span) return main;
+  // A slide-in before the main slide: from its far end to the fret, then on as the main slide goes.
+  const end = main?.end ?? note.end, scale = (note.end - note.start) / (end - note.start);
+  const land = slideEndOf(note, note.end - note.start, eighth) * scale;
+  const rest = (main?.points || [[1, 0]]).filter(([t]) => t > land + 1e-6);
+  return { end, points: [[0, span], [land, 0], ...rest] };
+}
+
+function mainSlideRibbon(note, target, fret, eighth) {
   if (SLIDE_IN.has(note.slide) || SLIDE_OUT.has(note.slide)) {
     const span = edgeSlideSpan(note, fret);
     if (!span) return null;

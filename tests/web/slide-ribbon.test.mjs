@@ -88,3 +88,17 @@ assert.equal(effectSignatureFields({ slide: "shift", slideStart: 0.5 }).slideSta
   assert.equal(before.left.fx, undefined, "the part before it has no vibrato");
   assert.equal(before.right.vibratoStart, 1 / 3);
 }
+
+// A slide in and a slide on in one note (Guitar Pro has them): in from below, then
+// legato to the next note. The ribbon and the pitch run both, one after the other.
+{
+  const note = { start: 0, end: 1, pitch: 64, slide: "legato", slideIn: "inBelow", pos: { fret: 9 } };
+  const target = { start: 1, end: 2, pitch: 63 };
+  const ribbon = slideRibbon(note, target, { eighth: 0.25 });
+  assert.deepEqual(ribbon, { end: 1, points: [[0, -4], [0.25, 0], [1, -1]] });
+  assert.equal(slideAt(note, 0, 1, { to: -1 }), -4, "starts four frets below");
+  assert.equal(slideAt(note, 0.25, 1, { to: -1 }), 0, "lands on its fret");
+  assert.equal(slideAt(note, 1, 1, { to: -1 }), -1, "then slides on to the next note");
+  const { left, right } = splitNote(note, 0.5, 0.05, () => "b");
+  assert.equal(left.slideIn, "inBelow"); assert.equal(right.slideIn, undefined, "the slide-in stays on the first half");
+}

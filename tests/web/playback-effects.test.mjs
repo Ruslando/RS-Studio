@@ -33,8 +33,7 @@ assert.equal(harmonicOffset(n({ harmonic: "pinch" })), 12);
 for (const stroke of ["up", "down"]) {
   const chord = [45, 52, 57].map((pitch) => n({ pitch, stroke }));
   const events = playbackEvents(chord);
-  assert.equal(events[0].pitch, stroke === "up" ? 57 : 45);
-  assert.ok(events[2].start > events[0].start);
+  assert.deepEqual(events.map((e) => e.start), [1, 1, 1], "legacy strum directions no longer stagger the chord");
 }
 const hammer = playbackEvents([n(), n({ start: 2, end: 3, pitch: 64, fx: { hammer: true } })]);
 assert.equal(hammer.length, 1, "hammer/pull-off carries the source without a new pick");

@@ -20,8 +20,6 @@ your saved `.chart` files untouched.
   POST /api/projects/{job}/stems/{stem}/rename   - rename a stem in a real project
   POST /api/projects/{job}/stems/{stem}/replace  - swap a stem's audio for an uploaded file
   POST /api/projects/{job}/stems/{stem}/separate - recreate a stem from the full song in place
-  POST /api/projects/{job}/guitar-pro - preserve an imported GP source in the project
-  GET  /api/projects/{job}/guitar-pro/source - stream that untouched source to alphaTab
   POST /api/projects/{job}/export   - persist editor state + download a .chart bundle
   POST /api/projects/import         - open a .chart bundle into a fresh cache dir
   POST /api/cache/clear             - delete every cached project under .runs/
@@ -62,7 +60,6 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from . import __version__, models, pipeline, processing, tab, tutorial, updates
 from .local_security import LocalRequestMiddleware
@@ -131,9 +128,6 @@ _COVER_MAX_BYTES = 20 * 1024 * 1024
 _PROJECT_MAX_BYTES = 2 * 1024 * 1024 * 1024
 _PROJECT_MAX_UNPACKED_BYTES = 4 * 1024 * 1024 * 1024
 _PROJECT_MAX_FILES = 4000
-_GUITAR_PRO_MAX_BYTES = 64 * 1024 * 1024
-_GUITAR_PRO_SUMMARY_MAX_BYTES = 16 * 1024 * 1024
-_GUITAR_PRO_EXTS = {".gp", ".gpx", ".gp3", ".gp4", ".gp5"}
 
 app = FastAPI(
     title="RS Studio",
@@ -142,7 +136,7 @@ app = FastAPI(
 
 
 # Project-route suffixes whose bodies are binary.
-NO_GZIP_SUFFIXES: list[str] = ["/export", "/rocksmith", "/guitar-pro/source"]
+NO_GZIP_SUFFIXES: list[str] = ["/export", "/rocksmith"]
 
 
 def _skip_gzip(path: str) -> bool:
@@ -261,11 +255,6 @@ def _project_assets(m: dict) -> list[str]:
     cover = (m.get("metadata") or {}).get("coverArt")
     if cover:
         rels.append(cover)
-    gp_source = (m.get("guitarPro") or {}).get("sourceRel")
-    if isinstance(gp_source, str) and re.fullmatch(
-        r"guitar-pro/[0-9a-f]{32}\.(?:gp|gpx|gp3|gp4|gp5)", gp_source
-    ):
-        rels.append(gp_source)
     return rels
 
 
@@ -420,13 +409,6 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
             pass
     if "metadata" in payload:
         m["metadata"] = _normalize_metadata(payload.get("metadata"), m.get("metadata"))
-    if "guitarPro" in payload and isinstance(payload.get("guitarPro"), dict):
-        # The browser owns the imported score projection, while sourceRel is
-        # server-owned so a crafted save cannot point the bundle at arbitrary files.
-        source_rel = (m.get("guitarPro") or {}).get("sourceRel")
-        m["guitarPro"] = payload["guitarPro"]
-        if source_rel:
-            m["guitarPro"]["sourceRel"] = source_rel
     if payload.get("name"):
         m["name"] = payload["name"]
     m["name"] = _project_name(m)
@@ -928,9 +910,24 @@ def api_project_stem_order(job: str, payload: dict = Body(...)) -> JSONResponse:
 def api_project_finalize(job: str, payload: dict = Body(default={})) -> JSONResponse:
     """Name the draft and turn it into a real, listed project."""
     m = _draft_manifest(job)
-    if not m["stems"] and not m.get("guitarPro"):
+    payload = payload or {}
+    # A project from a Guitar Pro file has no audio: its length and tempo are the score's.
+    try:
+        score_duration = float(payload.get("scoreDuration") or 0)
+        tempo = float(payload.get("tempo") or 0)
+    except (TypeError, ValueError):
+        score_duration = tempo = 0
+    if not m["stems"] and score_duration <= 0:
         raise HTTPException(status_code=400, detail="Add audio or import a Guitar Pro score")
-    name = (payload or {}).get("name", "")
+    if score_duration > 0:
+        m["scoreDuration"] = score_duration
+        if not m["stems"]:
+            m["duration"] = score_duration
+    if tempo > 0 and not m.get("tempo"):
+        m["tempo"] = tempo
+    if payload.get("filename") and not m.get("filename"):
+        m["filename"] = _clean_text(Path(str(payload["filename"])).name, 240)
+    name = payload.get("name", "")
     if "metadata" in (payload or {}):
         m["metadata"] = _normalize_metadata((payload or {}).get("metadata"), m.get("metadata"))
     m["name"] = name.strip() or (Path(m["filename"]).stem if m.get("filename") else "") or "Untitled"
@@ -1426,97 +1423,6 @@ def api_project_load(job: str) -> JSONResponse:
 def api_project_save(job: str, payload: dict = Body(...)) -> JSONResponse:
     m = _apply_save_payload(job, payload)
     return JSONResponse({"ok": True, "saved_at": m["saved_at"]})
-
-
-@app.post("/api/projects/{job}/guitar-pro")
-async def api_project_guitar_pro(
-    job: str,
-    request: Request,
-) -> JSONResponse:
-    """Keep the untouched GP source beside its editable browser projection."""
-    m = _read_manifest(job)
-    # Starlette deliberately limits ordinary multipart fields to 1 MB.  A
-    # detailed multi-track GP projection can be larger, so parse this route with
-    # a bounded, score-specific limit while retaining the default everywhere else.
-    async with request.form(
-        max_files=1,
-        max_fields=1,
-        max_part_size=_GUITAR_PRO_SUMMARY_MAX_BYTES,
-    ) as form:
-        file = form.get("file")
-        summary = form.get("summary", "{}")
-        if not isinstance(file, StarletteUploadFile):
-            raise HTTPException(status_code=400, detail="Guitar Pro file is missing")
-        if not isinstance(summary, str):
-            raise HTTPException(status_code=400, detail="Invalid Guitar Pro summary")
-        if len(summary.encode("utf-8")) > _GUITAR_PRO_SUMMARY_MAX_BYTES:
-            raise HTTPException(status_code=413, detail="Guitar Pro import data is larger than 16 MB")
-        original_name = Path(file.filename or "score.gp").name
-        raw = await file.read(_GUITAR_PRO_MAX_BYTES + 1)
-
-    suffix = Path(original_name).suffix.lower()
-    if suffix not in _GUITAR_PRO_EXTS:
-        raise HTTPException(status_code=400, detail="Choose a .gp, .gpx, .gp3, .gp4, or .gp5 file")
-    if not raw:
-        raise HTTPException(status_code=400, detail="The Guitar Pro file is empty")
-    if len(raw) > _GUITAR_PRO_MAX_BYTES:
-        raise HTTPException(status_code=413, detail="Guitar Pro file is larger than 64 MB")
-    try:
-        parsed = json.loads(summary or "{}")
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail="Invalid Guitar Pro summary") from exc
-    if not isinstance(parsed, dict):
-        raise HTTPException(status_code=400, detail="Invalid Guitar Pro summary")
-
-    rel = f"guitar-pro/{uuid.uuid4().hex}{suffix}"
-    dest = _job_dir(job) / rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(raw)
-    parsed.update({
-        "sourceRel": rel,
-        "sourceFilename": _clean_text(original_name, 240),
-        "sourceBytes": len(raw),
-        "importedAt": _now(),
-    })
-    m["guitarPro"] = parsed
-    score = parsed.get("score") if isinstance(parsed.get("score"), dict) else {}
-    duration = score.get("durationSeconds")
-    try:
-        duration = float(duration)
-    except (TypeError, ValueError):
-        duration = None
-    if duration and duration > 0:
-        m["scoreDuration"] = duration
-        if not m.get("stems"):
-            m["duration"] = duration
-    tempo = score.get("tempo")
-    try:
-        tempo = float(tempo)
-    except (TypeError, ValueError):
-        tempo = None
-    if tempo and tempo > 0 and not m.get("tempo"):
-        m["tempo"] = tempo
-    if not m.get("filename"):
-        m["filename"] = original_name
-    m["saved_at"] = _now()
-    _write_manifest(job, m)
-    return JSONResponse({"guitarPro": parsed, "saved_at": m["saved_at"]})
-
-
-@app.get("/api/projects/{job}/guitar-pro/source")
-def api_project_guitar_pro_source(job: str) -> FileResponse:
-    """Return the untouched source to the same-version browser alphaTab runtime."""
-    m = _read_manifest(job)
-    gp = m.get("guitarPro") or {}
-    rel = gp.get("sourceRel")
-    if not isinstance(rel, str) or not re.fullmatch(
-        r"guitar-pro/[0-9a-f]{32}\.(?:gp|gpx|gp3|gp4|gp5)", rel
-    ):
-        raise HTTPException(status_code=404, detail="Guitar Pro source is unavailable")
-    source = _safe_project_file(_job_dir(job), rel)
-    if source is None or not source.exists():
-        raise HTTPException(status_code=404, detail="Guitar Pro source is missing")
-    return FileResponse(source, media_type="application/octet-stream", filename=gp.get("sourceFilename") or source.name)
 
 
 @app.delete("/api/projects/{job}")
