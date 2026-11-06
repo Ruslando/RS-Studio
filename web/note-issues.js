@@ -3,7 +3,7 @@
 // Errors, Warnings and Notes (rocksmith-check.js), next to the export's own check and the
 // markers' problems. A new kind of problem goes here, nowhere else.
 //
-// An issue: { kind, tone: "error" | "warning" | "note", title, help, time, notes }.
+// An issue: { id, kind, tone: "error" | "warning" | "note", title, help, time, notes }.
 
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
 import { outOfFretboardRange } from "./voicing-core.js";
@@ -12,45 +12,45 @@ import { OVERLAP_EPS } from "./constants.js";
 import { paintMemo } from "./paint-memo.js";
 
 export const ISSUE_TEXT = {
-  outOfRange: ["Note out of range", "No string and fret of this tuning plays this pitch. Change the note or the tuning."],
-  stack: ["Notes stacked on one pitch", "Notes of the same pitch overlap, so they play as one. Delete or shorten one of them."],
-  bendStack: ["Bend points at the same moment", "Rocksmith keeps only the first of them. Move one point a little apart."],
+  outOfRange: ["Note is outside the fret range", "No string can play this pitch within the selected fret range. Change the pitch, tuning, or fret range."],
+  stack: ["Notes with the same pitch overlap", "Notes with the same pitch overlap on the same string or have no separate string positions. Remove the overlap or place them on different strings."],
+  bendStack: ["Bend points have the same time", "Rocksmith keeps only the first bend point at this time. Move or remove the other points."],
 };
 
 // Playing techniques an imported note has in its Guitar Pro data (n.gp, guitar-pro-core.js)
 // that the editor has no field for, so the Rocksmith chart does not show them. Kept for
 // the Guitar Pro export. One whose editor effect was changed since is the editor's now.
 export const GP_ONLY_TEXT = {
-  pickSlide: ["Pick slide not in Rocksmith", "This older import has no pick-slide projection. Reimport the layer or choose a pick slide to export it as a muted slide."],
-  harmonic: ["Harmonic type not in Rocksmith", "Guitar Pro has a tapped, semi or feedback harmonic here. Rocksmith only has natural and pinch harmonics, so the chart shows a plain note. Choose one in the Harmonic menu."],
-  leftTap: ["Left-hand tap not in Rocksmith", "Guitar Pro has a tap with the fretting hand here. Rocksmith has one tap for both hands, and the chart shows a plain note. Choose Tapping under Slap / pop to show it as tapping."],
-  ornament: ["Ornament not in Rocksmith", "Guitar Pro has a turn or mordent here, a quick figure around the note. Rocksmith shows only the note. Write the figure out as notes to show it."],
-  barVibrato: ["Whammy vibrato not in Rocksmith", "Guitar Pro has a vibrato with the whammy bar here. Rocksmith shows no vibrato. Set Vibrato to show one."],
-  golpe: ["Golpe not in Rocksmith", "Guitar Pro has a golpe here, a tap on the guitar's body. Rocksmith has nothing for it."],
-  rasgueado: ["Rasgueado not in Rocksmith", "Guitar Pro has a rasgueado here, a strum with the fingers one after another. Rocksmith shows the notes without it."],
-  deadSlapped: ["Dead slapped not in Rocksmith", "This older import has no dead-slap projection. Reimport the layer or set Slapping and Dead / muted note."],
+  pickSlide: ["Imported pick slide has no conversion", "The imported pick slide has no pick-slide effect in the editor. Select Pick slide up or Pick slide down in the Slide menu."],
+  harmonic: ["Harmonic type is not supported", "Rocksmith supports natural and pinch harmonics. Select Natural or Pinch in the Harmonic menu."],
+  leftTap: ["Left-hand tap is not shown", "Rocksmith has no separate notation for a left-hand tap. Select Tapping under Slap / pop to represent it as tapping."],
+  ornament: ["Imported ornament is not shown", "Select a figure in the Ornament menu to convert this imported turn or mordent to notes for Rocksmith."],
+  barVibrato: ["Whammy vibrato is not shown", "Rocksmith has no whammy-bar vibrato notation. Enable Vibrato to show finger vibrato instead."],
+  golpe: ["Golpe is not supported", "Rocksmith cannot show a tap on the guitar body. The Guitar Pro export keeps this technique."],
+  rasgueado: ["Rasgueado is not supported", "Rocksmith shows the chord notes without this strum technique. The Guitar Pro export keeps the technique."],
+  deadSlapped: ["Imported dead slap has no conversion", "The imported dead slap is not fully represented by the editor effects. Select Slapping under Slap / pop and enable Dead / muted note."],
 };
 
 // Editor effects the Rocksmith chart leaves out, having nothing to show them with
 // (rocksmith/chart.py). A whammy, a trill and a grace note it imitates instead.
 export const DROPPED_TEXT = {
-  ghost: ["Ghost note not in Rocksmith", "Rocksmith has no quiet notes, so the chart shows a normal one."],
-  staccato: ["Staccato not in Rocksmith", "Rocksmith shows the note as long as it is drawn. Shorten the note to make it short."],
-  letRing: ["Let ring not in Rocksmith", "Rocksmith shows the note as long as it is drawn. Lengthen the note to let it ring."],
-  strum: ["Strum not in Rocksmith", "Rocksmith has no strum direction, so the chart shows the chord without one."],
+  ghost: ["Ghost dynamics are not supported", "Rocksmith cannot show the quiet dynamics of this note."],
+  staccato: ["Staccato needs a shorter note", "Rocksmith has no staccato notation. Shorten the note to represent the short sound."],
+  letRing: ["Let ring needs a longer note", "Rocksmith has no let-ring notation. Extend the note to represent how long it sounds."],
+  strum: ["Strum direction is not supported", "Rocksmith has no strum-direction notation. It shows the chord without the picking direction."],
 };
 
 export const droppedEffects = (n) => [
   ...["staccato", "letRing"].filter((key) => n.fx?.[key])];
 
 export const ADAPTED_TEXT = {
-  pickSlide: ["Pick slide as a muted slide", "Rocksmith shows a tapped, muted unpitched slide high on the neck."],
-  ghost: ["Ghost note is not scored", "Rocksmith shows this note with Ignore enabled; quiet dynamics are not represented."],
-  trill: ["Trill as hammer-ons and pull-offs", "Rocksmith plays alternating notes a sixteenth apart. If the figure cannot fit, the export reports a warning."],
-  grace: ["Grace note as a short lead-in", "Rocksmith plays a short note hammered into the main note. If there is no room, the export reports a warning."],
-  whammy: ["Whammy as slides", "Rocksmith approximates the pitch curve with slides along the string. If it cannot fit, the export reports a warning."],
-  ornament: ["Ornament as hammer-ons and pull-offs", "Rocksmith writes the figure as thirty-second notes, holding the last note. If it cannot fit, the export reports a warning."],
-  artificial: ["Artificial harmonic as pinch harmonic", "Rocksmith uses its pinch-harmonic notation for this harmonic."],
+  pickSlide: ["Pick slide uses a muted slide", "Rocksmith has no pick-slide notation. The export represents the pick slide with a tapped, muted slide."],
+  ghost: ["Ghost note is not scored", "Rocksmith has no ghost-note dynamics. The export shows this note but excludes it from scoring."],
+  trill: ["Trill uses hammer-ons and pull-offs", "Rocksmith has no trill notation. The export writes alternating notes with hammer-ons and pull-offs."],
+  grace: ["Grace note uses a short hammer-on", "Rocksmith has no grace-note notation. The export writes a short note before the main note and connects the notes with a hammer-on."],
+  whammy: ["Whammy uses slides", "Rocksmith has no whammy-bar notation. The export uses slides to represent the pitch changes."],
+  ornament: ["Ornament uses hammer-ons and pull-offs", "Rocksmith has no turn or mordent notation. The export writes the figure as notes with hammer-ons and pull-offs."],
+  artificial: ["Artificial harmonic uses pinch harmonic notation", "Rocksmith has no separate notation for this artificial harmonic. The export uses pinch harmonic notation."],
 };
 
 const BEAT_TECHNIQUES = new Set(["barVibrato", "golpe", "rasgueado", "deadSlapped", "strum"]);
@@ -104,7 +104,13 @@ export function stackedBends(note) {
   return out;
 }
 
-const issue = (kind, tone, [title, help], notes, time = notes[0].start) => ({ kind, tone, title, help, time, notes });
+const issue = (kind, tone, text, notes, time = notes[0].start) => {
+  const [title, help] = text;
+  const group = Object.values(ISSUE_TEXT).includes(text) ? "note"
+    : Object.values(GP_ONLY_TEXT).includes(text) ? "import"
+    : Object.values(DROPPED_TEXT).includes(text) ? "effect" : "adapt";
+  return { id: `editor.${group}.${kind}`, kind, tone, title, help, time, notes };
+};
 
 export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, revision = 0) {
   if (!lane?.notes?.length) return [];
@@ -113,7 +119,7 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
   const byBeat = new Map();
   // A chord with a note no fret reaches is that note's problem, said once, below.
   for (const { notes, kind } of chordWarnings(lane, tuning, maxFret, revision)) if (!notes.some(outside))
-    out.push(issue("shape", "warning", SHAPE_WARNINGS[kind], notes));
+    out.push({ ...issue("shape", "warning", SHAPE_WARNINGS[kind], notes), id: `editor.shape.${kind}` });
   for (const n of lane.notes) {
     if (outside(n)) out.push(issue("outOfRange", "warning", ISSUE_TEXT.outOfRange, [n]));
     for (const b of stackedBends(n)) out.push(issue("bendStack", "warning", ISSUE_TEXT.bendStack, [n], b.time));

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from ..tab import bend_points
+from .messages import ExportError, warning
 from . import dd
 from . import sng as S
 
@@ -565,7 +566,7 @@ def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
     if len(beats) > 2 and song_length - beats[-2][0] <= beats[-1][0] - song_length:
         beats.pop()
     if len(beats) < 2 or beats[-2][0] >= song_length:
-        raise ValueError("Song too short for the beat grid")
+        raise ExportError("beat-grid", "The song is too short for this beat grid. Check the tempo and grid start, or extend the song.")
     beats[-1] = (song_length, *beats[-1][1:])
     return beats
 
@@ -748,7 +749,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
     grip_only = [v for v in voiced if v[3].get("gripOnly")]
     voiced = [v for v in voiced if not v[3].get("gripOnly")]
     if not voiced:
-        raise ValueError("No voiced notes to export")
+        raise ExportError("no-voiced-notes", "There are no playable notes to export. Add notes with valid string and fret positions and turn off Grip only where needed.")
     voiced.sort(key=lambda v: (v[0], v[1]))
 
     chord_templates: list[S.ChordTemplate] = []
@@ -956,17 +957,17 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
         if name == "end":
             continue
         if name not in ROCKSMITH_SECTION_NAMES:
-            warnings.append(f"Section '{raw_name}' is not recognized by Rocksmith and was exported as riff")
+            warnings.append(warning("section-unknown", name=raw_name))
             name = "riff"
         boundary = min(measure_starts, key=lambda value: abs(value - time))
         if boundary >= end_t - 1e-4:
             continue
         if abs(boundary - time) > 0.02:
             warnings.append(
-                f"Section '{raw.get('text') or raw_name}' was snapped to the nearest measure boundary")
+                warning("section-snapped", name=raw.get('text') or raw_name))
         if boundary in authored:
             warnings.append(
-                f"Multiple section markers resolved to {boundary:.3f}s; the last one was used")
+                warning("section-collision", time=boundary))
         authored[boundary] = name
 
     if authored:
@@ -993,7 +994,7 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
             continue
         if abs(boundary - time) > 0.02:
             warnings.append(
-                f"Phrase boundary at {time:.3f}s was snapped to the nearest beat")
+                warning("phrase-snapped", time=time))
         prev = authored_phrase_starts.get(boundary, {})
         raw = raw if isinstance(raw, dict) else {}
         authored_phrase_starts[boundary] = {
@@ -1867,7 +1868,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
     # array, so beyond 32,767 a link silently wraps negative and the game reads
     # the wrong note. 32,000 leaves headroom. See the note record in sng.py.
     if len(notes) > 32000:
-        raise ValueError(f"Too many notes for one arrangement ({len(notes)})")
+        raise ExportError("note-limit", f"The export contains {len(notes)} notes. The export limit is 32,000 notes per arrangement. Remove notes or reduce the use of trills and ornaments.")
 
     # intra-phrase-iteration note linkage (int16 indices into the notes array)
     for k, note in enumerate(notes):
@@ -1976,7 +1977,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
     tuning_hi_lo = [int(p) for p in track.get("tuning") or []]
     n_str = len(tuning_hi_lo)
     if n_str < 4 or n_str > 6:
-        raise ValueError(f"Rocksmith needs a 4-6 string lane, got {n_str} strings")
+        raise ExportError("string-count", f"Rocksmith needs a layer with 4 to 6 strings. This layer has {n_str} strings.")
     tuning_low = list(reversed(tuning_hi_lo))  # index 0 = lowest string
 
     capo = max(0, int(track.get("capo") or 0))

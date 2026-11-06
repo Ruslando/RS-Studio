@@ -1,4 +1,5 @@
 import { issueTone } from "./issue-tone.js";
+import { migrateIgnoredIssues } from "./issue-identity.js";
 // Rocksmith CDLC export UI: the arrangement picker, the metadata form and the
 // POST that builds the .psarc. The File-menu entry is wired in ui.js with the
 // other exports.
@@ -436,7 +437,7 @@ function openRocksmithExportModal() {
   try { $("rsAuthor").value = localStorage.getItem(LS_AUTHOR) || ""; } catch { /* storage blocked: empty */ }
   try { $("rsDynamicDifficulty").checked = localStorage.getItem(LS_DD) !== "0"; } catch { /* storage blocked: on */ }
   try { $("rsMac").checked = localStorage.getItem(LS_MAC) === "1"; } catch { /* storage blocked: off */ }
-  rsIgnored = new Set(meta.rocksmith?.ignoredIssues || []);
+  rsIgnored = migrateIgnoredIssues(meta.rocksmith?.ignoredIssues);
   renderRsIssues();
   setRsStatus("");
   converterOk = false;
@@ -505,6 +506,7 @@ function renderRsIssues() {
       row.className = "list-row list-row--fields artifact-issue-row rs-issue-row";
       row.toggleAttribute("data-important", tone === "error");
       row.dataset.tone = tone;
+      row.dataset.issueId = key;
       // Rule 19: the sentence is the row's tooltip; DLC Builder's codes stay internal (10).
       row.dataset.tip = help ? `${title}\n${help}` : title;
       row.dataset.tipTone = tone;

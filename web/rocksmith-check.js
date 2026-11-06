@@ -8,6 +8,7 @@
 // Warnings, with the editor's own note problems (note-issues.js) and the flags'
 // (design.md 10), and framed on the stage around the notes they concern.
 import { issueTone, toneRank } from './issue-tone.js';
+import { issueId } from './issue-identity.js';
 import { $, scroll } from './dom.js';
 import { S } from './store.js';
 import { buildSpecForLanesAsync, laneFretCount, laneFretTuning, laneTuning } from './tablature.js';
@@ -153,18 +154,19 @@ export function rocksmithShapeProblems(lane) {
 
 // Every problem of a layer: the export's (Rocksmith), the editor's own
 // (note-issues.js) and its flags'. `key` is the problem's kind, what the export
-// window ignores: a checker code, else a fixed title or the flag's kind.
+// window ignores: a stable ID independent of the message text.
 function rowsFor(lane) {
   const found = results.get(lane?.id);
   const rows = [];
-  if (found?.error) rows.push({ key: 'not-exported', title: `Not exported: ${found.error}`, help: '', tone: 'error', time: null });
-  for (const text of found?.warnings || []) rows.push({ key: text, title: text, help: '', tone: 'warning', time: null });
-  for (const issue of found?.issues || []) rows.push({ ...issue, tone: issueTone(issue), key: issue.code });
+  if (found?.error) rows.push({ id: found.errorId || 'export.compile-failed', key: found.errorId || 'export.compile-failed', title: `Not exported: ${found.error}`, help: '', tone: 'error', time: null });
+  if (found?.warningIssues) for (const issue of found.warningIssues) rows.push({ ...issue, key: issue.id });
+  else for (const text of found?.warnings || []) rows.push({ key: issueId(text), title: text, help: '', tone: 'warning', time: null });
+  for (const issue of found?.issues || []) rows.push({ ...issue, tone: issueTone(issue), key: issue.id || issueId(issue.code) });
   if (lane) for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision))
-    rows.push({ key: issue.title, title: issue.title, help: issue.help, tone: issue.tone, time: issue.time });
+    rows.push({ id: issue.id, key: issue.id, title: issue.title, help: issue.help, tone: issue.tone, time: issue.time });
   // ponytail: flags are only built for the active layer, so another layer's flag problems are not here.
   for (const entry of markerArtifacts()) if (entry.issue && entry.lane === lane)
-    rows.push({ key: `flag-${entry.kind}`, title: entry.issue.title, help: entry.issue.help, tone: entry.issue.tone, time: entry.t });
+    rows.push({ id: entry.issue.id, key: entry.issue.id, title: entry.issue.title, help: entry.issue.help, tone: entry.issue.tone, time: entry.t });
   return rows.sort((a, b) => (a.time ?? -1) - (b.time ?? -1));
 }
 
@@ -193,6 +195,7 @@ function issueRow(entry) {
   row.className = 'artifact-row artifact-marker-row artifact-issue-row';
   row.toggleAttribute('data-important', entry.tone === 'error');
   row.dataset.tone = entry.tone;
+  row.dataset.issueId = entry.key;
   row.dataset.tip = entry.help ? `${entry.title}\n${entry.help}` : entry.title;
   row.dataset.tipTone = entry.tone;
   row.setAttribute('aria-description', `${entry.tone[0].toUpperCase() + entry.tone.slice(1)}: ${row.dataset.tip}`);

@@ -64,8 +64,8 @@ export function markerArtifacts() {
         key: `anchor:${lane.id}:${index}`, kind: 'anchor', lane, owner: lane.name,
         marker, t: marker.t, name: `${lost ? '⚠ ' : ''}Fret ${fret}${lost ? " · can't reach" : ''}`,
         // Listed again under Errors (rocksmith-check.js), where every problem goes.
-        issue: lost ? { tone: 'warning', title: `Hand anchor on fret ${fret} can't reach its note`,
-          help: 'The hand cannot play the note there, so the anchor is ignored. Move it or choose another fret.' } : null,
+        issue: lost ? { id: 'marker.anchor-out-of-reach', tone: 'warning', title: `Hand anchor at fret ${fret} cannot reach the note`,
+          help: 'The hand cannot reach the note from this anchor, so the anchor is not used. Move the anchor or select another fret.' } : null,
       });
     });
     [...lane.phraseBoundaries || []].sort((a, b) => a.t - b.t).forEach((marker, index) => entries.push({
@@ -85,8 +85,8 @@ export function markerArtifacts() {
       entries.push({
         key: `tone:${lane.id}:${marker.id}`, kind: 'tone', lane, owner: lane.name,
         marker, t: marker.t, name: `${missing ? '⚠ ' : ''}${label}`,
-        issue: missing ? { tone: 'warning', title: `Tone preset missing: ${label}`,
-          help: "The preset this tone switch names isn't in your sound library. Choose another one or import it." } : null,
+        issue: missing ? { id: 'marker.tone-preset-missing', tone: 'warning', title: `Tone preset is missing: ${label}`,
+          help: "The sound library does not contain this tone preset. Select another preset or import the missing preset." } : null,
       });
     }
   }

@@ -35,7 +35,7 @@ import { S } from "./store.js";
 import { initProjectView, restoreView, savedView } from "./project-view.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
-import { tonePresetLabel, tonePresetMissing, withStartTone } from "./tone-marker-core.js";
+import { withStartTone } from "./tone-marker-core.js";
 import { loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets-core.js";
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars, withEndSection } from "./section-marker-core.js";
 import { normalizeComments } from "./comments.js";
@@ -191,10 +191,7 @@ export async function confirmLeave() {
 // unsaved work because a save failed.
 export async function saveProject({ saveAs = false } = {}) {
   if (!S.state) return false;
-  if (S.state.job === "tutorial") {
-    toast("Walkthrough changes are temporary", 2200);
-    return false;
-  }
+  if (S.state.job === "tutorial") return false;
   try {
     if (saveAs) {
       const { blob, name } = await projectBundle();
@@ -333,8 +330,8 @@ let projectVisuals = Promise.resolve();
 export const waitForProjectVisuals = () => projectVisuals;
 
 export async function applyProject(data) {
-  let presetLoadError = null;
-  try { await loadPresetFolderData(); } catch (error) { presetLoadError = error; }
+  try { await loadPresetFolderData(); }
+  catch (error) { console.warn("Tone presets could not be loaded", error); }
   projectVisuals = Promise.resolve();
   // 1. tear down the previous project
   disposeSynths();
@@ -490,11 +487,6 @@ export async function applyProject(data) {
   // sits upstream of all three. project-library.js hands GP drops back the same
   // way ("cw-open-guitar-pro").
   window.dispatchEvent(new CustomEvent("cw-project-opened"));
-  const presets = readAvailableSoundPresets();
-  const missingTones = [...new Set(S.state.editLanes.flatMap(lane => (lane.toneMarkers || [])
-    .filter(marker => tonePresetMissing(marker.tone, presets, marker.toneData)).map(marker => tonePresetLabel(marker.tone, marker.toneData, presets))))];
-  if (presetLoadError) toast(`Could not load tone presets: ${presetLoadError.message}`, 8000, "warn");
-  if (missingTones.length) toast(`Missing tone presets: ${missingTones.join(", ")}. Choose an available preset for the marked tone switches.`, 10000, "warn");
 }
 
 // Close the project and hand the window back to the launcher — phases 1 and 4 of

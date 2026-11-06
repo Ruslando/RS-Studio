@@ -891,6 +891,11 @@ original timing/layer, including song markers when all layers use own timings.
 
 ### Errors and warnings
 
+Issue categories use stable IDs independent of display text. DLC Builder checks keep
+their `Ixx` IDs and detection rules. Editor, marker, and export categories use
+`editor.*`, `marker.*`, and `export.*` IDs. See [the issue catalogue](issue-catalogue.md)
+for the IDs, message text, legacy ignore migration, and ASD-STE100 writing guidance.
+
 The pane's first lists, Errors and Warnings, hold every problem of the active
 layer, sorted by kind rather than by source: what the Rocksmith export would report,
 and the flags' own (a hand anchor that cannot reach its note is an error, a tone

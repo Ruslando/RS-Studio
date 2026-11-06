@@ -150,6 +150,41 @@ def _disable_browser_extras(window) -> None:
     view.CoreWebView2InitializationCompleted += ready
 
 
+def _configure_qt_permissions(window) -> None:
+    """Use Qt permission enums instead of pywebview's integer policies.
+
+    pywebview 6.2.1 passes 1/2 to setFeaturePermission. PyQt6 rejects these
+    integers, and an exception in the Qt signal handler can abort the process.
+    Preserve its media permissions and deny other requests. Permit sanitized
+    clipboard writes from a user action without enabling clipboard reads.
+    """
+    view = getattr(window.native, "webview", None)
+    if view is None or not hasattr(view, "page"):
+        return
+    page = view.page()
+    signal = getattr(page, "featurePermissionRequested", None)
+    previous = getattr(page, "onFeaturePermissionRequested", None)
+    if signal is None or previous is None:
+        return
+    if getattr(page, "_rs_permissions_configured", False):
+        return
+
+    settings = page.settings()
+    settings.setAttribute(settings.WebAttribute.JavascriptCanAccessClipboard, True)
+    policies = page.PermissionPolicy
+    media = (page.Feature.MediaAudioCapture, page.Feature.MediaVideoCapture,
+             page.Feature.MediaAudioVideoCapture)
+
+    def permission_requested(origin, feature):
+        policy = (policies.PermissionGrantedByUser if feature in media
+                  else policies.PermissionDeniedByUser)
+        page.setFeaturePermission(origin, feature, policy)
+
+    signal.disconnect(previous)
+    signal.connect(permission_requested)
+    page._rs_permissions_configured = True
+
+
 def _open_window(url: str) -> bool:
     """Show the UI in a native window. False if no webview backend is usable.
 
@@ -179,6 +214,7 @@ def _open_window(url: str) -> bool:
         window.events.closing += shell._on_closing
         window.events.before_show += lambda: _enable_page_context_menu(window)
         window.events.before_show += lambda: _disable_browser_extras(window)
+        window.events.before_show += lambda: _configure_qt_permissions(window)
         # Not private: pywebview's default forgets the page's storage (theme, keys)
         # on every start.
         webview.start(icon=str(_app_icon()), private_mode=False,

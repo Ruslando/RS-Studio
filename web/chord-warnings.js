@@ -3,8 +3,8 @@ import { paintMemo } from './paint-memo.js';
 
 // What each kind says, on the fretboard and on the stage's warning mark.
 export const SHAPE_WARNINGS = {
-  stretch: ["No reasonable shape found", "Only a very wide hand reaches these notes together."],
-  impossible: ["No valid shape found", "The notes cannot all be played together with this tuning, fret range and fingering."],
+  stretch: ["Chord needs a large hand stretch", "The editor found a fingering that needs a large hand stretch. Change the string positions or notes if the stretch is too difficult."],
+  impossible: ["Chord has no valid fingering", "The editor found no fingering for these notes with the current tuning, fret range, and fixed positions. Change the notes or their string positions."],
 };
 
 const laneCache = new WeakMap();

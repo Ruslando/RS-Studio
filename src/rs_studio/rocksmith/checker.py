@@ -4,7 +4,8 @@ A port of Rocksmith2014.NET (MIT, see NOTICE) at commit 4cf3325:
 src/Rocksmith2014.XML.Processing/Checkers/InstrumentalChecker.fs and its
 Utils.fs, plus checkBassTuning from samples/DLCBuilder.Domain/Utils.fs. Issue
 codes, titles and the "important" set match DLC Builder's, so a list from here
-can be compared line by line with what DLC Builder reports for the same psarc.
+can be compared with what DLC Builder reports for the same psarc.
+Help text uses short instructions based on ASD-STE100; checker logic is unchanged.
 
 DLC Builder checks an imported psarc after SngToXml has turned it back into an
 XML arrangement. `_view` does the same conversion on our SNG objects, with the
@@ -31,6 +32,11 @@ class Issue:
     title: str
     help: str
     important: bool
+    id: str = ""
+
+    def __post_init__(self):
+        if not self.id:
+            object.__setattr__(self, "id", self.code)
 
     @property
     def tone(self) -> str:
@@ -49,7 +55,7 @@ class Issue:
 
     def text(self) -> str:
         at = "" if self.time is None else f" at {_clock(self.time)}"
-        return f"{self.code}{at}: {self.title}"
+        return f"{self.id}{at}: {self.title}"
 
 
 def _clock(seconds: float) -> str:
@@ -60,72 +66,82 @@ def _clock(seconds: float) -> str:
 # code -> (title, help, important). Titles are DLC Builder's (i18n/en.json); the
 # help says what to change in the editor rather than in EOF.
 ISSUES = {
-    "I01": ("An applause event is missing the event that ends it",
-            "Intro and outro applause need an Applause end after them.", False),
-    "I02": ("Unexpected event between intro applause events",
-            "Crowd speed events do not work correctly between Intro applause and its Applause end.",
-            False),
-    "I03": ("Note linked to a chord",
-            "A legato slide ends on a chord. Rocksmith can only link a note to another single note.", False),
-    "I04": ("Linked note missing its target",
-            "A legato note has no following note on the same string.", True),
-    "I05": ("Linked slide ends on the wrong fret",
-            "The note after a legato slide is not on the fret the slide goes to.", True),
-    "I06": ("Linked notes on different frets",
-            "Two linked notes on the same string use different frets.", True),
-    "I07": ("Linked bend mismatch",
-            "The bend a note ends with does not match the first bend value of the note it is linked to.", True),
-    "I08": ("Linked note does not reach its target",
-            "The next note on the same string does not start where the linked note's sustain ends.", True),
-    "I09": ("Unpitched slide with link",
-            "A link on an unpitched slide causes mastery issues in Rocksmith 2014 Remastered.", True),
-    "I10": ("Phrase changes on a linked note's sustain",
-            "This can make a later note on the same string invisible when the arrangement has DD levels.", True),
-    "I11": ("Note is both harmonic and pinch harmonic", "Pick one harmonic type.", False),
-    "I13": ("7th fret harmonic with sustain",
-            "The game does not detect a sustained 7th fret harmonic. Shorten the note or mark it ignored.", False),
-    "I14": ("Bend without a bend value", "The note is set as a bend but every bend value is zero.", True),
-    "I15": ("Tone change on a note",
-            "Place a tone change slightly before a note rather than exactly on it.", False),
-    "I16": ("Note inside a noguitar section", "A note or chord sits inside a section of type No Guitar.", False),
-    "I18": ("Linked chord without linked chord notes",
-            "The chord is linked but none of its notes are. Such a chord can crash the game.", True),
-    "I20": ("Chord fingering does not match the hand position",
-            "The hand position is on the lowest fret of a chord that does not use the first finger.", False),
-    "I27": ("Chord fingering looks wrong",
-            "The fingering needs the fingers to cross in a way common chords do not.", False),
-    "I28": ("Barre over open strings", "Open strings lie between strings fretted by the same finger.", False),
-    "I29": ("Muted string in a chord that is not muted",
-            "The game needs the pitch of every chord note. Remove the dead note or mute the whole chord.", True),
-    "I21": ("Hand position changes inside a chord shape",
-            "A hand position change inside a held chord can cut the shape off or crash the game.", True),
-    "I22": ("Phrase boundary breaks a chord shape",
-            "Repeated chords cross a phrase or section boundary.", True),
-    "I23": ("Hand position change at the end of an unpitched slide",
-            "A hand position change this close to an unpitched slide's end may not show in the game.", False),
-    "I25": ("The first phrase contains notes",
-            "Rocksmith needs an empty first phrase. Leave the first measure empty or add leading silence.", True),
-    "I26": ("Missing END phrase", "The arrangement has no phrase called END.", False),
-    "I30": ("More than 100 phrases",
-            "DD bars will not show, and very many phrases can crash the game.", False),
-    "I31": ("Hammer-on or pull-off on the same fret",
-            "A hammer-on or pull-off uses the same fret as the previous note on that string.", False),
-    "I32": ("Finger changes during a slide",
-            "From the hand positions, the slide starts and ends on different fingers.", False),
-    "I33": ("Position shift into a pull-off", "The hand position changes on a pull-off note.", False),
-    "I34": ("Several bend values at the same time",
-            "Two points of a bend curve sit at the same moment. Move or remove one.", True),
-    "I35": ("Natural harmonic with bend", "The harmonic should probably be a pinch harmonic.", False),
-    "I37": ("Phrase mover on a note", "A mover1 phrase starts on a note; the number should be at least 2.", False),
-    "I36": ("String not available on bass", "Bass arrangements can only use four strings.", True),
-    "I38": ("Fret above 24", "The game cannot display notes above the 24th fret.", False),
-    "I39": ("Note after the song end", "A note or chord comes after the END phrase or the end of the audio.", False),
-    "I40": ("Technique on a note without sustain",
-            "Vibrato, tremolo and slides need sustain. Lengthen the note.", False),
-    "I41": ("Low bass tuning without workaround",
-            "The game does not detect notes in this low a bass tuning without the 220 Hz tuning workaround.", True),
-    "I42": ("Bass tuning does not fit the tuning pitch",
-            "With a 220 Hz tuning pitch the string offsets should all be positive.", False),
+    'I01': ('An applause event is missing the event that ends it',
+            'Add an Applause end event after Intro applause.', False),
+    'I02': ('Unexpected event between intro applause events',
+            'Move this crowd event before Intro applause or after Applause end.', False),
+    'I03': ('Note linked to a chord',
+            'Rocksmith cannot link a single note to a chord. Change the legato slide to a shift slide, or use a single target note.', False),
+    'I04': ('Linked note missing its target',
+            'This linked note has no next note on the same string. Add a target note. If it has a legato slide, remove the slide instead.', True),
+    'I05': ('Linked slide ends on the wrong fret',
+            'The slide ends on a different fret from the next linked note. Change the target note or the slide.', True),
+    'I06': ('Linked notes on different frets',
+            'Linked notes use different frets without a connecting slide. Use a legato slide between them, or set them to the same fret.', True),
+    'I07': ('Linked bend mismatch',
+            'Set the last bend value of the first note to the first bend value of the next note.', True),
+    'I08': ('Linked note does not reach its target',
+            'The linked note ends before its target starts. Extend it to the next note on the same string.', True),
+    'I09': ('Unpitched slide with link',
+            'An unpitched slide with a link can cause incorrect mastery scores. Remove the slide or change it to a shift slide.', True),
+    'I10': ("Phrase changes on a linked note's sustain",
+            'Move the phrase boundary outside the linked note. With difficulty levels, this boundary can hide a later note.', True),
+    'I11': ('Note is both harmonic and pinch harmonic',
+            'Select one harmonic type in the Harmonic menu.', False),
+    'I13': ('7th fret harmonic with sustain',
+            'Rocksmith cannot detect sustain on a natural harmonic at fret 7. Shorten the note or select Rocksmith > Not scored (Ignore).', False),
+    'I14': ('Bend without a bend value',
+            'All bend points have a value of zero. Move a bend point above zero, or remove Bend.', True),
+    'I15': ('Tone change on a note',
+            'Move the tone switch before the note so the tone is active when the note starts.', False),
+    'I16': ('Note inside a noguitar section',
+            'Move the note outside the No Guitar section, or change the section type.', False),
+    'I18': ('Linked chord without linked chord notes',
+            "Rocksmith can stop when a chord link has no linked chord notes. Check the chord's legato slide and note lengths.", True),
+    'I20': ('Chord fingering does not match the hand position',
+            "The hand position does not match this chord's fingering. Change the hand anchor or the finger positions.", False),
+    'I27': ('Chord fingering looks wrong',
+            'The finger numbers suggest that the fingers cross. Check the fingering and change it if needed.', False),
+    'I28': ('Barre over open strings',
+            'Change the fingering. An open string is between strings held by the same finger.', False),
+    'I29': ('Muted string in a chord that is not muted',
+            'Rocksmith cannot combine dead notes with pitched notes in one chord. Remove Dead / muted note, or enable it for every chord note.', True),
+    'I21': ('Hand position changes inside a chord shape',
+            'Move the hand position change outside the held chord shape. This change can cut off the shape or cause the game to stop.', True),
+    'I22': ('Phrase boundary breaks a chord shape',
+            'A phrase or section boundary changes the hand position inside a held chord shape. Move the boundary outside the shape.', True),
+    'I23': ('Hand position change at the end of an unpitched slide',
+            "Move the hand anchor away from the end of the unpitched slide. Rocksmith can fail to show a change at the slide's end.", False),
+    'I25': ('The first phrase contains notes',
+            'Rocksmith needs an empty first phrase. Increase Leading silence in the export settings, or move the first notes later.', True),
+    'I26': ('Missing END phrase',
+            'Rocksmith needs an END phrase after the playable notes. The export creates it automatically. If this message remains, report an export error.', False),
+    'I30': ('More than 100 phrases',
+            'The arrangement has more than 100 phrase occurrences. Remove unnecessary phrase or section markers. Too many phrases can hide difficulty bars or stop the game.', False),
+    'I31': ('Hammer-on or pull-off on the same fret',
+            "This hammer-on or pull-off starts on the previous note's fret or slide target. Change the fret or remove Hammer-on / pull-off.", False),
+    'I32': ('Finger changes during a slide',
+            'The hand positions imply different fingers at the start and end of this slide. Change the hand anchors or fingering to keep the same finger.', False),
+    'I33': ('Position shift into a pull-off',
+            'Move the hand anchor before or after the pull-off note.', False),
+    'I34': ('Several bend values at the same time',
+            'Move or remove overlapping bend points. Each bend point must have a different time.', True),
+    'I35': ('Natural harmonic with bend',
+            'This note has a natural harmonic and a bend. Remove Bend or select Pinch in the Harmonic menu.', False),
+    'I37': ('Phrase mover on a note',
+            'A mover1 phrase starts on a note. Rocksmith requires mover2 or a higher number here. The editor does not allow these reserved phrase names. Report this export error.', False),
+    'I36': ('String not available on bass',
+            'Move the note to one of the four bass strings.', True),
+    'I38': ('Fret above 24',
+            'Rocksmith cannot show frets above 24. Move the note to a lower fret, or reduce the capo if used.', False),
+    'I39': ('Note after the song end',
+            'This note starts at or after the END phrase or the end of the audio. Move it earlier or extend the playable song and its audio.', False),
+    'I40': ('Technique on a note without sustain',
+            'This note is too short to carry its vibrato, tremolo picking, or slide. Extend the note or remove the technique.', False),
+    'I41': ('Low bass tuning without workaround',
+            'This bass tuning needs the low-tuning workaround for note detection. The export normally applies it automatically. Check the layer tuning. If the tuning is correct, report this export error.', True),
+    'I42': ('Bass tuning does not fit the tuning pitch',
+            'The tuning reference is 220 Hz or lower, but a string offset is negative. Check the layer tuning and Concert pitch settings.', False),
 }
 
 
@@ -133,54 +149,51 @@ ISSUES = {
 # be exported at all: code -> (title, help).
 # Shown where it happened, never important: the chart is still fine to ship.
 FIXED = {
-    "I29": ("Dead note left out of the chord",
-            "Rocksmith needs the pitch of every chord note, so the export leaves the dead note out. "
-            "Mute every string of the chord to keep it."),
-    "slide": ("Slide dropped: no target on its string",
-              "A shift or legato slide moves along one string, but the next note is on another string or open. "
-              "Put the target on the slide's string."),
-    "late-fx": ("Late slide or vibrato covers the whole note",
-                "The note is bent, and a bend cannot be cut, so Rocksmith plays the effect "
-                "from the start of the note."),
-    "grace": ("Grace note left out", "There is no room before its note on that string."),
-    "slide-in": ("Slide-in left out",
-                 "Rocksmith plays a slide-in as a short note before this one, sliding into it, but there is "
-                 "no room for it on that string or no fret to start it from."),
-    "whammy": ("Whammy left out",
-               "Rocksmith plays a whammy as slides along the string, but this one would slide past the "
-               "open string or fret 24, starts on an open string, or is on a bent note."),
-    "whammy-slide": ("Slide replaced by the whammy",
-                     "The whammy ends in a slide, so the note's own slide out is left out."),
-    "trill": ("Trill left out",
-              "Rocksmith plays a trill as hammer-ons and pull-offs a sixteenth apart, but the note is "
-              "shorter than two sixteenths or the upper note is above fret 24."),
-    "ornament": ("Ornament left out", "There is not enough time for the figure, or one of its notes is outside frets 0–24."),
-    "slide-open": ("Slide dropped: open string", "An open string cannot slide. Fret the note to keep the slide."),
-    "fret": ("Note moved down to fret 24", "Rocksmith has no frets above 24."),
-    "unvoiced": ("Note skipped", "The note has no string or fret."),
-    "finger": ("Chord without fingering", "Some fretted notes of this grip have no finger; Rocksmith shows them without one."),
-    "hand": ("Hand position guessed", "The note has no hand position from the editor, so the export placed the hand."),
-    "shape-grip": ("Arpeggio or handshape exported as plain notes",
-                   "Its notes do not form one grip: a string is played on two frets, or only one string is used. "
-                   "Put every note of a string on the same fret, or remove the shape."),
-    "shape-mixed": ("Arpeggio or handshape exported as plain notes",
-                    "A note outside the shape is played while the shape is held. Every note between its first "
-                    "and last note belongs to it: add that note to the shape, or move it out."),
-    "grip-only": ("Grip-only note left out",
-                  "A grip-only note only adds to the grip of an arpeggio or handshape that is played. "
-                  "Put it in one, or make it a played note."),
-    "phrase-differs": ("Phrase plays other notes than the first of its name",
-                       "Phrases with the same name are one phrase in Rocksmith, which levels and scores them "
-                       "together. Make the notes match, or give this phrase its own name."),
-    "shape-hand": ("Hand position change inside an arpeggio or handshape",
-                   "The hand holds the grip for the whole shape, so the export keeps it where the shape begins "
-                   "and ignores this change. Move the hand anchor before or after the shape, or change the fingering."),
+    'I29': ('Dead note removed from the chord',
+            'The export leaves this dead note out because other chord notes are not muted. Enable Dead / muted note for every chord note to keep a fully muted chord.'),
+    'slide': ('Slide removed: no valid target',
+            'The export cannot find a valid target for this slide. Put the next note on the same string at a different fret above fret 0.'),
+    'late-fx': ('Slide or vibrato starts with the note',
+            'Rocksmith cannot start this effect partway through a bent note. The export starts the slide or vibrato at the beginning of the note.'),
+    'grace': ('Grace note removed',
+            'The export cannot place a lower note before this note. Check for an open string, the song start, or another note on the same string.'),
+    'slide-in': ('Slide-in removed',
+            'The slide-in overlaps another note, has no duration, or has no valid start fret. Shorten the slide-in, move the other note, or change the slide direction.'),
+    'whammy': ('Whammy removed',
+            'The whammy would leave frets 1 to 24, or this note has a bend. Change the whammy curve, move the note, or remove Bend.'),
+    'whammy-slide': ('Whammy replaces the slide',
+            'The export uses the final whammy slide and leaves out the separate slide out. Remove Whammy bar to keep the separate slide.'),
+    'trill': ('Trill removed',
+            'The note is too short for the trill, or its upper note is above fret 24. Extend the note or select a smaller trill interval.'),
+    'ornament': ('Ornament removed',
+            'The note is too short for the figure, or a figure note is outside frets 0 to 24. Extend the note, change its fret, or select another ornament.'),
+    'slide-open': ('Slide removed from an open string',
+            'An open string cannot slide. Use a fretted note to keep the slide.'),
+    'fret': ('Note moved to fret 24',
+            'The export limits this note to fret 24, which changes its pitch. Choose a position at fret 24 or below and check the capo.'),
+    'unvoiced': ('Note removed: no string or fret',
+            'The export leaves out this note because its string or fret is missing or invalid. Assign a valid string and fret position.'),
+    'finger': ('Chord has no complete fingering',
+            'Some fretted chord notes have no finger number. Assign the missing fingers, or select Rocksmith > No finger numbers (Fingerless).'),
+    'hand': ('Export sets the hand position',
+            'The export received no hand position for this note, so it sets one. Add a hand anchor to choose the position.'),
+    'shape-grip': ('Shape removed: invalid grip',
+            'The export writes plain notes because this shape cannot use one grip. Use at least two strings and only one fret on each string.'),
+    'shape-mixed': ('Shape removed: another note is inside it',
+            'A note outside this shape starts between its first and last notes. Add that note to the shape or move it outside the shape.'),
+    'grip-only': ('Grip-only note removed',
+            'A grip-only note needs an arpeggio or handshape that contains played notes. Add it to such a shape, or turn off Grip only (Ghost gem).'),
+    'phrase-differs': ('Phrases with the same name have different notes',
+            'Rocksmith gives phrases with the same name shared difficulty levels and scores. Make their notes match, or give this phrase a different name.'),
+    'shape-hand': ('Hand position change removed inside a shape',
+            'The export keeps the hand position from the start of this shape. Move the hand anchor outside the shape, or change the fingering.'),
 }
 
 
 def fixed(code: str, seconds: float) -> Issue:
     title, help_ = FIXED[code]
-    return Issue(code, round(seconds, 3), title, help_, False)
+    return Issue(code, round(seconds, 3), title, help_, False,
+                 "export.chord-dead-note-removed" if code == "I29" else f"export.{code}")
 
 
 def _issue(code: str, ms: int | None) -> Issue:

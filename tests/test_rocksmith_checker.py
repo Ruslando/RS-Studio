@@ -109,7 +109,8 @@ class ThroughTheExporter(unittest.TestCase):
         spec["rocksmith"]["arrangements"].append({"track": 1, "kind": "rhythm"})
         lead, rhythm = builder.check_spec(spec)
         self.assertIsNone(lead["error"])
-        self.assertEqual(rhythm["error"], "No voiced notes to export")
+        self.assertEqual(rhythm["errorId"], "export.no-voiced-notes")
+        self.assertIn("There are no playable notes to export", rhythm["error"])
 
     def test_the_check_marks_the_crowd_events_it_added(self):
         spec = _spec([_note(2.0, 2.5, 6, 3)], lead=5)
@@ -263,7 +264,7 @@ class ExporterFixes(unittest.TestCase):
         [found] = builder.check_spec(_spec(partly + fully, lead=5))
         self.assertEqual([(i["code"], i["time"], i["title"], i["important"]) for i in found["issues"]
                           if i["code"] not in ("hand", "finger")],
-                         [("I29", 2.0, "Dead note left out of the chord", False)])
+                         [("I29", 2.0, "Dead note removed from the chord", False)])
         song = _compiled(partly + fully)
         first, second = song.levels[0].notes
         self.assertEqual(song.chords[first.chord_id].frets, [3, 5, 5, -1, -1, -1])
@@ -494,6 +495,44 @@ class HandBuiltArrangements(unittest.TestCase):
         """Through float32, as the SNG stores them: 1.0005 s is 1000 ms, not 1001."""
         self.assertEqual(checker._ms(1.0005), 1000)
         self.assertEqual(checker._ms(2.25), 2250)
+
+
+class StableIssueIds(unittest.TestCase):
+    def test_correction_has_an_id_separate_from_the_dlc_builder_check(self):
+        problem = checker._issue("I29", 2000)
+        correction = checker.fixed("I29", 2)
+        self.assertEqual(problem.id, "I29")
+        self.assertEqual(correction.id, "export.chord-dead-note-removed")
+        self.assertEqual(correction.in_editor(1).id, correction.id)
+        self.assertEqual(builder._blocking({}, [problem, correction]), [problem])
+        self.assertEqual(builder._blocking({"rocksmith": {"ignoredIssues": ["I29"]}}, [problem, correction]), [])
+        self.assertTrue(correction.text().startswith("export.chord-dead-note-removed"))
+
+    def test_all_checker_and_correction_ids_are_unique(self):
+        checks = [checker._issue(code, None) for code in checker.ISSUES]
+        corrections = [checker.fixed(code, 0) for code in checker.FIXED]
+        ids = [issue.id for issue in checks + corrections]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual([i.id for i in checks], list(checker.ISSUES))
+
+    def test_warning_id_does_not_depend_on_time_or_display_text(self):
+        from rs_studio.rocksmith.messages import warning
+        first = warning("tone-outside-song", time=25)
+        second = warning("tone-outside-song", time=30)
+        self.assertNotEqual(first, second)
+        self.assertEqual(first.id, second.id)
+        self.assertIsInstance(first, str)
+        self.assertEqual(first.as_issue()["tone"], "warning")
+        self.assertTrue(first.as_issue()["help"])
+
+    def test_live_check_supplies_ids_for_issues_and_compiler_warnings(self):
+        spec = _spec([_note(4, 5, 3, 12, harmonic="natural", bend="full")],
+                     toneMarkers=[{"t": 30, "tone": "clean"}])
+        [result] = builder.check_spec(spec)
+        self.assertTrue(all(i["id"] for i in result["issues"]))
+        self.assertIn("I35", [i["id"] for i in result["issues"]])
+        self.assertEqual(result["warningIssues"][0]["id"], "export.tone-outside-song")
+        self.assertEqual(result["warningIssues"][0]["title"], result["warnings"][0])
 
 
 if __name__ == "__main__":

@@ -52,13 +52,19 @@ function addToastCopyButton(element, getText) {
       await navigator.clipboard.writeText(getText());
       button.textContent = "Copied";
     } catch {
-      // Clipboard access may be disabled in a desktop webview. Select the
-      // message so the user can still copy it with the keyboard.
+      // Qt can deny the asynchronous clipboard permission. The legacy copy
+      // command uses the user's click without requesting clipboard read access.
       const range = document.createRange();
       range.selectNodeContents(element.querySelector(".toast-text"));
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
+      try {
+        if (document.execCommand("copy")) {
+          button.textContent = "Copied";
+          return;
+        }
+      } catch { /* Leave the message selected for keyboard copying. */ }
       button.textContent = "Press Ctrl+C";
     }
   });

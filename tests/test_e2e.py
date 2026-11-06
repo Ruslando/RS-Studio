@@ -4205,7 +4205,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('.toast').filter(has_text='No tone presets are available')).to_be_visible()
         self.assertEqual(page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers'''), [])
 
-    def test_tone_switch_missing_presets_warn_on_load_and_can_be_repaired(self):
+    def test_tone_switch_missing_presets_keep_marker_warnings_without_a_load_toast(self):
         page = self.page
         root = Path(__file__).resolve().parents[1]
         data = json.loads((root / 'examples/reference-showcase/project.json').read_text('utf-8'))
@@ -4222,11 +4222,7 @@ class EndToEndTests(unittest.TestCase):
             page.click('#welcomeOpen')
         chooser.value.set_files(bundle)
         warning = page.locator('.toast').filter(has_text='Missing tone presets:')
-        expect(warning).to_have_count(1)
-        expect(warning.locator('.dot.warn')).to_be_visible()
-        self.assertEqual(warning.locator('.dot.warn').evaluate('el => getComputedStyle(el, "::before").content'), 'none')
-        for name in ['lead', 'clean', 'crunch', 'bass']:
-            expect(warning).to_contain_text(name)
+        expect(warning).to_have_count(0)
         before = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers''')
         self.assertEqual([m['tone'] for m in before], ['lead', 'clean', 'crunch', 'bass', 'sound_removed'])
         strokes = page.evaluate('''async () => {

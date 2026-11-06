@@ -80,5 +80,5 @@ class CustomToneTests(unittest.TestCase):
         base, slots, _ = builder._arrangement_tones({"toneMarkers": markers(4)}, False, "song", "lead", 30, [])
         self.assertEqual([s["Key"] for s in slots][0], base["Key"])
         # Five: the base tone and four others, one more than tones A to D hold.
-        with self.assertRaisesRegex(ValueError, "at most four tones"):
+        with self.assertRaisesRegex(ValueError, "four or fewer tones"):
             builder._arrangement_tones({"toneMarkers": markers(5)}, False, "song", "lead", 30, [])

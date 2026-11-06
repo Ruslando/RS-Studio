@@ -306,7 +306,7 @@ def _normalize_metadata(raw: dict | None, current: dict | None = None) -> dict:
             if value:
                 out["rocksmith"][key] = value
         # Kinds of issue the export may go past for this song (DLC Builder's IgnoredIssues):
-        # checker codes (I01 …) and the editor's own kinds, keyed by short text.
+        # DLC Builder codes (I01 …) and stable IDs for editor/export conditions.
         ignored = rs.get("ignoredIssues")
         if isinstance(ignored, list):
             out["rocksmith"]["ignoredIssues"] = sorted({c for c in ignored if isinstance(c, str) and 0 < len(c) <= 200})[:200]

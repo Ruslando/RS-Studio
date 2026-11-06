@@ -25,6 +25,7 @@ import numpy as np
 import soundfile as sf
 
 from . import bnk, chart, checker, dds, font, manifest, psarc, sng, wem
+from .messages import ExportError, warning
 from .tones import custom_tone
 from .wem import AudioConverterNotFoundError, WwiseNotFoundError  # public error types
 
@@ -201,20 +202,20 @@ def _tuning_offsets(tuning_hi_lo: list[int], warnings: list[str]) -> tuple[list[
     elif n == 4:
         ref, is_bass = _STANDARD_BASS, True
     else:
-        raise ValueError(f"Rocksmith supports 6-string guitar or 4-string bass lanes, got {n} strings")
+        raise ExportError("string-count", f"Rocksmith needs a 6-string guitar or 4-string bass. This layer has {n} strings.")
     low_high = list(reversed([int(p) for p in tuning_hi_lo]))
     offsets = []
     for midi, std in zip(low_high, ref):
         off = midi - std
         reduced = ((off + 11) % 12) - 11
         if reduced != off:
-            warnings.append(f"Tuning offset {off:+d} octave-reduced to {reduced:+d}")
+            warnings.append(warning("tuning-octave", offset=off, reduced=reduced))
         offsets.append(reduced)
     cents = 0.0
     if is_bass and any(off < -4 for off in offsets):
         offsets = [off + 12 for off in offsets]
         cents = LOW_BASS_CENTS
-        warnings.append("Low bass tuning: exported an octave up at a 220 Hz reference so Rocksmith detects it")
+        warnings.append(warning("bass-reference"))
     # A bass has no 5th and 6th string, but the game names a tuning by all six
     # offsets: they take the 4th string's, as DLC Builder sets them (Eb Standard
     # is six -1s, not -1,-1,-1,-1,0,0).
@@ -530,7 +531,7 @@ def _arrangement_specs(spec: dict, tracks: list[dict], warnings: list[str]) -> l
         except ValueError:
             is_bass = False
         if len(tracks) > 1:
-            warnings.append(f"Multiple lanes: exported '{track.get('name') or 'lane 1'}' only")
+            warnings.append(warning("multiple-lanes", name=track.get('name') or 'layer 1'))
         return [{"track": idx, "kind": "bass" if is_bass else "lead"}]
     out = []
     used_tags = set()
@@ -587,10 +588,10 @@ def _arrangement_tones(track: dict, is_bass: bool, key: str, tag: str,
             tone = f"{tone}_{digest}"
             custom[tone] = definition
         if tone not in _TONE_PRESETS and tone not in custom:
-            warnings.append(f"Ignored unknown Rocksmith tone preset '{tone or '?'}'")
+            warnings.append(warning("tone-unknown", preset=tone or '?'))
             continue
         if not 0 <= time <= song_length:
-            warnings.append(f"Ignored Rocksmith tone switch outside the song at {time:.3f}s")
+            warnings.append(warning("tone-outside-song", time=time))
             continue
         markers.append((time, index, tone))
     markers.sort()
@@ -623,7 +624,7 @@ def _arrangement_tones(track: dict, is_bass: bool, key: str, tag: str,
                     used_slots.append(name)
         current = tone
     if len(used_slots) > 4:  # RS2014 hard limit: Tone_A..D, the base tone among them.
-        raise ValueError("Rocksmith supports at most four tones per arrangement, the base tone included")
+        raise ExportError("tone-limit", "Use four or fewer tones per arrangement, including the base tone.")
 
     def load(name: str) -> dict:
         if name in custom:
@@ -699,8 +700,7 @@ def _fewer_levels(arr: dict, song, phrase_levels: dict) -> list[str]:
     phrase_levels[arr["tag"]] = levels
     if not fewer:
         return []
-    return [f"{arr['full_name']}: fewer difficulty levels than at the last export in "
-            f"{', '.join(fewer)}. Progress Rocksmith saved for these phrases may not fit them any more."]
+    return [warning("difficulty-reduced", arrangement=arr['full_name'], phrases=', '.join(fewer))]
 
 
 def _dynamic_difficulty(spec: dict) -> bool:
@@ -742,7 +742,7 @@ def _blocking(spec: dict, issues: list) -> list:
     if rs.get("validate") is False:
         return []
     ignored = set(rs.get("ignoredIssues") or [])
-    return [i for i in issues if i.code in checker.ISSUES and i.code not in ignored]
+    return [i for i in issues if i.id in checker.ISSUES and i.id not in ignored]
 
 
 def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: float,
@@ -758,7 +758,7 @@ def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: f
     arr = ARRANGEMENTS[req["kind"]]
     if arr["is_bass"] != is_bass:
         need = "4-string bass" if arr["is_bass"] else "6-string guitar"
-        raise ValueError(f"{arr['full_name']} needs a {need} tuning")
+        raise ExportError("arrangement-tuning", f"{arr['full_name']} needs a {need} tuning. Change the arrangement type or the layer tuning.")
 
     compiled = chart.compile_track(
         track, track.get("grid") or spec.get("grid") or {}, song_length,
@@ -818,8 +818,10 @@ def check_spec(spec: dict) -> list[dict]:
                 length + lead, key, warnings)
         except ValueError as exc:
             found["error"] = str(exc)
+            found["errorId"] = getattr(exc, "id", "export.compile-failed")
             continue
         found["warnings"] = list(dict.fromkeys(warnings))
+        found["warningIssues"] = [message.as_issue() for message in dict.fromkeys(warnings)]
         # The COUNT phrase and the events, in editor time, for the editor to show.
         song = built.compiled.sng
         found["count"] = next((pi.start_time - lead for pi in song.phrase_iterations
@@ -832,7 +834,7 @@ def check_spec(spec: dict) -> list[dict]:
                                 c == code and abs(t - o) < 1e-3 for o, c in own) else {})}
                            for t, code in song.events]
         issues = [issue.in_editor(lead) for issue in built.issues()]
-        found["issues"] = [{"code": i.code, "time": i.time, "title": i.title, "help": i.help,
+        found["issues"] = [{"id": i.id, "code": i.code, "time": i.time, "title": i.title, "help": i.help,
                             "important": i.important, "tone": i.tone} for i in issues]
     return out
 
@@ -867,14 +869,14 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
     for field, name in (("title", title), ("artist", artist), ("album", album)):
         gaps = font.missing(name)
         if gaps and shown[field] != latin[field]:
-            warnings.append(f"Rocksmith cannot show {' '.join(gaps)} in the {field}; left out")
+            warnings.append(warning("metadata-characters", characters=' '.join(gaps), field=field))
     low = key.lower()
     rs_meta = (spec.get("metadata") or {}).get("rocksmith") or {}
     japanese = {}
     for field_, name in (("title", rs_meta.get("japaneseTitle")), ("artist", rs_meta.get("japaneseArtist"))):
         name = str(name or "").strip()
         if name and font.missing(name):
-            warnings.append(f"Rocksmith cannot show {' '.join(font.missing(name))} in the Japanese {field_}; left out")
+            warnings.append(warning("japanese-characters", characters=' '.join(font.missing(name)), field=field_))
         if font.shown(name, ""):
             japanese[field_] = font.shown(name, "")
 

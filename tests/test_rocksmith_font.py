@@ -34,7 +34,7 @@ class GameFontTests(unittest.TestCase):
         self.assertEqual((attrs["ArtistName"], attrs["SongName"]), ("Kino", "Dvorak"))
         self.assertEqual((attrs["ArtistNameSort"], attrs["SongNameSort"]), ("Kino", "Dvorak"))
         self.assertEqual(name, "Kino_Dvorak_v1_p.psarc")
-        self.assertFalse([w for w in warnings if "cannot show" in w])
+        self.assertFalse([w for w in warnings if "Characters removed" in w])
 
     def test_japanese_is_shown_as_written(self):
         attrs, _, _ = _names({"title": "伊根", "titleLatin": "Ine", "artist": "Don’t Band"})
@@ -43,7 +43,7 @@ class GameFontTests(unittest.TestCase):
     def test_without_a_latin_spelling_the_missing_characters_are_left_out(self):
         attrs, warnings, _ = _names({"title": "Dvořák Live"})
         self.assertEqual(attrs["SongName"], "Dvoák Live")
-        self.assertIn("Rocksmith cannot show ř in the title; left out", warnings)
+        self.assertIn("Characters removed from title: ř", warnings)
 
     def test_the_key_stays_made_from_the_name(self):
         """Shown names change nothing about ids: a song already in the game keeps them."""
