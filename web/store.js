@@ -75,6 +75,7 @@ export const S = {
   heatPreview: false,  // the snap threshold slider is in use: show what passes it
   sliceHeld: false,  // temporary FL-style Slice gesture while the S key is held
   taps: [],
+  showIgnoredIssues: false,
   undoStack: [],
   redoStack: [],
   // Bumped by every note edit/restore. The preview voicing cache uses this to

@@ -265,14 +265,16 @@ export function drawStackBadges(badges, vx0, vx1) {
   // A count, inside a 15px disc pinned to a note: mono, and 9 for both reasons.
   sctx.font = stageMono(STAGE_ANCHORED, 600);
   sctx.textAlign = "center"; sctx.textBaseline = "middle";
-  for (const { note, count } of badges) {
+  for (const { note, count, ignored } of badges) {
     const x = xOf(note.start), y = yOf(note.pitch);
     if (x > vx1 || x + 18 < vx0) continue;
+    sctx.save(); if (ignored) sctx.globalAlpha *= .35;
     const cx = x + 9, cy = y + S.state.rowH / 2, r = 7.5;
     sctx.beginPath(); sctx.arc(cx, cy, r, 0, Math.PI * 2);
     sctx.fillStyle = veil(PAINT.ground); sctx.fill();
     sctx.lineWidth = 2; sctx.strokeStyle = PAINT.warn; sctx.stroke();
     sctx.fillStyle = PAINT.text; sctx.fillText(String(count), cx, cy + 0.5);
+    sctx.restore();
   }
   sctx.restore();
   sctx.lineWidth = 1;

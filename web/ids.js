@@ -30,6 +30,7 @@ export function syncUidPastLoaded() {
   const lanes = S.state.editLanes;
   for (const lane of lanes) {
     consider(lane.id);
+    for (const anchor of lane.handHolds || []) consider(anchor.id);
     for (const n of lane.notes) { consider(n.id); consider(n.shapeId); }
   }
   S.uid = Math.max(S.uid, max + 1);

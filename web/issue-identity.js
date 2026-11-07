@@ -70,3 +70,10 @@ export function migrateIgnoredIssues(keys) {
   ]) ids.add(`export.${id}`);
   return ids;
 }
+
+// Occurrences follow their source objects, never their current clock position.
+export function issueInstanceKey(lane, issue) {
+  const category = issueId(issue.id || issue.key || issue.code);
+  const targets = issue.target ? [issue.target] : (issue.notes || []).map(n => `note:${n.id}`).sort();
+  return JSON.stringify([lane?.id || 'song', category, targets.length ? targets : ['layer'], issue.slot ?? null]);
+}

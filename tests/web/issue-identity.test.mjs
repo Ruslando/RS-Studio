@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { issueId, migrateIgnoredIssues } from '../../web/issue-identity.js';
+import { issueId, migrateIgnoredIssues, issueInstanceKey } from '../../web/issue-identity.js';
 import { laneIssues } from '../../web/note-issues.js';
 
 const tuning = [43, 38, 33, 28];
@@ -26,3 +26,17 @@ assert.deepEqual(migrateIgnoredIssues([...ignored]), ignored, 'migration is idem
 assert.equal(issueId('editor.adapt.trill'), 'editor.adapt.trill');
 assert.equal(issueId('future.condition'), 'future.condition', 'preserve unknown saved IDs');
 console.log('issue identity passed');
+
+{
+  const lane = {id: 'a'}, issue = {id: 'editor.adapt.ghost', notes: [{id: 'n1', start: 1}]};
+  const key = issueInstanceKey(lane, issue);
+  issue.notes[0].start = 9; issue.title = 'New wording';
+  assert.equal(issueInstanceKey(lane, issue), key, 'moving or rewording preserves an instance');
+  assert.notEqual(issueInstanceKey({id: 'b'}, issue), key, 'layers are independent');
+  assert.notEqual(issueInstanceKey(lane, {...issue, notes: [{id: 'copy'}]}), key, 'copies start active');
+  const chord = {...issue, notes: [{id: 'n2'}, {id: 'n1'}]};
+  assert.equal(issueInstanceKey(lane, chord), issueInstanceKey(lane, {...chord, notes: [...chord.notes].reverse()}));
+  assert.notEqual(issueInstanceKey(lane, {...issue, slot: 1}), key, 'repeated issues remain independent');
+  const marker = {id: 'marker.tone-preset-missing', target: 'tone:a:m1', time: 1};
+  assert.equal(issueInstanceKey(lane, marker), issueInstanceKey(lane, {...marker, time: 20}));
+}

@@ -1,3 +1,5 @@
+import { diagnosticMarksAt } from './draw.js';
+import { openIssueMenu } from './issue-state.js';
 import { makeResizeRoom } from "./note-merge.js";
 // Pointer interaction: hit testing, the mousedown/move/up gesture state machine
 // (select / move / marquee / trace / frame), edge auto-scroll while dragging, and
@@ -699,8 +701,10 @@ export function init_interaction() {
   stage.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     if (!S.state) return;
-    for (const rail of markerRails()) if (rail.contextMenu?.(e)) return;
     const [x, y] = localXY(e);
+    const diagnostics = diagnosticMarksAt(x, y);
+    if (diagnostics.length) { openIssueMenu(e.clientX, e.clientY, diagnostics); return; }
+    for (const rail of markerRails()) if (rail.contextMenu?.(e)) return;
     const comment = commentAt(x, y);
     if (comment) { openCommentPop(e.clientX, e.clientY, comment); return; }
     // Right-click a bend control point removes it (the two end points pin the

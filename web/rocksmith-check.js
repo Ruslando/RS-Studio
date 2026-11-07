@@ -1,3 +1,5 @@
+import { issueIgnored, showIgnoredIssues, setShowIgnoredIssues, openIssueMenu } from './issue-state.js';
+import { issueInstanceKey } from './issue-identity.js';
 // Live Rocksmith check: what the export would report, while the chart is edited.
 //
 // The server runs the export's own compile and its port of DLC Builder's
@@ -11,6 +13,7 @@ import { issueTone, toneRank } from './issue-tone.js';
 import { issueId } from './issue-identity.js';
 import { $, scroll } from './dom.js';
 import { S } from './store.js';
+import { openDiagnosticMenu } from './edit.js';
 import { buildSpecForLanesAsync, laneFretCount, laneFretTuning, laneTuning } from './tablature.js';
 import { laneIssues } from './note-issues.js';
 import { RS_KIND_OPTIONS, isTablatureLane } from './layer-role.js';
@@ -32,6 +35,7 @@ const clock = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, '0')
 
 let results = new Map();          // lane id -> { issues, warnings, error }
 let lastKey = null, timer = 0, inFlight = null;
+const expandedIssues = new Set();
 const lists = new Map();         // 'error' | 'warning' | 'note' -> { list, count, head, body, shown }
 
 // Layers the export would offer with their own arrangement.
@@ -118,7 +122,7 @@ export function rocksmithIssueNotes(lane) {
   const found = results.get(lane.id);
   if (!found?.issues?.length) return [];
   const out = [];
-  for (const issue of found.issues) {
+  for (const issue of rowsFor(lane).filter(row => row.code && (showIgnoredIssues || !issueIgnored(lane, row)))) {
     if (issue.time == null) continue;
     const notes = lane.notes.filter(note => Math.abs(note.start - issue.time) < SAME_ONSET);
     if (notes.length) out.push({ issue, notes });
@@ -136,7 +140,7 @@ export function rocksmithShapeProblems(lane) {
   if (!found?.issues?.length) return out;
   const stretches = [...shapeGroups(lane.notes)].map(([id, notes]) => ({ id,
     t0: Math.min(...notes.map((n) => n.start)), t1: Math.max(...notes.map((n) => n.start)) }));
-  for (const issue of found.issues) {
+  for (const issue of rowsFor(lane).filter(row => row.code && (showIgnoredIssues || !issueIgnored(lane, row)))) {
     if (!String(issue.code).startsWith('shape-') || issue.time == null) continue;
     // A broken shape is reported at its own first note; nested shapes make that the
     // only safe match. A hand change lies anywhere inside its shape.
@@ -155,7 +159,7 @@ export function rocksmithShapeProblems(lane) {
 // Every problem of a layer: the export's (Rocksmith), the editor's own
 // (note-issues.js) and its flags'. `key` is the problem's kind, what the export
 // window ignores: a stable ID independent of the message text.
-function rowsFor(lane) {
+export function rowsFor(lane) {
   const found = results.get(lane?.id);
   const rows = [];
   if (found?.error) rows.push({ id: found.errorId || 'export.compile-failed', key: found.errorId || 'export.compile-failed', title: `Not exported: ${found.error}`, help: '', tone: 'error', time: null });
@@ -163,18 +167,32 @@ function rowsFor(lane) {
   else for (const text of found?.warnings || []) rows.push({ key: issueId(text), title: text, help: '', tone: 'warning', time: null });
   for (const issue of found?.issues || []) rows.push({ ...issue, tone: issueTone(issue), key: issue.id || issueId(issue.code) });
   if (lane) for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision))
-    rows.push({ id: issue.id, key: issue.id, title: issue.title, help: issue.help, tone: issue.tone, time: issue.time });
-  // ponytail: flags are only built for the active layer, so another layer's flag problems are not here.
-  for (const entry of markerArtifacts()) if (entry.issue && entry.lane === lane)
-    rows.push({ id: entry.issue.id, key: entry.issue.id, title: entry.issue.title, help: entry.issue.help, tone: entry.issue.tone, time: entry.t });
+    rows.push({ ...issue, id: issue.id, key: issue.id, title: issue.title, help: issue.help, tone: issue.tone, time: issue.time, notes: issue.notes });
+  for (const entry of markerArtifacts(lane)) if (entry.issue && entry.lane === lane)
+    rows.push({ id: entry.issue.id, key: entry.issue.id, title: entry.issue.title, help: entry.issue.help, tone: entry.issue.tone, time: entry.t, target: entry.key });
+  const slots = new Map();
+  for (const row of rows) {
+    row.laneId = lane?.id;
+    if (!row.notes && !row.target && row.time != null) {
+      row.notes = (lane?.notes || []).filter(n => Math.abs(n.start - row.time) < SAME_ONSET);
+      if (!row.notes.length) {
+        const markers = [...(lane?.toneMarkers || []), ...(lane?.phraseBoundaries || []), ...(lane?.crowdEvents || [])];
+        const marker = markers.find(m => Math.abs(m.t - row.time) < SAME_ONSET);
+        row.target = marker ? `marker:${marker.id}` : `time:${row.time}`;
+      }
+    }
+    const base = issueInstanceKey(lane, row), slot = slots.get(base) || 0;
+    slots.set(base, slot + 1); row.slot = slot || null;
+  }
   return rows.sort((a, b) => (a.time ?? -1) - (b.time ?? -1));
 }
 
 // Every problem the pane lists for these layers, by kind: what the export
 // window asks to fix or ignore before it exports. key -> { title, help, count, tone }.
-export function rocksmithIssueKinds(lanes) {
+export function rocksmithIssueKinds(lanes, includeIgnored = false) {
   const kinds = new Map();
   for (const lane of lanes) for (const row of rowsFor(lane)) {
+    if (!includeIgnored && issueIgnored(lane, row)) continue;
     const seen = kinds.get(row.key) || { title: row.title, help: row.help || '', count: 0, tone: 'note' };
     seen.count += 1;
     if (toneRank[row.tone] > toneRank[seen.tone]) seen.tone = row.tone;
@@ -191,11 +209,18 @@ function moveTo(t) {
 }
 
 function issueRow(entry) {
+  const lane = S.state?.editLanes.find(l => l.id === entry.laneId);
   const row = document.createElement('li');
   row.className = 'artifact-row artifact-marker-row artifact-issue-row';
   row.toggleAttribute('data-important', entry.tone === 'error');
   row.dataset.tone = entry.tone;
   row.dataset.issueId = entry.key;
+  row.toggleAttribute('data-ignored', issueIgnored(lane, entry));
+  const menu = event => { event.preventDefault(); event.stopPropagation(); openIssueMenu(event.clientX, event.clientY, [{lane, issue: entry}]); };
+  row.addEventListener('contextmenu', menu);
+  const more = document.createElement('button'); more.type = 'button'; more.className = 'icon-btn icon-btn--compact';
+  more.innerHTML = icon('more', 14); more.title = 'Options'; more.setAttribute('aria-label', 'Options'); more.setAttribute('aria-haspopup', 'menu');
+  more.addEventListener('click', event => { event.stopPropagation(); const r = more.getBoundingClientRect(); openIssueMenu(r.left, r.bottom, [{lane, issue: entry}]); });
   row.dataset.tip = entry.help ? `${entry.title}\n${entry.help}` : entry.title;
   row.dataset.tipTone = entry.tone;
   row.setAttribute('aria-description', `${entry.tone[0].toUpperCase() + entry.tone.slice(1)}: ${row.dataset.tip}`);
@@ -204,17 +229,18 @@ function issueRow(entry) {
   const name = document.createElement('span'); name.className = 'artifact-name'; name.textContent = entry.title;
   copy.append(name);
   row.append(mark, copy);
+  const actions = document.createElement('div'); actions.className = 'artifact-issue-actions';
   if (entry.time != null) {
     const time = document.createElement('span'); time.className = 'artifact-detail artifact-time';
     time.textContent = clock(entry.time);
-    const actions = document.createElement('div'); actions.className = 'artifact-marker-actions';
+    row.append(time);
     const jump = document.createElement('button'); jump.type = 'button'; jump.className = 'icon-btn icon-btn--compact';
-    jump.innerHTML = icon('jump', 14); jump.title = 'Move to'; jump.setAttribute('aria-label', 'Move to');
-    jump.addEventListener('click', () => moveTo(entry.time));
+    jump.innerHTML = icon('jump', 14); jump.title = 'Jump to'; jump.setAttribute('aria-label', 'Jump to');
+    jump.addEventListener('click', event => { event.stopPropagation(); moveTo(entry.time); });
     actions.append(jump);
-    row.append(time, actions);
     row.addEventListener('click', event => { if (!event.target.closest('button')) moveTo(entry.time); });
   }
+  actions.append(more); row.append(actions);
   return row;
 }
 
@@ -225,23 +251,68 @@ export function renderRocksmithIssues() {
   const lane = S.state?.editLanes.find(item => item.active);
   const rows = S.state ? rowsFor(lane) : [];
   for (const [tone, section] of lists) {
-    const mine = rows.filter(row => row.tone === tone);
-    const key = JSON.stringify([lane?.id, mine]);
+    const all = rows.filter(row => row.tone === tone);
+    const mine = all.filter(row => showIgnoredIssues || !issueIgnored(lane, row));
+    const key = JSON.stringify([lane?.id, showIgnoredIssues, all.map(row => [issueInstanceKey(lane, row), row.title, row.help, row.time]), S.state?.metadata?.rocksmith]);
     if (key === section.shown) continue;
     section.shown = key;
-    section.list.replaceChildren(...mine.map(issueRow));
-    section.count.textContent = String(mine.length);
-    section.head.classList.toggle('is-empty', !mine.length); section.body.classList.toggle('is-empty', !mine.length);
+    const groups = new Map();
+    for (const entry of mine) {
+      if (!groups.has(entry.key)) groups.set(entry.key, []);
+      groups.get(entry.key).push(entry);
+    }
+    section.list.replaceChildren(...[...groups].map(([id, entries]) => {
+      const item = document.createElement('li'); item.className = 'artifact-issue-group';
+      const head = document.createElement('div'); head.className = 'artifact-row artifact-issue-group-head';
+      const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'artifact-row-head';
+      const expandedKey = `${lane?.id}:${tone}:${id}`;
+      toggle.setAttribute('aria-controls', `issue-instances-${lane?.id}-${tone}-${id}`);
+      toggle.innerHTML = chevron;
+      const title = document.createElement('span'); title.className = 'artifact-name'; title.textContent = entries[0].title;
+      toggle.title = entries[0].title;
+      const count = document.createElement('span'); count.className = 'artifact-count'; const activeCount = entries.filter(entry => !issueIgnored(lane, entry)).length;
+      count.textContent = showIgnoredIssues && activeCount !== entries.length ? `${activeCount} (${entries.length - activeCount} ignored)` : String(activeCount);
+      head.toggleAttribute('data-ignored', !activeCount);
+      toggle.append(title, count);
+      const children = document.createElement('ul'); children.className = 'artifact-list artifact-issue-instances';
+      children.id = `issue-instances-${lane?.id}-${tone}-${id}`;
+      const sync = () => { children.hidden = !expandedIssues.has(expandedKey); if (!children.hidden && !children.childElementCount) children.append(...entries.map(issueRow)); toggle.setAttribute('aria-expanded', String(!children.hidden)); };
+      toggle.onclick = () => { if (expandedIssues.has(expandedKey)) expandedIssues.delete(expandedKey); else expandedIssues.add(expandedKey); sync(); };
+      sync();
+      const more = document.createElement('button'); more.type = 'button'; more.className = 'icon-btn icon-btn--compact'; more.innerHTML = icon('more', 14); more.title = 'Category options'; more.setAttribute('aria-label', 'Category options'); more.setAttribute('aria-haspopup', 'menu');
+      const menu = (x, y) => openIssueMenu(x, y, [{lane, issue: entries[0]}], true);
+      more.onclick = () => { const r = more.getBoundingClientRect(); menu(r.left, r.bottom); };
+      head.oncontextmenu = event => { event.preventDefault(); menu(event.clientX, event.clientY); };
+      const actions = document.createElement('div'); actions.className = 'artifact-issue-actions';
+      actions.append(more); head.append(toggle, actions); item.append(head, children); return item;
+    }));
+    const active = all.filter(row => !issueIgnored(lane, row)).length;
+    section.count.textContent = showIgnoredIssues && active !== all.length ? `${active} (${all.length - active} ignored)` : String(active);
+    // Keep the header's menu reachable even when every occurrence is ignored.
+    section.head.classList.toggle('is-empty', !all.length); section.body.classList.toggle('is-empty', !mine.length);
+    section.options.toggleAttribute('data-show-ignored', showIgnoredIssues);
+    section.options.title = showIgnoredIssues ? 'Issue options (showing ignored)' : 'Issue options';
   }
 }
 
 function issueSection(tone, label) {
-  const head = document.createElement('div'); head.className = 'side-header';
+  const head = document.createElement('div'); head.className = 'side-header artifact-issue-section-head';
   const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'side-label';
   toggle.innerHTML = chevron;
   const title = document.createElement('span'); title.textContent = label;
   const count = document.createElement('span'); count.className = 'artifact-count'; count.setAttribute('aria-live', 'polite');
-  toggle.append(title, count); head.append(toggle);
+  toggle.append(title, count);
+  const options = document.createElement('button'); options.type = 'button';
+  options.className = 'icon-btn icon-btn--compact artifact-issue-options'; options.innerHTML = icon('more', 14);
+  options.setAttribute('aria-label', `${label} options`); options.setAttribute('aria-haspopup', 'menu');
+  options.onclick = () => {
+    const rect = options.getBoundingClientRect();
+    openDiagnosticMenu(rect.left, rect.bottom, [{
+      label: `${showIgnoredIssues ? '\u2713 ' : ''}Show ignored`,
+      fn: () => setShowIgnoredIssues(!showIgnoredIssues),
+    }]);
+  };
+  head.append(toggle, options);
   const body = document.createElement('div'); body.className = 'artifact-panel-body'; body.id = `artifact${label}Body`;
   const list = document.createElement('ul'); list.className = 'artifact-list artifact-issue-list'; list.id = `artifact${label}`;
   list.dataset.tone = tone;
@@ -252,7 +323,7 @@ function issueSection(tone, label) {
     toggle.setAttribute('aria-label', toggle.title);
   };
   toggle.addEventListener('click', () => { body.hidden = !body.hidden; sync(); }); sync();
-  lists.set(tone, { list, count, head, body, shown: null });
+  lists.set(tone, { list, count, head, body, options, shown: null });
   return [head, body];
 }
 
@@ -262,7 +333,7 @@ export function initRocksmithIssues() {
     ...issueSection('error', 'Errors'), ...issueSection('warning', 'Warnings'), ...issueSection('note', 'Notes'));
   const reset = () => {
     inFlight?.abort(); clearTimeout(timer);
-    results = new Map(); lastKey = null;
+    results = new Map(); lastKey = null; expandedIssues.clear();
     for (const section of lists.values()) section.shown = null;
   };
   window.addEventListener('cw-project-opened', reset);

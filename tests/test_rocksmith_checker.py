@@ -498,6 +498,16 @@ class HandBuiltArrangements(unittest.TestCase):
 
 
 class StableIssueIds(unittest.TestCase):
+    def test_instance_acknowledgement_is_scoped_to_arrangement_time_and_count(self):
+        first = checker.Issue("I35", 3.0, "First", "", False)
+        later = checker.Issue("I35", 4.0, "Later", "", False)
+        spec = {"rocksmith": {"ignoredOccurrences": [{"track": 0, "id": "I35", "time": 1.0}]}}
+        self.assertEqual(builder._blocking(spec, [first, later], 0, 2), [later])
+        self.assertEqual(builder._blocking(spec, [first, later], 1, 2), [first, later])
+        self.assertEqual(builder._blocking(spec, [first, first], 0, 2), [first])
+        self.assertEqual(builder._blocking(spec, [first, later], 0, 0), [first, later])
+
+
     def test_correction_has_an_id_separate_from_the_dlc_builder_check(self):
         problem = checker._issue("I29", 2000)
         correction = checker.fixed("I29", 2)

@@ -1,10 +1,12 @@
+import { issueInstanceKey } from './issue-identity.js';
+import { rowsFor } from './rocksmith-check.js';
+import { issueIgnored, showIgnoredIssues, issueIgnoreActions } from './issue-state.js';
 import { paintIntensity } from './spectrogram-intensity.js';
 import { paintBarNumber, paintNoteRow } from './timeline-paint.js';
 import { createOverview } from './overview.js';
-import { issueTone } from "./issue-tone.js";
-import { ISSUE_TEXT, laneIssues } from "./note-issues.js";
-import { hideTooltip, showTooltip } from "./tooltip.js";
-import { rocksmithIssueNotes, rocksmithShapeProblems } from "./rocksmith-check.js";
+import { ISSUE_TEXT } from "./note-issues.js";
+import { scheduleTooltipHide, showTooltip } from "./tooltip.js";
+import { rocksmithShapeProblems } from "./rocksmith-check.js";
 import { paintNoteBar, paintNoteGlow, paintNoteSelection, noteSelectionFill } from "./canvas-components.js";
 import { renderArtifacts } from "./artifacts.js";
 import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGhosts, notePlaybackGlow } from "./note-motion.js";
@@ -495,10 +497,19 @@ function paintFrame({ panels = true } = {}) {
 
   // Overlap stacks (same pitch + overlapping time inside one edit lane) are no
   // longer merged — flag them with a hot color + a count badge instead.
+  const frameIssues = new Map(S.state.lanes.filter(lane => lane.visible).map(lane => [lane, rowsFor(lane)]));
   const stackCount = new Map();   // note -> how many notes share its overlap cluster (>=2)
+  const ignoredStackNotes = new Set();
   const stackBadges = [];         // one badge per cluster, drawn on top of the notes
   for (const lane of S.state.lanes) {
-    if (lane.visible) collectStacks(lane, stackCount, stackBadges);
+    if (!lane.visible) continue;
+    const counts = new Map(), badges = [];
+    collectStacks(lane, counts, badges);
+    const ignored = frameIssues.get(lane).filter(i => i.kind === 'stack' && issueIgnored(lane, i));
+    for (const issue of ignored) for (const note of issue.notes) ignoredStackNotes.add(note);
+    for (const [note, count] of counts) if (showIgnoredIssues || !ignoredStackNotes.has(note)) stackCount.set(note, count);
+    stackBadges.push(...badges.filter(b => showIgnoredIssues || !ignoredStackNotes.has(b.note))
+      .map(b => ({...b, ignored: ignoredStackNotes.has(b.note)})));
   }
   // Note-name labels show at every pitch-zoom level (the rows can be a touch
   // shorter than the font at the lowest zoom, but the text stays legible); each
@@ -540,7 +551,7 @@ function paintFrame({ panels = true } = {}) {
       const x = xOf(motion.start), w = Math.max(2, xOf(ribbon?.end ?? motion.end) - x), y = yOf(n.pitch);
       if (x > vx1 || x + w < vx0) continue; // off-screen
       const rowH = S.state.rowH;
-      const fill = stackCount.has(n) ? PAINT.warn : laneColor;
+      const fill = stackCount.has(n) && !ignoredStackNotes.has(n) ? PAINT.warn : laneColor;
       sctx.save();
       sctx.translate(x + w / 2, y + rowH / 2);
       sctx.scale(motion.scaleX, motion.scale);
@@ -662,8 +673,8 @@ function paintFrame({ panels = true } = {}) {
         const crossY = drop ? y - drop : y;
         omittedCrosses.push({ x, y: crossY, w, h: rowH + drop + dip, alpha: laneAlpha });
       }
-      if (outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)))
-        outOfRange.push({ x, y: drop ? y - drop : y, w, h: rowH + drop + dip, alpha: laneAlpha });
+      if (outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)) && (showIgnoredIssues || !issueIgnored(lane, {id: 'editor.note.outOfRange', notes: [n]})))
+        outOfRange.push({ x, y: drop ? y - drop : y, w, h: rowH + drop + dip, alpha: laneAlpha * (issueIgnored(lane, {id: 'editor.note.outOfRange', notes: [n]}) ? .35 : 1) });
       sctx.restore();
     }
   }
@@ -728,21 +739,18 @@ function paintFrame({ panels = true } = {}) {
   for (const m of staleMarks) hoverMark(m.x, m.y, 10, 12, m.tip);
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
-    // The editor's own problems (note-issues.js): those with their own mark on the
-    // note explain it on hover; the others (a shape, a Guitar Pro-only technique) are framed.
-    for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)) {
-      const tip = { title: issue.title, body: issue.help, tone: issue.tone }, n = issue.notes[0];
-      if (issue.kind === "outOfRange") hoverMark(xOf(n.start), yOf(n.pitch), Math.max(2, xOf(n.end) - xOf(n.start)), S.state.rowH, tip);
-      else if (issue.kind === "stack") hoverMark(xOf(n.start), yOf(n.pitch) + S.state.rowH / 2 - 9, 18, 18, tip);
-      else if (issue.kind !== "bendStack") frames.push([issue.notes, tip]);   // a shape, a Guitar Pro-only technique
+    for (const issue of frameIssues.get(lane)) {
+      if (!issue.notes?.length || (!showIgnoredIssues && issueIgnored(lane, issue))) continue;
+      const ignored = issueIgnored(lane, issue);
+      const tip = { title: issue.title, body: issue.help, tone: issue.tone, diagnostic: {lane, issue}, ignored };
+      const n = issue.notes[0];
+      if (issue.kind === 'outOfRange') hoverMark(xOf(n.start), yOf(n.pitch), Math.max(2, xOf(n.end) - xOf(n.start)), S.state.rowH, tip);
+      else if (issue.kind === 'stack' || issue.kind === 'bendStack') hoverMark(xOf(n.start), yOf(n.pitch), 18, S.state.rowH, tip);
+      else frames.push([issue.code === 'slide' ? [...issue.notes, ...issue.notes.map(n => laneSlides(lane).get(n)).filter(Boolean)] : issue.notes, tip]);
     }
-    // What the Rocksmith export would report about these notes (rocksmith-check.js).
-    for (const { notes, issue } of rocksmithIssueNotes(lane))
-      // A dropped slide is the whole slide's problem: frame the note it lands on too.
-      frames.push([issue.code === "slide" ? [...notes, ...notes.map(n => laneSlides(lane).get(n)).filter(Boolean)] : notes, { title: issue.title, body: issue.help, tone: issueTone(issue) }]);
   }
   // Errors last, so a frame that is both shows red.
-  for (const [notes, tip] of frames.sort((a, b) => (a[1].tone === "error") - (b[1].tone === "error"))) frameWarning(notes, tip);
+  for (const [notes, tip] of frames.sort((a, b) => (a[1].tone === "error") - (b[1].tone === "error"))) { sctx.save(); if (tip.ignored) sctx.globalAlpha = .35; frameWarning(notes, tip); sctx.restore(); }
   // Bend points stacked on one moment: a count like an overlap stack's, in --warn
   // because the export resolves it, up and right of the point so its handle stays free.
   sctx.font = stageMono(STAGE_ANCHORED, 600); sctx.textAlign = "center"; sctx.textBaseline = "middle";
@@ -750,13 +758,17 @@ function paintFrame({ panels = true } = {}) {
     if (!lane.visible) continue;
     for (const note of lane.notes) {
       if (!note.bend || xOf(note.end) < vx0 || xOf(note.start) > vx1) continue;
-      for (const { x, y, count } of stackedBendPoints(note)) {
+      for (const [slot, { x, y, count }] of stackedBendPoints(note).entries()) {
+        const diagnostic = frameIssues.get(lane).find(i => i.kind === 'bendStack' && i.notes.includes(note) && (i.slot || 0) === slot);
+        if (diagnostic && !showIgnoredIssues && issueIgnored(lane, diagnostic)) continue;
+        sctx.save(); if (diagnostic && issueIgnored(lane, diagnostic)) sctx.globalAlpha *= .35;
         const cx = x + 10, cy = y - 10;
         sctx.beginPath(); sctx.arc(cx, cy, 7.5, 0, Math.PI * 2);
         sctx.fillStyle = veil(PAINT.ground); sctx.fill();
         sctx.lineWidth = 2; sctx.strokeStyle = PAINT.warn; sctx.stroke();
         sctx.fillStyle = PAINT.text; sctx.fillText(String(count), cx, cy + 0.5);
-        warningMarks.push({ x0: cx - 9, x1: cx + 9, y0: cy - 9, y1: cy + 9, tip: BEND_STACK_TIP });
+        warningMarks.push({ x0: cx - 9, x1: cx + 9, y0: cy - 9, y1: cy + 9, tip: diagnostic ? {...BEND_STACK_TIP, diagnostic: {lane, issue: diagnostic}} : BEND_STACK_TIP });
+        sctx.restore();
       }
     }
   }
@@ -941,7 +953,11 @@ export function init_draw() {
     const tips = warningMarks.filter(m => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1).map(m => m.tip)
       .sort((a, b) => (b.tone === "error") - (a.tone === "error"));
     const railTip = !tips.length && markerRails().map(rail => rail.tipAt?.(x, y)).find(Boolean);
-    showTooltip(railTip ? [railTip] : tips, e.clientX, e.clientY);
+    const blocks = (railTip ? [railTip] : tips).map(tip => tip.diagnostic ? {
+      ...tip, actionKey: issueInstanceKey(tip.diagnostic.lane, tip.diagnostic.issue),
+      actions: issueIgnoreActions(tip.diagnostic.lane, tip.diagnostic.issue),
+    } : tip);
+    showTooltip(blocks, e.clientX, e.clientY);
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
     S.refLockHover = refLockAt(x, y);
     S.mouseX = x;
@@ -952,7 +968,7 @@ export function init_draw() {
   stage.addEventListener("mouseleave", () => {
     S.pitchHoverClientY = null;
     stage.style.cursor = "default";
-    hideTooltip();
+    scheduleTooltipHide();
     cancelHoverPreview();
     S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; S.refEdgeHover = null; S.refLockHover = null; draw();
   });
@@ -979,4 +995,14 @@ export function init_draw() {
     hideNoteMenu({ scroll: true });
     draw();
   }, { passive: true });
+}
+
+export function diagnosticMarksAt(x, y) {
+  const entries = new Map();
+  for (const mark of warningMarks) {
+    if (x < mark.x0 || x > mark.x1 || y < mark.y0 || y > mark.y1 || !mark.tip.diagnostic) continue;
+    const entry = mark.tip.diagnostic;
+    entries.set(issueInstanceKey(entry.lane, entry.issue), entry);
+  }
+  return [...entries.values()];
 }

@@ -1,5 +1,6 @@
+import { rowsFor } from './rocksmith-check.js';
+import { ignoredCategories, setIssueIgnored, setCategoriesIgnored, issueIgnored } from './issue-state.js';
 import { issueTone } from "./issue-tone.js";
-import { migrateIgnoredIssues } from "./issue-identity.js";
 // Rocksmith CDLC export UI: the arrangement picker, the metadata form and the
 // POST that builds the .psarc. The File-menu entry is wired in ui.js with the
 // other exports.
@@ -437,7 +438,6 @@ function openRocksmithExportModal() {
   try { $("rsAuthor").value = localStorage.getItem(LS_AUTHOR) || ""; } catch { /* storage blocked: empty */ }
   try { $("rsDynamicDifficulty").checked = localStorage.getItem(LS_DD) !== "0"; } catch { /* storage blocked: on */ }
   try { $("rsMac").checked = localStorage.getItem(LS_MAC) === "1"; } catch { /* storage blocked: off */ }
-  rsIgnored = migrateIgnoredIssues(meta.rocksmith?.ignoredIssues);
   renderRsIssues();
   setRsStatus("");
   converterOk = false;
@@ -486,7 +486,6 @@ const LS_MAC = "cw.rsMac";
 
 // Kinds of issue this song exports past, as DLC Builder's IgnoredIssues: kept
 // with the song's details, also for kinds the chart no longer has.
-let rsIgnored = new Set();
 
 const rsPickedLanes = () => [...$("rsArrangements").querySelectorAll(".rs-arr-row")]
   .filter((row) => row.querySelector(".rs-arr-on").checked)
@@ -496,7 +495,7 @@ const rsPickedLanes = () => [...$("rsArrangements").querySelectorAll(".rs-arr-ro
 // disclosure each (the settings' one), a field row per kind with its Ignore box
 // (4.13), and Ignore all beside the disclosure's title.
 function renderRsIssues() {
-  const kinds = [...rocksmithIssueKinds(rsPickedLanes())].sort(([, a], [, b]) => a.title.localeCompare(b.title));
+  const kinds = [...rocksmithIssueKinds(rsPickedLanes(), true)].sort(([, a], [, b]) => a.title.localeCompare(b.title));
   for (const group of $("rsIssues").querySelectorAll(".sound-section")) {
     const mine = kinds.filter(([, kind]) => issueTone(kind) === group.dataset.tone);
     group.hidden = !mine.length;
@@ -523,22 +522,22 @@ function renderRsIssues() {
       label.className = "chk";
       const input = document.createElement("input");
       input.type = "checkbox";
-      input.checked = rsIgnored.has(key);
+      input.checked = ignoredCategories().has(key);
       input.addEventListener("change", () => {
-        if (input.checked) rsIgnored.add(key); else rsIgnored.delete(key);
+        setIssueIgnored(null, {id: key}, true, input.checked);
         renderRsIssues();
       });
-      label.append(input, " Ignore");
-      label.hidden = tone === "note";
+      label.append(input, " Ignore category");
+      label.hidden = false;
       row.append(mark, name, times, label);
       return row;
     }));
-    const all = group.querySelector(".rs-issue-all"), ignored = mine.filter(([key]) => rsIgnored.has(key)).length;
+    const all = group.querySelector(".rs-issue-all"), ignored = mine.filter(([key]) => ignoredCategories().has(key)).length;
     all.closest("label").hidden = group.dataset.tone === "note";
     all.checked = !!mine.length && ignored === mine.length;
     all.indeterminate = ignored > 0 && ignored < mine.length;
     all.onchange = () => {
-      for (const [key] of mine) if (all.checked) rsIgnored.add(key); else rsIgnored.delete(key);
+      setCategoriesIgnored(mine.map(([key]) => key), all.checked);
       renderRsIssues();
     };
   }
@@ -547,7 +546,7 @@ function renderRsIssues() {
 }
 
 // The issue kinds neither fixed nor ignored.
-const rsOpenIssues = () => [...rocksmithIssueKinds(rsPickedLanes())].filter(([key, issue]) => issueTone(issue) !== "note" && !rsIgnored.has(key)).map(([key]) => key);
+const rsOpenIssues = () => [...rocksmithIssueKinds(rsPickedLanes())].filter(([key, issue]) => issueTone(issue) !== "note" && !ignoredCategories().has(key)).map(([key]) => key);
 function leadIn(raw) {
   const value = raw === null || raw === "" ? NaN : Number(raw);
   return Number.isFinite(value) ? Math.min(30, Math.max(0, value)) : LEAD_IN_DEFAULT;
@@ -630,7 +629,7 @@ async function submitRocksmithExport() {
   }
 
   const meta = rsMetaFromForm();
-  meta.rocksmith = { ...meta.rocksmith, previewStart: clip.start, previewLength: clip.length, ignoredIssues: [...rsIgnored].sort() };
+  meta.rocksmith = { ...S.state.metadata?.rocksmith, ...meta.rocksmith, previewStart: clip.start, previewLength: clip.length, ignoredIssues: [...ignoredCategories()].sort() };
   S.state.metadata = { ...normalizeMetadata(S.state.metadata || {}), ...meta };
   const leadingSilence = leadIn($("rsLeadIn").value);
   rememberPref(LS_LEAD_IN, leadingSilence);
@@ -664,7 +663,10 @@ async function submitRocksmithExport() {
       spec.metadata = metadataPayload(state.metadata);
       spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane),
         bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version, author, dynamicDifficulty,
-        ignoredIssues: [...rsIgnored].sort(), mac,
+        ignoredIssues: [...ignoredCategories()].sort(), mac,
+        ignoredOccurrences: picks.flatMap((pick, track) => rowsFor(pick.lane)
+          .filter(issue => issueIgnored(pick.lane, issue))
+          .map(issue => ({track, id: issue.key, time: issue.time ?? null}))),
         preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {
@@ -700,7 +702,8 @@ export function init_rocksmith_export() {
   $("rsExportClose").addEventListener("click", closeRocksmithExportModal);
   $("rsArrangements").addEventListener("change", renderRsIssues);
   $("rsJapanese").addEventListener("change", syncRsJapanese);
-  window.addEventListener("cw-rocksmith-checked", () => { if (!$("rocksmithExportBackdrop").hidden) renderRsIssues(); });
+  for (const event of ["cw-rocksmith-checked", "cw-issue-ignore-changed"])
+    window.addEventListener(event, () => { if (!$("rocksmithExportBackdrop").hidden) renderRsIssues(); });
   $("rsCoverDrop").addEventListener("click", (e) => { if (!e.target.closest(".cover-clear")) $("rsCoverInput").click(); });
   $("rsCoverDrop").addEventListener("keydown", (e) => {
     if (e.target.closest(".cover-clear")) return;

@@ -57,7 +57,7 @@ function paneKey(markers) {
   const content = $('artifactsContent');
   if (content.inert) return null;
   return [S.state, S.voicingRevision, S.undoStack?.length, S.redoStack?.length, checkResults(), S.spectImg,
-    S.state?.curStem, PAINT.ground, content.clientWidth,
+    S.state?.curStem, PAINT.ground, content.clientWidth, JSON.stringify(S.state?.metadata?.rocksmith), S.showIgnoredIssues,
     markers.map(m => `${m.key}@${m.t}:${m.name}:${m.issue?.title || ''}`).join('|'),
     ...(S.state?.editLanes || []).flatMap(l => [l.id, l.active, l.visible, l.locked, l.name, l.color, l.notes, l.notes.length,
       l.instrument, l.tuning, l.customTuning, l.capo, l.rocksmithArrangement, l.timing,

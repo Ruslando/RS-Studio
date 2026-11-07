@@ -421,6 +421,16 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
                     font: 400 var(--text-control)/1.4 var(--font-ui); color: var(--text); }
 .app-tooltip      { position: fixed; z-index: var(--z-tooltip); pointer-events: none;
                     white-space: pre-line; color: var(--label); }
+.app-tooltip[data-interactive] { pointer-events: auto; max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.app-tooltip-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 0; margin-top: var(--s-pair); }
+.app-tooltip-actions > button {
+  flex: none; height: auto; min-height: 20px; padding: 0; gap: 0; border: 0;
+  background: transparent; box-shadow: none; color: var(--label);
+  font: 400 var(--text-caption)/1.4 var(--font-ui);
+}
+.app-tooltip-actions > button + button { margin-left: var(--s-sibling); }
+.app-tooltip-actions > button + button::before { content: '\00b7'; margin-right: var(--s-sibling); color: var(--hint); }
+.app-tooltip-actions > button:is(:hover, :focus-visible):not(:disabled) { background: transparent; color: var(--text); text-decoration: underline; }
 .app-tooltip-title { color: var(--text); font-weight: 600; }
 .app-tooltip-kind { display: flex; align-items: center; gap: 4px; font-size: var(--text-caption); color: var(--label); }
 .app-tooltip-kind svg { color: var(--warn); }
@@ -703,3 +713,24 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 #projTuning .field-slider > .ro { width: 48px; text-align: left; }
 .tuning-actions { display: flex; flex-wrap: wrap; gap: var(--s-sibling); }
 .tuning-actions [hidden] { display: none; }
+
+/* Issue menus share the same trailing column at every level. Times stay visible. */
+.side-header.artifact-issue-section-head { gap: 0; padding-right: calc(2 * var(--s-pair)); }
+.artifact-issue-section-head > .side-label { flex: 1; min-width: 0; }
+.artifact-issue-group-head { display: flex; align-items: center; padding-right: var(--s-pair); }
+.artifact-issue-group .artifact-row-head { flex: 1; min-width: 0; gap: var(--s-pair); }
+.artifact-issue-group .artifact-count { margin-left: auto; white-space: nowrap; color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); }
+.artifact-issue-instances { padding-left: 12px; }
+.artifact-issue-instances[hidden] { display: none; }
+.artifact-issue-actions { display: grid; grid-auto-flow: column; grid-auto-columns: var(--h-compact); flex: none; align-items: center; gap: var(--s-pair); }
+.artifact-issue-actions > .icon-btn { width: var(--h-compact); min-width: var(--h-compact); }
+/* Text yields space to the timestamp and both actions, even at the minimum panel width. */
+.artifact-issue-row { display: grid; grid-template-columns: 14px minmax(0, 1fr) max-content max-content; min-width: 0; }
+.artifact-issue-row > .artifact-issue-mark { grid-column: 1; grid-row: 1; }
+.artifact-issue-row > .artifact-copy { grid-column: 2; grid-row: 1; overflow: hidden; }
+.artifact-issue-row > .artifact-time { grid-column: 3; grid-row: 1; }
+.artifact-issue-row > .artifact-issue-actions { grid-column: 4; grid-row: 1; }
+.artifact-issue-row .artifact-time,
+.artifact-issue-row:is(:hover, :focus-within) .artifact-time { visibility: visible; padding-right: 0; }
+.artifact-issue-row[data-ignored] > :is(.artifact-issue-mark, .artifact-copy, .artifact-time),
+.artifact-issue-group-head[data-ignored] > .artifact-row-head { opacity: .45; }

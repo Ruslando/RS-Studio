@@ -734,7 +734,7 @@ def mac_filename(name: str) -> str:
     return name[:-len("_p.psarc")] + "_m.psarc"
 
 
-def _blocking(spec: dict, issues: list) -> list:
+def _blocking(spec: dict, issues: list, track: int | None = None, lead: float = 0) -> list:
     """The issues that stop the export, as DLC Builder's release build stops: every
     checker issue (I01 …) whose code the project has not ignored, unless the check
     is turned off. The export's own notes about what it changed do not stop it."""
@@ -742,7 +742,21 @@ def _blocking(spec: dict, issues: list) -> list:
     if rs.get("validate") is False:
         return []
     ignored = set(rs.get("ignoredIssues") or [])
-    return [i for i in issues if i.id in checker.ISSUES and i.id not in ignored]
+    occurrences = Counter((entry.get("id"), entry.get("time"))
+                          for entry in rs.get("ignoredOccurrences", [])
+                          if isinstance(entry, dict) and entry.get("track") == track
+                          and isinstance(entry.get("id"), str)
+                          and (entry.get("time") is None or isinstance(entry.get("time"), (int, float))))
+    remaining = []
+    for issue in issues:
+        if issue.id not in checker.ISSUES or issue.id in ignored:
+            continue
+        key = (issue.id, issue.in_editor(lead).time)
+        if occurrences[key]:
+            occurrences[key] -= 1
+        else:
+            remaining.append(issue)
+    return remaining
 
 
 def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: float,
@@ -913,7 +927,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             # Timed as in the editor, before the silence, like the live check.
             issues = built.issues()
             warnings.extend(f"{arr['full_name']}: {issue.in_editor(lead).text()}" for issue in issues if issue.tone != "note")
-            blocking += _blocking(spec, issues)
+            blocking += _blocking(spec, issues, req["track"], lead)
             sng_packed = sng.pack(sng.serialize(built.compiled.shipped))
             if phrase_levels is not None:
                 warnings.extend(_fewer_levels(arr, built.compiled.shipped, phrase_levels))

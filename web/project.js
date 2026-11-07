@@ -71,7 +71,7 @@ function projectBody() {
     ...(l.refBoxes && Object.keys(l.refBoxes).length ? { refBoxes: l.refBoxes } : {}),
     // Where the player put the fretting hand, in seconds. Written only when there is
     // one, so an untouched project gains no field.
-    ...(l.handHolds?.length ? { handHolds: l.handHolds.map((h) => ({ t: h.t, fret: h.fret })) } : {}),
+    ...(l.handHolds?.length ? { handHolds: l.handHolds.map((h) => ({ id: h.id, t: h.t, fret: h.fret })) } : {}),
   });
   const song = timingData(SONG);
   return {
@@ -287,7 +287,7 @@ export function mapLane(l, startAt = 0) {
     // reaching the voicer, where it would move a hand nobody put.
     handHolds: Array.isArray(l.handHolds)
       ? l.handHolds
-        .map((h) => ({ t: Number(h?.t), fret: Number(h?.fret) }))
+        .map((h) => ({ id: h?.id || `anchor_${h?.t}_${h?.fret}`, t: Number(h?.t), fret: Number(h?.fret) }))
         .filter((h) => Number.isFinite(h.t) && Number.isFinite(h.fret) && h.fret >= 0)
         .sort((a, b) => a.t - b.t)
       : [],

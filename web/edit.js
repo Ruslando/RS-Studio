@@ -1,3 +1,6 @@
+import { rowsFor } from './rocksmith-check.js';
+import { setIssueIgnored, ignoredCategories } from './issue-state.js';
+import { issueInstanceKey } from './issue-identity.js';
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { isTablatureLane } from "./layer-role.js";
 import { automaticHandSeat } from './hand-anchor-core.js';
@@ -105,6 +108,7 @@ function shiftSelectionOctave(delta) {
 export function snapshotEdit() {
   const a = activeLane();
   const snap = {
+    ignoredDiagnostics: cloneJson(S.state?.metadata?.rocksmith || {}),
     lockedReferences: lockedReferenceSnapshot(),
     lanes: {}, boxes: {}, ui: {}, holds: {}, capo: {}, marks: {},
     active: a ? a.id : null,
@@ -148,8 +152,8 @@ export function commit(prev, mirrorSource, cuts = null, { preserveTiming = false
 // changes it picks the first arbitrarily and overwrites the rest with it. A
 // structure edit never changes what is inside a reference, only when it happens,
 // so it records undo and skips that pass.
-export function commitStructure(prev, { translation = null } = {}) {
-  recordUndo(prev, translation);
+export function commitStructure(prev, { translation = null, preserveTiming = false } = {}) {
+  recordUndo(prev, translation, preserveTiming);
 }
 
 function rejectLockedEdit(prev, translation = 0) {
@@ -160,14 +164,18 @@ function rejectLockedEdit(prev, translation = 0) {
   return true;
 }
 
-function recordUndo(prev, translation = null, preserveTiming = false) {
+export function commitDiagnostics(prev) {
+  recordUndo(prev, null, true, false);
+}
+
+function recordUndo(prev, translation = null, preserveTiming = false, invalidateVoicing = true) {
   if (rejectLockedEdit(prev, translation || 0)) return;
   // A whole-project translation preserves imported/off-grid rhythm exactly.
   // Its locked references may move, but their shapes and contents must match.
   if (S.state && translation == null && !preserveTiming)
     eachTiming(editLanes(), lanes => snapStrayNotes(lanes, prev.lanes));
   if (rejectLockedEdit(prev, translation || 0)) return;
-  S.voicingRevision++;
+  if (invalidateVoicing) S.voicingRevision++;
   S.undoStack.push(prev);
   if (S.undoStack.length > MAX_UNDO) S.undoStack.shift();
   S.redoStack = [];
@@ -177,6 +185,13 @@ function recordUndo(prev, translation = null, preserveTiming = false) {
 }
 
 function restore(snap) {
+  if (S.state && snap.ignoredDiagnostics) {
+    const rs = (S.state.metadata ||= {}).rocksmith ||= {};
+    for (const key of ['ignoredIssues', 'ignoredInstances']) {
+      if (snap.ignoredDiagnostics[key]) rs[key] = [...snap.ignoredDiagnostics[key]];
+      else delete rs[key];
+    }
+  }
   clearNoteMotion();
   // Structure first: the grid readout and every note position below are drawn
   // against it, so putting the bars back after the notes would paint one frame
@@ -1004,7 +1019,7 @@ export function setHandAnchor(lane, t, fret, { create = false } = {}) {
   const rest = (lane.handHolds || []).filter((h) => !near(h));
   if ((!had && fret === null) || (had && Number(had.fret) === fret)) return;
   const prev = snapshotEdit();
-  lane.handHolds = (fret === null ? rest : [...rest, { t, fret }]).sort((a, b) => a.t - b.t);
+  lane.handHolds = (fret === null ? rest : [...rest, { id: had?.id || `anchor_${nid()}`, t, fret }]).sort((a, b) => a.t - b.t);
   // A hand chosen by hand replaces a fingering chosen for the same notes: the engine
   // fingers them for the new hand.
   if (fret !== null) dropChosenFingers(chordColumns(lane.notes).find((c) => c.t0 >= t - 1e-6)?.notes || []);
@@ -1702,7 +1717,15 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   search.placeholder = "Search effects…"; search.spellcheck = false;
   const browse = document.createElement("div");
   const results = document.createElement("div"); results.className = "ctxmenu-results"; results.hidden = true;
-  buildMenu(browse, [...appliedSection, ...tree]);
+  const diagnostics = editLanes().flatMap(lane => rowsFor(lane).filter(issue => issue.notes?.some(n => S.selection.has(n))).map(issue => {
+    const instance = (S.state.metadata?.rocksmith?.ignoredInstances || []).includes(issueInstanceKey(lane, issue));
+    const category = ignoredCategories().has(issue.key);
+    return {label: issue.title, children: [
+      {label: instance ? 'Restore instance' : 'Ignore instance', fn: () => setIssueIgnored(lane, issue, false, !instance)},
+      {label: category ? 'Restore category' : 'Ignore category', fn: () => setIssueIgnored(lane, issue, true, !category)},
+    ]};
+  }));
+  buildMenu(browse, [...appliedSection, ...tree, ...(diagnostics.length ? [{sep: true}, ...diagnostics] : [])]);
   m.append(search, browse, results);
   markWalkthroughMenu(m);
   menuOpenCount++;
@@ -1952,3 +1975,8 @@ export function init_edit() {
   });
 }
 import { placeFloating } from "./floating-position.js";
+
+export function openDiagnosticMenu(x, y, entries) {
+  const menu = ensureCtxMenu(); menu.innerHTML = '';
+  buildMenu(menu, entries); placeCtxMenu(menu, x, y);
+}

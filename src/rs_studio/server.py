@@ -310,6 +310,9 @@ def _normalize_metadata(raw: dict | None, current: dict | None = None) -> dict:
         ignored = rs.get("ignoredIssues")
         if isinstance(ignored, list):
             out["rocksmith"]["ignoredIssues"] = sorted({c for c in ignored if isinstance(c, str) and 0 < len(c) <= 200})[:200]
+        instances = rs.get("ignoredInstances")
+        if isinstance(instances, list):
+            out["rocksmith"]["ignoredInstances"] = sorted({c for c in instances if isinstance(c, str) and 0 < len(c) <= 10000})[:50000]
     else:
         out.setdefault("rocksmith", {})
     return out

@@ -1,3 +1,4 @@
+import { issueIgnored, showIgnoredIssues, openIssueMenu } from './issue-state.js';
 import { paintMarkerFlag, paintWarningSymbol } from "./canvas-components.js";
 import { placeFloating } from "./floating-position.js";
 // Per-lane amp tone switches. A marker selects a preset from its time
@@ -161,7 +162,8 @@ export function drawToneMarkers() {
   for (const normalized of normalizeToneMarkers(markers(lane))) {
     const marker = markers(lane).find((item) => item.id === normalized.id) || normalized;
     const x = xOf(normalized.t), text = tonePresetLabel(normalized.tone, normalized.toneData, presets);
-    const missing = tonePresetMissing(normalized.tone, presets, normalized.toneData);
+    const problem = {id: 'marker.tone-preset-missing', target: `tone:${lane.id}:${marker.id}`};
+    const missing = tonePresetMissing(normalized.tone, presets, normalized.toneData) && (showIgnoredIssues || !issueIgnored(lane, problem));
     // 11/700, the same as every other flag: three rails were drawing at 9, 10
     // and 11, all three in a font the app stopped loading in pass 1.
     sctx.font = stageUi(11, 600);
@@ -170,7 +172,10 @@ export function drawToneMarkers() {
     markerRects.push(rect);
     if (rect.x0 > right || rect.x1 < left) continue;
     paintMarkerFlag(sctx, rect, PAINT.tone);
-    if (missing) paintWarningSymbol(sctx, x + 7, top + 6, 10);
+    if (missing) {
+      sctx.save(); if (issueIgnored(lane, problem)) sctx.globalAlpha = .35;
+      paintWarningSymbol(sctx, x + 7, top + 6, 10); sctx.restore();
+    }
     sctx.fillStyle = PAINT.text; sctx.textBaseline = "middle";
     sctx.fillText(text, x + 9 + (missing ? 14 : 0), top + TONE_MARK_H / 2);
   }
@@ -183,7 +188,8 @@ export function drawMinimapToneMarkers(at, mmctx = minimapCtx) {
   const presets = readAvailableSoundPresets();
   for (const marker of normalizeToneMarkers(markers(lane))) {
     const x = at(marker.t);
-    mmctx.fillStyle = tonePresetMissing(marker.tone, presets, marker.toneData) ? PAINT.warn : PAINT.tone;
+    const ignored = issueIgnored(lane, {id: 'marker.tone-preset-missing', target: `tone:${lane.id}:${marker.id}`});
+    mmctx.fillStyle = tonePresetMissing(marker.tone, presets, marker.toneData) && !ignored ? PAINT.warn : PAINT.tone;
     mmctx.fillRect(x - 1, 26, 3, 8);
   }
 }
@@ -227,6 +233,15 @@ export function init_tone_markers() {
     mouseDown: toneMarkerMouseDown,
     menuLabel: "Add tone switch",
     addAt: addToneMarkerAtTime,
+    contextMenu: event => {
+      const [x, y] = toCanvas(event.clientX, event.clientY), hit = markerAt(x, y);
+      if (!hit) return false;
+      const lane = hit.lane || activeToneLane(), marker = hit.marker;
+      if (tonePresetMissing(marker.tone, undefined, marker.toneData)) {
+        openIssueMenu(event.clientX, event.clientY, [{lane, issue: {id: 'marker.tone-preset-missing', target: `tone:${lane.id}:${marker.id}`}}]);
+      } else openToneMarkerPop(event.clientX, event.clientY, marker, lane);
+      return true;
+    },
   });
   registerLaneField("toneMarkers", { normalize: normalizeToneMarkers });
   refreshPresetOptions();

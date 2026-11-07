@@ -35,10 +35,10 @@ const chevron = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 2
 const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
 const markerTime = t => `${t < 0 ? '-' : ''}${Math.floor(Math.abs(t) / 60)}:${(Math.abs(t) % 60).toFixed(3).padStart(6, '0')}`;
 
-export function markerArtifacts() {
+export function markerArtifacts(requestedLane = null) {
   if (!S.state) return [];
-  // Only the active layer and the timing it follows.
-  const active = S.state.editLanes.find(lane => lane.active);
+  // The pane follows the active layer; export validation may request another.
+  const active = requestedLane || S.state.editLanes.find(lane => lane.active);
   if (!active) return [];
   const entries = [], lanes = [active];
   for (const [timing, lane] of [[timingIdOf(active), active]]) {
@@ -61,7 +61,7 @@ export function markerArtifacts() {
       const lost = !!column && !column.choices.includes(Number(marker.fret));
       const fret = Math.round(marker.fret);
       entries.push({
-        key: `anchor:${lane.id}:${index}`, kind: 'anchor', lane, owner: lane.name,
+        key: `anchor:${lane.id}:${marker.id || index}`, kind: 'anchor', lane, owner: lane.name,
         marker, t: marker.t, name: `${lost ? '⚠ ' : ''}Fret ${fret}${lost ? " · can't reach" : ''}`,
         // Listed again under Errors (rocksmith-check.js), where every problem goes.
         issue: lost ? { id: 'marker.anchor-out-of-reach', tone: 'warning', title: `Hand anchor at fret ${fret} cannot reach the note`,

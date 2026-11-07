@@ -1,3 +1,4 @@
+import { issueIgnored, showIgnoredIssues, openIssueMenu } from './issue-state.js';
 // Explicit fretting-hand anchors. `handHolds` remains the persisted field used
 // by existing projects and the voicing engine; the UI calls them Hand anchors.
 import { $, scroll, stage, sctx, mmctx as minimapCtx } from './dom.js';
@@ -152,7 +153,7 @@ function drawAnchors() {
   for (const anchor of lane.handHolds || []) {
     // One that no longer reaches its note (the note changed under it) says so.
     const column = handColumnAt(columns, anchor.t);
-    const lost = !!column && !column.choices.includes(Number(anchor.fret));
+    const lost = !!column && !column.choices.includes(Number(anchor.fret)) && (showIgnoredIssues || !issueIgnored(lane, {id: 'marker.anchor-out-of-reach', target: `anchor:${lane.id}:${anchor.id || lane.handHolds.indexOf(anchor)}`}));
     const label = `Fret ${Math.round(anchor.fret)}${lost ? " · can't reach" : ""}`, x = xOf(anchor.t);
     const width = Math.ceil(sctx.measureText(label).width) + 14;
     if (x > scroll.scrollLeft + scroll.clientWidth || x + width < scroll.scrollLeft) continue;
@@ -191,7 +192,11 @@ export function init_hand_anchors() {
     contextMenu: event => {
       const hit = anchorAt(event);
       if (!hit) return false;
-      openHandAnchorPop(event.clientX, event.clientY, hit.anchor, hit.lane); return true;
+      const column = handColumnAt(laneHandColumns(hit.lane), hit.anchor.t);
+      if (column && !column.choices.includes(Number(hit.anchor.fret))) {
+        openIssueMenu(event.clientX, event.clientY, [{lane: hit.lane, issue: {id: 'marker.anchor-out-of-reach', target: `anchor:${hit.lane.id}:${hit.anchor.id || hit.lane.handHolds.indexOf(hit.anchor)}`}}]);
+      } else openHandAnchorPop(event.clientX, event.clientY, hit.anchor, hit.lane);
+      return true;
     },
     drawMinimap: (at, mmctx = minimapCtx) => {
       const lane = shownLane();
