@@ -647,8 +647,7 @@ function setBendOnSelection(kind) {
   if (cleared) toast("Cleared conflicting effects");
 }
 
-// Put (truthy) a half step down on every selected note, or clear the whammy (null).
-const WHAMMY_START = [[0, 0], [0.5, -1], [1, -1]];
+// Start with a dip on every selected note, or clear the whammy (null).
 function setWhammyOnSelection(on) {
   const notes = [...S.selection].filter((n) => laneOf(n));
   if (!notes.length) return;
@@ -658,8 +657,7 @@ function setWhammyOnSelection(on) {
     delete n.whammyPoints;
     if (!on) { delete n.whammy; continue; }
     cleared = clearConflicts(n, "whammy") || cleared;
-    n.whammyPoints = WHAMMY_START.map((p) => [...p]);
-    n.whammy = whammyKind(n.whammyPoints);
+    n.whammy = "dip";
   }
   commit(prev); draw();
   if (cleared) toast("Cleared conflicting effects");
@@ -1243,15 +1241,15 @@ const NO_NATURAL_WITH_BEND = ["Not with a bend",
 const EFFECT_MENU = [
   { label: "Bends & slides", kw: "pitch expression", items: [
     { toggle: "vibrato", kw: "wobble" },
-    // On/off: a half-step bend, shaped by dragging its points on the spectrogram.
-    { field: "bend", on: "half", label: "Bend", kw: "pitch curve", set: setBendOnSelection },
+    // On/off: a full-step bend, shaped by dragging its points on the spectrogram.
+    { field: "bend", on: "full", label: "Bend", kw: "pitch curve", set: setBendOnSelection },
     { field: "slide", label: "Slide", kw: "glide glissando", set: setSlideOnSelection, variants: [
       [null, "None"], ["shift", "Shift → next"], ["legato", "Legato → next"],
       ["inBelow", "In from below ↗"], ["inAbove", "In from above ↘"],
       ["outDown", "Out downward ↓"], ["outUp", "Out upward ↑"],
       ["pickDown", "Pick slide down"], ["pickUp", "Pick slide up"],
     ] },
-    // Like a bend, a half step down.
+    // On/off: a dip, shaped by dragging its points on the spectrogram.
     { field: "whammy", on: true, rs: "slides", label: "Whammy bar", kw: "tremolo arm dive bar dip", set: setWhammyOnSelection },
     { only: "single", field: "trill", rs: "hammers", label: "Trill", kw: "ornament", set: (v) => setChoiceOnSelection("trill", v), variants: [
       [null, "None"], ["half", "½-step"], ["whole", "Whole-step"],

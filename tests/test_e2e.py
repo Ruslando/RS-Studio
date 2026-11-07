@@ -2539,6 +2539,36 @@ class EndToEndTests(unittest.TestCase):
             page.mouse.click(points[key + "Base"]["x"], points[key + "Base"]["y"])
             self.assertNotIn(note_id, page.evaluate(selected), f"the {key} is not grabbed where it is not drawn")
 
+    def test_bend_and_whammy_are_simple_toggles_with_default_curves(self):
+        self.open_reference_project()
+        page = self.page
+        def open_effects():
+            page.evaluate("""async () => {
+                const { S, setSelection } = await import('/store.js');
+                setSelection(new Set([S.state.editLanes[0].notes[0]]));
+                (await import('/edit.js')).openNoteMenu(400, 200);
+            }""")
+            page.locator(".ctxmenu-family > .ctxmenu-parent", has_text="Bends & slides").hover()
+
+        for label, field, expected, curve in [
+            ('Bend', 'bend', 'full', [[0, 0], [0.5, 2], [1, 2]]),
+            ('Whammy bar', 'whammy', 'dip', [[0, 0], [0.5, -2], [1, 0]]),
+        ]:
+            open_effects()
+            page.get_by_role('button', name=re.compile('^' + re.escape(label) + r'(?:$| )')).click()
+            actual = page.evaluate("""async field => {
+                const { S } = await import('/store.js');
+                const note = S.state.editLanes[0].notes[0];
+                return [note[field], (await import('/edit.js')).curveOf(note, field)];
+            }""", field)
+            self.assertEqual(actual, [expected, curve])
+            open_effects()
+            page.get_by_role('button', name=re.compile('^' + re.escape(label) + r'(?:$| )')).click()
+            self.assertIsNone(page.evaluate("""async field => {
+                const { S } = await import('/store.js');
+                return S.state.editLanes[0].notes[0][field] ?? null;
+            }""", field))
+
     def test_bend_and_natural_harmonic_exclude_each_other(self):
         self.open_reference_project()
         page = self.page
@@ -2556,7 +2586,7 @@ class EndToEndTests(unittest.TestCase):
         natural = page.locator(".ctxmenu-item", has_text="Natural")
         expect(natural).to_be_disabled()
         expect(natural).to_contain_text("Not with a bend")
-        expect(page.locator(".ctxmenu-item", has_text="Pinch")).to_be_enabled()
+        expect(page.get_by_role("button", name="Pinch (P.H.)", exact=True)).to_be_enabled()
         natural.hover(force=True)
         expect(page.locator(".app-tooltip")).to_contain_text("cannot be bent")
 
