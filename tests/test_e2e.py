@@ -716,6 +716,104 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press('Control+z')
         self.assertEqual(state()['notes'], before['notes'])
 
+    def test_ctrl_click_selects_notes_between_and_under_hidden_marker_rails(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.refBoxes = {}; lane.phraseBoundaries = []; lane.handHolds = []; lane.toneMarkers = [];
+            S.state.sectionMarkers = [{t:0,kind:'intro',name:'Intro'}];
+            lane.notes = [
+                {id:'upper',start:2,end:3,pitch:S.state.spec.midi_high},
+                {id:'lower',start:3,end:4,pitch:60},
+            ];
+            S.toolMode = 'pan'; setSelection(new Set()); S.undoStack = [];
+            (await import('/marker-rails.js')).setRailsHidden(false);
+            document.querySelector('#scroll').scrollTop = 0;
+            (await import('/repaint.js')).drawNow();
+        }""")
+        selected = lambda: page.evaluate("async () => [...(await import('/store.js')).S.selection].map(n=>n.id)")
+
+        def point(note_id, scrolled=False):
+            return page.evaluate("""async ([id,scrolled]) => {
+                const {S} = await import('/store.js');
+                const {xOf,yOf,zoomBothTo} = await import('/geometry.js');
+                const scroll = document.querySelector('#scroll'), stage = document.querySelector('#stage');
+                if (scrolled) {
+                    const r = stage.getBoundingClientRect();
+                    zoomBothTo(3, r.left+r.width/2, r.top+r.height/2);
+                }
+                const n = S.state.editLanes[0].notes.find(n=>n.id===id);
+                scroll.scrollLeft = Math.max(0, xOf((n.start+n.end)/2)-stage.clientWidth/2);
+                if (scrolled) scroll.scrollTop = yOf(n.pitch);
+                (await import('/repaint.js')).drawNow();
+                const r = stage.getBoundingClientRect();
+                return [r.left+xOf((n.start+n.end)/2)-scroll.scrollLeft,
+                    r.top+yOf(n.pitch)+S.state.rowH/2-scroll.scrollTop];
+            }""", [note_id, scrolled])
+
+        page.keyboard.down('Control')
+        page.mouse.click(*point('upper'))
+        self.assertEqual(selected(), ['upper'], 'empty space in a visible rail must not block the note')
+        marker = page.evaluate("""async () => {
+            const r = (await import('/markers.js')).firstMarkerViewportRect();
+            return [r.left+r.width/2, r.top+r.height/2];
+        }""")
+        page.mouse.move(*marker)
+        page.mouse.down()
+        self.assertIsNone(page.evaluate("async () => (await import('/store.js')).S.drag"),
+                          'a visible marker must still block Ctrl selection and tracing')
+        page.mouse.up()
+        self.assertEqual(selected(), ['upper'])
+        page.mouse.click(*point('upper'))
+        self.assertEqual(selected(), [])
+        page.mouse.click(*point('lower', scrolled=True))
+        self.assertEqual(selected(), ['lower'], 'scrolling a note into a rail must not disable Ctrl-click')
+        page.evaluate("""async () => {
+            (await import('/marker-rails.js')).setRailsHidden(true);
+            (await import('/repaint.js')).drawNow();
+        }""")
+        page.mouse.click(*point('lower'))
+        self.assertEqual(selected(), [], 'hidden rails must not block deselection')
+        page.mouse.click(*point('lower'))
+        self.assertEqual(selected(), ['lower'])
+        page.keyboard.up('Control')
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.undoStack.length"), 0)
+
+    def test_ctrl_click_remains_a_click_when_the_viewport_moves(self):
+        self.open_reference_project()
+        page = self.page
+        for tool in ['pan', 'select', 'trace', 'marquee', 'frame']:
+            for spectrogram in [False, True]:
+                with self.subTest(tool=tool, spectrogram=spectrogram):
+                    point = page.evaluate("""async ([tool,spectrogram]) => {
+                        const {S,setSelection} = await import('/store.js');
+                        const {xOf,yOf} = await import('/geometry.js');
+                        const lane = S.state.editLanes[0];
+                        lane.refBoxes = {}; lane.notes = [{id:'target',start:2,end:3,pitch:60}];
+                        S.toolMode = tool; setSelection(new Set());
+                        S.spectImg = spectrogram ? document.createElement('canvas') : null;
+                        const scroll = document.querySelector('#scroll'), stage = document.querySelector('#stage');
+                        scroll.scrollLeft = 0; scroll.scrollTop = 0;
+                        (await import('/repaint.js')).drawNow();
+                        const r = stage.getBoundingClientRect();
+                        return [r.left+xOf(2.5),r.top+yOf(60)+S.state.rowH/2];
+                    }""", [tool, spectrogram])
+                    page.keyboard.down('Control')
+                    page.mouse.move(*point)
+                    page.mouse.down()
+                    # Playback following / viewport animations can scroll between
+                    # press and release, without the user dragging the mouse.
+                    page.evaluate("document.querySelector('#scroll').scrollLeft += 20")
+                    page.mouse.move(point[0]+1, point[1])
+                    self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.drag.mode"),
+                                     'tracePending', 'viewport movement must not become a drawing gesture')
+                    page.mouse.up()
+                    page.keyboard.up('Control')
+                    self.assertEqual(page.evaluate("async () => [...(await import('/store.js')).S.selection].map(n=>n.id)"),
+                                     ['target'])
+
     def test_panning_coasts_after_a_flick_and_new_input_stops_it(self):
         self.open_reference_project()
         page = self.page

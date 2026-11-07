@@ -217,7 +217,9 @@ function updateDrag(x, y) {
     seekPlayback(cursorTimeAt(x)); return;
   }
   if (S.drag.mode === "tracePending") {
-    if (Math.hypot(x - S.drag.x0, y - S.drag.y0) < 4) return;
+    // Viewport scrolling/zooming moves world coordinates even on a click.
+    // Only actual pointer travel may turn selection into a drawing gesture.
+    if (Math.hypot(S.lastPointerX - S.drag.clientX, S.lastPointerY - S.drag.clientY) < 4) return;
     S.drag.moved = true;
     if (!S.spectImg) return;
     const { x0, y0 } = S.drag;
@@ -432,10 +434,12 @@ export function init_interaction() {
     if (!S.state || e.button !== 0) return; // right-click handled by contextmenu
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
       const [x, y] = localXY(e);
-      if (y - scroll.scrollTop <= railsBottom()) return;
+      // Rails float over the note grid. Only an actual visible marker blocks
+      // selection; empty rail space (or a hidden rail) still belongs to notes.
+      if (markerCursorAt(x, y) || markerRails().some(rail => rail.cursorAt?.(x, y))) return;
       const hit = pickNote(timeAt(x), pitchAt(y), pitchAtExact(y));
       e.preventDefault();
-      S.drag = { mode: 'tracePending', x0: x, y0: y, hit, toggleSelection: true };
+      S.drag = { mode: 'tracePending', x0: x, y0: y, clientX: e.clientX, clientY: e.clientY, hit, toggleSelection: true };
       return;
     }
     // Bottom-up: the lowest rail gets first refusal, then tempo/meter flags.
@@ -579,7 +583,7 @@ export function init_interaction() {
     // create snapped notes from the brightest nearby pitch rows.
     if (wantTrace && S.spectImg && !(defaultTrace && noteHit)) {
       if (defaultTrace) {
-        S.drag = { mode: "tracePending", x0: x, y0: y };
+        S.drag = { mode: "tracePending", x0: x, y0: y, clientX: e.clientX, clientY: e.clientY };
         setSelection(new Set());
         return;
       }
