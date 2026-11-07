@@ -248,11 +248,11 @@ function gripsFor(lane) {
     laneFingering(lane).then((fingering) => {
       if (handJob !== key) return;    // a later edit already asked for a newer one
       const columns = gripsFrom(fingering);
-      const blocked = new Set(chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
+      const blockedStarts = new Set(chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
         .filter(column => column.kind === "impossible").map(column => column.t0));
-      const playableColumns = columns.filter(column => !blocked.has(column.start));
+      const playableColumns = columns.filter(column => !blockedStarts.has(column.start));
       const fingers = playableColumns.flatMap(column => column.fingers);
-      hand = { key, vkey, strings: fingering.tuning.length, columns, playableColumns, voiced: fingering.voiced,
+      hand = { key, vkey, strings: fingering.tuning.length, columns, playableColumns, blockedStarts, voiced: fingering.voiced,
         ringFingers: fingers.filter((f) => f.note.fx?.letRing),
         releaseFingers: [...fingers].reverse(),
         popFingers: fingers.filter((f) => f.note.slap === "pop") };
@@ -359,9 +359,13 @@ let chordShown = null;
 // A Hand or Capo value under the pointer in the bar, previewed on the board.
 let listPeek = null;   // { kind: "hand" | "capo", value }
 
-// Custom shape entry keeps its existing staged walk; its redesign is separate.
-let shownAnyway = null;   // "laneId:t0" of the stretched chord the user asked to see
+let shownAnyway = null;   // { key: hand revision, column: "laneId:t0" }
+let revealedHand = null;
+const shapeRevealed = (lane, column) => !!shownAnyway && shownAnyway.key === handKey(lane)
+  && shownAnyway.column === column;
 const fretboardShowAnyway = $("fretboardShowAnyway");
+
+// Custom shape entry keeps its existing staged walk; its redesign is separate.
 let shaping = null;   // { notes, index, picked: Map(note -> { string, fret }) }
 // Typing fingers onto the grip on the board: { target, original } — the note last
 // clicked, and the draft's memory (draftNoteFinger). The note under the pointer takes
@@ -1031,18 +1035,18 @@ export function drawFretboard() {
   const warningTime = frozenAt(lane) ?? boardTime();
   const here = lane ? chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
     .find(({ t0, notes }) => warningTime >= t0 - 1e-5 && warningTime < Math.max(...notes.map(n => n.end))) : null;
-  // A stretch the user asked to see anyway is drawn like any other chord.
-  const stretchKey = here?.kind === "stretch" ? `${lane.id}:${here.t0}` : null;
-  const impossible = !!here && !(stretchKey && shownAnyway === stretchKey);
+  // Stretched shapes are visible immediately; invalid shapes require opt-in.
+  const invalidKey = here?.kind === "impossible" ? `${lane.id}:${here.t0}` : null;
+  const impossible = !!invalidKey && !shapeRevealed(lane, invalidKey);
   const selectionError = editing && !transportPlaying() ? selectedPositions(lane).error : null;
   const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
-  warning.hidden = !selectionError && !impossible;
+  warning.hidden = !selectionError && !here;
   const [shapeTitle, shapeHelp] = SHAPE_WARNINGS[here?.kind] || SHAPE_WARNINGS.impossible;
-  warning.textContent = selectionError || (impossible ? `⚠ ${shapeTitle}` : "");
+  warning.textContent = selectionError || (here ? `⚠ ${shapeTitle}` : "");
   warning.title = selectionError || shapeHelp;
-  warning.toggleAttribute("data-error", impossible && !stretchKey && !selectionError);
-  fretboardShowAnyway.hidden = !impossible || !stretchKey || !!selectionError;
-  fretboardShowAnyway.dataset.key = stretchKey || "";
+  warning.toggleAttribute("data-error", here?.kind === "impossible" && !selectionError);
+  fretboardShowAnyway.hidden = !impossible || !!selectionError;
+  fretboardShowAnyway.dataset.key = invalidKey || "";
   fretboardPanel.toggleAttribute("data-unplayable", impossible);
   if (fretboardPanel.hasAttribute("data-edit-blocked") !== blocked) {
     fretboardPanel.toggleAttribute("data-edit-blocked", blocked);
@@ -1797,8 +1801,20 @@ function handNow(lane, s) {
   // A 6-string board cannot honestly show a bass. Until the bass neck exists,
   // a lane with another string count gets the instrument and no fingers.
   if (!lane || !lane.notes?.length) return null;
-  const found = gripsFor(lane);
+  let found = gripsFor(lane);
   if (!found || found.strings !== s.strings) return null;
+  if (shownAnyway?.key === handKey(lane) && found.blockedStarts) {
+    if (revealedHand?.source !== found || revealedHand.reveal !== shownAnyway) {
+      const playableColumns = found.columns.filter(column => !found.blockedStarts.has(column.start)
+        || shapeRevealed(lane, `${lane.id}:${column.start}`));
+      const fingers = playableColumns.flatMap(column => column.fingers);
+      revealedHand = { source: found, reveal: shownAnyway, value: { ...found, playableColumns,
+        ringFingers: fingers.filter(f => f.note.fx?.letRing),
+        releaseFingers: [...fingers].reverse(),
+        popFingers: fingers.filter(f => f.note.slap === "pop") } };
+    }
+    found = revealedHand.value;
+  }
   // While the positions are on screen the hand holds the column being decided instead
   // of following the playhead: the boxes are a comparison, and a comparison against a
   // moving target is not one. A grip's own onset asks for it pressed and still — the
@@ -2427,7 +2443,9 @@ export function init_fretboard() {
     if (shaping && (event.detail === "seek" || event.detail === "play")) setFretboardShape(false);
   });
   fretboardShowAnyway.addEventListener("click", () => {
-    shownAnyway = fretboardShowAnyway.dataset.key || null;
+    const lane = currentLane(), column = fretboardShowAnyway.dataset.key;
+    shownAnyway = lane && column ? { key: handKey(lane), column } : null;
+    revealedHand = null;
     fretboardShowAnyway.blur();
     draw();
   });

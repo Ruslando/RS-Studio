@@ -2580,12 +2580,13 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate("async () => (await import('/playback.js')).seekPlayback(100)")
         expect(page.locator('#fretboardShape')).to_have_attribute('aria-pressed', 'false')
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-unplayable', '')
-        expect(page.locator('#fretboardWarning')).to_contain_text('No valid shape found')
+        expect(page.locator('#fretboardWarning')).to_contain_text('Chord has no valid fingering')
         for start in [96,100,104,108]:
             page.evaluate("async t => (await import('/playback.js')).seekPlayback(t)", start)
             expect(page.locator('#fretboardWarning')).to_be_visible()
-            expect(page.locator('#fretboardShowAnyway')).to_be_hidden()
-            count = page.evaluate("""async () => {
+            expect(page.locator('#fretboardShowAnyway')).to_be_visible()
+            expect(page.locator('#fretboardPanel')).to_have_attribute('data-edit-blocked', '')
+            count_script = """async () => {
                 const ctx = document.querySelector('#fretboard').getContext('2d'), original = ctx.fillText;
                 let digits = 0; const strings = [];
                 ctx.fillText = function(text,...args) {
@@ -2595,14 +2596,44 @@ class EndToEndTests(unittest.TestCase):
                 };
                 try { (await import('/fretboard.js')).drawFretboard(); } finally { ctx.fillText = original; }
                 return {digits,strings};
-            }""")
-            self.assertEqual(count['digits'],0,'invalid chords must not paint fingerings or onion skins')
+            }"""
+            count = page.evaluate(count_script)
+            self.assertEqual(count['digits'], 0, 'invalid shape is hidden initially')
+            page.locator('#fretboardShowAnyway').click()
+            expect(page.locator('#fretboardShowAnyway')).to_be_hidden()
+            expect(page.locator('#fretboardPanel')).not_to_have_attribute('data-edit-blocked', '')
+            count = page.evaluate(count_script)
+            self.assertGreater(count['digits'], 0, 'Show anyway reveals the available fingering')
             expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count','0')
         warning = page.locator('#fretboardWarning').bounding_box()
         board = page.locator('#fretboard').bounding_box()
         self.assertAlmostEqual(warning['x']+warning['width']/2,board['x']+board['width']/2,delta=2)
         self.assertEqual(len(count['strings']),2)
-        self.assertAlmostEqual(warning['y']+warning['height']/2,board['y']+sum(count['strings'])/2,delta=2)
+        self.assertLess(warning['y'] + warning['height'], board['y'] + board['height'] / 2, 'warning leaves the shape visible')
+        # An edit invalidates the opt-in, including when the chord stays at the same time.
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            S.voicingRevision++;
+            (await import('/repaint.js')).drawNow();
+        }""")
+        expect(page.locator('#fretboardShowAnyway')).to_be_visible()
+        expect(page.locator('#fretboardPanel')).to_have_attribute('data-edit-blocked', '')
+        self.assertEqual(page.evaluate(count_script)['digits'], 0)
+        page.locator('#fretboardShowAnyway').click()
+        expect(page.locator('#fretboardShowAnyway')).to_be_hidden()
+        page.wait_for_function('async () => (await (' + count_script + ')()).digits > 0')
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.notes.push(...[[45,4,0], [52,3,2], [57,2,2], [66,1,7], [64,0,0]].map(([pitch,string,fret], i) =>
+                ({id: 'stretch-test-' + i, start: 112, end: 114, pitch, pos: {string,fret}})));
+            S.voicingRevision++;
+            (await import('/playback.js')).seekPlayback(112);
+        }""")
+        expect(page.locator('#fretboardWarning')).to_contain_text('large hand stretch')
+        expect(page.locator('#fretboardShowAnyway')).to_be_hidden()
+        expect(page.locator('#fretboardPanel')).not_to_have_attribute('data-edit-blocked', '')
+        page.wait_for_function('async () => (await (' + count_script + ')()).digits > 0')
         page.evaluate("async () => (await import('/playback.js')).seekPlayback(100)")
 
         page.evaluate("""async () => {
