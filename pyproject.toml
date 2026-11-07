@@ -1,6 +1,6 @@
 [project]
 name = "rs-studio"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 description = "Transcription and charting tool for Rocksmith 2014"
 requires-python = ">=3.10,<3.13"
 license = "Apache-2.0"

@@ -35,9 +35,12 @@ export function laneChords(lane) {
   const signature = JSON.stringify(lane.notes.map((n) => [n.id, n.start, n.pitch, !!n.fx?.dead,
     n.chordName, n.chordNameFor, n.arrangement?.notes?.map((a) => a.pitch)]));
   const hit = cache.get(lane);
-  if (hit?.signature === signature) return hit.chords;
+  // The same notes, not only alike ones: undo puts back copies with the same ids, and
+  // a chord holding the old objects would rename notes no longer in the lane.
+  if (hit?.signature === signature && hit.notes.length === lane.notes.length
+      && hit.notes.every((n, i) => n === lane.notes[i])) return hit.chords;
   const chords = chordsOf(lane.notes);
-  cache.set(lane, { signature, chords });
+  cache.set(lane, { signature, chords, notes: lane.notes.slice() });
   return chords;
 }
 
