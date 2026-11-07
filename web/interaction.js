@@ -467,7 +467,7 @@ export function init_interaction() {
 
     // Existing range edges stay grabbable in every tool, including the default
     // Trace tool, and take priority over notes and reference boxes behind them.
-    if (!e.shiftKey && !wantSlice) {
+    if (!e.altKey && !e.shiftKey && !wantSlice) {
       const edge = regionEdgeAt(x);
       if (edge) {
         e.preventDefault();
@@ -572,7 +572,8 @@ export function init_interaction() {
     // clears the frame.
     if (wantFrame) {
       // A click with no drag on empty space spans playhead → click instead.
-      S.drag = { mode: "region", x0: x, from: e.altKey && !pickNote(t, pitch, pitchAtExact(y)) ? playbackTime() : null };
+      S.drag = { mode: "region", x0: x, clearOnClick: e.altKey && !!S.detectRegion,
+        from: e.altKey && !pickNote(t, pitch, pitchAtExact(y)) ? playbackTime() : null };
       const time = clamp(timeAt(x), 0, S.state.duration);
       S.detectRegion = { t0: time, t1: time };
       draw();
@@ -918,8 +919,10 @@ export function init_interaction() {
     } else if (S.drag.mode === "region") {
       let { t0, t1 } = S.detectRegion;
       if (t1 < t0) [t0, t1] = [t1, t0];
-      // An Alt-click on empty space loops playhead → click; on a note it clears the frame.
-      if (t1 - t0 < MIN_REGION && S.drag.from != null) [t0, t1] = [Math.min(S.drag.from, t0), Math.max(S.drag.from, t0)];
+      // Alt-click clears an existing loop first. With no loop, empty space
+      // spans playhead → click. Alt-drag can still replace the range directly.
+      if (t1 - t0 < MIN_REGION && !S.drag.clearOnClick && S.drag.from != null)
+        [t0, t1] = [Math.min(S.drag.from, t0), Math.max(S.drag.from, t0)];
       if (t1 - t0 < MIN_REGION) { S.detectRegion = null; }
       else S.detectRegion = { t0, t1: Math.min(t1, S.state.duration) };
       updateDetectStatus();

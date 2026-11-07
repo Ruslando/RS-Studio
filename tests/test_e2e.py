@@ -814,6 +814,51 @@ class EndToEndTests(unittest.TestCase):
                     self.assertEqual(page.evaluate("async () => [...(await import('/store.js')).S.selection].map(n=>n.id)"),
                                      ['target'])
 
+    def test_alt_click_clears_existing_loop_before_setting_another(self):
+        self.open_reference_project()
+        page = self.page
+        points = page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            const {xOf,yOf} = await import('/geometry.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = []; lane.refBoxes = {}; S.detectRegion = null;
+            setSelection(new Set()); S.toolMode = 'pan';
+            (await import('/playback.js')).seekPlayback(1);
+            const scroll = document.querySelector('#scroll');
+            scroll.scrollLeft = 0; scroll.scrollTop = 0;
+            (await import('/repaint.js')).drawNow();
+            const r = document.querySelector('#stage').getBoundingClientRect();
+            return [2,3,4].map(t=>[r.left+xOf(t),r.top+yOf(60)+S.state.rowH/2]);
+        }""")
+        region = lambda: page.evaluate("async () => (await import('/store.js')).S.detectRegion")
+
+        def assert_region(start, end):
+            self.assertAlmostEqual(region()['t0'], start, delta=.02)
+            self.assertAlmostEqual(region()['t1'], end, delta=.02)
+
+        page.keyboard.down('Alt')
+        page.mouse.click(*points[1])
+        assert_region(1, 3)
+        page.mouse.click(*points[0])  # Inside the loop: clear it.
+        self.assertIsNone(region())
+        page.mouse.click(*points[2])
+        assert_region(1, 4)
+        page.mouse.click(*points[2])  # On the loop edge: also clear it.
+        self.assertIsNone(region())
+        page.mouse.click(*points[0])
+        assert_region(1, 2)
+        page.mouse.click(*points[2])  # Outside the loop: clear instead of replace.
+        self.assertIsNone(region())
+        page.mouse.click(*points[0])
+        assert_region(1, 2)
+        # An intentional Alt-drag still replaces an existing range directly.
+        page.mouse.move(*points[1]); page.mouse.down()
+        page.mouse.move(*points[2], steps=8); page.mouse.up()
+        assert_region(3, 4)
+        page.mouse.click(*points[0])
+        self.assertIsNone(region())
+        page.keyboard.up('Alt')
+
     def test_panning_coasts_after_a_flick_and_new_input_stops_it(self):
         self.open_reference_project()
         page = self.page
