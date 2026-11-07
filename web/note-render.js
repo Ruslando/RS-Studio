@@ -18,7 +18,7 @@ import { stackClusters, stackedBends } from "./note-issues.js";
 import { paintNoteBar } from "./canvas-components.js";
 import { graceBefore } from "./grace.js";
 import { pitchCurve, whammyCurve } from "./whammy.js";
-import { SLIDES_TO_NEXT, SLIDE_IN, SLIDE_OUT, bendAt, bendCurve, easedCurveAt, slideRibbon, slideStartOf, slideTargets, vibratoStartOf } from "./bend.js";
+import { SLIDES_TO_NEXT, SLIDE_IN, SLIDE_OUT, bendAt, bendCurve, easedCurveAt, slideRibbon, slideStartOf, slideTargets, vibratoStartOf, vibratoEndOf } from "./bend.js";
 import { REGION_GRAB, REGION_HANDLE_H, STAGE_ANCHORED, stageMono } from "./constants.js";
 import { ruler, rulerRight, scroll, sctx } from "./dom.js";
 import { laneFingering, laneFingeringKey } from "./tablature.js";
@@ -218,13 +218,20 @@ export function vibratoStartHandle(n, lane) {
 }
 
 // Every effect-start handle of a note: where its slide leaves and its vibrato sets in.
-export const effectStartHandles = (n, lane) => [slideStartHandle(n, lane), vibratoStartHandle(n, lane)].filter(Boolean);
+export function vibratoEndHandle(n, lane) {
+  const start = vibratoStartHandle(n, lane);
+  if (!start) return null;
+  const t = n.start + vibratoEndOf(n) * (n.end - n.start);
+  const bar = noteCentreAt(n, lane, t) + start.bar - noteCentreAt(n, lane, n.start + vibratoStartOf(n) * (n.end - n.start));
+  return { note: n, kind: "vibratoEnd", x: xOf(t), bar, y: bar + start.y - start.bar };
+}
+export const effectStartHandles = (n, lane) => [slideStartHandle(n, lane), vibratoStartHandle(n, lane), vibratoEndHandle(n, lane)].filter(Boolean);
 
 // A vibrato drawn as a fine wave from where it sets in to the note's end,
 // following the note's curve, under its label.
 function paintVibratoWave(n, lane) {
   const rowH = S.state.rowH, t0 = n.start + vibratoStartOf(n) * (n.end - n.start);
-  const x0 = xOf(t0), x1 = xOf(n.end);
+  const x0 = xOf(t0), x1 = xOf(n.start + vibratoEndOf(n) * (n.end - n.start));
   if (x1 - x0 < 6 || rowH < 7) return;
   const amp = Math.min(2, rowH * 0.12), lift = rowH * 0.3;
   sctx.save();

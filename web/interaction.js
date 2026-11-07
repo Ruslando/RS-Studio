@@ -716,9 +716,9 @@ export function init_interaction() {
     if (handle) { removeBendPoint(handle.note, handle.i, handle.kind); return; }
     // Right-click a slide- or vibrato-start handle moves it back to the pick.
     const start = effectStartAt(x, y);
-    if (start && (start.note[`${start.kind}Start`] ?? (start.kind === "slide" ? start.note.slideEnd : null)) != null) {
+    if (start && (start.note[start.kind === "vibratoEnd" ? "vibratoEnd" : `${start.kind}Start`] ?? (start.kind === "slide" ? start.note.slideEnd : null)) != null) {
       const prev = snapshotEdit();
-      EFFECT_START_SETTERS[start.kind](start.note, 0); commit(prev); draw(); return;
+      EFFECT_START_SETTERS[start.kind](start.note, start.kind === "vibratoEnd" ? 1 : 0); commit(prev); draw(); return;
     }
     // Right-click a reference badge opens its menu, acting on the occurrence it
     // identifies. A locked/hidden layer is view-only, so its references are inert.

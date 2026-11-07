@@ -11,7 +11,7 @@ import { automaticHandSeat } from './hand-anchor-core.js';
 import { wireContextSubmenu } from "./context-submenu.js";
 import { hoveredStageNote } from "./interaction.js";
 import { whammyCurve, whammyKind } from "./whammy.js";
-import { MAX_POINTS, SLIDE_END_MIN, SLIDE_IN, SLIDE_OUT, SLIDES_TO_NEXT, SLIDE_START_MAX, bendAt, slideReach, bendCurve, normalizeCurve, slideInOf } from "./bend.js";
+import { MAX_POINTS, SLIDE_END_MIN, SLIDE_IN, SLIDE_OUT, SLIDES_TO_NEXT, SLIDE_START_MAX, bendAt, slideReach, bendCurve, normalizeCurve, slideInOf, vibratoStartOf, vibratoEndOf } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
 import { icon } from "./icons.js";
@@ -616,10 +616,14 @@ export function setSlideFrets(n, frets, fret) {
 
 // The same for where vibrato sets in.
 export function setVibratoStart(n, fraction) {
-  const s = Math.max(0, Math.min(SLIDE_START_MAX, fraction));
+  const s = Math.max(0, Math.min(vibratoEndOf(n) - (1 - SLIDE_START_MAX), fraction));
   if (s > 1e-3) n.vibratoStart = s; else delete n.vibratoStart;
 }
-export const EFFECT_START_SETTERS = { slide: setSlideStart, vibrato: setVibratoStart };
+export function setVibratoEnd(n, fraction) {
+  const end = Math.max(vibratoStartOf(n) + (1 - SLIDE_START_MAX), Math.min(1, fraction));
+  if (end < 1 - 1e-3) n.vibratoEnd = end; else delete n.vibratoEnd;
+}
+export const EFFECT_START_SETTERS = { slide: setSlideStart, vibrato: setVibratoStart, vibratoEnd: setVibratoEnd };
 
 // ---- bend (Tier-2): a [t, semi] curve on note.bendPoints, seeded from a preset ----
 // The preset id stays on note.bend as the label; bend.js derives the curve from
@@ -724,7 +728,7 @@ function dropEffect(n, name) {
     const fx = { ...n.fx }, value = fxValue(n, name, false);
     if (value) fx[name] = value; else delete fx[name];
     if (Object.keys(fx).length) n.fx = fx; else delete n.fx;
-    if (name === "vibrato") delete n.vibratoStart;
+    if (name === "vibrato") { delete n.vibratoStart; delete n.vibratoEnd; }
   } else if (n[name] != null) {
     delete n[name];
     if (name === "bend") delete n.bendPoints;   // the curve is meaningless without it
@@ -752,7 +756,7 @@ export function setFxOnSelection(key, on) {
     const fx = { ...n.fx }, value = fxValue(n, key, on);
     if (value) fx[key] = value; else delete fx[key];
     if (Object.keys(fx).length) n.fx = fx; else delete n.fx;
-    if (!n.fx?.vibrato) delete n.vibratoStart;
+    if (!n.fx?.vibrato) { delete n.vibratoStart; delete n.vibratoEnd; }
   }
   commit(prev); draw();
   if (cleared) toast("Cleared conflicting effects");

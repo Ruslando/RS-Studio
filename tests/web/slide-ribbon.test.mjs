@@ -102,3 +102,22 @@ assert.equal(effectSignatureFields({ slide: "shift", slideStart: 0.5 }).slideSta
   const { left, right } = splitNote(note, 0.5, 0.05, () => "b");
   assert.equal(left.slideIn, "inBelow"); assert.equal(right.slideIn, undefined, "the slide-in stays on the first half");
 }
+
+// An early end limits playback and survives cuts before, inside and after the interval.
+{
+  const n = { start: 0, end: 4, pitch: 60, fx: { vibrato: true, accent: true }, vibratoStart: .25, vibratoEnd: .75 };
+  assert.equal(pitchOffsetAt(n, .75, 3), 0, 'vibrato stops at its exact end');
+  assert.equal(pitchOffsetAt(n, .9, 3.6), 0, 'vibrato is silent after its end');
+  assert.ok(pitchOffsetAt(n, .4, 1.6) > 0, 'vibrato plays inside the interval');
+  const inside = splitNote(n, 2, .05, () => 'tail');
+  assert.equal(inside.left.vibratoStart, .5);
+  assert.equal(inside.left.vibratoEnd, undefined);
+  assert.equal(inside.right.vibratoStart, undefined);
+  assert.equal(inside.right.vibratoEnd, .5);
+  const after = splitNote(n, 3.5, .05, () => 'tail');
+  assert.equal(after.right.fx?.vibrato, undefined, 'tail after the vibrato is plain');
+  assert.equal(after.left.vibratoEnd, 3 / 3.5);
+  const before = splitNote(n, .5, .05, () => 'tail');
+  assert.equal(before.left.fx?.vibrato, undefined, 'lead before the vibrato is plain');
+  assert.equal(before.right.vibratoEnd, 2.5 / 3.5);
+}

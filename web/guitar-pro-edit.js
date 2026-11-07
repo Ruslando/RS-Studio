@@ -22,7 +22,7 @@ function same(a, b) { return JSON.stringify(a ?? null) === JSON.stringify(b ?? n
 function effectsOf(note) {
   const out = {};
   for (const key of ["slide", "slideIn", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick", "slap", "stroke", "ornament",
-    "whammy", "whammyPoints", "vibratoStart", "slideStart", "finger"])
+    "whammy", "whammyPoints", "vibratoStart", "vibratoEnd", "slideStart", "finger"])
     if (note[key] != null) out[key] = note[key];
   if (note.fx && Object.keys(note.fx).length) out.fx = { ...note.fx };
   return out;
@@ -362,9 +362,9 @@ function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, 
   // (The part that slides starts before the slide does: it moves in that part's last quarter, GP_SLIDE_AT.)
   const slideOutAt = SLIDE_OUT.has(current.slide)
     ? Math.max(0, ((Number(sourceProjection.slideStart) || 0) - gpSlideAt(current.slide)) / (1 - gpSlideAt(current.slide))) : 0;
-  if (force || !!fx.vibrato !== !!oldFx.vibrato || changed("vibratoStart") || changed("slide"))
-    targetNote.vibrato = (asFile(["vibratoStart", "slide"]) && !!fx.vibrato === !!oldFx.vibrato ? part.vibrato
-      : fx.vibrato && (Number(current.vibratoStart) || 0) < to - 1e-6 && !(slideOutAt > 0 && from >= slideOutAt - 1e-6))
+  if (force || !!fx.vibrato !== !!oldFx.vibrato || changed("vibratoStart") || changed("vibratoEnd") || changed("slide"))
+    targetNote.vibrato = (asFile(["vibratoStart", "vibratoEnd", "slide"]) && !!fx.vibrato === !!oldFx.vibrato ? part.vibrato
+      : fx.vibrato && (Number(current.vibratoStart) || 0) < to - 1e-6 && (current.vibratoEnd ?? 1) > from + 1e-6 && !(slideOutAt > 0 && from >= slideOutAt - 1e-6))
       // As wide as the file had it, while the editor's vibrato is the file's.
       ? (!!fx.vibrato === !!oldFx.vibrato && (part?.vibrato || sourceProjection.gp?.vibrato)) || alphaTab.model.VibratoType.Slight
       : alphaTab.model.VibratoType.None;
@@ -561,6 +561,8 @@ function rebuildVoice(alphaTab, staff, barIndex, voiceIndex, allItems, tuning, s
       for (const segment of gp.tieSegments.slice(1)) boundaries.add(segment.startTick);
     const vibrato = Number(item.projected.vibratoStart);
     if (vibrato > 0 && vibrato < 1) boundaries.add(item.startTick + quantizeTick(vibrato * length));
+    const vibratoEnd = Number(item.projected.vibratoEnd);
+    if (vibratoEnd > 0 && vibratoEnd < 1) boundaries.add(item.startTick + quantizeTick(vibratoEnd * length));
     // A slide plays at a fixed point of its part (GP_SLIDE_AT): a later start is a tied
     // part that begins where that point lands on it. One the file had is in its parts already.
     const slide = Number(item.projected.slideStart), at = gpSlideAt(item.projected.slide);
@@ -679,7 +681,9 @@ function planLane(score, staff, lane, points, bounds, rebuildAll = false) {
   }
   for (const item of items) {
     const gp = item.projected.gp, assigned = assignments.get(item.projected);
-    const changed = rebuildAll || !gp || Math.abs(item.startTick - gp.startTick) > 1 || Math.abs(item.endTick - gp.endTick) > 1 || assigned !== gp.voice;
+    const changed = rebuildAll || !gp || Math.abs(item.startTick - gp.startTick) > 1 || Math.abs(item.endTick - gp.endTick) > 1 || assigned !== gp.voice
+      || !same(item.projected.vibratoStart, gp.editorEffects?.vibratoStart)
+      || !same(item.projected.vibratoEnd, gp.editorEffects?.vibratoEnd);
     const graceChanged = !same(item.projected.grace, gp?.editorEffects?.grace);
     if (changed || graceChanged) {
       if (gp) for (const bar of barsOverlapping(bounds, gp.startTick, gp.endTick)) affected.add(`${bar}:${gp.voice}`);

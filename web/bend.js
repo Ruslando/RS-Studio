@@ -42,13 +42,18 @@ export const vibratoAt = (sec) => sec <= 0 ? 0
 export const vibratoStartOf = (n) => n?.fx?.vibrato
   ? Math.max(0, Math.min(SLIDE_START_MAX, Number(n.vibratoStart) || 0)) : 0;
 
+// Where vibrato stops; absent means the full note, as in older projects.
+export const vibratoEndOf = n => n?.fx?.vibrato
+  ? Math.max(vibratoStartOf(n) + (1 - SLIDE_START_MAX), Math.min(1, Number.isFinite(n.vibratoEnd) ? n.vibratoEnd : 1)) : 1;
+
 // How far the string is PUSHED (sideways): the bend curve at fraction u of the
 // note plus the vibrato `sec` seconds after its onset (or after its own start).
 // One answer for the fretboard's finger and the playback's pitch, so the two agree.
 export function pitchOffsetAt(n, u, sec) {
   const pts = bendCurve(n);
-  const from = vibratoStartOf(n) * Math.max(0, (n?.end ?? 0) - (n?.start ?? 0));
-  return (pts ? bendAt(pts, u) : 0) + (n?.fx?.vibrato ? vibratoAt(sec - from) : 0);
+  const duration = Math.max(0, (n?.end ?? 0) - (n?.start ?? 0));
+  const from = vibratoStartOf(n) * duration, to = vibratoEndOf(n) * duration;
+  return (pts ? bendAt(pts, u) : 0) + (n?.fx?.vibrato && sec < to ? vibratoAt(sec - from) : 0);
 }
 
 // Trills alternate with the upper fret at a sixteenth-note rate. Sharing the

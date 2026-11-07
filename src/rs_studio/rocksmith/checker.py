@@ -155,6 +155,8 @@ FIXED = {
             'The export cannot find a valid target for this slide. Put the next note on the same string at a different fret above fret 0.'),
     'late-fx': ('Slide or vibrato starts with the note',
             'Rocksmith cannot start this effect partway through a bent note. The export starts the slide or vibrato at the beginning of the note.'),
+    'vibrato-end': ('Vibrato continues to the note end',
+            'Rocksmith cannot stop vibrato partway through this bend or slide without changing its pitch curve. The export keeps vibrato through the note end.'),
     'grace': ('Grace note removed',
             'The export cannot place a lower note before this note. Check for an open string, the song start, or another note on the same string.'),
     'slide-in': ('Slide-in removed',

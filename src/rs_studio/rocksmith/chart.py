@@ -96,26 +96,38 @@ def _split_late_effects(notes: list, fixes: list) -> list:
     out = []
     for n in notes:
         slide_cut, vib_cut = _late_cuts(n)
-        cuts = sorted({c for c in (slide_cut, vib_cut) if c is not None})
+        start, end = _f(n.get("start")), _f(n.get("end"))
+        vib_end = None
+        fraction = _f(n.get("vibratoEnd"), 1)
+        if (n.get("fx") or {}).get("vibrato") and 0 < fraction < 1 and end > start:
+            vib_end = start + fraction * (end - start)
+            # A slide's moving part cannot be split without changing its motion.
+            if n.get("slide") in ("shift", "legato", "outDown", "outUp") and (slide_cut is None or vib_end > slide_cut):
+                fixes.append(("vibrato-end", start))
+                vib_end = None
+        cuts = sorted({c for c in (slide_cut, vib_cut, vib_end) if c is not None})
         if not cuts:
             out.append(n)
             continue
         # A bend curve spans the whole note and is not cut. A chord is cut too:
         # what follows a cut goes out as single notes (_voiced_entities).
         if n.get("bend"):
-            fixes.append(("late-fx", _f(n.get("start"))))
+            if slide_cut is not None or vib_cut is not None:
+                fixes.append(("late-fx", start))
+            if vib_end is not None:
+                fixes.append(("vibrato-end", start))
             out.append(n)
             continue
         bounds = [_f(n.get("start")), *cuts, _f(n.get("end"))]
         for i, (a, b) in enumerate(zip(bounds, bounds[1:])):
-            piece = {k: v for k, v in n.items() if k not in ("slideStart", "vibratoStart")}
+            piece = {k: v for k, v in n.items() if k not in ("slideStart", "vibratoStart", "vibratoEnd")}
             fx = dict(n.get("fx") or {})
             if i:
                 piece = {k: v for k, v in piece.items() if k not in _ATTACK_ONLY}
                 fx = {k: v for k, v in fx.items() if k not in _ATTACK_FX}
                 if n.get("_pickSlide"):
                     fx["dead"] = True
-            if vib_cut is not None and a < vib_cut - 1e-9:
+            if (vib_cut is not None and a < vib_cut - 1e-9) or (vib_end is not None and a >= vib_end - 1e-9):
                 fx.pop("vibrato", None)
             piece.pop("fx", None)
             if fx:
@@ -204,7 +216,7 @@ def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
         sign = -1 if kind == "inBelow" else 1
         fx = {k: v for k, v in (n.get("fx") or {}).items() if k != "vibrato"}
         lead = {k: v for k, v in plain.items()
-                if k not in ("bend", "bendPoints", "slideStart", "vibratoStart", "slideFrets", "fx", *_SHAPE_FIELDS)}
+                if k not in ("bend", "bendPoints", "slideStart", "vibratoStart", "vibratoEnd", "slideFrets", "fx", *_SHAPE_FIELDS)}
         lead.update(start=start, end=cut, fret=fret + sign * step, pitch=_f(n.get("pitch")) + sign * step, slide="legato",
                     _helper=True)
         if fx:
@@ -223,6 +235,15 @@ def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
                     main[key] = (at - cut) / (end - cut)
                 else:
                     main.pop(key)
+        if n.get("vibratoEnd") is not None:
+            stop = start + _f(n["vibratoEnd"]) * (end - start)
+            if stop <= cut:
+                main_fx.pop("vibrato", None)
+                if not main_fx:
+                    main.pop("fx", None)
+                main.pop("vibratoEnd", None)
+            else:
+                main["vibratoEnd"] = min(1, (stop - cut) / (end - cut))
         out += [lead, main]
     return out
 
@@ -232,7 +253,7 @@ _WHAMMY_PRESETS = {"dip": [[0, 0], [0.5, -2], [1, 0]], "dive": [[0, 0], [1, -2]]
 
 def _later_piece(n: dict, start: float, end: float, offset: int) -> dict:
     """A piece of `n` after its pick, `offset` frets away: nothing of the attack."""
-    piece = {k: v for k, v in n.items() if k not in (*_ATTACK_ONLY, "slideStart", "vibratoStart", "slideIn")}
+    piece = {k: v for k, v in n.items() if k not in (*_ATTACK_ONLY, "slideStart", "vibratoStart", "vibratoEnd", "slideIn")}
     fx = {k: v for k, v in (n.get("fx") or {}).items() if k not in _ATTACK_FX}
     piece.pop("fx", None)
     if fx:
@@ -277,7 +298,7 @@ def _whammy_as_slides(notes: list, fixes: list) -> list:
             else:
                 parts.append([a, b, f0, f1])
         for i, (a, b, f0, f1) in enumerate(parts):
-            piece = {k: v for k, v in n.items() if k not in ("whammy", "whammyPoints", "slideStart", "vibratoStart")}
+            piece = {k: v for k, v in n.items() if k not in ("whammy", "whammyPoints", "slideStart", "vibratoStart", "vibratoEnd")}
             if i:
                 piece = _later_piece(piece, a, b, f0)
             else:
@@ -304,7 +325,7 @@ def _hammered(n: dict, times: list, offsets: list) -> list:
             piece = _later_piece(n, a, b, offsets[i])
             piece["fx"] = {**(piece.get("fx") or {}), "hammer": True}
         else:
-            piece = {k: v for k, v in n.items() if k not in ("trill", "ornament", "slideStart", "vibratoStart")}
+            piece = {k: v for k, v in n.items() if k not in ("trill", "ornament", "slideStart", "vibratoStart", "vibratoEnd")}
             piece.update(end=b, fret=int(n["fret"]) + offsets[0], pitch=_f(n.get("pitch")) + offsets[0])
         if b < times[-1]:
             piece.pop("slide", None)

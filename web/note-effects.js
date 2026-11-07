@@ -5,7 +5,7 @@
 // Everything copy/paste, references and undo carry along with a note.
 export const EFFECT_FIELDS = [
   "slide", "fx", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick", "slap",
-  "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart", "slideEnd", "slideFrets",
+  "stroke", "whammy", "pos", "arrangement", "slideStart", "vibratoStart", "vibratoEnd", "slideEnd", "slideFrets",
   "slideIn", "whammyPoints", "ornament",
   // Rocksmith only: how the chord the note is in is drawn ("full" or "repeat",
   // chart._chord_display), a note left out of the score (`ignore`), a chord shown
@@ -37,7 +37,7 @@ export const SIGNATURE_EFFECT_FIELDS = [
 ];
 // Fields added after projects already stored signatures. They join the signature
 // only when set, so a note without them hashes as it always did.
-export const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart", "slideEnd", "slideFrets", "slideIn", "whammyPoints", "ornament"];
+export const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart", "vibratoEnd", "slideEnd", "slideFrets", "slideIn", "whammyPoints", "ornament"];
 
 // `{ slide: …, bend: …, … }` with an explicit null for anything absent, so a
 // removed effect changes the signature as surely as an added one does. Three

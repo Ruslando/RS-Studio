@@ -446,7 +446,12 @@ function editorEffects(note, beat, chain = [{ note, beat, from: 0, to: 1 }]) {
   if (note.isGhost) fx.ghost = true;
   if (note.isLetRing) fx.letRing = true;
   const vibrato = chain.find((part) => part.note.vibrato);
-  if (vibrato) { fx.vibrato = true; if (vibrato.from > 1e-6) out.vibratoStart = vibrato.from; }
+  if (vibrato) {
+    fx.vibrato = true;
+    if (vibrato.from > 1e-6) out.vibratoStart = vibrato.from;
+    const end = chain.filter(part => part.note.vibrato).at(-1).to;
+    if (end < 1 - 1e-6) out.vibratoEnd = end;
+  }
   if (note.isStaccato) fx.staccato = true;
   if (note.accentuated) fx.accent = true;
   if (note.isDead) fx.dead = true;

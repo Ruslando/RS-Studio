@@ -70,15 +70,22 @@ export function splitNote(note, at, minDuration, newId) {
     if (!slideInOf(half)) delete half.slideEnd;
   }
 
-  // Late vibrato likewise: cut before it, the left half is plain.
-  const vibratoAt = note.fx?.vibrato && note.vibratoStart != null
-    ? note.start + note.vibratoStart * (note.end - note.start) : null;
-  delete left.vibratoStart; delete right.vibratoStart;
-  if (vibratoAt != null && at <= vibratoAt) {
-    const fx = { ...left.fx }; delete fx.vibrato;
-    if (Object.keys(fx).length) left.fx = fx; else delete left.fx;
-    if (vibratoAt - at > 1e-9) right.vibratoStart = (vibratoAt - at) / (note.end - at);
-  } else if (vibratoAt != null) left.vibratoStart = (vibratoAt - note.start) / (at - note.start);
+  // Intersect the vibrato interval with each half, preserving its absolute times.
+  if (note.fx?.vibrato) {
+    const from = note.start + (note.vibratoStart ?? 0) * (note.end - note.start);
+    const to = note.start + (note.vibratoEnd ?? 1) * (note.end - note.start);
+    for (const half of [left, right]) {
+      delete half.vibratoStart; delete half.vibratoEnd;
+      const start = Math.max(half.start, from), end = Math.min(half.end, to);
+      if (end <= start + 1e-9) {
+        const fx = { ...half.fx }; delete fx.vibrato;
+        if (Object.keys(fx).length) half.fx = fx; else delete half.fx;
+      } else {
+        if (start > half.start + 1e-9) half.vibratoStart = (start - half.start) / (half.end - half.start);
+        if (end < half.end - 1e-9) half.vibratoEnd = (end - half.start) / (half.end - half.start);
+      }
+    }
+  }
 
   // The whammy is one gesture over the note: each half keeps its part of the curve.
   const whammy = whammyCurve(note);

@@ -169,6 +169,15 @@ def _sng(notes):
 
 
 class LateVibratoTest(unittest.TestCase):
+    def test_vibrato_window_exports_as_three_linked_parts(self):
+        (lead, wobble, tail), _ = _sng([{"string": 5, "fret": 5, "start": 1.0, "end": 3.0, "pitch": 50,
+            "fx": {"vibrato": True}, "vibratoStart": 0.25, "vibratoEnd": 0.75}])
+        self.assertEqual([round(n.time, 3) for n in (lead, wobble, tail)], [1, 1.5, 2.5])
+        self.assertFalse(lead.mask & S.VIBRATO)
+        self.assertTrue(wobble.mask & S.VIBRATO and wobble.mask & S.CHILD and wobble.mask & S.PARENT)
+        self.assertFalse(tail.mask & S.VIBRATO)
+        self.assertTrue(tail.mask & S.CHILD)
+
     def test_late_vibrato_is_plain_hold_then_linked_vibrato(self):
         (hold, wobble), _ = _sng([{"string": 5, "fret": 5, "start": 1.0, "end": 2.0, "pitch": 50,
                                    "fx": {"vibrato": True, "accent": True}, "vibratoStart": 0.5}])

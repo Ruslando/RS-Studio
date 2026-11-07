@@ -2479,18 +2479,18 @@ class EndToEndTests(unittest.TestCase):
             (await import('/repaint.js')).drawNow?.() ?? (await import('/repaint.js')).draw();
             return note.id;
         }""")
-        def handle():
-            return page.evaluate("""async (id) => {
+        def handle(kind="vibrato"):
+            return page.evaluate("""async ([id, kind]) => {
                 const { S } = await import('/store.js');
                 const { laneOf } = await import('/lanes.js');
                 const { scroll } = await import('/dom.js');
                 const note = S.state.editLanes[0].notes.find((n) => n.id === id);
-                const h = (await import('/note-render.js')).effectStartHandles(note, laneOf(note)).find((h) => h.kind === 'vibrato');
+                const h = (await import('/note-render.js')).effectStartHandles(note, laneOf(note)).find((h) => h.kind === kind);
                 const rect = document.querySelector('#stage').getBoundingClientRect();
                 const { xOf } = await import('/geometry.js');
                 return { x: h.x - scroll.scrollLeft + rect.left, y: h.y - scroll.scrollTop + rect.top,
-                         width: xOf(note.end) - xOf(note.start), vibratoStart: note.vibratoStart ?? null };
-            }""", note_id)
+                         width: xOf(note.end) - xOf(note.start), vibratoStart: note.vibratoStart ?? null, vibratoEnd: note.vibratoEnd ?? null };
+            }""", [note_id, kind])
         h = handle()
         self.assertIsNone(h["vibratoStart"])
         page.mouse.move(h["x"], h["y"])
@@ -2505,6 +2505,20 @@ class EndToEndTests(unittest.TestCase):
         page.screenshot(path=str(shot), clip={"x": max(0, h["x"] - 60), "y": max(0, h["y"] - 120), "width": 520, "height": 200})
         page.mouse.click(moved["x"], moved["y"], button="right")
         self.assertIsNone(handle()["vibratoStart"], "right-click moves the start back to the pick")
+
+        end = handle("vibratoEnd")
+        self.assertIsNone(end["vibratoEnd"])
+        page.mouse.move(end["x"], end["y"])
+        page.mouse.down()
+        page.mouse.move(end["x"] - end["width"] * .5, end["y"], steps=5)
+        page.mouse.up()
+        moved_end = handle("vibratoEnd")
+        self.assertGreater(moved_end["vibratoEnd"], .3)
+        self.assertLess(moved_end["vibratoEnd"], .7)
+        page.mouse.click(moved_end["x"], moved_end["y"], button="right")
+        self.assertIsNone(handle("vibratoEnd")["vibratoEnd"], "right-click restores the full vibrato end")
+        page.keyboard.press("Control+z")
+        self.assertAlmostEqual(handle("vibratoEnd")["vibratoEnd"], moved_end["vibratoEnd"])
 
     def test_curved_notes_are_grabbed_where_they_are_drawn(self):
         self.open_reference_project()
