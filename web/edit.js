@@ -49,7 +49,7 @@ import { matchKey } from "./keymap.js";
 import { runEditorShortcut } from "./editor-shortcuts.js";
 import { navigateMarker } from "./marker-artifacts.js";
 import { normLayerVolume } from "./util.js";
-import { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
+import { slideFingerGroup, chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
 
 // ---- undo / redo (all edit lanes) ----
 export const MAX_UNDO = 200;
@@ -933,18 +933,27 @@ export function applyColumnAlternative(colNotes, choice, influence = null) {
   }
 }
 
-// THE PLAYER'S OWN FINGER ON ONE NOTE: 0 the thumb, 1-4 index to pinky, null back to
+// THE PLAYER'S OWN FINGER: 0 the thumb, 1-4 index to pinky, null back to
 // the engine's. Taken as typed — the board and the exports show it even where no hand
-// could hold it, which is the player's call. Moves no note and no hand.
+// could hold it, which is the player's call. Fretted slide chains share the edit
+// in either direction. Moves no note and no hand.
 //
 // Typed as a draft: shown at once, one undo step when it is kept, gone when it is not.
 // `original` is the draft's memory, Map(note -> finger before it).
 const putFinger = (note, finger) => { if (finger == null) delete note.finger; else note.finger = finger; };
 
-export function draftNoteFinger(original, note, finger) {
-  if (!canEditLane(laneOf(note)) || (note.finger ?? null) === finger) return;
-  if (!original.has(note)) original.set(note, note.finger ?? null);
-  putFinger(note, finger);
+export function draftNoteFinger(original, note, finger, positions = null) {
+  const lane = laneOf(note);
+  if (!canEditLane(lane)) return;
+  const group = slideFingerGroup(lane.notes, note, n => positions ? positions.get(n) : n.pos || n.auto);
+  let changed = false;
+  for (const member of group) {
+    if ((member.finger ?? null) === finger) continue;
+    if (!original.has(member)) original.set(member, member.finger ?? null);
+    putFinger(member, finger);
+    changed = true;
+  }
+  if (!changed) return;
   // Only the fingers changed, and they are laid over the voicing, not solved into it:
   // the lane is not voiced again for them (see laneFingering).
   S.fingerRevision = (S.fingerRevision || 0) + 1; draw();

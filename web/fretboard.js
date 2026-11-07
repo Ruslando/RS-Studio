@@ -550,14 +550,14 @@ function typeFinger(e) {
   const note = spots?.[spotHover]?.note ?? fingering.target;
   if (!note) return false;
   e.preventDefault(); e.stopPropagation();
-  draftNoteFinger(fingering.original, note, digit);
+  draftNoteFinger(fingering.original, note, digit, gripsFor(currentLane())?.voiced);
   return true;
 }
 
 // The grip on the board back to the engine's fingers.
 function resetGripFingers() {
   for (const m of focusGrip(currentLane(), laneSpec(currentLane()))?.marks || [])
-    if (m.note && m.note.finger != null) draftNoteFinger(fingering.original, m.note, null);
+    if (m.note && m.note.finger != null) draftNoteFinger(fingering.original, m.note, null, gripsFor(currentLane())?.voiced);
 }
 
 function syncShapeMode() {

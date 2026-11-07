@@ -2539,6 +2539,45 @@ class EndToEndTests(unittest.TestCase):
             page.mouse.click(points[key + "Base"]["x"], points[key + "Base"]["y"])
             self.assertNotIn(note_id, page.evaluate(selected), f"the {key} is not grabbed where it is not drawn")
 
+    def test_slide_finger_can_be_edited_from_either_end(self):
+        self.open_reference_project()
+        result = self.page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const edit = await import('/edit.js');
+            const lane = S.state.editLanes[0];
+            const notes = [5, 7, 9].map((fret, i) => ({ id: 'slide-finger-' + i,
+                start: i * .5, end: (i + 1) * .5, pitch: 55 + fret,
+                pos: { string: 2, fret, scope: 'local' }, ...(i < 2 ? { slide: 'legato' } : {}) }));
+            lane.notes = notes;
+            const values = () => lane.notes.map(n => n.finger ?? null);
+            const original = new Map();
+            edit.draftNoteFinger(original, notes[2], 4);
+            const fromEnd = values();
+            const { laneFingering } = await import('/tablature.js');
+            const found = await laneFingering(lane);
+            const displayed = notes.map(n => found.fingers.get(n));
+            edit.settleFingerDraft(original, false);
+            const cancelled = values();
+            edit.draftNoteFinger(original, notes[0], 2);
+            edit.settleFingerDraft(original, true);
+            const fromStart = values();
+            edit.draftNoteFinger(original, notes[2], 3);
+            edit.settleFingerDraft(original, true);
+            const changed = values();
+            edit.undo(); const undone = values();
+            edit.redo(); const redone = values();
+            const current = await laneFingering(lane);
+            edit.draftNoteFinger(original, lane.notes[1], 0, current.voiced);
+            const thumbFromMiddle = values();
+            edit.settleFingerDraft(original, false);
+            edit.draftNoteFinger(original, lane.notes[2], null);
+            const reset = values();
+            edit.settleFingerDraft(original, false);
+            return { thumbFromMiddle, displayed, fromEnd, cancelled, fromStart, changed, undone, redone, reset, restored: values() };
+        }""")
+        self.assertEqual(result, dict(thumbFromMiddle=[0]*3, displayed=[4]*3, fromEnd=[4]*3, cancelled=[None]*3, fromStart=[2]*3,
+            changed=[3]*3, undone=[2]*3, redone=[3]*3, reset=[None]*3, restored=[3]*3))
+
     def test_bend_and_whammy_are_simple_toggles_with_default_curves(self):
         self.open_reference_project()
         page = self.page

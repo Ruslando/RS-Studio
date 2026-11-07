@@ -183,6 +183,30 @@ function slideBreakCost(prev, cur) {
   return broken * COST_W.slide;
 }
 
+// Notes joined by a fretted slide share one finger, whichever end is edited.
+// Open-string landings and slides in/out do not join finger assignments.
+export function slideFingerGroup(notes, note, positionOf = n => n.pos || n.auto) {
+  const columns = chordColumns(notes), links = new Map();
+  const link = (a, b) => {
+    if (!links.has(a)) links.set(a, new Set());
+    links.get(a).add(b);
+  };
+  for (let i = 0; i + 1 < columns.length; i++) {
+    for (const from of columns[i].notes) {
+      const source = positionOf(from);
+      if (!SLIDE_TO_NEXT.has(from.slide) || !(source?.fret > 0)) continue;
+      for (const to of columns[i + 1].notes) {
+        const target = positionOf(to);
+        if (!(target?.fret > 0) || target.string !== source.string) continue;
+        link(from, to); link(to, from);
+      }
+    }
+  }
+  const group = new Set([note]);
+  for (const member of group) for (const next of links.get(member) || []) group.add(next);
+  return [...group];
+}
+
 // A picked shift that releases into an open note is performed as a downward
 // slide-out followed by a fresh attack on the open string. Keep the editor's
 // semantic `shift` untouched and derive this notation only for preview/export.
