@@ -85,6 +85,27 @@ try {
   win.emit('mouseup', { clientX: 170, clientY: 300 });
   delete note.whammy; delete note.whammyPoints;
 
+  // Even an off-grid fixed edge must leave a full visible cell, including Alt.
+  for (const pxPerSec of [100, 2000]) {
+    S.pxPerSec = pxPerSec;
+    const minimum = grid.displayGridStep(grid.gridAt(1.031));
+    for (const altKey of [false, true]) {
+      note.start = 1.031; note.end = 1.5;
+      stage.emit('mousedown', { clientX: 149, altKey });
+      win.emit('mousemove', { clientX: 103, altKey });
+      assert.ok(Math.abs(note.end - note.start - minimum) < 1e-9, 'right edge stops at one visible grid cell');
+      win.emit('mouseup', { clientX: 103, altKey });
+      assert.ok(note.end - note.start >= minimum - 1e-9, 'release preserves minimum length');
+      note.start = 1.031; note.end = 1.5;
+      stage.emit('mousedown', { clientX: 104, altKey });
+      win.emit('mousemove', { clientX: 150, altKey });
+      assert.ok(Math.abs(note.end - note.start - minimum) < 1e-9, 'left edge stops at one visible grid cell');
+      win.emit('mouseup', { clientX: 150, altKey });
+    }
+  }
+  note.start = 1.031; note.end = 1.5;
+  S.pxPerSec = 100;
+
   const before = { lane: structuredClone(lane.notes) };
   grid.snapStrayNotes([lane], before);
   assert.equal(note.start, 1.031, 'subsequent unrelated edits leave free timing intact');

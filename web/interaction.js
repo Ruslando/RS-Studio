@@ -16,7 +16,7 @@ import { draw } from "./repaint.js";
 import { withMemo } from "./paint-memo.js";
 import { addBendPoint, commit, curveOf, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { cursorTimeAt, pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
-import { gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
+import { displayGridStep, gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
 import { noteLength } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
 import { commentAt, commentCursorAt, commentMouseDown, openCommentPop } from "./comments.js";
@@ -81,6 +81,9 @@ function pickNoteNow(t, pitch, exact) {
   }
   return null;
 }
+
+// Measure the minimum at the fixed edge, using the same grid as snapping.
+const resizeMinimum = (note, edge) => displayGridStep(gridAt(edge === 'r' ? note.start : note.end)) || MIN_DUR;
 
 // Dragging a note's edge: every selected note of its lane resizes with it.
 function resizeDrag(note, lane, edge, x, t, free, prev) {
@@ -294,7 +297,7 @@ function updateDrag(x, y) {
     }
     if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 1) return;
     S.drag.resizeMoved = true;
-    const minimum = Math.min(MIN_DUR, minDur());
+    const minimum = resizeMinimum(o, S.drag.edge);
     const time = timeAt(x) - (S.drag.resizeGrab || 0);
     S.drag.resizeTime = time;
     const target = S.drag.freeResize ? time : snap(time);
@@ -302,13 +305,13 @@ function updateDrag(x, y) {
       const dt = Math.max(o.start + minimum, target) - o.end;
       for (const n of S.drag.notes) {
         const oo = S.drag.orig.get(n);
-        n.end = Math.min(S.state.duration, Math.max(oo.start + minimum, oo.end + dt));
+        n.end = Math.min(S.state.duration, Math.max(oo.start + resizeMinimum(oo, 'r'), oo.end + dt));
       }
     } else {
       const dt = Math.min(o.end - minimum, Math.max(projectStart(S.state), target)) - o.start;
       for (const n of S.drag.notes) {
         const oo = S.drag.orig.get(n);
-        n.start = Math.min(oo.end - minimum, Math.max(projectStart(S.state), oo.start + dt));
+        n.start = Math.min(oo.end - resizeMinimum(oo, 'l'), Math.max(projectStart(S.state), oo.start + dt));
       }
     }
     if (slide?.knee != null) {
