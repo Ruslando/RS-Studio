@@ -34,6 +34,7 @@ export function hammerDirections(notes) {
 }
 
 export function strikeTime(mark, t) {
+  if (mark.shapeHeld || mark.note?.gripOnly) return null;
   const start = mark.strikeStart ?? mark.start;
   if (t < start || (mark.note && t >= (mark.soundingEnd ?? mark.note.end))) return null;
   const step = mark.tremoloStep || 0;

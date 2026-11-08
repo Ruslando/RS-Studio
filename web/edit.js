@@ -939,7 +939,7 @@ export function applyColumnAlternative(colNotes, choice, influence = null) {
 // THE PLAYER'S OWN FINGER: 0 the thumb, 1-4 index to pinky, null back to
 // the engine's. Taken as typed — the board and the exports show it even where no hand
 // could hold it, which is the player's call. Fretted slide chains share the edit
-// in either direction. Moves no note and no hand.
+// in either direction. Moves no note; a chosen index anchors the hand at its fret.
 //
 // Typed as a draft: shown at once, one undo step when it is kept, gone when it is not.
 // `original` is the draft's memory, Map(note -> finger before it).
@@ -957,7 +957,7 @@ export function draftNoteFinger(original, note, finger, positions = null) {
     changed = true;
   }
   if (!changed) return;
-  // Only the fingers changed, and they are laid over the voicing, not solved into it:
+  // The fingers and their index anchor are laid over the voicing, not solved into it:
   // the lane is not voiced again for them (see laneFingering).
   S.fingerRevision = (S.fingerRevision || 0) + 1; draw();
 }

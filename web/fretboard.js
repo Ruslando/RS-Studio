@@ -1,4 +1,5 @@
 import { fretboardPreviewPhrase } from './fretboard-preview-phrase.js';
+import { fretboardShapeFrames, shapeHandAt } from './fretboard-shapes.js';
 import { previewPositionReferences } from "./references.js";
 import { positionPreviewHand, positionPreviewLane } from "./position-preview.js";
 import { positionEditTargets, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
@@ -193,7 +194,7 @@ function gripsFrom({ tuning, notes, voiced, fingers: walked, seats }) {
     if (n.fx?.letRing) ringEnds.set(n, letRingEnd(n, following.get(key), S.state.duration) + 0.15);
     following.set(key, n.start);
   }
-  for (const col of chordColumns(notes)) {
+  for (const col of chordColumns(notes.filter(note => !note.gripOnly))) {
     const shape = new Map();
     for (const note of col.notes) {
       const pos = voiced.get(note);
@@ -248,11 +249,12 @@ function gripsFor(lane) {
     laneFingering(lane).then((fingering) => {
       if (handJob !== key) return;    // a later edit already asked for a newer one
       const columns = gripsFrom(fingering);
+      const shapes = fretboardShapeFrames(fingering, columns);
       const blockedStarts = new Set(chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
         .filter(column => column.kind === "impossible").map(column => column.t0));
       const playableColumns = columns.filter(column => !blockedStarts.has(column.start));
       const fingers = playableColumns.flatMap(column => column.fingers);
-      hand = { key, vkey, strings: fingering.tuning.length, columns, playableColumns, blockedStarts, voiced: fingering.voiced,
+      hand = { key, vkey, strings: fingering.tuning.length, columns, playableColumns, shapes, blockedStarts, voiced: fingering.voiced,
         ringFingers: fingers.filter((f) => f.note.fx?.letRing),
         releaseFingers: [...fingers].reverse(),
         popFingers: fingers.filter((f) => f.note.slap === "pop") };
@@ -903,7 +905,7 @@ function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, o
     const spacing = Math.abs(stringOffsetAt(1, end, s) - stringOffsetAt(0, end, s)) * scale;
     const preparing = now?.preparations?.find((f) => f.string === i);
     const pull = preparing ? popPreparation(preparing.note, now.t) : 0;
-    const moving = now?.moving && contact && ((contact.pressed ?? now.at?.pressed) || contact.ringing || contact.releasing);
+    const moving = now?.moving && contact && !contact.shapeHeld && ((contact.pressed ?? now.at?.pressed) || contact.ringing || contact.releasing);
     const n = contact?.note;
     const kind = !moving ? null : n?.slap === "slap" ? "slap"
       : n?.slap === "tap" ? "tap" : contact.hammerMotion === "hammer" ? "hammer" : null;
@@ -1362,7 +1364,7 @@ const fretboardLabels = () => {
 function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time = null, liveStrings = false, labels = null } = {}) {
   const mode = labels ?? (digits ? fretboardLabels() : "none");
   const showFingers = digits && (mode === "fingers" || mode === "both");
-  for (const m of marks) if (!(m.fret > 0) && !m.dead && !liveStrings) {
+  for (const m of marks) if (!(m.fret > 0) && !m.dead && !m.shapeHeld && !liveStrings) {
     ctx.save(); ctx.globalAlpha *= (m.opacity ?? 1) * (m.note?.fx?.ghost ? 0.4 : 1);
     glowString(ctx, s, scale, X, Y, m.string, hue); ctx.restore();
   }
@@ -1378,13 +1380,14 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineWidth = 1.8;
-  for (const g of barreGroups(marks.filter((m) => (m.fret > 0 || m.dead)
-    && !(mode === "notes" && gripPitchLabel(m))), filled)) {
+  const contacts = marks.filter(m => (m.fret > 0 || m.dead) && !(mode === "notes" && gripPitchLabel(m)));
+  const groups = [true, false].flatMap(held => barreGroups(contacts.filter(m => !!m.shapeHeld === held), filled));
+  for (const g of groups) {
     const pts = g.map((m) => ({
       m, x: X(m.x), y: Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s)),
       r: markRadius(m.x, scale, s),
     }));
-    const style = filled && time != null ? whammyGripStyle(g[0].note, time) : { size: 1, opacity: 1 };
+    const style = filled && time != null && !g[0].shapeHeld ? whammyGripStyle(g[0].note, time) : { size: 1, opacity: 1 };
     const x = pts[0].x, r = pts[0].r * style.size * (g[0].grow ?? 1);
     ctx.save();
     const ghost = !!g[0].note?.fx?.ghost;
@@ -1826,7 +1829,11 @@ function handNow(lane, s) {
   // end of every note is — is a position nobody plays.
   const animate = $("fretboardAnimations")?.checked !== false;
   const moving = animate && frozen == null && transportPlaying();
-  return { found, t, moving, at: handAt(found.playableColumns || found.columns, t, moving ? travelSeconds() : 0, s, animate),
+  const pose = handAt(found.playableColumns || found.columns, t, moving ? travelSeconds() : 0, s, animate);
+  const shapes = (found.shapes || []).filter(frame => !found.blockedStarts?.has(frame.start)
+    || shapeRevealed(lane, `${lane.id}:${frame.start}`));
+  const at = shapeHandAt(shapes, t, pose, s, animate);
+  return { found, t, moving, at,
     ringing: moving ? ringingMarksAt(found.ringFingers || [], t, s) : [],
     releases: moving ? releasedStringsAt(found.releaseFingers || [], t, s) : [],
     preparations: moving ? (found.popFingers || []).filter((f) => Math.abs(popPreparation(f.note, t)) > 0.001) : [] };
@@ -1844,13 +1851,14 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
   if (quiet) {
     ctx.save();
     ctx.globalAlpha = FADED;
-    drawGrip(ctx, s, scale, X, Y, at.marks, hue, true);
+    drawGrip(ctx, s, scale, X, Y, at.gripMarks || at.marks, hue, true);
     ctx.restore();
     return;
   }
 
   // Technique pulses are tied to finger impacts, individually even inside barres.
   if (moving) for (const m of at.marks) {
+    if (m.shapeHeld) continue;
     const pulse = fingerPulseAt(m, t);
     if (!pulse || !(m.fret > 0) || !(m.pressed ?? at.pressed)) continue;
     const x = X(m.x), y = Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s));
@@ -1872,6 +1880,7 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
   // A picked fretted note: a soft disc of the layer's hue closes in on the fingertip.
   // Filled and contracting, where a technique's rings above are outlined and spread.
   if (moving) for (const m of at.marks) {
+    if (m.shapeHeld) continue;
     if (!(m.fret > 0) || !(m.pressed ?? at.pressed) || fingerPulseAt(m, t)) continue;
     const u = fretStrikeAt(m, t);
     if (u == null) continue;
@@ -1903,7 +1912,17 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
     if (extra) return [{ ...m, ...extra, noteLabel: false, lift: 0 }, m];
     return [m];
   });
-  drawGrip(ctx, s, scale, X, Y, marks, hue, at.pressed, { time: $("fretboardAnimations")?.checked === false ? null : t, liveStrings: moving });
+  drawGrip(ctx, s, scale, X, Y, at.gripMarks || marks, hue, at.pressed, { time: $("fretboardAnimations")?.checked === false ? null : t, liveStrings: moving });
+  if (at.gripMarks) for (const mark of at.marks) {
+    if (mark.shapeHeld || mark.releasing) continue;
+    const contact = at.gripMarks.find(contact => contact.string === mark.string);
+    if (!contact) continue;
+    const x = X(contact.x), y = Y(stringOffsetAt(contact.string, Math.max(0, contact.x), s));
+    const radius = markRadius(contact.x, scale, s) * 1.2;
+    ctx.save(); ctx.globalAlpha *= .85;
+    ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = PAINT.paper; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+  }
   if (!moving) for (const m of at.marks) if (m.slideSpan) drawSlideArrow(ctx, s, scale, X, Y, m);
 }
 

@@ -361,7 +361,20 @@ export async function laneFingering(lane, signal) {
   // hand can hold it. On an open string there is nothing to finger, so it waits.
   // Before the references, so a repeat takes it from its first time; after, so a
   // repeat's own typed finger still wins.
-  const typed = () => { for (const n of notes) if (isChosenFinger(n.finger) && found.voiced.get(n)?.fret > 0) found.fingers.set(n, n.finger); };
+  const typed = () => {
+    for (const n of notes) if (isChosenFinger(n.finger) && found.voiced.get(n)?.fret > 0) found.fingers.set(n, n.finger);
+    // A chosen index finger defines the hand position just as the automatic
+    // fingering does. Apply it to the whole chord, including its open strings.
+    // Keep this over the cached answer: cancelling/resetting a finger then
+    // restores the automatic hand without moving or revoicing any notes.
+    for (const column of chordColumns(notes)) {
+      const indexFrets = column.notes.filter(n => n.finger === 1 && !n.fx?.dead)
+        .map(n => found.voiced.get(n)?.fret).filter(fret => fret > 0);
+      if (!indexFrets.length) continue;
+      const seat = Math.min(...indexFrets);
+      for (const n of column.notes) found.seats.set(n, seat);
+    }
+  };
   typed();
   alignReferences(lane, notes, found);
   typed();

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
+import { chordColumns, isChosenFinger } from '../../web/voicing-core.js';
 
 let liveBars = [0, 4], ownBars = [0, 3], solves = 0;
 const S = { voicingRevision: 1 };
@@ -8,9 +9,10 @@ const { laneFingering, laneFingeringKey } = await mockImport(new URL('../../web/
   './song-bars.js': { songBarStarts: timing => timing ? timing.bars : liveBars },
   './timing.js': { onLiveTiming: lane => !lane.timing, timingIdOf: lane => lane.timing,
     timingData: () => ({ bars: ownBars }) },
-  './voicing.js': { arrangedNotes: notes => notes, isChosenFinger: () => false, voiceNotesFingered: (notes, tuning, limit, options) => {
+  './voicing.js': { arrangedNotes: notes => notes, chordColumns, isChosenFinger, voiceNotesFingered: (notes, tuning, limit, options) => {
     solves++;
-    return { voiced: new Map(notes.map(note => [note, { string: 0, fret: options.bars[1] }])), fingers: new Map(), seats: new Map() };
+    return { voiced: new Map(notes.map((note, string) => [note, { string, fret: note.testFret ?? options.bars[1] }])),
+      fingers: new Map(notes.map(note => [note, 3])), seats: new Map(notes.map(note => [note, 2])) };
   } },
 }, { './fretboard-cache.js': true, './tunings.js': true, './constants.js': true });
 
@@ -33,4 +35,36 @@ const result = await laneFingering(lane);
 assert.equal(solves, 3, 'replacing notes invalidates cached positions even at the same revision');
 assert.ok(result.voiced.has(lane.notes[0]));
 assert.ok(!result.voiced.has(oldNote));
+
+for (const chord of [false, true]) {
+  const index = { start: 0, end: 1, pitch: 69, testFret: 5 };
+  const companions = chord ? [
+    { start: 0, end: 1, pitch: 66, testFret: 7 },
+    { start: 0, end: 1, pitch: 55, testFret: 0 },
+  ] : [];
+  const later = { start: 2, end: 3, pitch: 69, testFret: 5 };
+  const lane = { tuning: 'guitar6', notes: [index, ...companions, later] };
+  const automatic = await laneFingering(lane), beforeSolves = solves;
+  index.finger = 1;
+  const chosen = await laneFingering(lane);
+  assert.equal(chosen.fingers.get(index), 1);
+  for (const note of [index, ...companions]) assert.equal(chosen.seats.get(note), 5,
+    'a chosen index moves the entire column hand to its fret');
+  assert.equal(chosen.seats.get(later), 2, 'another onset retains its hand');
+  assert.deepEqual(chosen.voiced, automatic.voiced, 'finger changes move no notes');
+  assert.equal(solves, beforeSolves, 'the index anchor requires no new voicing solve');
+  delete index.finger;
+  const reset = await laneFingering(lane);
+  assert.equal(reset.fingers.get(index), 3);
+  for (const note of lane.notes) assert.equal(reset.seats.get(note), 2,
+    'reset/cancel restores the cached automatic hand');
+  index.finger = 1;
+  index.fx = { dead: true };
+  assert.equal((await laneFingering(lane)).seats.get(index), 2, 'dead notes do not anchor the index');
+  index.testFret = 0;
+  // A fresh note array invalidates the mocked positional cache.
+  lane.notes = [...lane.notes];
+  delete index.fx;
+  assert.equal((await laneFingering(lane)).seats.get(index), 2, 'open strings do not anchor the index');
+}
 console.log('Fingering cache identity and per-layer timing passed');
