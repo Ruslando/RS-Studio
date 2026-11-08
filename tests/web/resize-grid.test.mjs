@@ -17,6 +17,7 @@ const note = { id: 'n', start: 1.031, end: 1.5, pitch: 64 };
 const lane = { id: 'lane', active: true, visible: true, notes: [note] };
 const S = { pxPerSec: 100, toolMode: 'pan', state: { projectStart: 0, duration: 10, lanes: [lane], tempoMap: [], rowH: 10 },
   matches: [], selection: new Set(), detectRegion: null };
+S.state.spec = {midi_low: 0, midi_high: 127};
 const noop = () => {}, commits = [];
 // A dip's end handles sit on the note's edges, on its row (y 100).
 const endHandles = n => n.whammy ? [{ i: 0, kind: 'whammy', note: n, x: n.start * 100, y: 100 }, { i: 2, kind: 'whammy', note: n, x: n.end * 100, y: 100 },
@@ -33,7 +34,8 @@ try {
   const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
     './store.js': { S, setSelection: value => { S.selection = value; } },
     './dom.js': { stage, scroll }, './repaint.js': { draw: noop }, './grid.js': grid,
-    './lanes.js': { activeLane: () => lane, targetLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible, refreshCounts: noop },
+    './lanes.js': { activeLane: () => lane, targetLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible, refreshCounts: noop,
+      setLaneNotePitch: (lane, note, pitch) => {note.pitch = pitch;} },
     './geometry.js': { timeAt: x => x / 100, xOf: t => t * 100, pitchAt: () => 64, pitchAtExact: () => 64, yOf: () => 100 },
     './markers.js': { markerMouseDown: () => false, markerCursorAt: () => null }, './comments.js': { commentMouseDown: () => false, commentAt: () => null }, './marker-rails.js': { markerRails: () => [] },
     './ids.js': { nid: () => 'new-boundary-note' },
@@ -57,13 +59,13 @@ try {
   stage.emit('mousedown', { clientX: 186.5, altKey: true });
   assert.equal(S.drag.mode, 'resize', 'Alt on a note edge resizes instead of starting a range');
   win.emit('mousemove', { clientX: 204, altKey: true });
-  assert.ok(Math.abs(note.end - 2.05) < 1e-9, 'Alt allows a position between grid lines');
+  assert.equal(note.end, 2.046875, 'Alt snaps to eighths of the authored grid cell');
   win.emit('keyup', { key: 'Alt' });
   assert.equal(note.end, 2, 'releasing Alt restores grid snapping without more pointer movement');
   win.emit('keydown', { key: 'Alt', altKey: true });
-  assert.ok(Math.abs(note.end - 2.05) < 1e-9);
+  assert.equal(note.end, 2.046875);
   win.emit('mouseup', { clientX: 204, altKey: true });
-  assert.ok(Math.abs(note.end - 2.05) < 1e-9, 'mouse release retains the free placement');
+  assert.equal(note.end, 2.046875, 'mouse release retains the fine-grid placement');
 
   // A whammy note: its end handle is on the right edge. Sideways it resizes the
   // note, up and down it moves the curve's end.
@@ -87,21 +89,22 @@ try {
   win.emit('mouseup', { clientX: 170, clientY: 300 });
   delete note.whammy; delete note.whammyPoints;
 
-  // Even an off-grid fixed edge must leave a full visible cell, including Alt.
+  // Normal resize leaves one visible cell; Alt permits a shorter precise span.
   for (const pxPerSec of [100, 2000]) {
     S.pxPerSec = pxPerSec;
     const minimum = grid.displayGridStep(grid.gridAt(1.031));
     for (const altKey of [false, true]) {
+      const expectedMinimum = altKey ? Math.min(.05, minimum) : minimum;
       note.start = 1.031; note.end = 1.5;
       stage.emit('mousedown', { clientX: 149, altKey });
       win.emit('mousemove', { clientX: 103, altKey });
-      assert.ok(Math.abs(note.end - note.start - minimum) < 1e-9, 'right edge stops at one visible grid cell');
+      assert.ok(Math.abs(note.end - note.start - expectedMinimum) < 1e-9, 'right edge respects normal or fine minimum');
       win.emit('mouseup', { clientX: 103, altKey });
-      assert.ok(note.end - note.start >= minimum - 1e-9, 'release preserves minimum length');
+      assert.ok(note.end - note.start >= expectedMinimum - 1e-9, 'release preserves minimum length');
       note.start = 1.031; note.end = 1.5;
       stage.emit('mousedown', { clientX: 104, altKey });
       win.emit('mousemove', { clientX: 150, altKey });
-      assert.ok(Math.abs(note.end - note.start - minimum) < 1e-9, 'left edge stops at one visible grid cell');
+      assert.ok(Math.abs(note.end - note.start - expectedMinimum) < 1e-9, 'left edge respects normal or fine minimum');
       win.emit('mouseup', { clientX: 150, altKey });
     }
   }
@@ -116,6 +119,52 @@ try {
   assert.equal(note.start, 1.031, 'zooming never modifies note data');
   assert.deepEqual(grid.snapNote(1.2, 1.2625), { start: 1, end: 1.0625 },
     'coarse zoom does not stretch a short note when moving it');
+
+  note.start = 1; note.end = 1.237; S.selection = new Set([note]);
+  const length = note.end - note.start;
+  stage.emit('mousedown', {clientX: 112});
+  assert.equal(S.drag.mode, 'move');
+  win.emit('mousemove', {clientX: 165});
+  assert.equal(note.start, 1.53125, 'free-length notes use eighth-cell snapping without a modifier');
+  assert.ok(Math.abs(note.end - note.start - length) < 1e-9, 'moving preserves the exact free duration');
+  win.emit('mouseup', {clientX: 165});
+  assert.equal(note.start, 1.53125, 'release retains the fine-grid position');
+  assert.equal(commits.at(-1)[3].preserveTiming, true, 'commit does not snap the free move afterward');
+  assert.ok(Math.abs(note.end - note.start - length) < 1e-9, 'mouse release does not requantize the duration');
+  const movedEnd = note.end;
+  stage.emit('mousedown', {clientX: movedEnd * 100 - 1});
+  win.emit('mousemove', {clientX: movedEnd * 100 + 25, altKey: true});
+  win.emit('mouseup', {clientX: movedEnd * 100 + 25, altKey: true});
+  assert.equal(note.end, 2.03125, 'Alt resizing retains the fine-grid endpoint on release');
+
+  note.start = 1; note.end = 1.25;
+  stage.emit('mousedown', {clientX: 112});
+  win.emit('mousemove', {clientX: 165});
+  assert.equal(note.start, 1.5, 'grid-length notes still snap during movement');
+  win.emit('mouseup', {clientX: 165});
+  assert.equal(note.start, 1.5);
+  assert.equal(note.end, 1.75);
+
+  // Mixed lengths and off-grid spacing move as one group, even at the bounds.
+  note.start = 1; note.end = 1.237;
+  const companion = {id: 'companion', start: 2.03, end: 2.28, pitch: 69};
+  lane.notes = [note, companion]; S.selection = new Set(lane.notes);
+  stage.emit('mousedown', {clientX: 112});
+  win.emit('mousemove', {clientX: 164.6});
+  assert.equal(note.start, 1.5234375, 'the group anchor snaps at eight times the authored precision');
+  assert.ok(Math.abs(companion.start - note.start - 1.03) < 1e-9, 'mixed-length notes keep their original spacing');
+  assert.ok(Math.abs(companion.end - companion.start - .25) < 1e-9);
+  S.state.duration = 3;
+  win.emit('mousemove', {clientX: 500});
+  assert.equal(companion.end, 3, 'the group stops when its latest tail reaches the song end');
+  assert.ok(Math.abs(companion.start - note.start - 1.03) < 1e-9, 'song-end clamping moves the group together');
+  win.emit('mousemove', {clientX: -100});
+  assert.equal(note.start, 0);
+  assert.ok(Math.abs(companion.start - note.start - 1.03) < 1e-9, 'song-start clamping moves the group together');
+  win.emit('mouseup', {clientX: -100});
+  assert.ok(Math.abs(note.end - note.start - .237) < 1e-9, 'group release preserves each duration');
+  assert.ok(Math.abs(companion.start - note.start - 1.03) < 1e-9, 'group release preserves spacing');
+  lane.notes = [note]; S.selection = new Set([note]); S.state.duration = 10;
 
   // A tempo marker between old-grid lines ends a shortened final cell.
   S.pxPerSec = 2000;

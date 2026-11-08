@@ -228,11 +228,23 @@ export function snap(t, segments = null) {
   return Math.max(projectStart(S.state), snapInSegments(t, segments || gridSegments(), displayGridStep));
 }
 
+// Precision gestures use eight subdivisions of the authored grid cell,
+// independently of how zoom coarsens the visible grid.
+export function snapFine(t) {
+  return Math.max(projectStart(S.state), snapInSegments(t, gridSegments(), seg => segStep(seg) / 8));
+}
+
 // Move a note's start onto the visible grid without stretching its rhythm to a
 // coarse zoom level. Length retains the underlying musical resolution.
-export function snapNote(start, end, { adaptive = true } = {}) {
+export function snapNote(start, end, { adaptive = true, preserveDuration = false } = {}) {
   const segments = gridSegments(), stepAt = adaptive ? displayGridStep : segStep;
   const seg = gridAt(start), step = stepAt(seg);
+  if (preserveDuration) {
+    const duration = end - start;
+    const latest = S.state ? S.state.duration - duration : Infinity;
+    const s = Math.max(projectStart(S.state), Math.min(latest, snapInSegments(start, segments, stepAt)));
+    return { start: s, end: s + duration };
+  }
   if (!step) {
     const s = Math.max(projectStart(S.state), start);
     return { start: s, end: end + s - start };
@@ -262,7 +274,7 @@ export function snapStrayNotes(lanes, previous = {}) {
       if (oldNotes.get(n.id)?.start === n.start) continue;
       const seg = gridAt(n.start);
       if (n.start >= projectStart(S.state) && (!seg.bpm || on(n.start, seg, segStep(seg)) || on(n.start, seg, 60 / seg.bpm / 24))) continue;
-      const q = snapNote(n.start, n.end, { adaptive: false });
+      const q = snapNote(n.start, n.end, { adaptive: false, preserveDuration: true });
       for (const h of lane.handHolds || []) if (Math.abs(+h.t - n.start) < 1e-6) h.t = q.start;
       n.start = q.start; n.end = q.end;
       moved++;

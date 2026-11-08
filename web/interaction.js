@@ -16,8 +16,8 @@ import { draw } from "./repaint.js";
 import { withMemo } from "./paint-memo.js";
 import { addBendPoint, commit, curveOf, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts, snapshotEdit } from "./edit.js";
 import { cursorTimeAt, pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
-import { displayGridStep, gridAt, gridSegments, minDur, snap, snapNote } from "./grid.js";
-import { noteLength } from './note-length.js';
+import { displayGridStep, gridAt, gridSegments, minDur, snap, snapFine, snapNote } from "./grid.js";
+import { noteLength, hasFreeNoteLength } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
 import { commentAt, commentCursorAt, commentMouseDown, openCommentPop } from "./comments.js";
 import { updateProjectStartAt } from "./project-position.js";
@@ -83,8 +83,9 @@ function pickNoteNow(t, pitch, exact) {
 }
 
 // Measure the minimum at the fixed edge, using the same grid as snapping.
-const resizeMinimum = (note, edge) => {
+const resizeMinimum = (note, edge, free = false) => {
   const segments = gridSegments();
+  if (free) return Math.min(MIN_DUR, resizeMinimum(note, edge));
   if (edge === 'r') {
     const step = displayGridStep(gridAt(note.start)) || MIN_DUR;
     const next = segments.find(segment => segment.t > note.start);
@@ -313,21 +314,21 @@ function updateDrag(x, y) {
     }
     if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 1) return;
     S.drag.resizeMoved = true;
-    const minimum = resizeMinimum(o, S.drag.edge);
+    const minimum = resizeMinimum(o, S.drag.edge, S.drag.freeResize);
     const time = timeAt(x) - (S.drag.resizeGrab || 0);
     S.drag.resizeTime = time;
-    const target = S.drag.freeResize ? time : snap(time);
+    const target = S.drag.freeResize ? snapFine(time) : snap(time);
     if (S.drag.edge === "r") {
       const dt = Math.max(o.start + minimum, target) - o.end;
       for (const n of S.drag.notes) {
         const oo = S.drag.orig.get(n);
-        n.end = Math.min(S.state.duration, Math.max(oo.start + resizeMinimum(oo, 'r'), oo.end + dt));
+        n.end = Math.min(S.state.duration, Math.max(oo.start + resizeMinimum(oo, 'r', S.drag.freeResize), oo.end + dt));
       }
     } else {
       const dt = Math.min(o.end - minimum, Math.max(projectStart(S.state), target)) - o.start;
       for (const n of S.drag.notes) {
         const oo = S.drag.orig.get(n);
-        n.start = Math.min(oo.end - resizeMinimum(oo, 'l'), Math.max(projectStart(S.state), oo.start + dt));
+        n.start = Math.min(oo.end - resizeMinimum(oo, 'l', S.drag.freeResize), Math.max(projectStart(S.state), oo.start + dt));
       }
     }
     if (slide?.knee != null) {
@@ -345,16 +346,22 @@ function updateDrag(x, y) {
   if (S.drag.mode === "move") {
     S.drag.moved = true;
     const dt = timeAt(x) - timeAt(S.drag.startX);
-    const dRow = Math.floor(y / S.state.rowH) - Math.floor(S.drag.startY / S.state.rowH);
+    const originals = S.drag.notes.map(note => S.drag.orig.get(note));
+    const anchor = S.drag.orig.get(S.drag.note);
+    const fine = originals.some(note => hasFreeNoteLength(note, gridSegments()));
+    const target = (fine ? snapFine : snap)(anchor.start + dt);
+    // Snap the grabbed note once, then translate the whole selection by the
+    // same amount. Clamp the group, so neither spacing nor pitch intervals change.
+    const delta = Math.max(projectStart(S.state) - Math.min(...originals.map(note => note.start)),
+      Math.min(S.state.duration - Math.max(...originals.map(note => note.end)), target - anchor.start));
+    const wantedRow = Math.floor(y / S.state.rowH) - Math.floor(S.drag.startY / S.state.rowH);
+    const dRow = Math.max(Math.max(...originals.map(note => note.pitch)) - S.state.spec.midi_high,
+      Math.min(Math.min(...originals.map(note => note.pitch)) - S.state.spec.midi_low, wantedRow));
     for (const n of S.drag.notes) {
       const o = S.drag.orig.get(n);
-      const len = o.end - o.start;
-      const s = Math.max(0, o.start + dt);          // keep the note out of negative time
-      const q = snapNote(s, s + len);               // both edges land on the grid (Snap on)
-      n.start = q.start;
-      n.end = q.end;
-      setLaneNotePitch(S.drag.lane, n,
-        Math.max(S.state.spec.midi_low, Math.min(S.state.spec.midi_high, o.pitch - dRow)));
+      n.start = o.start + delta;
+      n.end = o.end + delta;
+      setLaneNotePitch(S.drag.lane, n, o.pitch - dRow);
     }
     // Audible feedback: each time the drag crosses to a new pitch row, play the
     // moved notes so you can hear where you're landing. Pure horizontal nudges
@@ -942,11 +949,8 @@ export function init_interaction() {
       updateDetectStatus();
       // Keep the range available for looping and explicitly requested detection.
     } else if (S.drag.mode === "move" || S.drag.mode === "resize") {
-      // Resize only the grabbed edge. In particular, do not re-quantize an Alt
-      // placement or the fixed edge when the gesture is released.
-      if (S.drag.mode === 'move' && S.drag.moved) for (const n of S.drag.notes) {
-        const q = snapNote(n.start, n.end); n.start = q.start; n.end = q.end;
-      }
+      // Both gestures already placed their edges. Preserve free movement and Alt
+      // resizing on release, including through the commit's stray-note pass.
       // Pressing a note of a selection keeps the group so it can be dragged together;
       // a plain click without dragging narrows it to that one note.
       if (S.drag.mode === 'move' && !S.drag.moved && S.selection.size > 1) setSelection(new Set([S.drag.note]));
@@ -956,7 +960,7 @@ export function init_interaction() {
       updateNoteGesture(S.state, S.drag.lane || laneOf(S.drag.note), S.drag.notes);
       noteLength.remember(S.state, S.drag.note, gridSegments());
       // Pitch edits leave hand placement to the solver; they do not author anchors.
-      commitIfChanged(undefined, S.drag.mode === 'resize');
+      commitIfChanged(undefined, true);
     } else if (S.drag.mode === "bendPoint" || S.drag.mode === "effectStart") {
       commitIfChanged();
     } else if (S.drag.mode === "refBox") {

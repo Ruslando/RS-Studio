@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
 
 const painted = [], noop = () => {};
-const ctx = new Proxy({ measureText(text) { return { width: text.length * parseFloat(this.font.match(/[\d.]+(?=px)/)[0]) * 0.5 }; }, fillText(text, x, y) { painted.push({ text, x, y, font: this.font }); } }, {
+let strokes = 0;
+const ctx = new Proxy({ stroke() { strokes++; }, measureText(text) { return { width: text.length * parseFloat(this.font.match(/[\d.]+(?=px)/)[0]) * 0.5 }; }, fillText(text, x, y) { painted.push({ text, x, y, font: this.font }); } }, {
   get: (target, name) => name in target ? target[name] : noop,
 });
 const controls = { spectrogramNoteNames: { value: 'always' }, spectrogramPositions: { value: 'hover' },
@@ -21,10 +22,10 @@ try {
     './tablature.js': { laneFingeringKey: () => 'one', laneFingering: async () => ({ notes: [note], voiced: new Map([[note, { string: 1, fret: 5 }]]) }) },
     './repaint.js': { draw: noop }, './articulations.js': { hammerDirections: () => new Map() },
     './bend.js': { slideTargets: () => new Map(), slideRibbon: () => null, bendCurve: () => null, SLIDES_TO_NEXT: new Set(), SLIDE_IN: new Set(), SLIDE_OUT: new Set() },
-    './geometry.js': { xOf: time => time * 100, yOf: () => 0 }, './grid.js': { gridAt: () => ({ bpm: 120 }) },
+    './geometry.js': { xOf: time => time * 100, yOf: () => 0 }, './grid.js': { gridAt: () => ({ bpm: 120 }), gridSegments: () => [{t: 0, bpm: 120, tsDen: 4, subdiv: 8}] },
     './grace.js': { graceBefore: () => null }, './note-effects.js': { noteMarks: () => ['PM'], FX_GLYPHS: {}, HARMONIC_TAG: {} },
     './note-label-paint.js': painter,
-  }, { './spectrogram-labels.js': true });
+  }, { './spectrogram-labels.js': true, './note-length.js': true });
   drawNoteFx(); await Promise.resolve(); painted.length = 0;
   drawNoteFx();
   assert.deepEqual(painted.map(item => item.text), ['E4'], 'hover-only components stay hidden until hovered');
@@ -51,5 +52,9 @@ try {
   for (const id of ['spectrogramNoteNames', 'spectrogramPositions', 'spectrogramEffects']) controls[id].value = 'off';
   painted.length = 0; drawNoteFx();
   assert.equal(painted.length, 0, 'Off hides every label including slide glyphs');
+  delete note.slide; note.end = 1.13; strokes = 0; drawNoteFx();
+  assert.equal(strokes, 1, 'a free-length note retains its hollow tail marker with labels off');
+  note.end = 1.125; strokes = 0; drawNoteFx();
+  assert.equal(strokes, 0, 'a regular grid duration has no free-length marker');
 } finally { globalThis.document = oldDocument; }
 console.log('Note appearance visibility, font and slide placement passed');

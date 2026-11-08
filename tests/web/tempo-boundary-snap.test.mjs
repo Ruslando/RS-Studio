@@ -19,6 +19,11 @@ for (const pxPerSec of [30, 120, 2000]) {
   close(grid.snap(1.23), 1.23, 'marker snaps exactly to itself');
 }
 S.pxPerSec = 2000;
+close(grid.snapFine(1.134), 1.1328125, 'precision grid divides the 1/32 cell into eight 1/256 cells');
+S.pxPerSec = 30;
+close(grid.snapFine(1.134), 1.1328125, 'precision grid follows the authored setting rather than zoom');
+S.pxPerSec = 2000;
+close(grid.snapFine(1.229), 1.23, 'precision movement respects exact tempo boundaries');
 close(grid.snap(1.13), 1.125, 'earlier regular grid points remain available');
 close(grid.snap(1.36), 1.355, 'later grid points use the new tempo');
 close(grid.snapNote(1.1875, 1.25).end, 1.23, 'moving a note cannot round its tail past the boundary');

@@ -32,6 +32,7 @@ import { FX_GLYPHS, HARMONIC_TAG, noteMarks } from "./note-effects.js";
 import { PAINT, WASH, halo, veil } from "./stage-paint.js";
 import { S } from "./store.js";
 import { rocksmithCountIn } from "./rocksmith-check.js";
+import { hasFreeNoteLength } from './note-length.js';
 import { dpr, fmtTime, grayHex, hexA, noteName } from "./util.js";
 
 // ---- detect time frame (Alt-drag) ----
@@ -358,6 +359,7 @@ function positionsForLabels(lane) {
 export function drawNoteFx() {
   const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
   const options = spectrogramLabelOptions();
+  const segments = gridSegments();
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
     const positions = options.positions !== 'off' ? positionsForLabels(lane) : null;
@@ -374,6 +376,14 @@ export function drawNoteFx() {
       const onto = slides.get(n), ribbon = noteRibbon(lane, n);
       const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
       if ((grace ? xOf(grace.start) : x) > vx1 || Math.max(x1, ribbon ? xOf(ribbon.end) : x1) < vx0) continue;
+      if (hasFreeNoteLength(n, segments)) {
+        // A small hollow diamond distinguishes a free-length tail from effects
+        // and diagnostics, even when note labels are hidden.
+        const cy = yOf(n.pitch) + S.state.rowH / 2, r = Math.min(3, S.state.rowH / 3);
+        sctx.save(); sctx.strokeStyle = PAINT.text; sctx.lineWidth = 1;
+        sctx.beginPath(); sctx.moveTo(x1, cy - r); sctx.lineTo(x1 + r, cy);
+        sctx.lineTo(x1, cy + r); sctx.lineTo(x1 - r, cy); sctx.closePath(); sctx.stroke(); sctx.restore();
+      }
       const { mode, effects } = resolveNoteAppearance(options, S.hoverNote === n);
       const tags = effects ? noteMarks(n).map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(n) || m : m) : [];
       if (effects && n.slide && !ribbon && !edgeSlide(n.slide)) tags.push(SLIDE_TAG[n.slide] || "slide");

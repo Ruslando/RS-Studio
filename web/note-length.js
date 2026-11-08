@@ -1,9 +1,27 @@
 // Remember a rhythmic length, rather than seconds, so drawing the same note
 // value in a different tempo still produces the same musical duration.
+import { segBeatSec } from './bars.js';
+
 const bpmAt = (time, segments) => {
   const segment = [...segments].reverse().find(item => item.t <= time) || segments[0];
   return Number(segment?.bpm) > 0 ? Number(segment.bpm) : 120;
 };
+
+// Use the authored division rather than the zoom-dependent visible grid.
+// A shortened cell at a tempo boundary also has a nonstandard duration.
+export function hasFreeNoteLength(note, segments) {
+  if (!segments.length || !(note.end > note.start)) return false;
+  let time = note.start, cells = 0, shortest = Infinity;
+  for (const end of [...segments.filter(segment => segment.t > time && segment.t < note.end).map(segment => segment.t), note.end]) {
+    const seg = [...segments].reverse().find(segment => segment.t <= time) || segments[0];
+    const step = segBeatSec(seg) / Math.max(1, Number(seg.subdiv) || 1);
+    if (!(step > 0)) return false;
+    cells += (end - time) / step;
+    shortest = Math.min(shortest, step);
+    time = end;
+  }
+  return Math.abs(cells - Math.round(cells)) * shortest > 1e-4;
+}
 
 export function lengthInBeats(start, end, segments) {
   let time = start, beats = 0;
