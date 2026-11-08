@@ -1042,7 +1042,7 @@ export function drawFretboard() {
   const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
   warning.hidden = !selectionError && !here;
   const [shapeTitle, shapeHelp] = SHAPE_WARNINGS[here?.kind] || SHAPE_WARNINGS.impossible;
-  warning.textContent = selectionError || (here ? `⚠ ${shapeTitle}` : "");
+  warning.textContent = selectionError || (here ? `${here.kind === "stretch" ? "ⓘ" : "⚠"} ${shapeTitle}` : "");
   warning.title = selectionError || shapeHelp;
   warning.toggleAttribute("data-error", here?.kind === "impossible" && !selectionError);
   fretboardShowAnyway.hidden = !impossible || !!selectionError;

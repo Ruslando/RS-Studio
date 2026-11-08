@@ -119,7 +119,7 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
   const byBeat = new Map();
   // A chord with a note no fret reaches is that note's problem, said once, below.
   for (const { notes, kind } of chordWarnings(lane, tuning, maxFret, revision)) if (!notes.some(outside))
-    out.push({ ...issue("shape", "warning", SHAPE_WARNINGS[kind], notes), id: `editor.shape.${kind}` });
+    out.push({ ...issue("shape", kind === "stretch" ? "note" : "warning", SHAPE_WARNINGS[kind], notes), id: `editor.shape.${kind}` });
   for (const n of lane.notes) {
     if (outside(n)) out.push(issue("outOfRange", "warning", ISSUE_TEXT.outOfRange, [n]));
     for (const b of stackedBends(n)) out.push(issue("bendStack", "warning", ISSUE_TEXT.bendStack, [n], b.time));
