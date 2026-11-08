@@ -185,6 +185,46 @@ def _configure_qt_permissions(window) -> None:
     page._rs_permissions_configured = True
 
 
+def _configure_qt_downloads(window) -> None:
+    """Replace pywebview's Qt5-only download callback and preserve blob names."""
+    native = window.native
+    view = getattr(native, "webview", None)
+    previous = getattr(native, "on_download_requested", None)
+    if view is None or previous is None or not hasattr(view, "page"):
+        return
+    profile = view.page().profile()
+    if getattr(profile, "_rs_downloads_configured", False):
+        return
+    from qtpy.QtWidgets import QFileDialog
+
+    def download_requested(download):
+        # Exceptions escaping a PyQt signal callback can abort the application.
+        try:
+            name = download.suggestedFileName() or download.downloadFileName() or "download"
+            path, _ = QFileDialog.getSaveFileName(
+                native, native.localization["global.saveFile"], os.path.basename(name),
+                "All files (*)",
+            )
+            if not path:
+                download.cancel()
+                return
+            if hasattr(download, "setDownloadDirectory"):
+                download.setDownloadDirectory(os.path.dirname(path))
+                download.setDownloadFileName(os.path.basename(path))
+            else:  # Older Qt5 versions only expose the combined path setter.
+                download.setPath(path)
+            download.accept()
+        except Exception:  # noqa: BLE001 - never let a download failure abort Qt
+            import logging
+
+            logging.getLogger(__name__).exception("Could not save download")
+            download.cancel()
+
+    profile.downloadRequested.disconnect(previous)
+    profile.downloadRequested.connect(download_requested)
+    profile._rs_downloads_configured = True
+
+
 def _open_window(url: str) -> bool:
     """Show the UI in a native window. False if no webview backend is usable.
 
@@ -215,6 +255,7 @@ def _open_window(url: str) -> bool:
         window.events.before_show += lambda: _enable_page_context_menu(window)
         window.events.before_show += lambda: _disable_browser_extras(window)
         window.events.before_show += lambda: _configure_qt_permissions(window)
+        window.events.before_show += lambda: _configure_qt_downloads(window)
         # Not private: pywebview's default forgets the page's storage (theme, keys)
         # on every start.
         webview.start(icon=str(_app_icon()), private_mode=False,
