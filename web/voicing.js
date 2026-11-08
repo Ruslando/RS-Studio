@@ -22,8 +22,8 @@ import { playbackTime, ensureTone, previewNotes } from "./playback.js";
 import { S, setSelection } from "./store.js";
 import { setPlaybackCursor } from "./tracing.js";
 import { clamp } from "./util.js";
-import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey, soundingColumns } from "./voicing-core.js";
-import { adjacentColumn } from './column-navigation.js';
+import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey } from "./voicing-core.js";
+import { adjacentColumn, legatoColumns } from './column-navigation.js';
 
 export * from "./voicing-core.js";
 export { analyzeChord, detectChord, PC_NAMES, pcName } from "./chords.js";
@@ -185,18 +185,19 @@ function centerViewOnNotes(notes) {
 // jump the playhead + view to them. The fretboard follows the playhead, so this is
 // what puts a chord on the neck.
 let focusAudition = 0;
-function focusColumn(note, { seek = true } = {}) {
+function focusColumn(note, { seek = true, column = null } = {}) {
   const ctx = note && columnOf(note);
   if (!ctx) return;
-  setSelection(new Set(ctx.col.notes));
+  const focused = column || ctx.col;
+  setSelection(new Set(focused.notes));
   // ↑ ↓ pick between two things sounding at the same moment, so they must not move
   // the playhead: moving it would change the very set they are choosing from.
-  if (seek) setPlaybackCursor(ctx.col.t0);
-  centerViewOnNotes(ctx.col.notes);   // ends with draw()
+  if (seek) setPlaybackCursor(focused.t0);
+  centerViewOnNotes(focused.notes);   // ends with draw()
   const audition = ++focusAudition, project = S.state;
   ensureTone().then(() => {
     if (audition === focusAudition && S.state === project)
-      previewNotes(ctx.col.notes, ctx.lane);
+      previewNotes(focused.notes, ctx.lane);
   });
 }
 
@@ -213,10 +214,10 @@ function arrowLane() {
 export function stepColumnFocus(dir) {
   const lane = arrowLane();
   if (!lane) return;
-  const cols = chordColumns(lane.notes);
+  const cols = legatoColumns(chordColumns(lane.notes));
   if (!cols.length) return;
   const next = adjacentColumn(cols, playbackTime(), dir, S.selection);
-  if (next) focusColumn(next.notes[0]);
+  if (next) focusColumn(next.notes[0], { column: next });
 }
 
 // ↑ ↓: between the columns *sounding at once*. A note held while another line moves
@@ -226,9 +227,12 @@ export function stepColumnFocus(dir) {
 export function stepVoiceFocus(dir) {
   const lane = arrowLane();
   if (!lane) return;
-  const sounding = soundingColumns(lane.notes, playbackTime() + 1e-3);
+  const time = playbackTime() + 1e-3;
+  const sounding = legatoColumns(chordColumns(lane.notes))
+    .filter(column => column.t0 <= time && column.notes.some(note => note.end > time))
+    .sort((a, b) => Math.max(...a.notes.map(note => note.pitch)) - Math.max(...b.notes.map(note => note.pitch)));
   if (sounding.length < 2) return;
   const here = sounding.findIndex((c) => c.notes.some((n) => S.selection.has(n)));
   const idx = clamp((here < 0 ? (dir > 0 ? -1 : sounding.length) : here) + dir, 0, sounding.length - 1);
-  if (idx !== here) focusColumn(sounding[idx].notes[0], { seek: false });
+  if (idx !== here) focusColumn(sounding[idx].notes[0], { seek: false, column: sounding[idx] });
 }

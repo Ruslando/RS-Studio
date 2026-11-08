@@ -331,15 +331,6 @@ function selectAlternative(key, items) {
   return items[alternativeIndex] || null;
 }
 
-function stepAlternative(delta) {
-  if (!alternativeCount) return;
-  hoverPicked = false;
-  // Original is part of the cycle: Original → alternatives → Original.
-  alternativeIndex = ((alternativeIndex + 1 + delta + alternativeCount + 1) % (alternativeCount + 1)) - 1;
-  previewAlternative = alternativeIndex >= 0;
-  drawFretboard();
-}
-
 function useAlternative() {
   const offer = activeAlternative, lane = currentLane();
   if (!offer || !lane || !previewIsCurrent(offer, lane)) { drawFretboard(); return; }
@@ -2304,19 +2295,8 @@ export function init_fretboard() {
   $("fretboardChoose").addEventListener("click", () => {
     useAlternative(); $("fretboardChoose").blur();
   });
-  const navigateAlternative = e => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input")) return;
-    if (!editing || transportPlaying() || fretboardPanel.hasAttribute("data-edit-blocked")) return;
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault(); e.stopPropagation();
-    if (shaping) stepShapeNote(e.key === "ArrowLeft" ? -1 : 1);
-    else stepAlternative(e.key === "ArrowLeft" ? -1 : 1);
-  };
-  fretboardPin.addEventListener("keydown", navigateAlternative);
-  fretboardEl.addEventListener("keydown", navigateAlternative);
   window.addEventListener("keydown", e => {
-    if (typeFinger(e)) return;
-    if (fretboardStage.matches(":hover") || $("fretboardControls").matches(":hover, :focus-within")) navigateAlternative(e);
+    typeFinger(e);
   }, true);
   // The board is a control only while the mode says so. Anywhere on the wood, not
   // only off a candidate box: a box is a drawing of a place the notes could go, and
