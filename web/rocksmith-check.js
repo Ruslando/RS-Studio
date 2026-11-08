@@ -1,4 +1,4 @@
-import { issueIgnored, showIgnoredIssues, setShowIgnoredIssues, openIssueMenu } from './issue-state.js';
+import { issueIgnored, showIgnoredIssues, setShowIgnoredIssues, openIssueMenu, restoreIssues } from './issue-state.js';
 import { issueInstanceKey } from './issue-identity.js';
 // Live Rocksmith check: what the export would report, while the chart is edited.
 //
@@ -46,7 +46,7 @@ const checkedLanes = () => (S.state?.editLanes || []).filter(lane =>
 // Everything the spec is built from, cheaply: edits bump the voicing revision,
 // markers and layer settings are read directly.
 function checkKey() {
-  const marks = items => (items || []).map(item => [item.t, item.tone ?? item.sectionType ?? null]);
+  const marks = items => (items || []).map(item => [item.id, item.t, item.tone ?? item.sectionType ?? null, item.text ?? null]);
   return JSON.stringify([S.voicingRevision, S.state.duration, rsLeadIn(), S.state.grid, S.state.tempoMap,
     S.state.timings, marks(S.state.sectionMarkers),
     checkedLanes().map(lane => [lane.id, lane.rocksmithArrangement, lane.tuning, lane.customTuning, lane.capo,
@@ -257,11 +257,13 @@ export function renderRocksmithIssues() {
     if (key === section.shown) continue;
     section.shown = key;
     const groups = new Map();
-    for (const entry of mine) {
+    for (const entry of all) {
       if (!groups.has(entry.key)) groups.set(entry.key, []);
       groups.get(entry.key).push(entry);
     }
     section.list.replaceChildren(...[...groups].map(([id, entries]) => {
+      const visible = entries.filter(entry => showIgnoredIssues || !issueIgnored(lane, entry));
+      if (!visible.length) return null;
       const item = document.createElement('li'); item.className = 'artifact-issue-group';
       const head = document.createElement('div'); head.className = 'artifact-row artifact-issue-group-head';
       const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'artifact-row-head';
@@ -271,12 +273,12 @@ export function renderRocksmithIssues() {
       const title = document.createElement('span'); title.className = 'artifact-name'; title.textContent = entries[0].title;
       toggle.title = entries[0].title;
       const count = document.createElement('span'); count.className = 'artifact-count'; const activeCount = entries.filter(entry => !issueIgnored(lane, entry)).length;
-      count.textContent = showIgnoredIssues && activeCount !== entries.length ? `${activeCount} (${entries.length - activeCount} ignored)` : String(activeCount);
+      count.textContent = activeCount !== entries.length ? `${activeCount} (${entries.length - activeCount} ignored)` : String(activeCount);
       head.toggleAttribute('data-ignored', !activeCount);
       toggle.append(title, count);
       const children = document.createElement('ul'); children.className = 'artifact-list artifact-issue-instances';
       children.id = `issue-instances-${lane?.id}-${tone}-${id}`;
-      const sync = () => { children.hidden = !expandedIssues.has(expandedKey); if (!children.hidden && !children.childElementCount) children.append(...entries.map(issueRow)); toggle.setAttribute('aria-expanded', String(!children.hidden)); };
+      const sync = () => { children.hidden = !expandedIssues.has(expandedKey); if (!children.hidden && !children.childElementCount) children.append(...visible.map(issueRow)); toggle.setAttribute('aria-expanded', String(!children.hidden)); };
       toggle.onclick = () => { if (expandedIssues.has(expandedKey)) expandedIssues.delete(expandedKey); else expandedIssues.add(expandedKey); sync(); };
       sync();
       const more = document.createElement('button'); more.type = 'button'; more.className = 'icon-btn icon-btn--compact'; more.innerHTML = icon('more', 14); more.title = 'Category options'; more.setAttribute('aria-label', 'Category options'); more.setAttribute('aria-haspopup', 'menu');
@@ -285,9 +287,9 @@ export function renderRocksmithIssues() {
       head.oncontextmenu = event => { event.preventDefault(); menu(event.clientX, event.clientY); };
       const actions = document.createElement('div'); actions.className = 'artifact-issue-actions';
       actions.append(more); head.append(toggle, actions); item.append(head, children); return item;
-    }));
+    }).filter(Boolean));
     const active = all.filter(row => !issueIgnored(lane, row)).length;
-    section.count.textContent = showIgnoredIssues && active !== all.length ? `${active} (${all.length - active} ignored)` : String(active);
+    section.count.textContent = active !== all.length ? `${active} (${all.length - active} ignored)` : String(active);
     // Keep the header's menu reachable even when every occurrence is ignored.
     section.head.classList.toggle('is-empty', !all.length); section.body.classList.toggle('is-empty', !mine.length);
     section.options.toggleAttribute('data-show-ignored', showIgnoredIssues);
@@ -307,9 +309,14 @@ function issueSection(tone, label) {
   options.setAttribute('aria-label', `${label} options`); options.setAttribute('aria-haspopup', 'menu');
   options.onclick = () => {
     const rect = options.getBoundingClientRect();
+    const lane = S.state?.editLanes.find(item => item.active);
+    const ignored = S.state ? rowsFor(lane).filter(issue => issue.tone === tone && issueIgnored(lane, issue)) : [];
     openDiagnosticMenu(rect.left, rect.bottom, [{
       label: `${showIgnoredIssues ? '\u2713 ' : ''}Show ignored`,
       fn: () => setShowIgnoredIssues(!showIgnoredIssues),
+    }, {
+      label: 'Restore all ignored', disabled: !ignored.length,
+      fn: () => restoreIssues(ignored.map(issue => ({lane, issue}))),
     }]);
   };
   head.append(toggle, options);

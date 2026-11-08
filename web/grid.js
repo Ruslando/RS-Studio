@@ -197,27 +197,52 @@ export function restoreGridState(g) {
 // tempo grid there's no division to measure against, so fall back to MIN_DUR.
 export const minDur = () => gridStep() || MIN_DUR;
 
+// A segment's last cell stops at the next marker, even when that marker is
+// between its regular grid lines. The marker competes as an exact snap point.
+function snapInSegments(t, segments, stepAt, round = Math.round) {
+  let index = 0;
+  while (index + 1 < segments.length && segments[index + 1].t <= t) index++;
+  const seg = segments[index], step = stepAt(seg), boundary = segments[index + 1]?.t;
+  if (!step) return t;
+  let snapped = seg.t + round((t - seg.t) / step) * step;
+  if (boundary != null) {
+    snapped = Math.min(snapped, boundary);
+    if (round === Math.round && Math.abs(boundary - t) < Math.abs(snapped - t)) snapped = boundary;
+  }
+  return snapped;
+}
+
+function snapTail(start, end, roundedEnd, step, segments, stepAt, round = Math.round) {
+  const boundary = segments.find(segment => segment.t > start && segment.t <= Math.max(end, roundedEnd));
+  if (!boundary) return roundedEnd;
+  const cellEnd = start + Math.ceil((boundary.t - start) / step - 1e-9) * step;
+  // The final old-grid cell is truncated, including when the next tempo is
+  // faster. Longer spans can continue onto the next segment's own grid.
+  if (Math.max(end, roundedEnd) <= cellEnd + 1e-9) return boundary.t;
+  return snapInSegments(end, segments, stepAt, round);
+}
+
 export function snap(t, segments = null) {
   // A tempo-flag drag uses its starting grid, so its moving origin cannot
   // pull subsequent pointer events onto a different set of snap positions.
-  const seg = segments ? [...segments].reverse().find(s => s.t <= t) || segments[0] : gridAt(t);
-  const step = displayGridStep(seg);
-  if (!step) return Math.max(projectStart(S.state), t);
-  return Math.max(projectStart(S.state), Math.round((t - seg.t) / step) * step + seg.t);
+  return Math.max(projectStart(S.state), snapInSegments(t, segments || gridSegments(), displayGridStep));
 }
 
 // Move a note's start onto the visible grid without stretching its rhythm to a
 // coarse zoom level. Length retains the underlying musical resolution.
 export function snapNote(start, end, { adaptive = true } = {}) {
-  const seg = gridAt(start), step = adaptive ? displayGridStep(seg) : segStep(seg);
+  const segments = gridSegments(), stepAt = adaptive ? displayGridStep : segStep;
+  const seg = gridAt(start), step = stepAt(seg);
   if (!step) {
     const s = Math.max(projectStart(S.state), start);
     return { start: s, end: end + s - start };
   }
-  const s = Math.max(projectStart(S.state), Math.round((start - seg.t) / step) * step + seg.t);
-  const lengthStep = Math.min(segStep(seg) || step, step);
+  const s = Math.max(projectStart(S.state), snapInSegments(start, segments, stepAt));
+  const lengthAt = segment => Math.min(segStep(segment) || step, stepAt(segment) || step);
+  const lengthStep = lengthAt(gridAt(s));
   const cells = Math.max(1, Math.round((end - start) / lengthStep));
-  return { start: s, end: S.state ? Math.min(S.state.duration, s + cells * lengthStep) : s + cells * lengthStep };
+  const e = snapTail(s, end + s - start, s + cells * lengthStep, lengthStep, segments, lengthAt);
+  return { start: s, end: S.state ? Math.min(S.state.duration, e) : e };
 }
 
 // After every committed edit: a note whose start fell off its grid — a tempo flag
@@ -259,10 +284,12 @@ export function quantizeFine(start, end) {
     const s = Math.max(projectStart(S.state), start);
     return { start: s, end: end + s - start };
   }
-  const step = 60 / seg.bpm / FINE_SUBDIV;
-  const s = Math.max(projectStart(S.state), Math.round((start - seg.t) / step) * step + seg.t);
+  const segments = gridSegments(), fineStep = segment => segment.bpm ? 60 / segment.bpm / FINE_SUBDIV : 0;
+  const s = Math.max(projectStart(S.state), snapInSegments(start, segments, fineStep));
+  const step = fineStep(gridAt(s)) || fineStep(seg);
   const cells = Math.max(1, Math.floor((end - start) / step));
-  return { start: s, end: Math.min(S.state.duration, s + cells * step) };
+  const e = snapTail(s, end + s - start, s + cells * step, step, segments, fineStep, Math.floor);
+  return { start: s, end: Math.min(S.state.duration, e) };
 }
 
 // The offset marks where beat 1 sits (it trims leading silence). Changing it

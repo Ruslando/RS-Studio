@@ -36,7 +36,7 @@ assert.ok(SECTION_HELP.end);
   ], "sorted, clamped into the song, nameless and timeless ones dropped");
   assert.equal(new Set(got.map((m) => m.id)).size, 4);
   assert.deepEqual(normalizeSectionMarkers(null), []);
-  assert.deepEqual(sectionMarkersForExport([{ t: 1, text: "Intro", id: "x" }]), [{ t: 1, text: "Intro", marker: "", sectionType: "intro" }]);
+  assert.deepEqual(sectionMarkersForExport([{ t: 1, text: "Intro", id: "x" }]), [{ id: "x", t: 1, text: "Intro", marker: "", sectionType: "intro" }]);
 }
 
 // ---- sections onto bars ---------------------------------------------------

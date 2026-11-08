@@ -835,7 +835,14 @@ def check_spec(spec: dict) -> list[dict]:
             found["errorId"] = getattr(exc, "id", "export.compile-failed")
             continue
         found["warnings"] = list(dict.fromkeys(warnings))
-        found["warningIssues"] = [message.as_issue() for message in dict.fromkeys(warnings)]
+        # Equal display text can describe different markers; keep each occurrence.
+        seen_warnings = set()
+        found["warningIssues"] = []
+        for message in warnings:
+            identity = (message.id, str(message), message.time, message.target)
+            if identity not in seen_warnings:
+                seen_warnings.add(identity)
+                found["warningIssues"].append(message.as_issue(lead))
         # The COUNT phrase and the events, in editor time, for the editor to show.
         song = built.compiled.sng
         found["count"] = next((pi.start_time - lead for pi in song.phrase_iterations

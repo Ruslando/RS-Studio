@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
+import { noteLength } from '../../web/note-length.js';
 
 class Surface {
   listeners = new Map(); style = {};
@@ -32,9 +33,10 @@ try {
   const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
     './store.js': { S, setSelection: value => { S.selection = value; } },
     './dom.js': { stage, scroll }, './repaint.js': { draw: noop }, './grid.js': grid,
-    './lanes.js': { activeLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible },
+    './lanes.js': { activeLane: () => lane, targetLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible, refreshCounts: noop },
     './geometry.js': { timeAt: x => x / 100, xOf: t => t * 100, pitchAt: () => 64, pitchAtExact: () => 64, yOf: () => 100 },
-    './markers.js': { markerMouseDown: () => false }, './comments.js': { commentMouseDown: () => false }, './marker-rails.js': { markerRails: () => [] },
+    './markers.js': { markerMouseDown: () => false, markerCursorAt: () => null }, './comments.js': { commentMouseDown: () => false, commentAt: () => null }, './marker-rails.js': { markerRails: () => [] },
+    './ids.js': { nid: () => 'new-boundary-note' },
     './note-render.js': { regionEdgeAt: () => null, noteRibbon: () => null, slideFretsHandle: () => null, curveHandles: endHandles }, './grace.js': { graceBefore: () => null },
     './references.js': { boxOfNote: () => null, refLockAt: () => null, refBadgeAt: () => null, refBoxEdgeAt: () => null },
     './playback.js': { auditionNote: noop },
@@ -114,5 +116,32 @@ try {
   assert.equal(note.start, 1.031, 'zooming never modifies note data');
   assert.deepEqual(grid.snapNote(1.2, 1.2625), { start: 1, end: 1.0625 },
     'coarse zoom does not stretch a short note when moving it');
+
+  // A tempo marker between old-grid lines ends a shortened final cell.
+  S.pxPerSec = 2000;
+  S.state.tempoMap = [{ t: 1.23, bpm: 60, tsNum: 4, tsDen: 4, subdiv: 8 }];
+  note.start = 1.1875; note.end = 1.5;
+  stage.emit('mousedown', { clientX: 149 });
+  win.emit('mousemove', { clientX: 122 });
+  assert.equal(note.end, 1.23, 'right edge can stop at the marker despite the short cell');
+  win.emit('mouseup', { clientX: 122 });
+  assert.equal(note.end, 1.23, 'committing retains the exact boundary');
+  stage.emit('mousedown', { clientX: 119 });
+  win.emit('mousemove', { clientX: 122.5 });
+  assert.equal(note.start, 1.1875, 'left edge permits the shortened cell before a marker');
+  win.emit('mouseup', { clientX: 122.5 });
+  note.start = 1; note.end = 1.5;
+  stage.emit('mousedown', { clientX: 149 });
+  win.emit('mousemove', { clientX: 148 });
+  assert.ok(note.end > 1.23, 'resizing past a marker still permits an intentional sustain');
+  win.emit('mouseup', { clientX: 148 });
+
+  // Drawing a new note uses the same shortened final cell as resizing.
+  lane.notes = []; S.motifLabels = []; S.shapeLabels = []; S.selection.clear();
+  noteLength.remember(S.state, { start: 0, end: .0625 }, grid.gridSegments());
+  stage.emit('dblclick', { clientX: 118.75 });
+  assert.equal(lane.notes.length, 1, 'a short final cell can still be drawn');
+  assert.equal(lane.notes[0].start, 1.1875);
+  assert.equal(lane.notes[0].end, 1.23, 'a drawn note ends exactly at the tempo marker');
 } finally { globalThis.window = oldWindow; }
 console.log('resize grid: adaptive snapping, Alt, release, fixed edges and persistent free timing passed');

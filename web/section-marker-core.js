@@ -282,7 +282,7 @@ export function applySectionMarkersToBars(bars, markers) {
 }
 
 export function sectionMarkersForExport(markers) {
-  return normalizeSectionMarkers(markers).map(({ t, text, marker, sectionType }) => ({
-    t, text, marker, sectionType,
+  return normalizeSectionMarkers(markers).map(({ id, t, text, marker, sectionType }) => ({
+    id, t, text, marker, sectionType,
   }));
 }

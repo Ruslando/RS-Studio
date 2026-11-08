@@ -775,8 +775,10 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
 
     chord_templates: list[S.ChordTemplate] = []
     chord_ids: dict[tuple, int] = {}
+    incomplete_fingerings: set[tuple] = set()
 
     def ensure_chord_template(frets: list, midi: list, fingers: list, name: str, t: float, *,
+                              sounding_strings: set[int],
                               arpeggio: bool = False, fingerless: bool = False) -> int:
         """One template per grip, fingering and name: the same grip fingered or named two ways is two.
 
@@ -787,10 +789,14 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
         if fingerless:
             fingers = [-1] * 6
         key = (tuple(frets), tuple(fingers), name, mask)
+        # Dead notes need no fretting finger. Check each use: a template first
+        # used by a muted chord can later be used by an unfingered sounding one.
+        if (not fingerless and key not in incomplete_fingerings
+                and any(frets[s] > 0 and fingers[s] == -1 for s in sounding_strings)):
+            fixes.append(("finger", t))
+            incomplete_fingerings.add(key)
         if key not in chord_ids:
             chord_ids[key] = len(chord_templates)
-            if not fingerless and any(f > 0 and g == -1 for f, g in zip(frets, fingers)):
-                fixes.append(("finger", t))   # where the grip is first played
             chord_templates.append(S.ChordTemplate(
                 frets=frets, fingers=fingers, notes=midi,
                 name=name, mask=mask))
@@ -826,12 +832,20 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             continue
         by_string = {}
         finger_on = {}
+        sounding_strings = set()
         conflict = False
         for _, string, fret, n in members:
             if string in by_string and by_string[string] != fret:
                 conflict = True
             by_string[string] = fret
-            finger_on.setdefault(string, _finger(n, fret))
+            # A repeated string can be muted first and sounded later in a shape.
+            # Its sounding note supplies the grip's finger in that case.
+            if not (n.get("fx") or {}).get("dead"):
+                if string not in sounding_strings:
+                    finger_on[string] = _finger(n, fret)
+                sounding_strings.add(string)
+            else:
+                finger_on.setdefault(string, _finger(n, fret))
         if conflict or len(by_string) < 2:
             fixes.append(("shape-grip", start))
             continue
@@ -853,6 +867,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             or _chord_name(m[3] for m in members)
         shape_info[shape_id] = {
             "chord_id": ensure_chord_template(frets, midi, fingers, name, start, arpeggio=kind == "arpeggio",
+                                              sounding_strings=sounding_strings,
                                               fingerless=any(m[3].get("fingerless") for m in members)),
             "kind": kind, "start": start, "end": end, "frets": list(by_string.values()),
         }
@@ -900,6 +915,7 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
                     midi[s] = tuning_low[s] + (fret or capo)
                     fingers[s] = _finger(n, fret)
                 ent.chord_id = ensure_chord_template(frets, midi, fingers, _chord_name(n for _, _, n in notes), t,
+                                                     sounding_strings={s for s, _, n in notes if not (n.get("fx") or {}).get("dead")},
                                                      fingerless=any(n.get("fingerless") for _, _, n in notes))
             entities.append(ent)
         i = j
@@ -975,20 +991,21 @@ def _beats_phrases_sections(grid: dict, song_length: float, section_markers: lis
         # renamed it to `sectionType` still carry it.
         raw_name = str(raw.get("sectionType") or raw.get("rocksmithType") or raw.get("text") or "riff")
         name = "".join(ch for ch in raw_name.lower() if ch.isalnum())
+        target = f"marker:{raw['id']}" if raw.get('id') else None
         if name == "end":
             continue
         if name not in ROCKSMITH_SECTION_NAMES:
-            warnings.append(warning("section-unknown", name=raw_name))
+            warnings.append(warning("section-unknown", name=raw_name, at=time, target=target))
             name = "riff"
         boundary = min(measure_starts, key=lambda value: abs(value - time))
         if boundary >= end_t - 1e-4:
             continue
         if abs(boundary - time) > 0.02:
             warnings.append(
-                warning("section-snapped", name=raw.get('text') or raw_name))
+                warning("section-snapped", name=raw.get('text') or raw_name, at=time, target=target))
         if boundary in authored:
             warnings.append(
-                warning("section-collision", time=boundary))
+                warning("section-collision", time=boundary, at=time, target=target))
         authored[boundary] = name
 
     if authored:

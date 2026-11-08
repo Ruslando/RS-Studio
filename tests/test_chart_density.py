@@ -68,6 +68,54 @@ class NoteStatusTest(unittest.TestCase):
         self.assertIn("finger", [code for code, _ in unfingered.fixes])
         self.assertNotIn("finger", [code for code, _ in self._level(_chord(1.0, fingerless=True)).fixes])
 
+    def test_dead_notes_do_not_need_fingers_but_partial_mute_is_still_reported(self):
+        for kind in (None, "handshape", "arpeggio"):
+            for fully_muted in (False, True):
+                with self.subTest(kind=kind, fully_muted=fully_muted):
+                    notes = _chord(1.0)
+                    for index, note in enumerate(notes):
+                        if fully_muted or index == 1:
+                            note["fx"] = {"dead": True}
+                        else:
+                            note["finger"] = 1
+                        if kind:
+                            note.update(shapeId="grip", shapeKind=kind)
+                    compiled = self._level(notes)
+                    codes = [code for code, _ in compiled.fixes]
+                    self.assertNotIn("finger", codes)
+                    self.assertEqual("I29" in codes, not fully_muted)
+                    if fully_muted:
+                        chord = compiled.sng.levels[0].notes[0]
+                        self.assertTrue(chord.mask & S.FRETHANDMUTE)
+                        self.assertEqual(compiled.sng.chords[chord.chord_id].fingers, [-1] * 6)
+
+    def test_sounding_chord_still_warns_after_muted_use_of_same_template(self):
+        muted = [{**note, "fx": {"dead": True}} for note in _chord(1.0)]
+        sounding = _chord(2.0) + _chord(3.0)
+        compiled = self._level(muted + sounding)
+        self.assertEqual([(code, t) for code, t in compiled.fixes if code == "finger"], [("finger", 2.0)])
+
+    def test_sounding_notes_in_shapes_still_require_fingers(self):
+        for kind in ("handshape", "arpeggio"):
+            with self.subTest(kind=kind):
+                notes = [{**note, "shapeId": "grip", "shapeKind": kind} for note in _chord(1.0)]
+                notes[1]["fx"] = {"dead": True}
+                self.assertIn("finger", [code for code, _ in self._level(notes).fixes])
+
+    def test_shape_uses_sounding_finger_after_muted_occurrence_on_same_string(self):
+        for kind in ("handshape", "arpeggio"):
+            with self.subTest(kind=kind):
+                muted = [{**note, "fx": {"dead": True}} for note in _chord(1.0)]
+                sounding = [{**note, "finger": finger} for note, finger in zip(_chord(2.0), (1, 3))]
+                notes = [{**note, "shapeId": "grip", "shapeKind": kind} for note in muted + sounding]
+                compiled = self._level(notes)
+                self.assertNotIn("finger", [code for code, _ in compiled.fixes])
+                self.assertEqual(compiled.sng.chords[0].fingers[:2], [1, 3])
+
+    def test_palm_muted_chords_still_require_fingers(self):
+        notes = [{**note, "fx": {"palmMute": True}} for note in _chord(1.0)]
+        self.assertIn("finger", [code for code, _ in self._level(notes).fixes])
+
 
 if __name__ == "__main__":
     unittest.main()

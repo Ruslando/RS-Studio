@@ -34,7 +34,7 @@ import { MAX_CAPO, canEditLane, editLanes } from "./lanes.js";
 import { chordLabel, laneChords } from "./chord-names.js";
 import { renameChord } from "./chord-rename.js";
 import { songBarStarts } from "./song-bars.js";
-import { gridAt, gridBpm, gridSegments, minDur, segBeatSec, snap } from "./grid.js";
+import { gridAt, gridBpm, gridSegments, minDur, segBeatSec, snap, snapNote } from "./grid.js";
 import { noteLength } from "./note-length.js";
 import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
@@ -2148,7 +2148,7 @@ function addNoteHere(e) {
   else {
     const step = minDur();
     start = Math.max(0, Math.min(snap(playbackTime()), S.state.duration - step));
-    end = Math.min(S.state.duration, Math.max(start + step, noteLength.end(S.state, start, gridSegments())));
+    end = snapNote(start, Math.min(S.state.duration, Math.max(start + step, noteLength.end(S.state, start, gridSegments())))).end;
   }
   addNoteOnBoard(lane, place.string, place.fret, start, end);
 }

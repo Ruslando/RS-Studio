@@ -176,7 +176,7 @@ FIXED = {
     'unvoiced': ('Note removed: no string or fret',
             'The export leaves out this note because its string or fret is missing or invalid. Assign a valid string and fret position.'),
     'finger': ('Chord has no complete fingering',
-            'Some fretted chord notes have no finger number. Assign the missing fingers, or select Rocksmith > No finger numbers (Fingerless).'),
+            'Some sounding fretted chord notes have no finger number. Dead / muted notes do not need finger numbers. Assign the missing fingers, or select Rocksmith > No finger numbers (Fingerless).'),
     'hand': ('Export sets the hand position',
             'The export received no hand position for this note, so it sets one. Add a hand anchor to choose the position.'),
     'shape-grip': ('Shape removed: invalid grip',

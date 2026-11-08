@@ -1,6 +1,5 @@
 import { rowsFor } from './rocksmith-check.js';
-import { setIssueIgnored, ignoredCategories } from './issue-state.js';
-import { issueInstanceKey } from './issue-identity.js';
+import { issueIgnoreActions } from './issue-state.js';
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { isTablatureLane } from "./layer-role.js";
 import { automaticHandSeat } from './hand-anchor-core.js';
@@ -187,7 +186,7 @@ function recordUndo(prev, translation = null, preserveTiming = false, invalidate
 function restore(snap) {
   if (S.state && snap.ignoredDiagnostics) {
     const rs = (S.state.metadata ||= {}).rocksmith ||= {};
-    for (const key of ['ignoredIssues', 'ignoredInstances']) {
+    for (const key of ['ignoredIssues', 'ignoredInstances', 'restoredInstances']) {
       if (snap.ignoredDiagnostics[key]) rs[key] = [...snap.ignoredDiagnostics[key]];
       else delete rs[key];
     }
@@ -1171,7 +1170,8 @@ export function moveNoteOnBoard(note, string, fret) {
 
 // A note added on the fretboard at (string, fret), sounding from start to end.
 export function addNoteOnBoard(lane, string, fret, start, end) {
-  if (!lane || !canEditLane(lane) || !(end - start >= minDur())) return null;
+  // The caller snaps the span; a cell ending at a tempo marker can be short.
+  if (!lane || !canEditLane(lane) || !(end > start)) return null;
   const before = handsBefore(lane);
   const note = { id: nid(), start, end, pitch: laneFretTuning(lane)[string] + fret, confidence: 1 };
   const prev = snapshotEdit();
@@ -1729,12 +1729,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   const browse = document.createElement("div");
   const results = document.createElement("div"); results.className = "ctxmenu-results"; results.hidden = true;
   const diagnostics = editLanes().flatMap(lane => rowsFor(lane).filter(issue => issue.notes?.some(n => S.selection.has(n))).map(issue => {
-    const instance = (S.state.metadata?.rocksmith?.ignoredInstances || []).includes(issueInstanceKey(lane, issue));
-    const category = ignoredCategories().has(issue.key);
-    return {label: issue.title, children: [
-      {label: instance ? 'Restore instance' : 'Ignore instance', fn: () => setIssueIgnored(lane, issue, false, !instance)},
-      {label: category ? 'Restore category' : 'Ignore category', fn: () => setIssueIgnored(lane, issue, true, !category)},
-    ]};
+    return {label: issue.title, children: issueIgnoreActions(lane, issue)};
   }));
   buildMenu(browse, [...appliedSection, ...tree, ...(diagnostics.length ? [{sep: true}, ...diagnostics] : [])]);
   m.append(search, browse, results);

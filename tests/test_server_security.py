@@ -33,9 +33,11 @@ class DiagnosticMetadataTests(unittest.TestCase):
     def test_ignore_choices_survive_metadata_roundtrip(self):
         instance = json.dumps(["edit_1", "editor.adapt.ghost", ["note:n1"], None])
         raw = {"rocksmith": {"ignoredIssues": ["editor.adapt.ghost"],
-                             "ignoredInstances": [instance, instance, None, 5]}}
+                             "ignoredInstances": [instance, instance, None, 5],
+                             "restoredInstances": [instance, instance, None, 5]}}
         normalized = server._normalize_metadata(raw)
         self.assertEqual(normalized["rocksmith"]["ignoredInstances"], [instance])
+        self.assertEqual(normalized["rocksmith"]["restoredInstances"], [instance])
         self.assertEqual(server._normalize_metadata(normalized)["rocksmith"], normalized["rocksmith"])
         self.assertEqual(normalized["rocksmith"]["ignoredIssues"], ["editor.adapt.ghost"])
 

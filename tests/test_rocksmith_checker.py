@@ -498,6 +498,31 @@ class HandBuiltArrangements(unittest.TestCase):
 
 
 class StableIssueIds(unittest.TestCase):
+    def test_section_warning_occurrences_have_source_times_and_stable_targets(self):
+        for lead in (0, 5):
+            with self.subTest(lead=lead):
+                spec = _spec([_note(2, 2.5, 1, 5), _note(12, 12.5, 1, 7)], lead=lead)
+                spec["sections"] = [
+                    {"id": "verse-a", "t": 4.15, "text": "Verse", "sectionType": "verse"},
+                    {"id": "verse-b", "t": 8.25, "text": "Verse", "sectionType": "verse"},
+                ]
+                [result] = builder.check_spec(spec)
+                snapped = [i for i in result["warningIssues"] if i["id"] == "export.section-snapped"]
+                self.assertEqual(len(snapped), 2, "equal labels must not merge different marker occurrences")
+                self.assertAlmostEqual(snapped[0]["time"], 4.15)
+                self.assertAlmostEqual(snapped[1]["time"], 8.25)
+                self.assertEqual([i["target"] for i in snapped], ["marker:verse-a", "marker:verse-b"])
+                self.assertIn("Notes and audio stay in place", snapped[0]["help"])
+                # A layer's own timing and sections take precedence over the song's.
+                spec["tracks"][0]["sections"] = [
+                    {"id": "own-verse", "t": 6.2, "text": "Verse", "sectionType": "verse"},
+                ]
+                [result] = builder.check_spec(spec)
+                snapped = [i for i in result["warningIssues"] if i["id"] == "export.section-snapped"]
+                self.assertEqual(len(snapped), 1)
+                self.assertEqual(snapped[0]["target"], "marker:own-verse")
+                self.assertAlmostEqual(snapped[0]["time"], 6.2)
+
     def test_instance_acknowledgement_is_scoped_to_arrangement_time_and_count(self):
         first = checker.Issue("I35", 3.0, "First", "", False)
         later = checker.Issue("I35", 4.0, "Later", "", False)

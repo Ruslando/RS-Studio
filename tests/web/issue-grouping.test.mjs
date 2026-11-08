@@ -45,7 +45,7 @@ const env = vm.createContext({S, issueId, issueInstanceKey, migrateIgnoredIssues
 function load(file, expose) {
   const source = readFileSync(new URL(`../../web/${file}.js`, import.meta.url), 'utf8')
     .replace(/^import[\s\S]*?;\s*$/gm, '').replace(/\bexport /g, '');
-  vm.runInContext(source + `;globalThis.${expose} = {${expose === 'stateApi' ? 'setIssueIgnored, setCategoriesIgnored, issueIgnored, setShowIgnoredIssues, openIssueMenu, issueIgnoreActions' : 'rowsFor, rocksmithIssueKinds, initRocksmithIssues, renderRocksmithIssues'}};`, env);
+  vm.runInContext(source + `;globalThis.${expose} = {${expose === 'stateApi' ? 'setIssueIgnored, setCategoriesIgnored, issueIgnored, setShowIgnoredIssues, openIssueMenu, issueIgnoreActions, restoreIssues, exportIssueIgnores' : 'rowsFor, rocksmithIssueKinds, initRocksmithIssues, renderRocksmithIssues'}};`, env);
 }
 load('issue-state', 'stateApi');
 load('rocksmith-check', 'listApi');
@@ -77,16 +77,18 @@ instanceActions.children[0].handlers.click({stopPropagation() {stopped = true;}}
 assert.equal(jumpedTo, 1, 'jump button seeks to its instance');
 assert.equal(stopped, true, 'jump does not trigger the row click a second time');
 instanceActions.children[1].handlers.click({stopPropagation() {}});
-assert.deepEqual(Array.from(actions, a => a.label), ['Ignore instance', 'Ignore category'], 'Options still opens both ignore actions beside Jump to');
+assert.deepEqual(Array.from(actions, a => a.label), ['Ignore occurrence'], 'occurrence options affect only that occurrence');
 const issues = list.rowsFor(lane);
 state.openIssueMenu(0, 0, [{lane, issue: issues[0]}]);
-assert.deepEqual(Array.from(actions, a => a.label), ['Ignore instance', 'Ignore category']);
+assert.deepEqual(Array.from(actions, a => a.label), ['Ignore occurrence']);
 actions[0].fn();
 assert.equal(state.issueIgnored(lane, issues[0]), true);
 assert.equal(state.issueIgnored(lane, issues[1]), false);
 assert.equal(commits, 1);
 list.renderRocksmithIssues();
 assert.equal(warningList.children[0].children[1].children.length, 1, 'expanded state survives refresh');
+assert.equal(warningHeader.children[0].children.at(-1).textContent, '1 (1 ignored)', 'section count includes hidden ignored occurrences');
+assert.equal(warningList.children[0].children[0].children[0].children.at(-1).textContent, '1 (1 ignored)', 'category count includes hidden ignored occurrences');
 assert.equal(list.rocksmithIssueKinds([lane]).get(issues[0].key).count, 1, 'export still sees the other occurrence');
 lane.notes[0].start = 5; lane.notes[0].end = 6; S.voicingRevision++;
 assert.equal(state.issueIgnored(lane, list.rowsFor(lane).find(i => i.notes[0].id === 'n1')), true);
@@ -155,9 +157,97 @@ console.log('Header access, action alignment, bulk undo and inactive-layer check
 
 // Tooltip controls call the same persisted, undoable actions as the menus.
 const tooltipActions = state.issueIgnoreActions(otherLane, markerIssue);
-assert.equal(tooltipActions[0].label, 'Restore instance');
+assert.equal(tooltipActions[0].label, 'Restore occurrence');
 tooltipActions[0].fn();
 assert.equal(state.issueIgnored(otherLane, markerIssue), false);
-state.issueIgnoreActions(otherLane, markerIssue)[1].fn();
+state.issueIgnoreActions(otherLane, markerIssue, true)[0].fn();
 assert.equal(state.issueIgnored(otherLane, markerIssue), true);
-assert.equal(state.issueIgnoreActions(otherLane, markerIssue)[1].label, 'Restore category');
+assert.deepEqual(Array.from(state.issueIgnoreActions(otherLane, markerIssue), a => a.label), ['Restore occurrence']);
+assert.deepEqual(Array.from(state.issueIgnoreActions(otherLane, markerIssue, true), a => a.label), ['Restore category']);
+
+// Restoring one occurrence inside an ignored category leaves its siblings ignored.
+S.state.metadata = {};
+env.markerArtifacts = () => [];
+lane.notes = [
+  {id: 'one', start: 1, end: 2, pitch: 40, fx: {ghost: true}},
+  {id: 'two', start: 3, end: 4, pitch: 40, fx: {ghost: true}},
+];
+otherLane.notes = [{id: 'other', start: 5, end: 6, pitch: 40, fx: {ghost: true}}];
+S.voicingRevision++;
+const [first, second] = list.rowsFor(lane), [other] = list.rowsFor(otherLane);
+state.setCategoriesIgnored([first.key], true);
+const beforeRestore = structuredClone(S.state.metadata);
+const restoreOccurrence = state.issueIgnoreActions(lane, first)[0];
+assert.equal(restoreOccurrence.label, 'Restore occurrence');
+assert.equal(state.issueIgnoreActions(lane, first).length, 1, 'ignored occurrence never offers a category action');
+restoreOccurrence.fn();
+assert.equal(state.issueIgnored(lane, first), false);
+assert.equal(state.issueIgnored(lane, second), true);
+assert.equal(state.issueIgnored(otherLane, other), true);
+assert.equal(state.issueIgnoreActions(lane, first)[0].label, 'Ignore occurrence');
+assert.equal(state.issueIgnoreActions(lane, first).length, 1, 'active occurrence never offers a category action');
+assert.equal(state.issueIgnoreActions(lane, first, true)[0].label, 'Restore category', 'category menu keeps its scope');
+const afterRestore = JSON.parse(JSON.stringify(S.state.metadata));
+S.state.metadata = beforeRestore;
+assert.equal(state.issueIgnored(lane, first), true, 'undo restores the category acknowledgement');
+S.state.metadata = afterRestore;
+assert.equal(state.issueIgnored(lane, first), false, 'restored occurrence survives metadata roundtrip and redo');
+lane.notes[0].start = 9; S.voicingRevision++;
+assert.equal(state.issueIgnored(lane, list.rowsFor(lane).find(i => i.notes[0].id === 'one')), false, 'restored occurrence follows its note');
+const exportIgnores = state.exportIssueIgnores([
+  {lane, track: 0, issue: first}, {lane, track: 0, issue: second}, {lane: otherLane, track: 1, issue: other},
+]);
+assert.deepEqual(Array.from(exportIgnores.ignoredIssues), [], 'export does not acknowledge a category containing a restored occurrence');
+assert.deepEqual(JSON.parse(JSON.stringify(exportIgnores.ignoredOccurrences)), [
+  {track: 0, id: second.key, time: second.time}, {track: 1, id: other.key, time: other.time},
+], 'export still acknowledges the ignored siblings');
+state.setCategoriesIgnored([first.key], true);
+assert.equal(state.issueIgnored(lane, first), true, 'ignoring the category again clears individual restore exceptions');
+
+// Each severity can restore all ignored occurrences with one undo step, without
+// restoring other severities or the same category on another layer.
+S.state.metadata = {};
+lane.notes = []; otherLane.notes = []; S.voicingRevision++;
+env.testIssues = [
+  {id: 'I01', code: 'I01', title: 'Error', tone: 'error', time: 1},
+  {id: 'I35', code: 'I35', title: 'Warning', tone: 'warning', time: 2},
+  {id: 'I35', code: 'I35', title: 'Warning', tone: 'warning', time: 3},
+  {id: 'export.test-note', code: 'test-note', title: 'Note', tone: 'note', time: 4},
+];
+vm.runInContext('results = new Map([["a", {issues: testIssues}], ["b", {issues: [testIssues[1]]}]]);', env);
+state.setCategoriesIgnored(['I01', 'I35', 'export.test-note'], true);
+state.setShowIgnoredIssues(false);
+list.renderRocksmithIssues();
+assert.equal(warningHeader.children[0].children.at(-1).textContent, '0 (2 ignored)');
+for (const [index, tone, count] of [[2, 'warning', 2], [0, 'error', 1], [4, 'note', 1]]) {
+  const section = sections.children[index];
+  section.children.at(-1).onclick();
+  const restoreAll = actions.find(action => action.label === 'Restore all ignored');
+  assert.equal(restoreAll.disabled, false, `${tone} bulk restore is reachable with ignored rows hidden`);
+  const before = commits;
+  restoreAll.fn();
+  assert.equal(commits, before + 1, `${tone} restore is one undo step`);
+  list.renderRocksmithIssues();
+  assert.equal(section.children[0].children.at(-1).textContent, String(count));
+  assert.ok(list.rowsFor(lane).filter(issue => issue.tone === tone).every(issue => !state.issueIgnored(lane, issue)));
+  assert.equal(state.issueIgnored(otherLane, list.rowsFor(otherLane)[0]), true, 'other layer stays ignored');
+  section.children.at(-1).onclick();
+  assert.equal(actions.find(action => action.label === 'Restore all ignored').disabled, true, 'empty restore action is disabled');
+}
+
+// Compiler warnings retain their marker time and get the same jump action.
+env.testIssues = [
+  {id: 'export.section-snapped', title: 'Section moved to a measure boundary: Verse',
+    help: 'The export moves the section label, not the notes.', tone: 'warning', time: 7.25, target: 'marker:verse'},
+];
+vm.runInContext('results = new Map([["a", {warningIssues: testIssues}]]);', env);
+list.renderRocksmithIssues();
+const sectionGroup = warningList.children[0];
+sectionGroup.children[0].children[0].onclick();
+const warningRow = sectionGroup.children[1].children[0];
+const jump = warningRow.children.at(-1).children[0];
+assert.equal(jump.attributes['aria-label'], 'Jump to');
+jump.handlers.click({stopPropagation() {}});
+assert.equal(jumpedTo, 7.25, 'section warning jumps to the source marker');
+assert.match(warningRow.dataset.tip, /not the notes/);
+console.log('Ignored counts, occurrence restore, severity restore and section navigation passed');

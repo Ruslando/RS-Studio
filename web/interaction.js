@@ -83,7 +83,21 @@ function pickNoteNow(t, pitch, exact) {
 }
 
 // Measure the minimum at the fixed edge, using the same grid as snapping.
-const resizeMinimum = (note, edge) => displayGridStep(gridAt(edge === 'r' ? note.start : note.end)) || MIN_DUR;
+const resizeMinimum = (note, edge) => {
+  const segments = gridSegments();
+  if (edge === 'r') {
+    const step = displayGridStep(gridAt(note.start)) || MIN_DUR;
+    const next = segments.find(segment => segment.t > note.start);
+    return next ? Math.min(step, next.t - note.start) : step;
+  }
+  const seg = [...segments].reverse().find(segment => segment.t < note.end) || segments[0];
+  const step = displayGridStep(seg) || MIN_DUR;
+  if (segments.some(segment => Math.abs(segment.t - note.end) < 1e-9)) {
+    const previous = seg.t + (Math.ceil((note.end - seg.t) / step - 1e-9) - 1) * step;
+    return Math.min(step, note.end - previous);
+  }
+  return Math.min(step, note.end > seg.t ? note.end - seg.t : step);
+};
 
 // Dragging a note's edge: every selected note of its lane resizes with it.
 function resizeDrag(note, lane, edge, x, t, free, prev) {
@@ -692,8 +706,8 @@ export function init_interaction() {
       const lane = targetLane(), step = minDur();
       if (!canEditLane(lane) || !step) return;
       const start = Math.max(0, Math.min(snap(timeAt(x)), S.state.duration - step));
-      const end = Math.min(S.state.duration, Math.max(start + step, noteLength.end(S.state, start, gridSegments())));
-      if (end - start < MIN_DUR) return;
+      const end = snapNote(start, Math.min(S.state.duration, Math.max(start + step, noteLength.end(S.state, start, gridSegments())))).end;
+      if (!(end > start)) return;  // a final cell before a marker may be shorter than MIN_DUR
       const note = { id: nid(), start, end, pitch: pitchAt(y), confidence: 1 };
       const prev = snapshotEdit();
       lane.notes.push(note);

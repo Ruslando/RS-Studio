@@ -18,7 +18,7 @@ MESSAGES = {
     'section-unknown': ('Section type changed to riff: {name}',
             'The export uses Riff for this unsupported section type. Select a supported type in the section marker.'),
     'section-snapped': ('Section moved to a measure boundary: {name}',
-            'The exported section starts at the nearest measure boundary. Move the section marker to that boundary to keep its position in the export.'),
+            'This section marker is between bar starts. The export places the section at the nearest bar start (the first beat of a measure). Notes and audio stay in place. Move the marker to a bar start to avoid this adjustment.'),
     'section-collision': ('Only the last section at {time:.3f}s is exported',
             'Multiple section markers use the same exported measure boundary. Only the last one is used. Move the markers to different measure boundaries.'),
     'phrase-snapped': ('Phrase boundary moved from {time:.3f}s',
@@ -35,19 +35,23 @@ MESSAGES = {
 
 
 class WarningMessage(str):
-    def __new__(cls, id: str, title: str, help: str):
+    def __new__(cls, id: str, title: str, help: str, time: float | None = None, target: str | None = None):
         message = super().__new__(cls, title)
         message.id = id
         message.help = help
+        message.time = time
+        message.target = target
         return message
 
-    def as_issue(self) -> dict:
-        return {'id': self.id, 'title': str(self), 'help': self.help, 'tone': 'warning', 'time': None}
+    def as_issue(self, lead: float = 0) -> dict:
+        return {'id': self.id, 'title': str(self), 'help': self.help, 'tone': 'warning',
+                'time': None if self.time is None else self.time - lead,
+                **({'target': self.target} if self.target else {})}
 
 
-def warning(kind: str, **values) -> WarningMessage:
+def warning(kind: str, *, at: float | None = None, target: str | None = None, **values) -> WarningMessage:
     title, help = MESSAGES[kind]
-    return WarningMessage(f'export.{kind}', title.format(**values), help)
+    return WarningMessage(f'export.{kind}', title.format(**values), help, at, target)
 
 
 class ExportError(ValueError):

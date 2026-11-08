@@ -1,5 +1,5 @@
 import { rowsFor } from './rocksmith-check.js';
-import { ignoredCategories, setIssueIgnored, setCategoriesIgnored, issueIgnored } from './issue-state.js';
+import { ignoredCategories, setIssueIgnored, setCategoriesIgnored, issueIgnored, exportIssueIgnores } from './issue-state.js';
 import { issueTone } from "./issue-tone.js";
 // Rocksmith CDLC export UI: the arrangement picker, the metadata form and the
 // POST that builds the .psarc. The File-menu entry is wired in ui.js with the
@@ -663,10 +663,9 @@ async function submitRocksmithExport() {
       spec.metadata = metadataPayload(state.metadata);
       spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane),
         bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version, author, dynamicDifficulty,
-        ignoredIssues: [...ignoredCategories()].sort(), mac,
-        ignoredOccurrences: picks.flatMap((pick, track) => rowsFor(pick.lane)
-          .filter(issue => issueIgnored(pick.lane, issue))
-          .map(issue => ({track, id: issue.key, time: issue.time ?? null}))),
+        mac,
+        ...exportIssueIgnores(picks.flatMap((pick, track) => rowsFor(pick.lane)
+          .map(issue => ({lane: pick.lane, track, issue})))),
         preview: { start: clip.start, length: clip.length } };
       panel.update({ stage: "Building the package", fraction: null });
       const res = await fetch(`/api/projects/${state.job}/rocksmith`, {
