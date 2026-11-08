@@ -102,10 +102,25 @@ export function initModalFocus() {
   // text fields keep it for typing.
   const ownKeys = '.ctxmenu, .menu-list, .live-editor, .tour-card, [aria-modal="true"], #projectStartHandle';
   const typing = 'input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, [contenteditable]';
+  // Blurring a control during pointerdown cancels Chromium's pending native
+  // drag, including a drag of an ancestor row. Keep focus until release, then
+  // return the editor's shortcuts just as for an ordinary control click.
+  let dragPress = false, deferredBlur = null;
+  const releaseDragFocus = () => {
+    dragPress = false;
+    const el = deferredBlur; deferredBlur = null;
+    if (el === document.activeElement) el.blur();
+  };
+  document.addEventListener('pointerdown', (event) => {
+    releaseDragFocus();
+    dragPress = event.button === 0 && !!event.target.closest('[draggable="true"]');
+  }, true);
+  for (const type of ['pointerup', 'dragend']) window.addEventListener(type, releaseDragFocus, true);
   document.addEventListener('focusin', (event) => {
     const el = event.target;
     // A dropdown or slider closes or stops if blurred mid-use; it lets go on change.
     if (open.length || el.closest(ownKeys) || el.matches(`${typing}, select, input[type="range"]`)) return;
+    if (dragPress) { deferredBlur = el; return; }
     el.blur();
   });
   document.addEventListener('change', (event) => {

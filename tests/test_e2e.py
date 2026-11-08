@@ -127,6 +127,30 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#lanes .lane-row")).to_be_visible()
         self.reference_job = page.evaluate("async () => (await import('/store.js')).S.state.job")
 
+    def start_artifact_drag(self, source, at, pitch=None):
+        """Use native mouse dragging; synthetic DragEvents bypass drag initiation."""
+        page = self.page
+        target = page.evaluate("""async ({at, pitch}) => {
+            const { xOf, yOf } = await import('/geometry.js');
+            const { S } = await import('/store.js');
+            const scroll = document.querySelector('#scroll');
+            scroll.scrollLeft = xOf(at) - scroll.clientWidth / 2;
+            if (pitch != null) scroll.scrollTop = yOf(pitch) - scroll.clientHeight / 2;
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            const r = document.querySelector('#stage').getBoundingClientRect();
+            return { x: r.left + xOf(at) - scroll.scrollLeft,
+                y: pitch == null ? r.top + r.height / 2
+                    : r.top + yOf(pitch) + S.state.rowH / 2 - scroll.scrollTop };
+        }""", {"at": at, "pitch": pitch})
+        source.scroll_into_view_if_needed()
+        rect = source.bounding_box()
+        x, y = rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2
+        page.mouse.move(x, y)
+        page.mouse.down()
+        page.mouse.move(x - 10, y, steps=5)
+        page.mouse.move(target["x"], target["y"], steps=15)
+        page.mouse.move(target["x"] + 1, target["y"])
+
     def pick_sound_gear(self, key):
         if not self.page.locator("#soundGearDialog").is_visible():
             self.page.locator('#soundChain [aria-pressed="true"]').click()
@@ -3766,22 +3790,15 @@ class EndToEndTests(unittest.TestCase):
         page.wait_for_timeout(300)
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.scoreTime"), 2)
         # Dropping it on the spectrogram adds a linked occurrence where it lands.
-        page.evaluate("""async () => {
-            const { xOf } = await import('/geometry.js');
-            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
-            const at = { clientX: r.left + xOf(12) - scroll.scrollLeft, clientY: r.top + r.height / 2 };
-            const dataTransfer = new DataTransfer();
-            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
-            const row = document.querySelector('.artifact-row[data-reference="1"]');
-            fire(row, 'dragstart'); fire(scroll, 'dragover', at);
-            window.dropDrag = { fire, row, scroll, at };
-        }""")
+        self.start_artifact_drag(row.locator('.artifact-preview-canvas'), 12)
         # While dragging, the stage previews exactly where the notes will land.
         preview = page.evaluate("async () => (await import('/store.js')).S.dropPreview.notes.map(n => [n.start, n.pitch])")
         self.assertEqual(len(preview), 6)
         self.assertAlmostEqual(min(start for start, _ in preview), 12, delta=0.6)
-        page.evaluate("() => { const { fire, row, scroll, at } = window.dropDrag; fire(scroll, 'drop', at); fire(row, 'dragend'); }")
+        page.mouse.up()
         self.assertIsNone(page.evaluate("async () => (await import('/store.js')).S.dropPreview"))
+        self.assertFalse(row.evaluate('(row) => row.contains(document.activeElement)'),
+                         'finishing a drag returns keyboard shortcuts to the editor')
         expect(row.locator('.artifact-preview-title')).to_contain_text('/ 3')
         landed = page.evaluate("""async () => (await import('/store.js')).S.selection.size
             && [...(await import('/store.js')).S.selection].map(n => [n.start, n.pitch])""")
@@ -3912,6 +3929,17 @@ class EndToEndTests(unittest.TestCase):
         first, second = sorted(page.evaluate(anchors))
         self.assertEqual(second, 16)
         self.assertLessEqual(first, 13 + 1e-6)
+
+    def test_locked_reference_cannot_start_native_drag(self):
+        self.open_reference_project()
+        page = self.page
+        row = page.locator('.artifact-row[data-reference="1"]')
+        row.get_by_role('button', name='Lock reference', exact=True).click()
+        for surface in ['.artifact-preview-canvas', '.artifact-name']:
+            self.start_artifact_drag(row.locator(surface), 12)
+            page.mouse.up()
+            self.assertIsNone(page.evaluate("async () => (await import('/store.js')).S.dropPreview"))
+            self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].refBoxes[1].anchors"), [2, 16])
 
     def test_reference_edit_lock_protects_content_and_survives_reload(self):
         self.open_reference_project()
@@ -4148,17 +4176,8 @@ class EndToEndTests(unittest.TestCase):
         row = page.locator('#motifList .artifact-row')
         expect(row).to_have_count(1)
         # Drag it to 0:13 (clear of any reference box), three semitones above its first note.
-        page.evaluate("""async (pitch) => {
-            const { xOf, yOf } = await import('/geometry.js');
-            const { S } = await import('/store.js');
-            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
-            const at = { clientX: r.left + xOf(13) - scroll.scrollLeft + 2,
-                clientY: r.top + yOf(pitch) + S.state.rowH / 2 - scroll.scrollTop };
-            const dataTransfer = new DataTransfer();
-            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
-            const row = document.querySelector('#motifList .artifact-row');
-            fire(row, 'dragstart'); fire(scroll, 'dragover', at); fire(scroll, 'drop', at); fire(row, 'dragend');
-        }""", original[0] + 3)
+        self.start_artifact_drag(row.locator('.artifact-name'), 13, original[0] + 3)
+        page.mouse.up()
         expect(row).to_have_count(2)
         placed = page.evaluate("""async () => [...(await import('/store.js')).S.selection]
             .sort((a, b) => a.start - b.start).map(n => [n.start, n.pitch, n.pos ?? null])""")
