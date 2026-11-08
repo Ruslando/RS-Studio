@@ -125,7 +125,7 @@ class ThroughTheExporter(unittest.TestCase):
         spec = _spec(notes)
         spec["rocksmith"]["validate"] = False
         _, warnings, _ = builder.build_cdlc(spec, None, _wems=(b"a", b"b"), _song_length=20.0)
-        self.assertIn("Lead: I35 at 0:04.000: Natural harmonic with bend", warnings)
+        self.assertIn("Lead: I35 at 0:04.000: Rocksmith: Natural harmonic with bend", warnings)
 
     def test_an_issue_stops_the_export_until_ignored_or_the_check_is_off(self):
         """As DLC Builder's release build: fix it, ignore its code, or turn the check off."""
@@ -135,7 +135,7 @@ class ThroughTheExporter(unittest.TestCase):
             build(_spec(notes))
         ignored = _spec(notes)
         ignored["rocksmith"]["ignoredIssues"] = ["I35"]
-        self.assertIn("Lead: I35 at 0:04.000: Natural harmonic with bend", build(ignored)[1])
+        self.assertIn("Lead: I35 at 0:04.000: Rocksmith: Natural harmonic with bend", build(ignored)[1])
 
 
 def _chord(start, end, frets_lo_hi, **effects_by_string):
@@ -264,7 +264,7 @@ class ExporterFixes(unittest.TestCase):
         [found] = builder.check_spec(_spec(partly + fully, lead=5))
         self.assertEqual([(i["code"], i["time"], i["title"], i["important"]) for i in found["issues"]
                           if i["code"] not in ("hand", "finger")],
-                         [("I29", 2.0, "Dead note removed from the chord", False)])
+                         [("I29", 2.0, "Rocksmith: Dead note removed from the chord", False)])
         song = _compiled(partly + fully)
         first, second = song.levels[0].notes
         self.assertEqual(song.chords[first.chord_id].frets, [3, 5, 5, -1, -1, -1])

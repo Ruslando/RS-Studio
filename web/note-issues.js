@@ -14,43 +14,43 @@ import { paintMemo } from "./paint-memo.js";
 export const ISSUE_TEXT = {
   outOfRange: ["Note is outside the fret range", "No string can play this pitch within the selected fret range. Change the pitch, tuning, or fret range."],
   stack: ["Notes with the same pitch overlap", "Notes with the same pitch overlap on the same string or have no separate string positions. Remove the overlap or place them on different strings."],
-  bendStack: ["Bend points have the same time", "Rocksmith keeps only the first bend point at this time. Move or remove the other points."],
+  bendStack: ["Rocksmith: Bend points have the same time", "Rocksmith keeps only the first bend point at this time. Move or remove the other points."],
 };
 
 // Playing techniques an imported note has in its Guitar Pro data (n.gp, guitar-pro-core.js)
 // that the editor has no field for, so the Rocksmith chart does not show them. Kept for
 // the Guitar Pro export. One whose editor effect was changed since is the editor's now.
 export const GP_ONLY_TEXT = {
-  pickSlide: ["Imported pick slide has no conversion", "The imported pick slide has no pick-slide effect in the editor. Select Pick slide up or Pick slide down in the Slide menu."],
-  harmonic: ["Harmonic type is not supported", "Rocksmith supports natural and pinch harmonics. Select Natural or Pinch in the Harmonic menu."],
-  leftTap: ["Left-hand tap is not shown", "Rocksmith has no separate notation for a left-hand tap. Select Tapping under Slap / pop to represent it as tapping."],
-  ornament: ["Imported ornament is not shown", "Select a figure in the Ornament menu to convert this imported turn or mordent to notes for Rocksmith."],
-  barVibrato: ["Whammy vibrato is not shown", "Rocksmith has no whammy-bar vibrato notation. Enable Vibrato to show finger vibrato instead."],
-  golpe: ["Golpe is not supported", "Rocksmith cannot show a tap on the guitar body. The Guitar Pro export keeps this technique."],
-  rasgueado: ["Rasgueado is not supported", "Rocksmith shows the chord notes without this strum technique. The Guitar Pro export keeps the technique."],
-  deadSlapped: ["Imported dead slap has no conversion", "The imported dead slap is not fully represented by the editor effects. Select Slapping under Slap / pop and enable Dead / muted note."],
+  pickSlide: ["Rocksmith: Pick slide not supported", "The imported pick slide has no pick-slide effect in the editor. Select Pick slide up or Pick slide down in the Slide menu."],
+  harmonic: ["Rocksmith: Harmonic type not supported", "Rocksmith supports natural and pinch harmonics. Select Natural or Pinch in the Harmonic menu."],
+  leftTap: ["Rocksmith: Left-hand tap not supported", "Rocksmith has no separate notation for a left-hand tap. Select Tapping under Slap / pop to represent it as tapping."],
+  ornament: ["Rocksmith: Ornament not supported", "Select a figure in the Ornament menu to convert this imported turn or mordent to notes for Rocksmith."],
+  barVibrato: ["Rocksmith: Whammy vibrato not supported", "Rocksmith has no whammy-bar vibrato notation. Enable Vibrato to show finger vibrato instead."],
+  golpe: ["Rocksmith: Golpe not supported", "Rocksmith cannot show a tap on the guitar body. The Guitar Pro export keeps this technique."],
+  rasgueado: ["Rocksmith: Rasgueado not supported", "Rocksmith shows the chord notes without this strum technique. The Guitar Pro export keeps the technique."],
+  deadSlapped: ["Rocksmith: Dead slap not supported", "The imported dead slap is not fully represented by the editor effects. Select Slapping under Slap / pop and enable Dead / muted note."],
 };
 
 // Editor effects the Rocksmith chart leaves out, having nothing to show them with
 // (rocksmith/chart.py). A whammy, a trill and a grace note it imitates instead.
 export const DROPPED_TEXT = {
-  ghost: ["Ghost dynamics are not supported", "Rocksmith cannot show the quiet dynamics of this note."],
-  staccato: ["Staccato needs a shorter note", "Rocksmith has no staccato notation. Shorten the note to represent the short sound."],
-  letRing: ["Let ring needs a longer note", "Rocksmith has no let-ring notation. Extend the note to represent how long it sounds."],
-  strum: ["Strum direction is not supported", "Rocksmith has no strum-direction notation. It shows the chord without the picking direction."],
+  ghost: ["Rocksmith: Ghost note not supported", "Rocksmith cannot show the quiet dynamics of this note."],
+  staccato: ["Rocksmith: Staccato not supported", "Rocksmith has no staccato notation. Shorten the note to represent the short sound."],
+  letRing: ["Rocksmith: Let ring not supported", "Rocksmith has no let-ring notation. Extend the note to represent how long it sounds."],
+  strum: ["Rocksmith: Strum direction not supported", "Rocksmith has no strum-direction notation. It shows the chord without the picking direction."],
 };
 
 export const droppedEffects = (n) => [
   ...["staccato", "letRing"].filter((key) => n.fx?.[key])];
 
 export const ADAPTED_TEXT = {
-  pickSlide: ["Pick slide uses a muted slide", "Rocksmith has no pick-slide notation. The export represents the pick slide with a tapped, muted slide."],
-  ghost: ["Ghost note is not scored", "Rocksmith has no ghost-note dynamics. The export shows this note but excludes it from scoring."],
-  trill: ["Trill uses hammer-ons and pull-offs", "Rocksmith has no trill notation. The export writes alternating notes with hammer-ons and pull-offs."],
-  grace: ["Grace note uses a short hammer-on", "Rocksmith has no grace-note notation. The export writes a short note before the main note and connects the notes with a hammer-on."],
-  whammy: ["Whammy uses slides", "Rocksmith has no whammy-bar notation. The export uses slides to represent the pitch changes."],
-  ornament: ["Ornament uses hammer-ons and pull-offs", "Rocksmith has no turn or mordent notation. The export writes the figure as notes with hammer-ons and pull-offs."],
-  artificial: ["Artificial harmonic uses pinch harmonic notation", "Rocksmith has no separate notation for this artificial harmonic. The export uses pinch harmonic notation."],
+  pickSlide: ["Rocksmith: Pick slide not supported", "Rocksmith has no pick-slide notation. The export represents the pick slide with a tapped, muted slide."],
+  ghost: ["Rocksmith: Ghost note not supported", "Rocksmith has no ghost-note dynamics. The export shows this note but excludes it from scoring."],
+  trill: ["Rocksmith: Trill not supported", "Rocksmith has no trill notation. The export writes alternating notes with hammer-ons and pull-offs."],
+  grace: ["Rocksmith: Grace note not supported", "Rocksmith has no grace-note notation. The export writes a short note before the main note and connects the notes with a hammer-on."],
+  whammy: ["Rocksmith: Whammy not supported", "Rocksmith has no whammy-bar notation. The export uses slides to represent the pitch changes."],
+  ornament: ["Rocksmith: Ornament not supported", "Rocksmith has no turn or mordent notation. The export writes the figure as notes with hammer-ons and pull-offs."],
+  artificial: ["Rocksmith: Artificial harmonic not supported", "Rocksmith has no separate notation for this artificial harmonic. The export uses pinch harmonic notation."],
 };
 
 const BEAT_TECHNIQUES = new Set(["barVibrato", "golpe", "rasgueado", "deadSlapped", "strum"]);

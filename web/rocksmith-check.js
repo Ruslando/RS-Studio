@@ -162,9 +162,9 @@ export function rocksmithShapeProblems(lane) {
 export function rowsFor(lane) {
   const found = results.get(lane?.id);
   const rows = [];
-  if (found?.error) rows.push({ id: found.errorId || 'export.compile-failed', key: found.errorId || 'export.compile-failed', title: `Not exported: ${found.error}`, help: '', tone: 'error', time: null });
+  if (found?.error) rows.push({ id: found.errorId || 'export.compile-failed', key: found.errorId || 'export.compile-failed', title: 'Rocksmith: Export failed', help: found.error, tone: 'error', time: null });
   if (found?.warningIssues) for (const issue of found.warningIssues) rows.push({ ...issue, key: issue.id });
-  else for (const text of found?.warnings || []) rows.push({ key: issueId(text), title: text, help: '', tone: 'warning', time: null });
+  else for (const text of found?.warnings || []) rows.push({ key: issueId(text), title: text.startsWith('Rocksmith: ') ? text : `Rocksmith: ${text}`, help: '', tone: 'warning', time: null });
   for (const issue of found?.issues || []) rows.push({ ...issue, tone: issueTone(issue), key: issue.id || issueId(issue.code) });
   if (lane) for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision))
     rows.push({ ...issue, id: issue.id, key: issue.id, title: issue.title, help: issue.help, tone: issue.tone, time: issue.time, notes: issue.notes });

@@ -85,7 +85,7 @@ export function markerArtifacts(requestedLane = null) {
       entries.push({
         key: `tone:${lane.id}:${marker.id}`, kind: 'tone', lane, owner: lane.name,
         marker, t: marker.t, name: `${missing ? '⚠ ' : ''}${label}`,
-        issue: missing ? { id: 'marker.tone-preset-missing', tone: 'warning', title: `Tone preset is missing: ${label}`,
+        issue: missing ? { id: 'marker.tone-preset-missing', tone: 'warning', title: `Rocksmith: Tone preset is missing: ${label}`,
           help: "The sound library does not contain this tone preset. Select another preset or import the missing preset." } : null,
       });
     }

@@ -36,6 +36,8 @@ MESSAGES = {
 
 class WarningMessage(str):
     def __new__(cls, id: str, title: str, help: str, time: float | None = None, target: str | None = None):
+        if not title.startswith("Rocksmith: "):
+            title = f"Rocksmith: {title}"
         message = super().__new__(cls, title)
         message.id = id
         message.help = help

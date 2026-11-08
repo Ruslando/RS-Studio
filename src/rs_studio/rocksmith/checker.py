@@ -37,6 +37,8 @@ class Issue:
     def __post_init__(self):
         if not self.id:
             object.__setattr__(self, "id", self.code)
+        if not self.title.startswith("Rocksmith: "):
+            object.__setattr__(self, "title", f"Rocksmith: {self.title}")
 
     @property
     def tone(self) -> str:

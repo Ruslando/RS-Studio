@@ -43,7 +43,7 @@ class GameFontTests(unittest.TestCase):
     def test_without_a_latin_spelling_the_missing_characters_are_left_out(self):
         attrs, warnings, _ = _names({"title": "Dvořák Live"})
         self.assertEqual(attrs["SongName"], "Dvoák Live")
-        self.assertIn("Characters removed from title: ř", warnings)
+        self.assertIn("Rocksmith: Characters removed from title: ř", warnings)
 
     def test_the_key_stays_made_from_the_name(self):
         """Shown names change nothing about ids: a song already in the game keeps them."""
