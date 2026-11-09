@@ -257,10 +257,19 @@ function fretOptions(note, tuning) {
 // physically valid barre/separate-fingertip partition rather than assuming that
 // every equal-fret note must share one finger.
 const noteIsDead = (note) => !!note?.fx?.dead;
+// Which notes of a shape the hand need not hold. A muted note beside sounding ones
+// is the hand resting where it is (a scratch), so it is not a reach. A chord muted
+// as a whole is still the grip, laid on the strings, so it has to be holdable.
+const looseIn = (shape) => ([...shape.keys()].some((n) => !noteIsDead(n)) ? noteIsDead : () => false);
 
 function groupsAtEachFret(shape) {
   const present = [...shape.values()];
-  const entries = [...shape.entries()].map(([note, p]) => ({ note, ...p })).filter((e) => !noteIsDead(e.note));
+  const loose = looseIn(shape);
+  // A chord muted whole is held like the chord, so a barre may lie across its
+  // muted strings: barreSpanSupported reads a dead note as a gap otherwise.
+  const entries = [...shape.entries()].map(([note, p]) => ({ note, ...p })).filter((e) => !loose(e.note));
+  const support = loose === noteIsDead ? entries
+    : entries.map((e) => (e.note?.fx?.dead ? { ...e, note: { ...e.note, fx: { ...e.note.fx, dead: false } } } : e));
   const byFret = new Map();
   for (const e of entries) {
     if (e.fret <= 0) continue;
@@ -277,7 +286,7 @@ function groupsAtEachFret(shape) {
       const loS = Math.min(...members.map((e) => e.string));
       const hiS = Math.max(...members.map((e) => e.string));
       const coversAllContacts = same.every(e => e.string < loS || e.string > hiS || members.includes(e));
-      if (coversAllContacts && (members.length === 1 || barreSpanSupported(entries, fret, loS, hiS, present))) valid.push({ mask, members });
+      if (coversAllContacts && (members.length === 1 || barreSpanSupported(support, fret, loS, hiS, present))) valid.push({ mask, members });
     }
     // Enumerate every honest partition, not only the smallest one. Three notes
     // at one fret may be one barre or three separate fingertips; those grips do
@@ -526,7 +535,7 @@ export function handForShape(shape, seat, profile = GUITAR_HAND_PROFILE, require
 }
 
 function handAtStart(shape, seat, profile, required, fixedSeat) {
-  const contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !noteIsDead(note));
+  const loose = looseIn(shape), contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !loose(note));
   // ONE FRETTED NOTE: the finger is where the hand puts it (fret − hand + 1, the
   // pinky for a stretch), so any hand within reach plays it and the index is on it
   // when the hand is on its fret. Out of reach, the hand comes to the note.
@@ -567,7 +576,7 @@ function handAtStart(shape, seat, profile, required, fixedSeat) {
 // of its valid fingerings, so a chord fingered with the index has exactly that fret.
 // Nothing fretted: no hand to choose.
 export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infinity) {
-  const contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !noteIsDead(note));
+  const loose = looseIn(shape), contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !loose(note));
   if (!contacts.length) return [];
   let seats;
   if (contacts.length === 1) {
@@ -587,7 +596,7 @@ export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infi
 // thumb shapes, D/F# 2x0232 and the E-shape 1x3211. The other notes are fingered
 // as usual, and the hand is theirs.
 export function thumbPoses(shape, profile = GUITAR_HAND_PROFILE) {
-  const fretted = [...shape].filter(([note, p]) => p.fret > 0 && !noteIsDead(note));
+  const loose = looseIn(shape), fretted = [...shape].filter(([note, p]) => p.fret > 0 && !loose(note));
   const low = fretted.find(([, p]) => p.string === profile.stringCount - 1);
   if (!low || fretted.length < 2 || [...shape.values()].some((p) => p.string === profile.stringCount - 2)) return [];
   const rest = new Map([...shape].filter(([note]) => note !== low[0]));
@@ -607,7 +616,7 @@ function posesFor(shape, profile, fingers) {
 // fretboard's Finger buttons step through. One fretted note: each finger whose hand
 // (fret − finger + 1) is on the neck. A chord: its valid fingerings, cheapest first.
 export function fingeringChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infinity) {
-  const contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !noteIsDead(note));
+  const loose = looseIn(shape), contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !loose(note));
   if (!contacts.length) return [];
   if (contacts.length === 1) {
     const [note, pos] = contacts[0];
@@ -1844,7 +1853,8 @@ function registerColumns(columns, tuning, options = {}) {
       guided: !!pins[i],
       rules,
       // Muted notes, for the hand walk only (planHand): see `reach` in voiceRegister.
-      dead: notes.some((n) => n.fx?.dead) ? notes.map((n) => !!n.fx?.dead) : null,
+      // A chord muted whole is no scratch: it is held like the chord (looseIn).
+      dead: notes.some((n) => n.fx?.dead) && !notes.every((n) => n.fx?.dead) ? notes.map((n) => !!n.fx?.dead) : null,
     };
   });
 
@@ -1933,7 +1943,7 @@ function chosenFingers(notes, source) {
 // Where the hand stands for a chosen fingering: a single note's finger is
 // fret − hand + 1, a chord's fingering is one of its poses.
 function handOfFingers(shape, fingers, profile) {
-  const contacts = [...shape].filter(([note, p]) => p.fret > 0 && !noteIsDead(note));
+  const loose = looseIn(shape), contacts = [...shape].filter(([note, p]) => p.fret > 0 && !loose(note));
   if (contacts.length === 1) {
     const [note, p] = contacts[0], finger = fingers.get(note);
     return finger >= 1 ? Math.max(1, p.fret - finger + 1) : null;
