@@ -1006,19 +1006,29 @@ export function setHandAnchor(lane, t, fret) {
   const near = (h) => Math.abs(Number(h.t) - t) <= 1e-6;
   const had = (lane.handHolds || []).find(near);
   const rest = (lane.handHolds || []).filter((h) => !near(h));
-  if ((!had && fret === null) || (had && Number(had.fret) === fret)) return;
+  // A hand chosen by hand replaces a fingering chosen for the same notes: the engine
+  // fingers them for the new hand. Picking the hand that is already held still
+  // does that, for fingers that came after it (or with an import).
+  const column = fret === null ? [] : chordColumns(lane.notes).find((c) => c.t0 >= t - 1e-6)?.notes || [];
+  const fingered = column.some((n) => n.pos?.finger != null
+    || slideFingerGroup(lane.notes, n, (m) => m.pos || m.auto).some((m) => m.finger != null));
+  if ((!had && fret === null) || (had && Number(had.fret) === fret && !fingered)) return;
   const prev = snapshotEdit();
   lane.handHolds = (fret === null ? rest : [...rest, { id: had?.id || `anchor_${nid()}`, t, fret }]).sort((a, b) => a.t - b.t);
-  // A hand chosen by hand replaces a fingering chosen for the same notes: the engine
-  // fingers them for the new hand.
-  if (fret !== null) dropChosenFingers(chordColumns(lane.notes).find((c) => c.t0 >= t - 1e-6)?.notes || []);
+  dropChosenFingers(lane, column);
   commit(prev); draw(); refreshTabIfOpen();
 }
 
-function dropChosenFingers(notes) {
-  for (const n of notes) if (n.pos?.finger != null) {
-    const { finger, ...pos } = n.pos;
-    n.pos = pos;
+// Both kinds: a fingering picked on the board (pos.finger) and a finger typed or
+// imported onto the note (note.finger, whose index finger would set the hand
+// again). A typed finger is shared along a fretted slide, so it goes there too.
+function dropChosenFingers(lane, notes) {
+  for (const n of notes) {
+    if (n.pos?.finger != null) {
+      const { finger, ...pos } = n.pos;
+      n.pos = pos;
+    }
+    for (const member of slideFingerGroup(lane.notes, n, (m) => m.pos || m.auto)) delete member.finger;
   }
 }
 
