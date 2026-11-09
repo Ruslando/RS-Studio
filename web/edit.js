@@ -1233,7 +1233,7 @@ export function clearOverrideAt(lane, colNotes, t) {
 // Adding an effect is an entry here plus its setter; openNoteMenu below does not
 // need to know it exists.
 // What the Rocksmith chart makes of an effect it has no field for (rocksmith/chart.py).
-const RS_NOTE = { ignore: "Shown but not scored in Rocksmith", pinch: "As pinch harmonic in Rocksmith", absent: "Not in Rocksmith", slides: "As slides in Rocksmith",
+const RS_NOTE = { ignore: "Shown but not scored in Rocksmith", pinch: "As pinch harmonic in Rocksmith", absent: "Not in Rocksmith", whammy: "As vibrato or a short note in Rocksmith",
   hammers: "As hammer-ons in Rocksmith", grace: "As a hammer-on in Rocksmith" };
 // [short note in the row, tooltip] for an effect greyed out by another one.
 const NO_BEND_ON_NATURAL = ["Not on a natural harmonic",
@@ -1252,7 +1252,7 @@ const EFFECT_MENU = [
       ["pickDown", "Pick slide down"], ["pickUp", "Pick slide up"],
     ] },
     // On/off: a dip, shaped by dragging its points on the spectrogram.
-    { field: "whammy", on: true, rs: "slides", label: "Whammy bar", kw: "tremolo arm dive bar dip", set: setWhammyOnSelection },
+    { field: "whammy", on: true, rs: "whammy", label: "Whammy bar", kw: "tremolo arm dive bar dip", set: setWhammyOnSelection },
     { only: "single", field: "trill", rs: "hammers", label: "Trill", kw: "ornament", set: (v) => setChoiceOnSelection("trill", v), variants: [
       [null, "None"], ["half", "½-step"], ["whole", "Whole-step"],
     ] },
