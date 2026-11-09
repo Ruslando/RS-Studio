@@ -314,6 +314,14 @@ export function slideInShift(column) {
   return shifts.size === 1 ? [...shifts][0] : 0;
 }
 
+// Where a slide-out leaves a finger, and the hand: the fret its slide ends on.
+const slidOutFret = (f, col, s) => (SLIDE_OUT.has(f.note?.slide) && slideSpan(f, null, col.eighth, s)?.to.fret) || f.fret;
+function slidSeat(col, s) {
+  if (!(col?.seat > 0)) return col?.seat ?? null;
+  const f = col.fingers.find((g) => g.fret > 0 && SLIDE_OUT.has(g.note?.slide));
+  return f ? Math.max(1, col.seat + slidOutFret(f, col, s) - f.fret) : col.seat;
+}
+
 // The frets a slide runs between, start to end, or null when it goes nowhere.
 export function slideSpan(f, next, eighth, s) {
   const note = f.note;
@@ -394,7 +402,10 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
         !next.fingers.some((f) => originFor(f, [m]))) || [] : [];
       return {
         pressed: false,
-        anchor: movingAnchor(fresh ? null : cur?.seat, next.seat, shift, s, u * u * (3 - 2 * u)),
+        // From where a slide-out left the hand, to where a slide-in starts: the
+        // seats are where the fingers land, and the shift must not overshoot either.
+        anchor: movingAnchor(fresh ? null : slidSeat(cur, s), next.seat > 0 ? Math.max(1, next.seat + slideInShift(next)) : next.seat,
+          shift, s, u * u * (3 - 2 * u)),
         marks: [...held.map((m) => ({ ...m, pressed: true })), ...next.fingers.flatMap((f) => {
           const grace = graceBefore(f.note, next.eighth ? 30 / next.eighth : 120, f.fret);
           const b = markAt(grace ? { ...f, fret: f.fret + grace.offset } : f, s), a = originFor(f, origins);
@@ -408,7 +419,8 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
             b.opacity = e; b.grow = 0.35 + 0.65 * e;
             return [b];
           }
-          const o = markAt(a, s);
+          const o = markAt(a, s), out = slidOutFret(a, cur, s);
+          if (out !== a.fret) o.x = fretCentre(out, s);   // a slide-out left this finger off its fret
           return {
             ...b,
             fret: u < 0.5 ? a.fret : f.fret,

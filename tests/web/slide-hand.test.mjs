@@ -48,3 +48,19 @@ test("a slide-in is fingered where it starts, the hand travelling with it", asyn
   const plain = { start: 0, end: 1, pitch: 63 };
   assert.equal(handForShape(new Map([[plain, { string: 2, fret: 8 }]]), 4).fingers.get(plain), 4);
 });
+
+test("the hand travels to where a slide-in starts and leaves from where a slide-out ends", () => {
+  const { handAt, handColumns } = fretboardCore;
+  const col = (start, end, fret, slide) => {
+    const note = { start, end, pitch: 55 + fret, ...(slide ? { slide } : {}) };
+    return { start, end, eighth: 4, seat: fret, fingers: [{ string: 2, fret, finger: 1, note, start, strikeStart: start }] };
+  };
+  const x0 = (columns, t) => handAt(handColumns(columns), t, 0.5)?.anchor?.x0;
+  // Fret 4, then a slide-in that lands on 8 from 4: no trip to 8 and back.
+  const into = [col(0, 1, 4), col(1, 2, 8, "inBelow")];
+  for (const t of [0.8, 0.95, 0.999]) assert.ok(Math.abs(x0(into, t) - x0(into, 1.001)) < 1, `slide-in at ${t}`);
+  // A slide-out from 8 down, then fret 3: the move starts where the slide ended.
+  const out = [col(0, 1, 8, "outDown"), col(1.5, 2, 3)];
+  const ended = x0(out, 0.999), left = x0(out, 1.0 + 1e-3);
+  assert.ok(Math.abs(ended - left) < 2, "no jump back to fret 8 when the hand leaves");
+});
