@@ -32,6 +32,7 @@ try {
     },
   }, { './bars.js': true, './constants.js': true, './project-position-core.js': true, './auto-grid.js': true });
   const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
+    './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
     './store.js': { S, setSelection: value => { S.selection = value; } },
     './dom.js': { stage, scroll }, './repaint.js': { draw: noop }, './grid.js': grid,
     './lanes.js': { activeLane: () => lane, targetLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible, refreshCounts: noop,

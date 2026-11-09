@@ -15,6 +15,7 @@ const savedWindow = globalThis.window; const messages = []; let id = 0;
 try {
   globalThis.window = new EventTarget();
   const { doPaste } = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+    './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
     './store.js': { S, setSelection: value => { S.selection = value; } },
     './dom.js': { pasteBackdrop: backdrop, pasteCopyBtn: copy, pasteAsRefBtn: reference, pasteCancelBtn: cancel, undoMI: {}, redoMI: {} },
     './grid.js': { snap: t => t, snapNote: (start, end) => ({ start, end }), currentGridState: noop, gridOffset: () => 0, snapStrayNotes: noop },

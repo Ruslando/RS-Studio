@@ -113,7 +113,7 @@ export function paintWarningSymbol(ctx, x, y, size) {
 }
 
 // dashed: a flag that is only proposed (the export's, until you take it over).
-export function paintMarkerFlag(ctx, rect, color, { dashed = false } = {}) {
+export function paintMarkerFlag(ctx, rect, color, { dashed = false, selected = false } = {}) {
   const { x0: x, y0: y, x1, y1 } = rect;
   const width = x1 - x, height = y1 - y;
   ctx.save();
@@ -121,13 +121,13 @@ export function paintMarkerFlag(ctx, rect, color, { dashed = false } = {}) {
   // A denser fill stands in for a backdrop blur: blurring the canvas into
   // itself copied the frame once per flag and cost most of a playback frame.
   ctx.fillStyle = hexA(PAINT.chrome, 0.78); ctx.fill();
-  ctx.fillStyle = hexA(color, 0.10); ctx.fill();
+  ctx.fillStyle = hexA(color, selected ? 0.32 : 0.10); ctx.fill();
   const sheen = ctx.createLinearGradient(x, y, x, y + height);
   sheen.addColorStop(0, hexA(PAINT.text, 0.12));
   sheen.addColorStop(1, hexA(PAINT.text, 0));
   ctx.fillStyle = sheen; ctx.fill();
   rectangle(ctx, x + 0.5, y + 0.5, width - 1, height - 1, 4);
-  ctx.strokeStyle = hexA(color, dashed ? 0.9 : 0.65); ctx.lineWidth = 1;
+  ctx.strokeStyle = hexA(color, selected || dashed ? 0.9 : 0.65); ctx.lineWidth = selected ? 1.6 : 1;
   if (dashed) ctx.setLineDash([3, 2]);
   ctx.stroke();
   ctx.restore();

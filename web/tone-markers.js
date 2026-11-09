@@ -11,7 +11,7 @@ import { draw } from "./repaint.js";
 import { STATE_RESTORED } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
-import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
+import { inRailBand, isMarkerSelected, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
 import { toast } from "./notify.js";
 import { PAINT } from "./stage-paint.js";
@@ -171,7 +171,7 @@ export function drawToneMarkers() {
     const rect = { marker, lane, x0: x, x1: x + width, y0: top + 2, y1: top + TONE_MARK_H - 2 };
     markerRects.push(rect);
     if (rect.x0 > right || rect.x1 < left) continue;
-    paintMarkerFlag(sctx, rect, PAINT.tone);
+    paintMarkerFlag(sctx, rect, PAINT.tone, { selected: isMarkerSelected("tone", marker.id) });
     if (missing) {
       sctx.save(); if (issueIgnored(lane, problem)) sctx.globalAlpha = .35;
       paintWarningSymbol(sctx, x + 7, top + 6, 10); sctx.restore();
@@ -230,6 +230,7 @@ export function init_tone_markers() {
     draw: drawToneMarkers,
     drawMinimap: drawMinimapToneMarkers,
     cursorAt: toneMarkerCursorAt,
+    flags: () => markerRects.map((r) => ({ ...r, kind: "tone", key: r.marker.id, t: +r.marker.t })),
     mouseDown: toneMarkerMouseDown,
     menuLabel: "Add tone switch",
     addAt: addToneMarkerAtTime,

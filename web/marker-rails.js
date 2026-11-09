@@ -1,3 +1,5 @@
+import { S } from "./store.js";
+
 // Extension points for the marker rail above the note grid, and for the
 // per-lane marker collections that feed it.
 //
@@ -160,3 +162,14 @@ export function timedLaneMarkers(lanes) {
       for (const item of lane?.[name] || []) out.push(item);
   return out;
 }
+
+// ---- marker selection ----
+// Flags picked with Ctrl/Shift-click, as "kind:key" (marker-clipboard.js). Every
+// rail shows the active layer's flags, so a selection belongs to that layer and
+// reads as empty on any other.
+let selection = { lane: null, keys: new Set() };
+const activeLaneId = () => { const lanes = S.state?.editLanes || []; return (lanes.find((l) => l.active) || lanes[0])?.id ?? null; };
+export const markerKey = (kind, key) => `${kind}:${key}`;
+export const markerSelection = () => (selection.lane === activeLaneId() ? selection.keys : new Set());
+export function setMarkerSelection(keys) { selection = { lane: activeLaneId(), keys: new Set(keys) }; }
+export const isMarkerSelected = (kind, key) => markerSelection().has(markerKey(kind, key));

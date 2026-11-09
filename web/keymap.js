@@ -86,6 +86,8 @@ export const FIXED_SHORTCUTS = [
   { keys: "A / Shift+A", key: "A", label: "Accept all matches as copies / references (find similar)" },
   { keys: "Enter / Shift+Enter", key: "Enter", label: "Accept focused match as copy / reference (find similar)" },
   { keys: "Ctrl+click", label: "Add / remove note from selection" },
+  { keys: "Ctrl+click on a marker", label: "Add / remove marker from selection (then copy, cut, paste, delete)" },
+  { keys: "Shift+click on a marker", label: "Select markers on that rail from the last one clicked" },
   { keys: "Ctrl+left drag", label: "Draw notes along the spectrogram" },
   { keys: "Left drag in empty space", label: "Pan the spectrogram" },
   { keys: "Shift+drag", label: "Select notes in a rectangle" },

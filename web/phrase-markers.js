@@ -10,7 +10,7 @@ import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
-import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
+import { inRailBand, isMarkerSelected, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
 import { normalizePhraseBoundaries, phraseName } from "./section-marker-core.js";
 import { PAINT } from "./stage-paint.js";
@@ -198,7 +198,7 @@ export function drawPhraseMarkers() {
     };
     markerRects.push(rect);
     if (rect.x0 > right || rect.x1 < left) continue;
-    paintMarkerFlag(sctx, rect, PAINT.phrase);
+    paintMarkerFlag(sctx, rect, PAINT.phrase, { selected: isMarkerSelected("phrase", boundary.id) });
     sctx.fillStyle = PAINT.text;
     sctx.textBaseline = "middle";
     sctx.fillText(label, x + 9, top + PHRASE_MARK_H / 2);
@@ -226,6 +226,7 @@ export function init_phrase_markers() {
     draw: drawPhraseMarkers,
     drawMinimap: drawMinimapPhraseMarkers,
     cursorAt: phraseMarkerCursorAt,
+    flags: () => markerRects.map((r) => ({ ...r, kind: "phrase", key: r.boundary.id, t: +r.boundary.t })),
     mouseDown: phraseMarkerMouseDown,
     menuLabel: "Add phrase boundary",
     addAt: addPhraseBoundaryAtTime,

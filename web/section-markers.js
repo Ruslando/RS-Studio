@@ -11,7 +11,7 @@ import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { MARK_H } from "./markers.js";
-import { inRailBand, railBand, registerMarkerRail, setRailOrigin } from "./marker-rails.js";
+import { inRailBand, isMarkerSelected, railBand, registerMarkerRail, setRailOrigin } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
 import {
   SECTION_GROUPS, SECTION_HELP, normalizeSectionMarkers, sectionTypeLabel,
@@ -252,7 +252,7 @@ function drawSectionMarkers() {
       x0: leftEdge, x1: leftEdge + width, y0: top + 2, y1: top + SECTION_MARK_H - 2 };
     markerRects.push(rect);
     if (rect.x0 > right || rect.x1 < left) continue;
-    paintMarkerFlag(sctx, rect, PAINT.section);
+    paintMarkerFlag(sctx, rect, PAINT.section, { selected: isMarkerSelected("section", marker.id) });
     sctx.fillStyle = PAINT.text; sctx.textBaseline = "middle";
     sctx.fillText(text, leftEdge + 9, top + SECTION_MARK_H / 2);
   }
@@ -280,6 +280,7 @@ export function init_section_markers() {
     draw: drawSectionMarkers,
     drawMinimap: drawMinimapSectionMarkers,
     cursorAt: sectionMarkerCursorAt,
+    flags: () => markerRects.map((r) => ({ ...r, kind: "section", key: r.marker.id, t: +r.marker.t })),
     mouseDown: sectionMarkerMouseDown,
     menuLabel: "Add section marker",
     addAt: addSectionMarkerAtTime,

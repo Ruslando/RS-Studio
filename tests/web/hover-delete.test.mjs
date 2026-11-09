@@ -9,6 +9,7 @@ const S = { state: { duration: 10, stems: [], editLanes: [lane], lanes: [lane] }
   selection: new Set(), undoStack: [], redoStack: [], voicingRevision: 0, hoverNote: first };
 let hover = second, tab = false;
 const { doDelete } = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+    './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
   './interaction.js': { hoveredStageNote: () => hover },
   './store.js': { S }, './dom.js': { undoMI: null, redoMI: null },
   './lanes.js': { activeLane: () => lane, editLanes: () => [lane],

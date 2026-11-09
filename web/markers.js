@@ -16,7 +16,7 @@ import { timeAt, xOf } from "./geometry.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
 import { projectStart } from "./project-position-core.js";
-import { railScale, railsHidden, timedLaneMarkers } from "./marker-rails.js";
+import { isMarkerSelected, railScale, railsHidden, timedLaneMarkers } from "./marker-rails.js";
 import { editLanes } from "./lanes.js";
 import { onLiveTiming, sectionsOnLiveTempo, SONG, withTiming } from "./timing.js";
 import { sectionMarkersChanged } from "./section-markers.js";
@@ -103,7 +103,7 @@ export function drawMarkers() {
     const rect = { seg, x0: x, x1: x + w, y0: y, y1: y + h };
     markerRects.push(rect);
     if (x > vx1 + 4 || x + w < vx0 - 4) continue;   // off-screen: keep the rect (never hit), skip paint
-    paintMarkerFlag(sctx, rect, seg.seg0 ? PAINT.markerIdle : PAINT.marker);
+    paintMarkerFlag(sctx, rect, seg.seg0 ? PAINT.markerIdle : PAINT.marker, { selected: isMarkerSelected("tempo", tempoKey(seg)) });
 
     let cx = x + 9;
     for (let i = 0; i < fields.length; i++) {
@@ -121,6 +121,11 @@ export function drawMarkers() {
   }
   sctx.restore();
 }
+
+// A tempo flag's selection key: its time, or "start" for the grid start.
+export const tempoKey = (seg) => (seg.seg0 ? "start" : (+seg.t).toFixed(4));
+// The flags as drawn, for marker selection (marker-clipboard.js).
+export const tempoFlags = () => markerRects.map((r) => ({ ...r, kind: "tempo", key: tempoKey(r.seg), t: r.seg.t }));
 
 function markerAt(x, y) {
   if (railsHidden() || railScale() < 1) return null;

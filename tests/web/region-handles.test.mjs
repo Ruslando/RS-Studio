@@ -18,6 +18,7 @@ const oldWindow = globalThis.window;
 try {
   globalThis.window = win;
   const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
+    './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
     './store.js': { S }, './dom.js': { stage, scroll }, './repaint.js': { draw: noop },
     './lanes.js': { activeLane: () => lane },
     './geometry.js': { timeAt: x => x / 100, pitchAt: () => 64, pitchAtExact: () => 64 },

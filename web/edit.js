@@ -46,6 +46,7 @@ import { modalOpen } from "./modal-focus.js";
 import { matchKey } from "./keymap.js";
 import { runEditorShortcut } from "./editor-shortcuts.js";
 import { navigateMarker } from "./marker-artifacts.js";
+import { clearMarkerSelection, copyMarkers, cutMarkers, deleteMarkers, forgetMarkerClip, hasMarkerClip, hasMarkerSelection, pasteMarkers } from "./marker-clipboard.js";
 import { normLayerVolume } from "./util.js";
 import { slideFingerGroup, chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
 
@@ -337,7 +338,9 @@ export function placeClip(clip, lane, at) {
 }
 
 export function doCopy() {
+  if (hasMarkerSelection()) { copyMarkers(); return; }
   if (!S.selection.size) return;
+  forgetMarkerClip();
   S.clipboardSrc = [...S.selection];
   S.clipboard = clipOf(S.clipboardSrc);
   // Remember the source occurrence when the copy is one whole reference box —
@@ -391,6 +394,7 @@ function pasteHitsReference(lane, at, shift, asReference = false, refShift = 0) 
 // mode: "copy" | "reference" forces that result; undefined = auto — when the copy
 // came entirely from one reference, ask via confirmPasteMode, otherwise plain copy.
 export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
+  if (hasMarkerClip() && pasteMarkers(at ?? playbackTime())) return;
   if (!S.clipboard.length || !S.state) return;
   const pasteAt = at ?? playbackTime();
   // The source box may have changed since the copy; only a still-whole box pastes as it.
@@ -473,6 +477,7 @@ function linkPasteAsReference(added, lane, refShift = 0) {
 
 export function doDelete({ hovered = false } = {}) {
   if (!S.state || S.drag) return;
+  if (deleteMarkers()) return;
   const hoverTarget = hovered && !tabViewOn() && !S.selection.size ? hoveredStageNote() : null;
   const targets = S.selection.size ? S.selection : new Set(hoverTarget ? [hoverTarget] : []);
   if (!targets.size) return;
@@ -521,6 +526,7 @@ export function sendSelectionToLane(target, { move = false } = {}) {
 // Cut = copy the selection, then delete the deletable part (same lane rules as
 // Delete).
 export function doCut() {
+  if (cutMarkers()) return;
   if (!S.selection.size) return;
   doCopy();
   doDelete();
@@ -1939,6 +1945,7 @@ export function init_edit() {
       else if (stem) { if (!isMasterStem(stem)) confirmStemRemoval(stem); }
       else doDelete({ hovered: true });
     }
+    else if (e.key === "Escape" && clearMarkerSelection()) e.preventDefault();
     else if (e.key === "Escape" && (S.selection.size || S.detectRegion)) {
       if (S.selection.size) setSelection(new Set());            // clear the selection
       if (S.detectRegion) { S.detectRegion = null; updateDetectStatus(); }

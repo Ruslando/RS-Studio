@@ -23,6 +23,7 @@ import { commentAt, commentCursorAt, commentMouseDown, openCommentPop } from "./
 import { updateProjectStartAt } from "./project-position.js";
 import { projectStart } from "./project-position-core.js";
 import { markerRails, railsBottom } from "./marker-rails.js";
+import { clearMarkerSelection, markerSelectClick } from "./marker-clipboard.js";
 import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes, setLaneNotePitch, targetLane } from "./lanes.js";
 import { auditionNote, playbackTime, previewNotes, seekPlayback } from "./playback.js";
 import { toast } from "./notify.js";
@@ -453,6 +454,8 @@ export function init_interaction() {
   });
   stage.addEventListener("mousedown", (e) => {
     if (!S.state || e.button !== 0) return; // right-click handled by contextmenu
+    if (markerSelectClick(e, ...localXY(e))) return;
+    clearMarkerSelection();   // any other click ends a flag selection
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
       const [x, y] = localXY(e);
       // Rails float over the note grid. Only an actual visible marker blocks
