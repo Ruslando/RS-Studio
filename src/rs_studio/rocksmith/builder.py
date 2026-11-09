@@ -791,9 +791,33 @@ def _compile_arrangement(spec: dict, base_track: dict, req: dict, song_length: f
     _template_midi(compiled.sng.chords, offsets, max(0, int(track.get("capo") or 0)), is_bass)
     base_tone, tone_slots, tone_events = _arrangement_tones(
         track, is_bass, key, arr["tag"], song_length, warnings)
+    tone_events = _tones_off_notes(tone_events, compiled.sngs)
     for song in compiled.sngs:
         song.tones = tone_events
     return _Built(compiled, is_bass, cents, base_tone, tone_slots)
+
+
+TONE_LEAD = 0.010   # s: how far a switch on a note moves ahead of it
+
+
+def _tones_off_notes(events: list[tuple[float, int]], sngs: list) -> list[tuple[float, int]]:
+    """A tone switch on a note's onset (I15) moved just ahead of it.
+
+    The editor snaps a switch to the grid, which is where the notes are, so the
+    switch the player put at the start of a passage lands on its first note.
+    Rocksmith wants the tone active before the note starts; 10 ms is too little
+    to hear and keeps clear of any other onset, in every difficulty level.
+    """
+    onsets = {checker._ms(n.time) for song in sngs for level in song.levels for n in level.notes}
+    out = []
+    for time, tone in events:
+        t = time
+        if checker._ms(t) in onsets:
+            t = time - TONE_LEAD
+            while t > 0 and checker._ms(t) in onsets:
+                t -= 0.001
+        out.append((max(0.0, t), tone))
+    return out
 
 
 def check_spec(spec: dict) -> list[dict]:

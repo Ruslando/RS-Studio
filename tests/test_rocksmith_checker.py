@@ -85,9 +85,12 @@ class ThroughTheExporter(unittest.TestCase):
         self.assertNotIn("I25", [c for c, _ in _codes(_spec(notes))])
 
     def test_times_come_back_in_editor_time(self):
-        notes = [_note(2.0, 2.5, 4, 5), _note(4.0, 4.5, 4, 5)]
+        notes = [_note(2.0, 2.5, 4, 5), _note(4.0, 4.5, 3, 12, harmonic="natural", bend="full")]
         spec = _spec(notes, lead=5, toneMarkers=[{"t": 4.0, "tone": "lead"}])
-        self.assertIn(("I15", 4.0), _codes(spec))
+        codes = _codes(spec)
+        self.assertIn(("I35", 4.0), codes)
+        # The switch on that note's onset goes out just ahead of it.
+        self.assertNotIn("I15", [code for code, _ in codes])
 
     def test_content_issues(self):
         notes = [
