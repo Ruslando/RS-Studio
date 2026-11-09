@@ -22,7 +22,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // editor, and past that cap the board shrinks and centres instead of stretching.
 // Both mm → px scales are the same one, always.
 
-import { NO_FINGER, placeAt, slidLanding, slideInShift, fingerLabel, barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
+import { NO_FINGER, placeAt, slidLanding, slideInShift, slideSpan, fingerLabel, barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
 import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEl, fretboardName, fretboardPanel, fretboardPin, fretboardShape, fretboardStage } from "./dom.js";
 import { UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
@@ -1009,7 +1009,7 @@ function drawSuggestion(ctx, s, scale, X, Y, lane) {
   status.classList.remove("busy");
   status.textContent = seat ? `Suggested hand: ${seat}` : "Suggested position";
   ctx.save(); ctx.setLineDash([4, 3]);
-  drawGrip(ctx, s, scale, X, Y, marks, lane.color || PAINT.accent, false);
+  drawPreviewGrip(ctx, s, scale, X, Y, marks, lane.color || PAINT.accent, false);
   ctx.restore();
 }
 
@@ -1601,11 +1601,12 @@ function drawOffer(ctx, s, scale, X, Y, hovered, lane) {
       string: p.string, fret: p.fret,
       pitch: n.pitch,
       finger: hovered.hand.byString.get(p.string) ?? NO_FINGER,
-      dead: !!n.dead, x: fretCentre(p.fret, s),
+      dead: !!n.dead, x: fretCentre(p.fret, s), note: n,
+      slideSpan: slideSpan({ note: n, fret: p.fret, string: p.string }, null, undefined, s),
     }] : [];
   });
   const hue = lane.color || PAINT.accent;
-  drawGrip(ctx, s, scale, X, Y, marks, hue, true);
+  drawPreviewGrip(ctx, s, scale, X, Y, marks, hue, true);
 }
 
 // The grip the working views are all talking about: the frozen column, as marks that
@@ -1680,6 +1681,22 @@ function drawNotePlaces(ctx, s, scale, X, Y, lane, at) {
 function drawNoteRings(ctx, lane) {
   const hovered = spots?.[alternativeIndex];
   ctx.lineWidth = 1.8;
+  // A sliding note's ring says where its slide runs: a dashed tail from the far end.
+  const geo = board?.lane === lane ? board : null;
+  for (const p of geo ? spots || [] : []) {
+    const span = slideSpan(p, null, undefined, geo.s);
+    if (!span) continue;
+    const far = span.from.fret === p.fret ? span.to : span.from;
+    ctx.save();
+    ctx.setLineDash([3, 3]); ctx.lineWidth = 1.2;
+    ctx.strokeStyle = p === hovered ? (lane.color || PAINT.accent) : PAINT.hint;
+    ctx.beginPath();
+    ctx.moveTo(geo.X(far.x), geo.Y(stringOffsetAt(p.string, far.x, geo.s)));
+    const cx = (p.x0 + p.x1) / 2, cy = (p.y0 + p.y1) / 2, dx = geo.X(far.x) - cx;
+    ctx.lineTo(cx + Math.sign(dx) * p.r, cy);
+    ctx.stroke();
+    ctx.restore();
+  }
   for (const p of spots || []) {
     ctx.strokeStyle = p === hovered ? (lane.color || PAINT.accent) : PAINT.hint;
     ctx.beginPath();
@@ -1691,10 +1708,12 @@ function drawNoteRings(ctx, lane) {
 // Re-finger the preview after moving a single note, without changing the song.
 function drawNoteOffer(ctx, s, scale, X, Y, lane, { hovered, at, hand }) {
   if (!hand) return;
+  // The moved note's slide is worked out again from its new fret.
   const moved = (m) => (m.note === hovered.note
-    ? { ...m, string: hovered.string, fret: hovered.fret, x: fretCentre(hovered.fret, s) } : m);
+    ? { ...m, string: hovered.string, fret: hovered.fret, x: fretCentre(hovered.fret, s),
+      slideSpan: slideSpan({ note: m.note, fret: hovered.fret, string: hovered.string }, null, undefined, s) } : m);
   const marks = at.marks.map(moved);
-  drawGrip(ctx, s, scale, X, Y,
+  drawPreviewGrip(ctx, s, scale, X, Y,
     marks.map((m) => ({ ...m, finger: hand.fingers.get(m.note) ?? NO_FINGER })),
     lane.color || PAINT.accent, true);
 }
@@ -1872,12 +1891,7 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
   // The low finger stays planted. A second finger taps/releases the upper fret;
   // its fill follows the same sixteenth-note phase as the audible trill.
   const marks = at.marks.flatMap((m) => {
-    // Stopped on a slide: where it starts, pressed, and a ghost where it lands.
-    if (!moving && m.slideSpan) {
-      const { from, to } = m.slideSpan, pitch = m.pitch ?? m.note?.pitch;
-      return [{ ...m, ...from, pitch: pitch + from.fret - m.fret },
-        { ...m, ...to, pitch: pitch + to.fret - m.fret, lift: 0, pressed: false, opacity: 0.55 }];
-    }
+    if (!moving && m.slideSpan) return slideEnds(m);
     if (m.graceTarget) return [m, { ...m, ...m.graceTarget, noteLabel: false, lift: 0, pressed: false, opacity: 0.55 }];
     if (m.graceOrigin) return [{ ...m, ...m.graceOrigin, noteLabel: false, lift: 0 }, m];
     if (m.trill) return [m, { ...m, ...m.trill, noteLabel: false, trill: undefined, lift: 0, pressed: m.trill.down,
@@ -1898,6 +1912,22 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
     ctx.strokeStyle = PAINT.paper; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
   }
   if (!moving) for (const m of at.marks) if (m.slideSpan) drawSlideArrow(ctx, s, scale, X, Y, m);
+}
+
+// Stopped on a slide: where it starts, pressed, and a ghost where it lands.
+function slideEnds(m) {
+  const { from, to } = m.slideSpan, pitch = m.pitch ?? m.note?.pitch;
+  return [{ ...m, ...from, pitch: pitch + from.fret - m.fret },
+    { ...m, ...to, pitch: pitch + to.fret - m.fret, lift: 0, pressed: false, opacity: 0.55 }];
+}
+
+// A preview grip (an offer, a suggestion): its slides drawn the way the hand's are,
+// start and landing with the arrow between them.
+function drawPreviewGrip(ctx, s, scale, X, Y, marks, hue, pressed) {
+  drawGrip(ctx, s, scale, X, Y, marks.flatMap((m) => m.slideSpan ? slideEnds(m) : [m]), hue, pressed);
+  ctx.save(); ctx.setLineDash([]);
+  for (const m of marks) if (m.slideSpan) drawSlideArrow(ctx, s, scale, X, Y, m);
+  ctx.restore();
 }
 
 // Start to target along the string, between the two marks.

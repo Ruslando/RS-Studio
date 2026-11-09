@@ -315,7 +315,7 @@ export function slideInShift(column) {
 }
 
 // The frets a slide runs between, start to end, or null when it goes nowhere.
-function slideSpan(f, next, eighth, s) {
+export function slideSpan(f, next, eighth, s) {
   const note = f.note;
   if (!note?.slide || !(f.fret > 0)) return null;
   const onto = SLIDES_TO_NEXT.has(note.slide) && next?.fingers.find((g) => g.string === f.string);
