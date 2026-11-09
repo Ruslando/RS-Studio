@@ -1089,15 +1089,6 @@ function initHandPositions() {
     if (handPeek !== value) { handPeek = value; drawFretboard(); }
   });
   row.addEventListener('mouseleave', () => { handPeek = null; drawFretboard(); });
-  row.addEventListener('keydown', event => {
-    if (event.ctrlKey || event.metaKey || event.altKey || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault(); event.stopPropagation();
-    const buttons = [...row.children].filter(button => !button.disabled);
-    const index = buttons.indexOf(document.activeElement);
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-      : Math.max(0, Math.min(buttons.length - 1, index + (event.key === 'ArrowRight' ? 1 : -1)));
-    buttons[next]?.click(); buttons[next]?.focus();
-  });
 }
 
 export function drawFretboard() {
