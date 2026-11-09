@@ -469,16 +469,27 @@ def _response_from_manifest(m: dict) -> dict:
     tuning = _tuning(m)
     # The server picks the offset files; the query only keeps the browser from
     # reusing what it cached for a different pitch.
-    spec_query = f"?cents={tuning['reference']}" if tuning["reference"] else ""
-    audio_query = f"?shift={tuning['shift']}" if tuning["shift"] else ""
+    spec_query = {"cents": tuning["reference"]} if tuning["reference"] else {}
+    audio_query = {"shift": tuning["shift"]} if tuning["shift"] else {}
+    job_dir = _job_dir(job)
+
+    # A replaced stem keeps its URL, and the browser may answer that URL from its
+    # cache without asking (the files carry no Cache-Control), which played the old
+    # audio after a reload. The file's own modification time names the version.
+    def versioned(path: str, query: dict, rel: str | None) -> str:
+        file = _safe_project_file(job_dir, rel)
+        stamp = {"v": f"{file.stat().st_mtime_ns:x}"} if file and file.exists() else {}
+        params = {**query, **stamp}
+        return f"{path}?{urllib.parse.urlencode(params)}" if params else path
+
     for st in m.get("stems", []):
         spec = dict(st["spectrogram"])
-        spec["url"] = f"/api/spectrogram/{job}/{st['id']}.png{spec_query}"
+        spec["url"] = versioned(f"/api/spectrogram/{job}/{st['id']}.png", spec_query, spec.get("image"))
         stems.append({
             "id": st["id"],
             "name": st["name"],
             "spectrogram": spec,
-            "audio_url": f"/api/audio/{job}/{st['id']}{audio_query}",
+            "audio_url": versioned(f"/api/audio/{job}/{st['id']}", audio_query, st.get("audio_rel")),
             "muted": bool(st.get("muted", False)),
             "solo": bool(st.get("solo", False)),
             "volume": st.get("volume", 1.0),
