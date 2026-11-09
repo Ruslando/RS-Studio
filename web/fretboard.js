@@ -22,7 +22,7 @@ import { panelControls, syncPanelControls } from "./canvas-controls.js";
 // editor, and past that cap the board shrinks and centres instead of stretching.
 // Both mm → px scales are the same one, always.
 
-import { NO_FINGER, placeAt, fingerLabel, barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
+import { NO_FINGER, placeAt, slidLanding, slideInShift, fingerLabel, barreGroups, boardHalfWidthAt, boardLength, boardWidth, capoLine, dotCentre, fretCentre, fretDistance, fretboardFor, gripIndex, handAt, handColumns, ringingMarksAt, releasedStringsAt, stringContactAt, notePlacements, pickBox, shapeBox, stringOffsetAt } from "./fretboard-core.js";
 import { $, editorEl, fretboardApply, fretboardAuto, fretboardBusy, fretboardBusyLabel, fretboardEl, fretboardName, fretboardPanel, fretboardPin, fretboardShape, fretboardStage } from "./dom.js";
 import { UI_PAINT as PAINT, WASH } from "./stage-paint.js";
 import { STAGE_ANCHORED, instrKey, stageMono, stageUi } from "./constants.js";
@@ -1018,7 +1018,9 @@ function drawSuggestion(ctx, s, scale, X, Y, lane) {
 // canvas fret numbers until the pointer or focus enters the row.
 function drawHandPositions(s, X, Y, lane) {
   const row = $("fretboardHandPositions"), at = lane && handColumnHere(lane);
-  const choices = new Set(at?.choices || []);
+  // A slide-in's buttons count from where the finger goes down (see slideInShift).
+  const shift = at?.shift || 0;
+  const choices = new Set((at?.choices || []).map((c) => c + shift).filter((c) => c >= 1));
   const shown = editing && !shaping && !transportPlaying() && !!at && choices.size > 0
     && !fretboardPanel.hasAttribute("data-edit-blocked") && !selectedPositions(lane).multiple;
   row.hidden = !shown;
@@ -1026,10 +1028,10 @@ function drawHandPositions(s, X, Y, lane) {
     if (row.contains(document.activeElement)) document.activeElement.blur();
     handPeek = null; return false;
   }
-  if (handPeek != null && !choices.has(handPeek)) handPeek = null;
+  if (handPeek != null && !at.choices.includes(handPeek)) handPeek = null;
   row.style.setProperty('--hand-hue', lane.color || PAINT.accent);
   row.setAttribute('aria-description', `Available hand positions: ${[...choices].join(', ')}`);
-  const count = laneFretCount(lane), held = holdHere(lane), seat = anchorFret(lane);
+  const count = laneFretCount(lane), held = holdHere(lane), seat = (Number(at.column.seat) || 0) + shift;
   if (row.dataset.count !== String(count)) {
     row.dataset.count = String(count);
     row.replaceChildren(...Array.from({length: count + 1}, (_, fret) => {
@@ -1048,7 +1050,7 @@ function drawHandPositions(s, X, Y, lane) {
     const right = fret ? X(fretDistance(capo + fret, s.scale)) : left + 38;
     button.style.left = `${left}px`; button.style.top = `${top}px`;
     button.style.width = `${right - left}px`;
-    const allowed = !fret || choices.has(fret), chosen = fret ? !!held && Number(held.fret) === fret : !held;
+    const allowed = !fret || choices.has(fret), chosen = fret ? !!held && Number(held.fret) + shift === fret : !held;
     button.disabled = !canEditLane(lane) || !allowed;
     button.textContent = fret ? String(fret + (fromNut ? capo : 0)) : 'Auto';
     button.setAttribute('aria-label', fret ? `Hand position ${fret}${allowed ? '' : ', unavailable'}` : 'Automatic hand position');
@@ -1057,7 +1059,7 @@ function drawHandPositions(s, X, Y, lane) {
     button.title = fret ? `Hand position ${fret}${allowed ? '' : ' cannot play these notes'}` : 'Use the automatic hand position';
     button.classList.toggle('is-allowed', !!fret && allowed);
     button.classList.toggle('is-current', fret === seat);
-    button.classList.toggle('is-suggested', suggestionVisible() && fret === suggestion.preview.seat);
+    button.classList.toggle('is-suggested', suggestionVisible() && fret === (suggestion.preview.seat || 0) + shift);
   }
   return true;
 }
@@ -1068,10 +1070,10 @@ function initHandPositions() {
     const button = event.target.closest('[data-value]'), lane = currentLane();
     if (!button || button.disabled || !editing || !canEditLane(lane) || transportPlaying()
         || shaping || selectedPositions(lane).multiple) return;
-    const value = button.dataset.value === 'auto' ? null : Number(button.dataset.value);
-    if (value !== null && !(handColumnHere(lane)?.choices || []).includes(value)) return;
     const at = handColumnHere(lane), time = handTimeHere(lane);
     if (!at) return;
+    const value = button.dataset.value === 'auto' ? null : Number(button.dataset.value) - at.shift;
+    if (value !== null && !at.choices.includes(value)) return;
     // Changing only the hand keeps these legal positions valid while its worker
     // refingers the lane. Retain the row and its keyboard focus during that wait.
     pendingHandColumn = { lane, notes: lane.notes, focus: focusNote(lane),
@@ -1082,7 +1084,8 @@ function initHandPositions() {
   });
   row.addEventListener('mouseover', event => {
     const button = event.target.closest('[data-value]');
-    const value = button && !button.disabled && button.dataset.value !== 'auto' ? Number(button.dataset.value) : null;
+    const value = button && !button.disabled && button.dataset.value !== 'auto'
+      ? Number(button.dataset.value) - (handColumnHere(currentLane())?.shift || 0) : null;
     if (handPeek !== value) { handPeek = value; drawFretboard(); }
   });
   row.addEventListener('mouseleave', () => { handPeek = null; drawFretboard(); });
@@ -1175,7 +1178,9 @@ export function drawFretboard() {
   const now = impossible || shaping ? null : handNow(lane, s);
   syncSuggestion(lane, s);
   drawHandPositions(s, X, Y, lane);
-  const seat = anchorFret(lane), offered = impossible ? 0 : offeredSeat(lane);
+  // A slide-in's hand is drawn where the finger goes down, like the moving band.
+  const slideIn = (editing && handColumnHere(lane)?.shift) || 0;
+  const seat = anchorFret(lane) + slideIn, offered = impossible || !offeredSeat(lane) ? 0 : offeredSeat(lane) + slideIn;
   paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, offered, strung, tunePx });
 
   // WHICH GRAIN IS DECIDED BY THE COLUMN, not by a second switch. A lone note has one
@@ -1962,15 +1967,19 @@ function handColumnHere(lane) {
     && pendingHandColumn.focus === focusNote(lane) && pendingHandColumn.revision === S.voicingRevision
     ? pendingHandColumn.at : null;
   if (pendingHandColumn?.lane === lane) pendingHandColumn = null;
-  const i = gripIndex(found.columns, frozenAt(lane) ?? boardTime());
+  let i = gripIndex(found.columns, frozenAt(lane) ?? boardTime());
   if (i < 0) return null;
+  // A slide's landing is fretted by the finger that slid there, so its hand is
+  // the slide start's: step back to the column the slide (chain) began on.
+  while (i > 0 && slidLanding(found.columns[i - 1], found.columns[i])) i--;
   const column = found.columns[i];
   if (!handChoicesOf.has(column)) {
     const shape = new Map(column.fingers.map((f) => [f.note, { string: f.string, fret: f.fret }]));
     handChoicesOf.set(column, handChoices(shape, handProfileForTuning(laneFretTuning(lane)),
       Math.max(1, laneFretCount(lane) - 3)));
   }
-  return { column, after: i > 0 ? found.columns[i - 1].start : -Infinity, choices: handChoicesOf.get(column) };
+  return { column, after: i > 0 ? found.columns[i - 1].start : -Infinity, choices: handChoicesOf.get(column),
+    shift: slideInShift(column) };
 }
 
 // The layer's chord at the column the board shows, if that column is a chord.

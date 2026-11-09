@@ -33,7 +33,7 @@
 import { bendSnapAt } from "./string-techniques.js";
 import { hammerLink } from "./articulations.js";
 import { graceBefore } from "./grace.js";
-import { SLIDES_TO_NEXT, SLIDE_IN, SLIDE_OUT, bendCurve, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
+import { SLIDES_TO_NEXT, SLIDE_IN, SLIDE_OUT, bendCurve, edgeSlideSpan, slideInOf, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
 
 // Finger numbers as Rocksmith has them: 1 index … 4 pinky, 0 the thumb (only ever
 // chosen, see thumbPoses), -1 none (an open string).
@@ -299,6 +299,19 @@ function movingAnchor(from, to, shift, s, fade = 1) {
   if (!a) return { ...b, opacity: fade };
   return { x0: a.x0 + (b.x0 - a.x0) * shift,
     x1: a.x1 + (b.x1 - a.x1) * shift, opacity: 1 };
+}
+
+// Whether `column` is reached by a slide from `prev`: a finger that slid there frets it.
+export const slidLanding = (prev, column) => column.fingers.some((f) => f.fret > 0
+  && prev.fingers.some((g) => g.string === f.string && g.fret > 0 && SLIDES_TO_NEXT.has(g.note?.slide)));
+
+// How far a column's slide-in starts from its frets (−4: four frets below), or 0.
+// The hand is where the finger goes down, so its positions are counted from there.
+// Same rule as voicing-core's slideInOffset (kept apart: that module imports this one).
+export function slideInShift(column) {
+  const fretted = column.fingers.filter((f) => f.fret > 0);
+  const shifts = new Set(fretted.map((f) => slideInOf(f.note) ? edgeSlideSpan(f.note, f.fret, slideInOf(f.note)) : 0));
+  return shifts.size === 1 ? [...shifts][0] : 0;
 }
 
 // The frets a slide runs between, start to end, or null when it goes nowhere.
