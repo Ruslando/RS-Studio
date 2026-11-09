@@ -360,12 +360,6 @@ const fretboardShowAnyway = $("fretboardShowAnyway");
 
 // Custom shape entry keeps its existing staged walk; its redesign is separate.
 let shaping = null;   // { notes, index, picked: Map(note -> { string, fret }) }
-// Typing fingers onto the grip on the board: { target, original } — the note last
-// clicked, and the draft's memory (draftNoteFinger). The note under the pointer takes
-// the key first, so pointing and typing needs no click. Done keeps the draft as one
-// undo step; Cancel and Escape throw it away.
-let fingering = null;
-
 // THE MOMENT THE BOARD SHOWS. While the song runs that is the playhead. Stopped, it is
 // the playhead plus a hair: a parked playhead is stored to the microsecond and a
 // note's onset is not, so a cursor sitting "on" a note is routinely a few nanoseconds
@@ -458,7 +452,7 @@ export function setFretboardEdit(on) {
   fretboardPanel.toggleAttribute("data-editing", editing);
   drawFretboard();
   setFretboardAlts(editing);
-  if (!editing) { setFretboardShape(false); setFretboardFingering(false, true); }
+  if (!editing) setFretboardShape(false);
   fretboardEl.style.cursor = "";
   if (!editing) { endResetPreview(); fretboardPin.hidden = true; }
   layoutFretboard();
@@ -500,57 +494,30 @@ function setFretboardShape(on) {
   layoutFretboard();
 }
 
-// Leaving keeps the draft only when asked to (Done, or playing on from it).
-function setFretboardFingering(on, keep = false) {
-  if (!on && fingering) settleFingerDraft(fingering.original, keep);
-  fingering = on ? { target: null, original: new Map() } : null;
-  if (on) { setFretboardShape(false); previewAlternative = false; endResetPreview(); }
-  spots = null; spotHover = -1;
-  syncFingeringMode();
-  layoutFretboard();
-}
-
-function syncFingeringMode() {
-  const button = $("fretboardFingering");
-  fretboardPanel.toggleAttribute("data-fingering", !!fingering);
-  button.textContent = fingering ? "Cancel" : "Assign custom fingering";
-  button.title = fingering ? "Discard the fingers typed since"
-    : "Point at a note and type its finger: 0 thumb, 1–4 index to pinky, Delete for automatic";
-}
-
-// The grip's fretted notes as targets, the one pointed at or clicked ringed in the hue.
-function drawFingering(ctx, s, scale, X, Y, lane, at) {
-  const marks = (at?.marks || []).filter((m) => m.fret > 0 && m.note && !m.dead);
-  spots = marks.map((m) => spotBox({ ...m, mm: m.x }, scale, s, X, Y));
-  if (fingering.target && !marks.some((m) => m.note === fingering.target)) fingering.target = null;
-  const hue = lane.color || PAINT.accent;
-  ctx.lineWidth = 2;
-  spots.forEach((p, i) => {
-    const on = i === spotHover || p.note === fingering.target;
-    ctx.strokeStyle = on ? hue : PAINT.hint;
-    ctx.beginPath();
-    ctx.arc((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, p.r + 3, 0, Math.PI * 2);
-    ctx.stroke();
-  });
-}
-
-// A digit types that finger onto the note pointed at (else the one clicked); Delete or
-// Backspace gives it back to the engine. True when the key was taken.
+// Assign directly to the fretted note under the pointer. Each key is one undo
+// step; leaving the board never leaves a pending fingering draft behind.
 function typeFinger(e) {
-  if (!fingering || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, textarea, select")) return false;
+  if (!visible || !boardEditable() || noteDrag || e.repeat || e.ctrlKey || e.metaKey || e.altKey
+      || e.target.closest?.("input, textarea, select, [contenteditable]")) return false;
   const digit = /^[0-4]$/.test(e.key) ? Number(e.key) : null;
   if (digit == null && e.key !== "Delete" && e.key !== "Backspace") return false;
-  const note = spots?.[spotHover]?.note ?? fingering.target;
-  if (!note) return false;
+  const mark = boardHover?.mark;
+  if (!mark?.note || !(mark.fret > 0) || mark.dead
+      || !board.marks.some(current => current.note === mark.note && current.fret === mark.fret && current.string === mark.string)) return false;
   e.preventDefault(); e.stopPropagation();
-  draftNoteFinger(fingering.original, note, digit, gripsFor(currentLane())?.voiced);
+  const original = new Map();
+  draftNoteFinger(original, mark.note, digit, gripsFor(currentLane())?.voiced);
+  settleFingerDraft(original, true);
   return true;
 }
 
-// The grip on the board back to the engine's fingers.
+// The grip on the board back to the engine's fingers, in one undo step.
 function resetGripFingers() {
+  if (!boardEditable()) return;
+  const original = new Map(), positions = gripsFor(currentLane())?.voiced;
   for (const m of focusGrip(currentLane(), laneSpec(currentLane()))?.marks || [])
-    if (m.note && m.note.finger != null) draftNoteFinger(fingering.original, m.note, null, gripsFor(currentLane())?.voiced);
+    if (m.note && m.note.finger != null) draftNoteFinger(original, m.note, null, positions);
+  settleFingerDraft(original, true);
 }
 
 function syncShapeMode() {
@@ -682,9 +649,8 @@ export function setFretboardVisible(on) {
     fretboardPanel.removeAttribute("data-editing");
     fretboardPanel.removeAttribute("data-edit-blocked");
     altsOn = false; alts = null; altsJob = null;
-    if (fingering) settleFingerDraft(fingering.original, true);
-    spots = null; spotHover = -1; shaping = null; fingering = null;
-    syncShapeMode(); syncFingeringMode();
+    spots = null; spotHover = -1; shaping = null; boardHover = null;
+    syncShapeMode();
     fretboardShape.hidden = true;
     fretboardApply.hidden = true;
   }
@@ -1082,7 +1048,7 @@ export function drawFretboard() {
   // And the working views stand down with it. They are offers about one column, so a
   // column arriving sixty times a second makes them noise — and the boxes would ask the
   // worker for a fresh set on every one of them.
-  const offering = editing && altsOn && !shaping && !fingering && !transportPlaying() && !impossible && !blocked;
+  const offering = editing && altsOn && !shaping && !transportPlaying() && !impossible && !blocked;
   activeAlternative = null; alternativeCount = 0;
   const chordOffer = offering && chord ? drawAlternatives(ctx, s, scale, X, Y, lane, at) : null;
   const noteOffer = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
@@ -1111,7 +1077,6 @@ export function drawFretboard() {
   const placing = shaping && !impossible ? drawShaping(ctx, s, scale, X, Y, lane) : null;
   // Something else is on offer: the grip in the hand steps back. See drawHand.
   if (!shaping) drawHand(ctx, s, scale, X, Y, lane, now, hovered || spot || resetPeeking ? "fade" : null);
-  if (fingering && !impossible) drawFingering(ctx, s, scale, X, Y, lane, at);
   drawBundle(ctx, s, scale, X, Y, lane, held, w, h, chord, placing, impossible);
   if (offering && at && !chord && gripsShown) drawNoteRings(ctx, lane);
   if (offering && chord && gripsShown) drawChordBoxes(ctx, lane);
@@ -1205,13 +1170,12 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   $("fretboardShapePrev").disabled = !shaping || shaping.index === 0;
   $("fretboardShapeNext").disabled = !shaping || shaping.index === shaping.notes.length - 1;
   // Chords only: a lone note has every position on the board already.
-  fretboardShape.hidden = !(editing) || playing || !!fingering || (!chord && !shaping);
-  $("fretboardFingering").hidden = !(editing) || playing || !!shaping;
-  $("fretboardFingerReset").hidden = !fingering || !(focusGrip(lane, s)?.marks || []).some((m) => m.note?.finger != null);
+  fretboardShape.hidden = !(editing) || playing || (!chord && !shaping);
+  $("fretboardFingerReset").hidden = !editing || playing || !!shaping || unplayable || !(focusGrip(lane, s)?.marks || []).some((m) => m.note?.finger != null);
   fretboardShape.title = shaping ? "Discard custom shape" : unplayable ? "This chord cannot be played on this neck"
     : group.error || "Place every note of the chord by hand";
   fretboardShape.disabled = unplayable || !!group.error;
-  $("fretboardAlternatives").hidden = playing || !!shaping || !!fingering || unplayable;
+  $("fretboardAlternatives").hidden = playing || !!shaping || unplayable;
   // Position 1 is the current (auto or pinned) shape, the alternatives follow, so the
   // readout keeps one form and the Use button never jumps under the pointer.
   const altsLoading = !alternativeCount && chord && (alts?.note !== focusNote(lane) || alts?.rev !== S.voicingRevision);
@@ -1230,8 +1194,8 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   $("fretboardAltStatus").hidden = !group.multiple && !altsLoading;
   $("fretboardChoose").hidden = false;
   $("fretboardChoose").disabled = !activeAlternative;
-  fretboardApply.hidden = !shaping && !fingering;
-  fretboardApply.disabled = !!fingering ? false : !shaping || shaping.picked.size !== shaping.notes.length || !shaping.preview?.hand
+  fretboardApply.hidden = !shaping;
+  fretboardApply.disabled = !shaping || shaping.picked.size !== shaping.notes.length || !shaping.preview?.hand
     || (group.multiple && !sharedShapeAllowed(lane, shaping.notes, shaping.picked));
   fretboardAuto.hidden = !overridden;
   refreshPinControls(lane, overridden);   // before measuring: they change its width
@@ -1348,8 +1312,7 @@ function onHue(hex) {
 // in names-only mode and sit beside them in Both. Open labels are centered text.
 const fretboardLabels = () => {
   const mode = document.querySelector('input[name="fretboardLabels"]:checked')?.value || "both";
-  // Typing fingers means seeing them.
-  return fingering && mode !== "fingers" && mode !== "both" ? "both" : mode;
+  return mode;
 };
 
 function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time = null, liveStrings = false, labels = null } = {}) {
@@ -2069,7 +2032,7 @@ let boardHover = null; // { mark, place } under the pointer
 let gripsShown = localStorage.getItem("cw.fretboardGrips") !== "0";
 let gripPeekFrom = null;  // the grip chosen before the Grip list was hovered
 
-const boardEditable = () => !!board && editing && !transportPlaying() && !shaping && !fingering
+const boardEditable = () => !!board && editing && !transportPlaying() && !shaping
   && !fretboardPanel.hasAttribute("data-edit-blocked") && canEditLane(board.lane);
 
 function pointerOnBoard(e) {
@@ -2269,10 +2232,10 @@ export function init_fretboard() {
   fretboardEl.addEventListener("mousemove", e => {
     if (noteDrag || !editing || transportPlaying() || fretboardPanel.hasAttribute("data-edit-blocked")) return;
     const spot = spots ? spots.indexOf(spotUnder(e)) : -1;
-    const i = spot >= 0 || shaping || fingering ? -1 : boxUnder(e);
+    const i = spot >= 0 || shaping ? -1 : boxUnder(e);
     // Hovering a ring or box browses to it; leaving them returns to the original.
     const over = alternativeKey.startsWith("note:") ? spot : alternativeKey.startsWith("chord:") ? i : -1;
-    if (!shaping && !fingering && over !== hoverAt) {
+    if (!shaping && over !== hoverAt) {
       if (over >= 0) { alternativeIndex = over; previewAlternative = true; hoverPicked = true; }
       else if (hoverPicked) { alternativeIndex = -1; previewAlternative = false; hoverPicked = false; }
     }
@@ -2310,12 +2273,6 @@ export function init_fretboard() {
     // While a shape is being built the board is only that: a circle places the note
     // being placed, a placed mark takes it back off, and bare wood does nothing — the
     // hand is not what you are deciding.
-    if (fingering) {
-      const pick = spotUnder(e);
-      if (pick) fingering.target = pick.note;
-      drawFretboard();
-      return;
-    }
     if (shaping) {
       const pick = spotUnder(e);
       if (!pick) return;
@@ -2448,14 +2405,9 @@ export function init_fretboard() {
     fretboardShowAnyway.blur();
     draw();
   });
-  $("fretboardFingering").addEventListener("click", () => {
-    $("fretboardFingering").blur();
-    if (!editing) setFretboardEdit(true);
-    setFretboardFingering(!fingering);
-  });
   $("fretboardFingerReset").addEventListener("click", () => {
     $("fretboardFingerReset").blur();
-    if (fingering) resetGripFingers();
+    resetGripFingers();
   });
   fretboardShape.addEventListener("click", () => {
     fretboardShape.blur();
@@ -2467,7 +2419,6 @@ export function init_fretboard() {
   // enabled when every note has a position; navigating notes keeps that draft.
   fretboardApply.addEventListener("click", () => {
     fretboardApply.blur();
-    if (fingering) { setFretboardFingering(false, true); return; }
     const col = shaping && columnOf(shaping.notes[0])?.col;
     if (fretboardApply.disabled || !col || shaping.picked.size !== shaping.notes.length
       || !previewIsCurrent(shaping, currentLane())) return;
@@ -2480,7 +2431,6 @@ export function init_fretboard() {
   // Transient depth: it is canvas state, above the selection and below every window.
   registerEscapeLayer(ESC_DEPTH.transient, () => {
     if (shaping) setFretboardShape(false);
-    else if (fingering) setFretboardFingering(false);   // Escape discards, as Cancel does
     else return false;
     return true;
   });

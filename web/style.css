@@ -1521,7 +1521,7 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardVoices[hidden] { display: none; }
 #fretboardVoiceCount { min-width: 7ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
 
-#fretboardPin :is(#fretboardChoose, #fretboardShape, #fretboardFingering, #fretboardFingerReset):not(:disabled) { color: var(--stage-text); }
+#fretboardPin :is(#fretboardChoose, #fretboardShape, #fretboardFingerReset):not(:disabled) { color: var(--stage-text); }
 
 /* One continuous toolbar. Use natural group widths; a large flex basis made
    alternatives wrap even when all visible controls fitted on one line. */

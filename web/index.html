@@ -443,7 +443,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                  and so the panel can shrink over it while it keeps its size. -->
             <div id="fretboardStage">
               <span id="fretboardWarning" role="status" hidden></span>
-              <canvas id="fretboard"></canvas>
+              <canvas id="fretboard" title="Hover a fretted note and type 0–4 to assign its finger (0 = thumb). Delete or Backspace restores automatic fingering."></canvas>
               <span id="fretboardResetStatus" role="status" hidden></span>
               <!-- The wait names itself. A spinner alone says "not yet" but not what
                    for, and this element covers two waits of very different length:
@@ -494,8 +494,6 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 </div>
                 <button type="button" id="fretboardShape" class="btn btn--compact" aria-pressed="false" hidden
                         title="Place every note of the chord by hand">Assign custom grip</button>
-                <button type="button" id="fretboardFingering" class="btn btn--compact" aria-pressed="false" hidden
-                        title="Point at a note and type its finger: 0 thumb, 1–4 index to pinky, Delete for automatic">Assign custom fingering</button>
                 <button type="button" id="fretboardFingerReset" class="btn btn--compact" hidden
                         title="Give this note or chord the automatic fingers back">Reset fingering</button>
                 <button type="button" id="fretboardApply" class="btn btn--compact btn--primary" hidden>Done</button>
