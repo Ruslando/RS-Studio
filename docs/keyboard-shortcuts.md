@@ -26,6 +26,9 @@ existing custom bindings using the same key.
 | Ctrl/Cmd+left drag | Draw notes along the spectrogram |
 | Left drag in empty space | Pan the spectrogram in time and pitch |
 
+Legato slide starts and landings are separate navigation stops and are selected
+individually. Notes starting together still form one chord.
+
 A plain click in empty space still seeks, and Ctrl/Cmd+click still toggles a
 note in the selection. Drawing and panning start only after a small drag threshold.
 Panning preserves the playhead, notes, selection and undo history. Existing note
@@ -39,7 +42,7 @@ The view stays within its bounds; reduced-motion preferences disable inertia.
 
 The transport buttons on either side of Play perform the same marker jumps.
 Navigation uses the active layer's tempo/meter, sections, phrase boundaries,
-tone switches and hand anchors. Coincident markers form one stop. It does not
+tone switches and comments. Coincident markers form one stop. It does not
 wrap at the ends or navigate markers belonging only to inactive layers. Marker
 jumps also work with the overview focused or the pointer over the fretboard.
 Ctrl/Cmd with plus or minus remains available to the browser. The new action

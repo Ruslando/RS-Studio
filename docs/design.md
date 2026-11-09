@@ -756,7 +756,7 @@ New comments cite this document by section ("design.md 4.9").
 The right artifact pane is built like the layer sidebar (4.15): no pane title,
 each list under a `.side-header` / `.side-label` with its count in mono at the
 right, rows as in 4.13. An empty list is hidden, header included. Each entry looks like what it
-indexes on the stage, in that hue (`--stage-*`, a hand anchor its layer's colour):
+indexes on the stage, in that hue (`--stage-*`):
 a marker's name is drawn as its flag, a tinted 24-high chip; a reference entry is
 framed solid, a motif dashed, at half strength and full under the pointer.
 Double-clicking a reference or motif entry moves there (on its name it renames).
@@ -898,8 +898,7 @@ for the IDs, message text, legacy ignore migration, and ASD-STE100 writing guida
 
 The pane's first lists, Errors and Warnings, hold every problem of the active
 layer, sorted by kind rather than by source: what the Rocksmith export would report,
-and the flags' own (a hand anchor that cannot reach its note is an error, a tone
-switch whose preset is missing a warning). The Rocksmith part is DLC Builder's arrangement checks (`rocksmith/checker.py`) and
+and the flags' own (a tone switch whose preset is missing is a warning). The Rocksmith part is DLC Builder's arrangement checks (`rocksmith/checker.py`) and
 the export's own warnings. The server runs the export's compile about 700 ms
 after edits settle, with the leading silence the export window last used; a
 newer check cancels one in flight. A row leads with a warning triangle
@@ -917,12 +916,12 @@ export changes on its own to avoid an issue (a slide into a chord, a dead note
 in a chord) is listed and framed the same way, never as important. An empty list
 is hidden, header included.
 
-Hand anchors are explicit fretting-hand positions, stored compatibly in the
-existing `handHolds` field. The active visible layer's anchors occupy a compact
-20px marker rail, using the same tinted frame as other flags and a `Fret N`
-label. Click/right-click opens their editor; dragging snaps to beats. Fret and
-time edits, moves and deletion support undo. A separate collapsible Hand anchors
-artifact list indexes the active layer and shares that editor and smooth Move to action.
+Explicit fretting-hand positions stay with their note or chord, stored compatibly
+in the existing `handHolds` field. They have no marker rail, minimap flag, context
+menu entry, separate editor or Artifacts category. Choose a position or Auto in
+the fret-number row below the fretboard; edits and resets support undo. Suggestions use
+the fingering worker, so drawing a fixed hand never voices a whole lane on the
+main thread.
 
 The hand follows fixed rules (`web/voicing-core.js`), and Rocksmith gets exactly
 the hand the fretboard shows (each note carries it as `hand` in the export spec;
@@ -934,30 +933,30 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
 - Planned automatically: index on the lowest note to start, stay while the notes
   are in reach, otherwise move.
 - A hand anchor fixes the hand of its own note or chord only. It moves no note. The
-  fretboard's Hand list (a `.pill` row: Auto, then only the hands that can play that
-  note or chord, `handChoices`) and the anchor's editor offer nothing else, and a
-  dragged anchor only lands where its hand reaches. One whose note later changes so
-  it no longer reaches is ignored and its flag says so in `--error` ("can't reach").
-  The capo is the same kind of row, 0–12. On the fretboard both rows are shut to
-  their value with a chevron beside; the chevron or a click on the value opens the
-  row, and a choice, the chevron or a click elsewhere shuts it.
+  fret-number row highlights all legal positions (`handChoices`) with a continuous
+  rule and end caps. Other positions are disabled. Clicking a number chooses it;
+  Auto removes the manual hand. Arrow keys traverse available positions.
+  A hand that no longer reaches its notes is ignored. Capo is edited in layer
+  settings and only displayed on the fretboard.
 - Notes of a layer that is not being edited (or is locked) are gray and half
   transparent, labels included.
 - A note moved along its string keeps its finger and stretch: the hand moves with it
   as an anchor on that note (`followHand`), undone with the move.
-- A position override carries on in one of three ways, chosen on the fretboard
-  (a `.pill`: Only here · Guided · Locked; `follow` on the pin). Only here: that
-  note or chord alone. Guided: the memory forgets those notes and learns the
-  override (weight 3), so the same notes after it prefer it where the hand allows.
-  Locked: the same notes after it are played so until another override of them.
-  Nothing reaches back before an override, and no other note's memory changes.
+- Every position override uses Guided: the memory learns the override (weight 3),
+  so later notes prefer it where the hand allows. Existing saved positions stay put
+  until explicitly changed. Legacy Only here and Locked modes normalize to Guided.
+  There is no mode selector, Grip list or Use position button. Show grips retains
+  the clickable alternative rings and boxes on the board.
+- Show suggestion is offered only when a fresh automatic solve of the focused
+  column differs in hand or note positions. It draws the proposed hand and notes
+  with dashed outlines; toggling it changes no musical data. Other columns retain
+  their saved positions, and calculation runs asynchronously in the worker.
 - Fingers: a single note's finger is `fret − hand + 1`; a chord takes the cheapest
   valid fingering for its hand, and the same grip later keeps the fingering it had
   (the memory, a preference the hand may decline). The fretboard's Finger buttons
   step through the valid choices (`fingeringChoices`): a note's finger 1–4 (which
   sets its hand), a chord's fingerings. The choice is stored as `finger` on each
-  fretted note's position override and carries on like the position (only here,
-  guided, locked); choosing a hand for those notes drops it. Rocksmith's chord boxes
+  fretted note's position override and carries on like the position (Guided); choosing a hand for those notes drops it. Rocksmith's chord boxes
   show exactly these fingers (open strings none), one template per grip and fingering.
 - Which finger takes a note follows one finger per fret, anywhere on the neck: two
   frets above the index is the ring finger, three the pinky (EOF's chord shapes

@@ -2,7 +2,6 @@ import { rowsFor } from './rocksmith-check.js';
 import { issueIgnoreActions } from './issue-state.js';
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { isTablatureLane } from "./layer-role.js";
-import { automaticHandSeat } from './hand-anchor-core.js';
 // Note editing: undo/redo across all edit lanes, clipboard (incl. paste-as-reference),
 // the per-note effects (bend / harmonic / articulations / slide), the fingering
 // override, and the right-click note context menu.
@@ -897,24 +896,6 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null, foll
   refreshTabIfOpen();
 }
 
-// How an override carries on: only here, guided or locked (normalizeOverrideInfluence),
-// set in place on the pin that carries it, so the shape itself stays as chosen.
-// Written as a new object rather than mutated, because the undo snapshot shares the
-// note's own `pos` reference and editing it in place would rewrite history too.
-export function setColumnFollow(colNotes, follow) {
-  if (positionSelection(laneOf(colNotes?.[0]), S.selection).multiple) return;
-  const want = normalizeOverrideInfluence({ follow }).follow;
-  const prev = snapshotEdit();
-  let touched = false;
-  for (const n of colNotes) for (const field of ["pos", "arrangement"]) {
-    if (!n[field] || normalizeOverrideInfluence(n[field]).follow === want) continue;
-    n[field] = { ...n[field], follow: want };
-    touched = true;
-  }
-  if (!touched) return;
-  commit(prev); draw(); refreshTabIfOpen();
-}
-
 // Unified shape chooser used by the fretboard's offer. Choosing an alternative
 // rewrites the column to what that shape plays — pins for the notes it keeps,
 // deletions for the ones it drops, real new notes for the ones it adds — so the
@@ -1012,20 +993,12 @@ function writeAlternative(colNotes, choice, influence) {
 // on the lane, belonging to the first note or chord at or after `t`. It fixes that
 // column's hand and nothing else: no note moves for it, and the hand after it is
 // planned on from there. The fretboard only offers hands that can play the column
-// (handChoices); one that no longer can (its notes changed) lapses. Placing the hand
-// already held there clears it.
-export function setHandAnchor(lane, t, fret, { create = false } = {}) {
+// (handChoices); one that no longer can (its notes changed) lapses.
+// Choose Auto (null) to clear it.
+export function setHandAnchor(lane, t, fret) {
   if (!canEditLane(lane) || !Number.isFinite(t) || (fret !== null && (!Number.isFinite(fret) || fret < 1))) return;
   const near = (h) => Math.abs(Number(h.t) - t) <= 1e-6;
   const had = (lane.handHolds || []).find(near);
-  if (!create && fret !== null && fret === automaticHandSeat(lane.notes, laneFretTuning(lane), t,
-    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds })) {
-    fret = null;
-  }
-  if (!had && fret !== null && !create) {
-    toast('Add a hand anchor from the spectrogram context menu first.');
-    return;
-  }
   const rest = (lane.handHolds || []).filter((h) => !near(h));
   if ((!had && fret === null) || (had && Number(had.fret) === fret)) return;
   const prev = snapshotEdit();
@@ -1046,7 +1019,7 @@ function dropChosenFingers(notes) {
 // A FINGERING CHOSEN FOR ONE NOTE OR CHORD: `placed` is the column as the fretboard
 // shows it ({ note, string, fret } each), `fingers` the choice (fingeringChoices).
 // Written onto each note's position override, so it carries on like the position
-// does (only here, guided or locked), and the hand follows from it: a hand anchor on
+// does (guided), and the hand follows from it: a hand anchor on
 // these notes would contradict it and goes.
 export function setColumnFingers(lane, placed, fingers) {
   if (!canEditLane(lane) || !placed.length || placed.some(({ note }) => !lane.notes.includes(note))) return;

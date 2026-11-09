@@ -11,6 +11,7 @@
 //   new-project.js       the New Project modal (it owns its own draft)
 //   stem-settings.js     the stem panel (its buttons call the ops below)
 
+import { normalizeOverrideInfluence } from "./voicing-core.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { INSTRUMENTS, PX_PER_SEC, ZOOM_MAX_X, ZOOM_MAX_Y, ZOOM_MIN_X, ZOOM_MIN_Y, instrKey } from "./constants.js";
 import { confirmChoice } from "./dialog.js";
@@ -258,7 +259,12 @@ export function mapLane(l, startAt = 0) {
   // own label. Nothing displayed it and one migration heuristic read it, so it is
   // dropped on the way in and the next save writes the project without it. A note
   // is a note however it got there.
-  const notes = (l.notes || []).map(({ source, ...n }) => n);
+  const notes = (l.notes || []).map(({ source, ...n }) => {
+    // Every saved override uses Guided, including retired Only here / Locked modes.
+    for (const field of ['pos', 'arrangement']) if (n[field])
+      n[field] = { ...n[field], ...normalizeOverrideInfluence(n[field]) };
+    return n;
+  });
   migrateMotifs(notes);
   // Keep a valid tuning key. Bare strings (an import, a custom tuning deleted
   // since) are looked up by those strings, so E A D G B E is E Standard; strings

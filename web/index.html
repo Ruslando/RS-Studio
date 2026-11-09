@@ -444,6 +444,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <div id="fretboardStage">
               <span id="fretboardWarning" role="status" hidden></span>
               <canvas id="fretboard" title="Hover a fretted note and type 0–4 to assign its finger (0 = thumb). Delete or Backspace restores automatic fingering."></canvas>
+              <div id="fretboardHandPositions" role="radiogroup" aria-label="Hand position" hidden></div>
               <span id="fretboardResetStatus" role="status" hidden></span>
               <!-- The wait names itself. A spinner alone says "not yet" but not what
                    for, and this element covers two waits of very different length:
@@ -456,15 +457,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               </div>
             </div>
             <div id="fretboardControls" role="group" aria-label="Fretboard controls">
-              <div id="fretboardSetup" role="group" aria-label="Hand and capo">
-              <div id="fretboardCapoField">
-                <span class="label" id="fretboardCapoLabel">Capo</span>
-                <span class="fretboard-values-up"><div id="fretboardCapoList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardCapoLabel"></div></span>
-              </div>
-              <div id="fretboardHandField">
-                <span class="label" id="fretboardHandLabel">Hand</span>
-                <span class="fretboard-values-up"><div id="fretboardHandList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardHandLabel"></div></span>
-              </div>
+              <div id="fretboardSetup" role="group" aria-label="Chord name">
               <div id="fretboardChordField">
                 <span class="label" id="fretboardChordLabel">Name</span>
                 <input type="text" id="fretboardChordInput" maxlength="31" aria-labelledby="fretboardChordLabel" spellcheck="false">
@@ -486,12 +479,6 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                   <span id="fretboardName" aria-live="polite" hidden></span>
                   <button type="button" id="fretboardShapeNext" class="icon-btn icon-btn--compact" aria-label="Next note" title="Next note (Right arrow)"><span data-ui-icon="chevronDown" aria-hidden="true"></span></button>
                 </div>
-                <div id="fretboardAlternatives" role="group" aria-labelledby="fretboardAltLabel" hidden>
-                  <span class="label" id="fretboardAltLabel">Grip</span>
-                  <span class="pill" id="fretboardAltStatus"><span id="fretboardAltCount" role="status" aria-live="polite">0 / 0</span></span>
-                  <span class="fretboard-values-up"><div id="fretboardGripList" class="pill fretboard-values fretboard-values--up" data-collapsible role="radiogroup" aria-labelledby="fretboardAltLabel"></div></span>
-                  <button type="button" id="fretboardChoose" class="btn btn--compact">Use position</button>
-                </div>
                 <button type="button" id="fretboardShape" class="btn btn--compact" aria-pressed="false" hidden
                         title="Place every note of the chord by hand">Assign custom grip</button>
                 <button type="button" id="fretboardFingerReset" class="btn btn--compact" hidden
@@ -500,12 +487,8 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 <label class="chk" title="Show the other grips on the board as rings and boxes"><input type="checkbox" id="fretboardGripsShown" checked /> Show grips</label>
                 </div>
                 <div id="fretboardInfluence" role="group" aria-label="Override">
-                <div id="fretboardFollow" class="pill" role="radiogroup" aria-label="How this override carries on" hidden>
-                  <button type="button" role="radio" data-follow="here" aria-checked="true" data-tip="Only here&#10;This note or chord only; nothing after it changes.">Only here</button>
-                  <button type="button" role="radio" data-follow="guided" aria-checked="false" data-tip="Guided&#10;The same notes after it prefer this, unless the hand is better placed elsewhere by then.">Guided</button>
-                  <button type="button" role="radio" data-follow="locked" aria-checked="false" data-tip="Locked&#10;The same notes after it are always played this way.">Locked</button>
-                </div>
-                <button type="button" id="fretboardAuto" class="icon-btn icon-btn--compact" title="Reset override (hover to preview)" aria-label="Reset override"><span data-ui-icon="return" aria-hidden="true"></span></button>
+                <label class="chk" id="fretboardSuggestionLabel" hidden><input type="checkbox" id="fretboardSuggestion" /> Show suggestion</label>
+                <button type="button" id="fretboardAuto" class="icon-btn icon-btn--compact" title="Reset override" aria-label="Reset override"><span data-ui-icon="return" aria-hidden="true"></span></button>
                 </div>
               </div>
             </div>
@@ -727,24 +710,6 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
     </div>
     <div class="dp-body">
       <textarea id="commentText" rows="3" maxlength="500" aria-label="Comment text" placeholder="Comment"></textarea>
-    </div>
-  </div>
-
-  <div id="handAnchorPop" class="live-editor" hidden role="dialog" aria-label="Hand anchor">
-    <div class="pop-head">
-      <span class="pop-title">Hand anchor</span>
-      <span class="pop-head-actions">
-        <button id="handAnchorDelete" class="pop-x pop-del" title="Delete hand anchor" aria-label="Delete hand anchor"><span data-ui-icon="trash" data-icon-size="14" aria-hidden="true"></span></button>
-        <button id="handAnchorPopClose" class="pop-x" title="Close" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
-      </span>
-    </div>
-    <div class="dp-body">
-      <div class="field-group block"><span class="label" id="handAnchorFretLabel">Fret</span>
-        <div id="handAnchorFret" class="pill fretboard-values" role="radiogroup" aria-labelledby="handAnchorFretLabel"></div>
-      </div>
-      <label class="field-group block">Position
-        <span class="pop-field"><input type="number" id="handAnchorTime" min="0" step="0.01" /><span class="pop-unit">s</span></span>
-      </label>
     </div>
   </div>
 

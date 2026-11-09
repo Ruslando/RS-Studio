@@ -59,7 +59,7 @@ export const EDITOR_COMMAND_HANDLERS = {
   markHandshape: () => withSelection(() => markSelectionAsShape('handshape')),
   unmarkShape: () => withSelection(unmarkSelectedShapes),
   fretboardShape: () => click('fretboardShape'), applyFretboardShape: () => click('fretboardApply'),
-  chooseFretboardAlternative: () => click('fretboardChoose'), autoFretboard: () => click('fretboardAuto'),
+  autoFretboard: () => click('fretboardAuto'),
   ...Object.fromEntries(['palmMute', 'hammer', 'vibrato', 'dead', 'accent', 'letRing'].map(key =>
     [key, () => withSelection(notes => setFxOnSelection(key, !notes.every(note => fxOn(note, key))))])),
   previousLayer: () => stepLayer(-1), nextLayer: () => stepLayer(1), addLayer: () => click('addLane'),

@@ -478,6 +478,7 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #viewer { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; border-radius: 0; }
 
 #fretboardBusy {
+  pointer-events: none;
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center; gap: var(--s-sibling);
 
@@ -510,7 +511,6 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"]:is(:hover, :active):not(:disabled) { background: var(--accent-hover); color: var(--on-engaged); }
 /* Two pairs and the way back: same notes | other notes | reset. */
 #fretboardAuto { margin-left: var(--s-sibling); }
-#fretboardFollow > * { min-width: 0; }
 #fretboardName { padding: 0 var(--s-pair); font: 600 var(--text-body)/1 var(--font-mono); color: var(--stage-text); }
 #fretboardResetStatus.busy::before { border-color: var(--stage-hint); border-top-color: var(--stage-text); }
 #fretboardResetStatus { position: absolute; top: var(--s-sibling); left: var(--s-sibling); right: var(--s-sibling); color: var(--stage-label); font-size: var(--text-data); text-align: center; pointer-events: none; }
@@ -1499,15 +1499,6 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 
 /* One candidate at a time, with controls that remain inside a narrow board. */
 #fretboardPin { max-width: calc(100% - 8px); flex-wrap: wrap; }
-/* Grip reads like the Capo/Hand fields: a label, then its value in a pill. */
-#fretboardAlternatives { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
-#fretboardAltLabel { color: var(--stage-label); font-size: var(--text-caption); }
-#fretboardAlternatives .pill > #fretboardAltCount {
-  display: inline-flex; align-items: center; justify-content: center; min-width: 7ch;
-  background: var(--control); color: var(--text); font: 600 var(--text-control)/1 var(--font-mono);
-  font-variant-numeric: tabular-nums; box-shadow: var(--e-control);
-}
-#fretboardAlternatives[hidden] { display: none; }
 /* The chord's name: grows with the text, so a long name is never cut off. */
 #fretboardChordInput {
   field-sizing: content; min-width: 7ch; max-width: 32ch; height: var(--h-control); padding: 0 8px; box-sizing: border-box;
@@ -1521,7 +1512,7 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardVoices[hidden] { display: none; }
 #fretboardVoiceCount { min-width: 7ch; text-align: center; color: var(--stage-text); font: 400 var(--text-data)/1 var(--font-mono); }
 
-#fretboardPin :is(#fretboardChoose, #fretboardShape, #fretboardFingerReset):not(:disabled) { color: var(--stage-text); }
+#fretboardPin :is(#fretboardShape, #fretboardFingerReset):not(:disabled) { color: var(--stage-text); }
 
 /* One continuous toolbar. Use natural group widths; a large flex basis made
    alternatives wrap even when all visible controls fitted on one line. */
@@ -1533,48 +1524,35 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardPanel:not([data-editing]) #fretboardControls { border-top-color: transparent; background: transparent; }
 #fretboardSetup { display: flex; align-items: center; gap: 8px; flex: none; }
 #fretboardSetup > * { flex: none; }
-#fretboardCapoField, #fretboardHandField, #fretboardFingerField, #fretboardChordField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
+#fretboardChordField { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--stage-line); padding-left: 12px; }
 #fretboardSetup > :first-child { border-left: 0; padding-left: 0; }
-#fretboardCapoField .label, #fretboardHandField .label, #fretboardFingerLabel, #fretboardChordLabel { color: var(--stage-label); font-size: var(--text-caption); }
-/* A row of the values that can be chosen (the hand: only those that play the note). */
-.fretboard-values { gap: 2px; }
-.fretboard-values > * { min-width: 26px; padding: 0 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.fretboard-values > [data-value="auto"] { font-family: var(--font-ui); }
-/* Capo, Hand and Grip show their value until a click on it opens them; a click on it again shuts them. */
-.fretboard-values[data-collapsible]:not([data-open]) > :not([aria-checked="true"]) { display: none; }
-#fretboardPanel:not([data-editing]) :is(#fretboardCapoField, #fretboardHandField, #fretboardFingerField, #fretboardChordField) { display: none; }
-/* Shut, the value keeps a width, so a dash becoming "2 1" or "Am7" while the board
-   works does not shift everything right of it (Reset among them, under the pointer). */
-#fretboardFingerList:not([data-open]) > [aria-checked="true"] { min-width: 6ch; }
-#fretboardChordList:not([data-open]) > [aria-checked="true"] { min-width: 7ch; }
-/* An automatic fingering reads quieter than one that was chosen. */
-#fretboardFingerList[data-auto] > [aria-checked="true"] { color: var(--stage-label); }
-/* Custom opens the name field and Auto clears the choice; they are words, not values. */
-.fretboard-values > :is([data-value="__custom"], [data-value="auto"]) { font-family: var(--font-ui); }
-/* Fingering and Chord open upward, over the board: a column of choices, the way a
-   menu opens, rather than a row that pushes the rest of the bar aside. Fixed, so the
-   bar's horizontal scroll does not clip it; the panel (a size container) is its
-   containing block, and fretboard.js places it there. While it is open the bar
-   keeps showing the value it had. */
-.fretboard-values-up { position: relative; display: inline-flex; }
-.fretboard-values--up[data-open] {
-  position: fixed; z-index: var(--z-popover); height: auto; flex-direction: column; align-items: stretch;
-  overflow-y: auto; box-shadow: var(--e1);
+#fretboardChordLabel { color: var(--stage-label); font-size: var(--text-caption); }
+#fretboardPanel:not([data-editing]) #fretboardChordField { display: none; }
+/* The hand selector follows the tapered fretboard instead of living in a menu. */
+#fretboardHandPositions { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+#fretboardHandPositions[hidden], #fretboardSuggestionLabel[hidden] { display: none; }
+#fretboardHandPositions > button {
+  position: absolute; box-sizing: border-box; height: 22px; min-width: 0; padding: 0;
+  pointer-events: auto; border: 0; border-top: 2px solid transparent; border-radius: 0;
+  background: transparent; color: var(--stage-hint); font: 400 11px/18px var(--font-mono);
 }
-.fretboard-values--up[data-open] > * { flex: none; justify-content: flex-start; }
-.fretboard-values-up:has(> [data-open])::before {
-  cursor: pointer;
-  content: attr(data-current); display: inline-flex; align-items: center;
-  height: var(--h-control); padding: 0 var(--s-sibling); box-sizing: border-box;
-  background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-control);
-  color: var(--stage-text); font: 400 var(--text-control)/1 var(--font-mono);
+#fretboardHandPositions > button.is-allowed { border-top-color: var(--hand-hue); color: var(--stage-text); }
+#fretboardHandPositions > button.is-first { border-left: 2px solid var(--hand-hue); border-top-left-radius: 3px; }
+#fretboardHandPositions > button.is-last { border-right: 2px solid var(--hand-hue); border-top-right-radius: 3px; }
+#fretboardHandPositions > button:disabled { opacity: .3; cursor: default; }
+#fretboardHandPositions > button[aria-checked="true"] {
+  background: var(--stage-text); color: var(--stage); border-radius: 4px; font-weight: 700;
 }
+#fretboardHandPositions > button.is-current:not([aria-checked="true"]) { color: var(--stage-text); font-weight: 700; text-decoration: underline; text-decoration-color: var(--hand-hue); }
+#fretboardHandPositions > button.is-suggested { outline: 1px dashed var(--hand-hue); outline-offset: -3px; opacity: 1; }
+#fretboardHandPositions > button:hover:not(:disabled):not([aria-checked="true"]) { background: var(--stage-chrome-hover); color: var(--stage-text); }
+#fretboardHandPositions > button:focus-visible { outline: 2px solid var(--stage-text); outline-offset: 1px; }
+#fretboardHandPositions > button[data-value="auto"] { font: 400 10px/18px var(--font-ui); }
 #fretboardControls #fretboardPin {
   position: static; flex: 1 0 auto; min-width: max-content; max-width: none; flex-wrap: nowrap;
   padding: 0; border: 0; border-radius: 0; background: transparent; gap: 12px;
   overflow: visible;
 }
-#fretboardAltStatus[hidden] { display: none; }
 #fretboardShapeActions, #fretboardInfluence { display: flex; align-items: center; gap: 4px; flex: none; }
 #fretboardShapeActions { flex-wrap: nowrap; }
 #fretboardInfluence { margin-left: auto; padding-left: 12px; border-left: 1px solid var(--stage-line); }

@@ -1156,21 +1156,11 @@ export function contextualCandidateSets(columns, tuning, cap = DP_SHAPES_PER_COL
 }
 
 
-// WHAT AN OVERRIDE MEANS FOR THE REST OF THE SONG, stored as `follow` on the pin:
-//
-//   here     this note or chord only; the memory learns what the engine would have
-//            played here, so nothing after it changes (the default)
-//   guided   the memory forgets this note or chord and learns the override three
-//            times over: the same notes after it prefer it, but where the hand is
-//            elsewhere by then a better position nearby may still win
-//   locked   the same notes after it take it, until another override of them or
-//            until a technique rules it out (spreadPins)
-//
-// Nothing reaches backwards, and no other note's memory is touched.
-export const FOLLOW_MODES = ["here", "guided", "locked"];
-
-export function normalizeOverrideInfluence(value = null) {
-  return { follow: FOLLOW_MODES.includes(value?.follow) ? value.follow : "here" };
+// Every override guides later placements. Legacy Only here / Locked values
+// normalize to Guided, so no hidden mode survives opening an older project.
+export const FOLLOW_MODES = ["guided"];
+export function normalizeOverrideInfluence() {
+  return { follow: "guided" };
 }
 
 // The flags a pin nobody chose them for gets: an imported tab's positions.
@@ -1185,33 +1175,6 @@ export function overrideFlow(notes) {
   return normalizeOverrideInfluence(source);
 }
 export const overrideInfluence = overrideFlow;
-
-// A LOCKED OVERRIDE IS HANDED ON to every identical column after it that carries no
-// pin of its own, until another pin of the same notes. Read at solve time and never
-// written onto the other columns: returning the one pin to automatic returns them all,
-// and a note drawn later joins without anybody re-applying anything.
-// Limitation: "identical" is the same pitches at one onset. The same chord with a
-// note left out is another column and is voiced on its own.
-function spreadPins(columns, pins) {
-  const out = new Array(columns.length).fill(null);
-  out.from = new Array(columns.length).fill(-1);    // whose pin each one is
-  if (!pins.some(Boolean)) return out;
-  const low = (notes) => [...notes].sort((a, b) => a.pitch - b.pitch);
-  const keys = columns.map((c) => low(c.notes).map((n) => n.pitch).join(","));
-  const live = new Map();
-  columns.forEach((column, i) => {
-    if (pins[i]) {
-      if (overrideFlow(column.notes).follow === "locked") live.set(keys[i], i);
-      else live.delete(keys[i]);
-    } else if (live.has(keys[i])) {
-      const from = live.get(keys[i]), source = low(columns[from].notes);
-      out[i] = new Map(low(column.notes).map((n, k) => [n, pins[from].get(source[k])]));
-      out.from[i] = from;
-    }
-  });
-  return out;
-}
-
 
 // The ranked alternative shapes offered to the user for a column, ignoring any
 // current pin (so they can always cycle back through the automatic options).
@@ -1728,7 +1691,6 @@ function holdsByColumn(columns, holds) {
 // usual, and the export says so at the shape.
 //
 // Returns Map(note -> { string, fret, finger, seat }) or null when there is none.
-const GRIP_FLOW = { follow: "guided" };
 function shapeGrips(columns, tuning, options) {
   const groups = new Map();
   for (const { notes } of columns) for (const n of notes) {
@@ -1804,16 +1766,10 @@ function registerColumns(columns, tuning, options = {}) {
   const gripped = columns.map(({ notes }, i) => !userPins[i] && grips && notes.every((n) => grips.has(n))
     ? new Map(notes.map((n) => [n, { string: grips.get(n).string, fret: grips.get(n).fret }])) : null);
   const pins = columns.map((_, i) => userPins[i] || gripped[i]);
-  const spread = spreadPins(columns, pins);
   const allRules = columns.map(({ notes }, i) => notes.map((n) => effectRule(n, columns[i + 1] ? columns[i + 1].notes : [])));
-  // A locked override handed on (spread) outranks where the column was voiced before.
-  const keptAll = columns.map(({ notes }, i) => pins[i] || spread[i] ? null : keptShape(notes, tuning, allRules[i], frets));
+  const keptAll = columns.map(({ notes }, i) => pins[i] ? null : keptShape(notes, tuning, allRules[i], frets));
   const input = columns.map(({ notes, t0 }, i) => {
     const rules = allRules[i];
-    // A pin handed on from an identical column is an offer the column can refuse:
-    // the pitches match but the technique may not, and a grip with an open string
-    // under a note that slides here is not the same grip. (An incoming slide's string
-    // is the other refusal, and only the walk knows it — see `soft` in voiceRegister.)
     // Some notes pinned and some not (a note added to an imported chord): the pinned
     // ones keep their strings exactly and only the rest are placed, around them.
     // Voiced before and still fitting (keepVoicing): taken as it is; its hand is planned anew.
@@ -1821,14 +1777,9 @@ function registerColumns(columns, tuning, options = {}) {
       ? keptAll[i] : null;
     const some = pins[i] || kept ? null : pinnedPositions(notes, tuning);
     const partial = some && some.size ? some : null;
-    const handed = !pins[i] && !kept && !partial && spread[i] && !notes.some((n, k) => {
-      const fret = spread[i].get(n).fret;
-      return fret > frets || (fret === 0 && rules[k] && rules[k].fretted);
-    }) ? spread[i] : null;
-    const authored = pins[i] || handed;
+    const authored = pins[i];
     const locked = authored || kept;
-    const flow = gripped[i] ? GRIP_FLOW : authored ? overrideFlow(columns[pins[i] ? i : spread.from[i]].notes) : null;
-    const chosen = authored ? chosenFingers(notes, pins[i] ? notes : columns[spread.from[i]].notes) : new Map();
+    const chosen = authored ? chosenFingers(notes, notes) : new Map();
     // The grip's fingers, where the player chose none, and its hand: one for the whole shape.
     let gripSeat = null;
     if (gripped[i]) for (const n of notes) {
@@ -1836,7 +1787,6 @@ function registerColumns(columns, tuning, options = {}) {
       if (!chosen.has(n) && Number.isInteger(g.finger) && notes.length > 1) chosen.set(n, g.finger);
       if (Number.isFinite(g.seat)) gripSeat = g.seat;
     }
-    const shadow = pins[i] && flow.follow === "here" ? shadowOf(notes, tuning, rules, frets, seat) : null;
     return {
       // A hand put here by the player fixes the hand of this column only. It does not
       // move notes: where they go is decided before the hand (see planHand). A chosen
@@ -1854,24 +1804,10 @@ function registerColumns(columns, tuning, options = {}) {
       // wins even when it contradicts the note's own technique. The user asked.
       fixed: locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
       pinned: partial ? notes.map((n) => partial.has(n) ? seat.get(partial.get(n).string) : null) : null,
-      soft: !!handed,
-      // How the override follows on (normalizeOverrideInfluence). Only here: the
-      // memory learns what would have been played instead (`aside`). Guided: it
-      // forgets these notes and learns the override (`guided`). A locked one is
-      // handed on to the same notes after it (`handed`, spreadPins).
-      aside: !!pins[i] && flow.follow === "here",
-      // What the engine had here before the override, while it still fits: the
-      // neighbours keep reading that, so an override "only here" changes nothing
-      // around it. Re-solving the column instead gave a different hand than the
-      // one the neighbours had been placed against.
-      shadow,
-      // Where this column is already played, for the register (blockCost): a kept
-      // placement, a handed-on copy, or a pin that steers what follows. A pin "only
-      // here" offers the placement it replaced instead, so it moves nothing around it.
-      steer: !!pins[i] && flow.follow !== "here",
-      decided: shadow || (pins[i] && flow.follow === "here") ? shadow
-        : locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
-      guided: !!pins[i] && flow.follow === "guided",
+      // Explicit positions guide later placements; saved positions stay fixed.
+      steer: !!pins[i],
+      decided: locked ? notes.map(n => seat.get(locked.get(n).string)) : null,
+      guided: !!pins[i],
       rules,
       // Muted notes, for the hand walk only (planHand): see `reach` in voiceRegister.
       dead: notes.some((n) => n.fx?.dead) ? notes.map((n) => !!n.fx?.dead) : null,
@@ -1928,7 +1864,7 @@ function registerColumns(columns, tuning, options = {}) {
     if (options.hands) {
       // The fingers this column must have: the ones chosen for it, or else the ones
       // the same grip had last time (a preference: a hand that cannot play them
-      // there picks its own). An override only here teaches nothing.
+      // there picks its own).
       const key = shapeKey(shape), contacts = [...shape.values()].filter((p) => p.fret > 0).length;
       let required = input[i].fingers;
       if (!required.size && contacts > 1 && fingerMemory.has(key))
@@ -1943,15 +1879,7 @@ function registerColumns(columns, tuning, options = {}) {
   });
 }
 
-// A pinned column's previous automatic placement (note.auto), as engine seats.
-function shadowOf(notes, tuning, rules, frets, seat) {
-  const auto = keptShape(notes.map(({ pitch, auto }) => ({ pitch, auto })), tuning, rules, frets);
-  return auto ? [...auto.values()].map((p) => seat.get(p.string)) : null;
-}
-
-// The fingers a pin asks for, on this column's notes. A locked override handed on
-// from another column brings that column's fingers, matched by pitch as spreadPins
-// matches the positions.
+// The fingers a pin asks for, on this column's notes, matched by pitch.
 function chosenFingers(notes, source) {
   const low = (list) => [...list].sort((a, b) => a.pitch - b.pitch);
   const from = low(source), to = low(notes), out = new Map();

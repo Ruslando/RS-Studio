@@ -1,7 +1,7 @@
 // Run: node tests/web/voicing-override.test.mjs
 // What an override reaches, and what a technique forbids an override to offer.
 import assert from "node:assert/strict";
-import { BASS_HAND_PROFILE, chordColumns, handChoices, overrideFlow, overrideInfluence, placementFault, placementLimits, scoreShapesAsDecided, shapeFault, voiceNotes, voiceNotesFingered } from "../../web/voicing-core.js";
+import { BASS_HAND_PROFILE, chordColumns, handChoices, FOLLOW_MODES, defaultPinFlags, normalizeOverrideInfluence, overrideFlow, overrideInfluence, placementFault, placementLimits, scoreShapesAsDecided, shapeFault, voiceNotes, voiceNotesFingered } from "../../web/voicing-core.js";
 
 const tuning = [64, 59, 55, 50, 45, 40];              // app order: string 0 = high E
 const note = (start, pitch, extra = {}) => ({ start, end: start + 0.4, pitch, ...extra });
@@ -9,25 +9,28 @@ const pin = (string, fret, reach = {}) => ({ string, fret, scope: "local", ...re
 const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
 
 // ---- how an override carries on -------------------------------------------
-// A4 five times. The third is pinned to the A string, fret 12.
+// Every override, including both retired modes, uses Guided.
 {
-  const lane = [0, 1, 2, 3, 4].map((t) => note(t, 57));
-  assert.deepEqual(overrideInfluence([lane[2]]), { follow: "here" }, "a new override is only here");
-  assert.equal(overrideFlow([{ pitch: 57, pos: pin(4, 12) }]).follow, "here", "an imported pin too");
-  assert.equal(overrideFlow([{ pitch: 57, pos: pin(4, 12, { adaptNext: true, influenceNext: true }) }]).follow, "here",
-    "the old switches are not read");
+  assert.deepEqual(FOLLOW_MODES, ['guided']);
+  assert.deepEqual(defaultPinFlags(), { follow: 'guided' });
+  for (const mode of [undefined, 'here', 'locked', 'invalid'])
+    assert.deepEqual(normalizeOverrideInfluence({follow: mode}), {follow: 'guided'});
+  assert.deepEqual(normalizeOverrideInfluence({follow: 'here'}), {follow: 'guided'});
+  const lane = [0, 1, 2, 3, 4].map(t => note(t, 57));
+  assert.deepEqual(overrideInfluence([lane[2]]), {follow: 'guided'});
+  assert.equal(overrideFlow([{pitch: 57, pos: pin(4, 12)}]).follow, 'guided');
   const auto = at(voiceNotes(lane, tuning), lane[0]);
-  assert.notEqual(auto, "4:12", "the test needs a pin that differs from the automatic answer");
-  const played = () => { const voiced = voiceNotes(lane, tuning); return lane.map((n) => at(voiced, n)); };
-
-  lane[2].pos = pin(4, 12, { follow: "locked" });
-  assert.deepEqual(played(), [auto, auto, "4:12", "4:12", "4:12"], "locked: the same notes after, nothing before");
+  const played = () => { const voiced = voiceNotes(lane, tuning); return lane.map(n => at(voiced, n)); };
+  lane[2].pos = pin(4, 12, {follow: 'here'});
+  const legacyHere = played();
+  lane[2].pos = pin(4, 12, {follow: 'guided'});
+  const guided = played();
+  assert.deepEqual(legacyHere, guided, 'legacy Only here now uses Guided');
   lane[2].pos = pin(4, 12);
-  assert.deepEqual(played(), [auto, auto, "4:12", auto, auto], "only here: one column");
-  // A later override of the same notes takes over from where it stands.
-  lane[2].pos = pin(4, 12, { follow: "locked" });
-  lane[3].pos = pin(2, 2);
-  assert.deepEqual(played(), [auto, auto, "4:12", "2:2", auto], "a later override ends the lock");
+  assert.deepEqual(played(), guided, 'an unspecified mode behaves as Guided');
+  lane[2].pos = pin(4, 12, {follow: 'locked'});
+  assert.deepEqual(played(), guided, 'a legacy Locked override behaves as Guided');
+  assert.deepEqual(guided.slice(0, 2), [auto, auto], 'nothing before the override changes');
 }
 
 // Guided: the same notes after prefer the override where the hand allows it, and no
@@ -55,24 +58,23 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
     "out of the hand's way it is a preference the hand may decline; nothing before it changes");
 }
 
-// The same chord again follows a locked override; a different chord does not.
+// A repeated chord can follow a Guided override.
 {
   const chord = (t) => [note(t, 52), note(t, 55), note(t, 59)];           // E3 G3 B3
   const a = chord(0), other = [note(1, 53), note(1, 57)], b = chord(2);
-  const reach = { follow: "locked" };
+  const reach = { follow: "guided" };
   a[0].pos = pin(4, 7, reach); a[1].pos = pin(3, 5, reach); a[2].pos = pin(2, 4, reach);
   const voiced = voiceNotes([...a, ...other, ...b], tuning);
   assert.deepEqual(b.map((n) => at(voiced, n)), ["4:7", "3:5", "2:4"]);
 }
 
-// A handed-on pin never puts a technique where it cannot be played: E4 pinned open,
+// A Guided preference never puts a technique where it cannot be played: E4 pinned open,
 // and the next E4 carries a slide.
 {
-  const reach = { follow: "locked" };
+  const reach = { follow: "guided" };
   const lane = [note(0, 64, { pos: pin(0, 0, reach) }), note(1, 64), note(2, 64, { slide: "outDown" })];
   const voiced = voiceNotes(lane, tuning);
-  assert.equal(at(voiced, lane[1]), "0:0");
-  assert.notEqual(voiced.get(lane[2]).fret, 0, "a slide is not handed an open string");
+  assert.notEqual(voiced.get(lane[2]).fret, 0, "a slide cannot use an open string");
 }
 
 // ---- what may be offered -------------------------------------------------
@@ -230,20 +232,6 @@ for (const chordPin of [false, true]) {
   lane[4].slide = "outUp";
   const constrained = voiceNotes(lane, tuning, Infinity, options);
   assert.notEqual(constrained.get(lane[4]).fret, 0, "a chord slide still requires a fret");
-}
-
-// ---- an override "only here" leaves its neighbours as they were -----------------
-// Bb5 voiced at the 8th, Fsus4/C after it at the 10th. Bb5 is then pinned at the 3rd
-// "only here": recalculating Fsus4/C must give the 10th again, not a fresh solve's 15th.
-{
-  const bb5 = [58, 65, 70].map((p) => note(0, p)), fsus = [60, 65, 70].map((p) => note(1, p));
-  const lane = [...bb5, ...fsus];
-  const kept = new Map([[58, [3, 8]], [65, [2, 10]], [70, [1, 11]]]);
-  bb5.forEach((n) => { const [string, fret] = kept.get(n.pitch); n.auto = { string, fret, hand: 8, n: 3 }; });
-  const before = voiceNotes(lane, tuning);
-  [[2, 3], [1, 6], [0, 6]].forEach(([string, fret], k) => { bb5[k].pos = pin(string, fret); });
-  const after = voiceNotes(lane, tuning);
-  assert.deepEqual(fsus.map((n) => at(after, n)), fsus.map((n) => at(before, n)), "the pin changed its neighbour");
 }
 
 // ---- a guided override pulls its bar's register to where it is played -----------

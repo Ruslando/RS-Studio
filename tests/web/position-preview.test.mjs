@@ -52,13 +52,11 @@ function compare(lane, source, shape, selection, kind) {
 
 // Reproduce the mismatch: a local pose estimate from seat 2 reports 4 for A7,
 // whereas the committed passage can choose a different anchor and finger.
-for (const follow of ['here', 'guided', 'locked']) for (const [string, fret] of [[3, 2], [4, 7], [5, 12]]) {
+for (const follow of ['guided']) for (const [string, fret] of [[3, 2], [4, 7], [5, 12]]) {
   const lane = structuredClone(project.editLanes[0]), first = lane.notes[0];
   first.pos = { string: 3, fret: 2, scope: 'local', follow };
   const shape = new Map([[first, { string, fret }]]);
   const hand = compare(lane, [first], shape, new Set([first]), 'note');
-  if (follow === 'here' && fret === 7) assert.notEqual(hand.seat, handForShape(shape, 2).seat,
-    'regression: do not display the old single-grip estimate as the final answer');
 }
 
 {

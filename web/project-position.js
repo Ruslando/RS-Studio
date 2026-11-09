@@ -11,7 +11,6 @@ import { closeSectionMarkerPop, sectionMarkersChanged } from './section-markers.
 import { closeToneMarkerPop } from './tone-markers.js';
 import { closePhraseMarkerPop } from './phrase-markers.js';
 import { closeCrowdEventPop } from './crowd-events.js';
-import { closeHandAnchorPop } from './hand-anchors.js';
 import { clearMatches } from './tracing.js';
 import { refreshTabIfOpen } from './tablature.js';
 import { updateAutoScroll } from './interaction.js';
@@ -83,7 +82,7 @@ function finish(cancel = false) {
 }
 
 function closeEditors() {
-  closeMarkerPop(); closeSectionMarkerPop(); closeHandAnchorPop();
+  closeMarkerPop(); closeSectionMarkerPop();
   closeToneMarkerPop(); closePhraseMarkerPop(); closeCrowdEventPop(); clearMatches();
 }
 

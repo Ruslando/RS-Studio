@@ -76,7 +76,7 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
   assert.notEqual(effectSig({ fx: { palmMute: true } }), effectSig({ fx: { vibrato: true } }));
   assert.equal(effectSig({ pos: { string: 1, fret: 2 } }), effectSig({}));
   assert.notEqual(effectSig({ pos: { string: 1, fret: 2 } }, { includePos: true }), effectSig({}, { includePos: true }));
-  assert.notEqual(effectSig({ pos: { string: 1, fret: 2, follow: "locked" } }, { includePos: true }),
+  assert.notEqual(effectSig({ pos: { string: 1, fret: 2, follow: "here" } }, { includePos: true }),
     effectSig({ pos: { string: 1, fret: 2 } }, { includePos: true }), "how an override carries on is part of it");
 }
 

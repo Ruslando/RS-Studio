@@ -142,9 +142,9 @@ const notes = () => [45, 52, 57, 60, 64].map((pitch, i) => ({ id: `n${i}`, pitch
 
   // A position the player pinned stays, and the grip is built around it.
   const pinned = run({ shapeId: "s1", shapeKind: "handshape" });
-  pinned[2].pos = { string: 1, fret: 5, scope: "local", follow: "here" };   // E on the B string
+  pinned[2].pos = { string: 0, fret: 0, scope: "local", follow: "guided" };   // Open E allows one playable grip
   const rp = voiceNotesFingered(pinned, E, Infinity, { instrument: "electric" });
-  assert.deepEqual(rp.voiced.get(pinned[2]), { string: 1, fret: 5 });
+  assert.deepEqual(rp.voiced.get(pinned[2]), { string: 0, fret: 0 });
   assert.ok(oneGrip(strings(rp, pinned)));
 
   // A technique that needs a fretted note never gets an open string in the grip:

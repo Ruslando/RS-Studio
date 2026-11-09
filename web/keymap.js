@@ -36,7 +36,6 @@ export const KEY_COMMANDS = [
     ["unmarkShape", "Remove arpeggio / handshape (keep notes)"],
     ["fretboardShape", "Fretboard: build a grip"],
     ["applyFretboardShape", "Fretboard: apply custom grip"],
-    ["chooseFretboardAlternative", "Fretboard: use previewed alternative"],
     ["autoFretboard", "Fretboard: return to automatic"],
     ["palmMute", "Toggle palm mute"], ["hammer", "Toggle hammer-on / pull-off"],
     ["vibrato", "Toggle vibrato"], ["dead", "Toggle dead note"],

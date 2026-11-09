@@ -31,7 +31,7 @@ import { isTablatureLane, selectedTablatureLane } from "./layer-role.js";
 import { gpDebug, modernGpProjectionStatus, modernGpResult, projectedGpLaneScore } from "./guitar-pro-score.js";
 import { parseTuning, songTimeToTabMs, tabMsToSongTime } from "./util.js";
 import { TUNINGS } from "./tunings.js";
-import { arrangedNotes, chordColumns, handChoices, handProfileForTuning, isChosenFinger, keepVoicing, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
+import { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
 import { draw } from "./repaint.js";
 import { paintMemo } from "./paint-memo.js";
 
@@ -164,35 +164,6 @@ export const laneFingeringKey = paintMemo(function laneFingeringKey(lane, tuning
 });
 
 const aborted = () => Object.assign(new Error("tablature generation cancelled"), { name: "AbortError" });
-
-// THE HANDS EACH NOTE OR CHORD OF A LANE CAN BE PLAYED WITH: [{ t0, choices }] by
-// onset (handChoices), from the lane's last fingering, which a hand anchor does not
-// change, since anchors move no notes. Null until that fingering is in; asking
-// starts it and redraws when it arrives.
-const handColumnsCache = new WeakMap();
-export function laneHandColumns(lane, { now = false } = {}) {
-  const key = laneFingeringKey(lane);
-  let cached = laneVoicingCache.get(lane);
-  if (cached?.key !== key && now) {
-    // Asked for an answer on the spot (an editor opening): voice the lane here.
-    const notes = arrangedNotes(lane.notes), tuning = laneFretTuning(lane);
-    const { voiced } = voiceNotesFingered(notes, tuning, Infinity,
-      { bars: laneBars(lane), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
-    cached = { key, positions: notes.map((note) => voiced.get(note) || null) };
-  }
-  if (cached?.key !== key) { laneFingering(lane).then(() => draw()).catch(() => {}); return null; }
-  const memo = handColumnsCache.get(lane);
-  if (memo?.key === key) return memo.columns;
-  const notes = arrangedNotes(lane.notes), voiced = voicedMap(notes, cached.positions);
-  const profile = handProfileForTuning(laneFretTuning(lane)), max = Math.max(1, laneFretCount(lane) - 3);
-  const columns = chordColumns(notes).map((c) => ({
-    t0: c.t0, choices: handChoices(new Map(c.notes.filter((n) => voiced.has(n)).map((n) => [n, voiced.get(n)])), profile, max) }));
-  handColumnsCache.set(lane, { key, columns });
-  return columns;
-}
-
-// The note or chord a hand anchor at `t` belongs to (the first at or after it).
-export const handColumnAt = (columns, t) => columns?.find((c) => c.t0 >= Number(t) - 1e-6) ?? null;
 
 function voicedMap(notes, positions) {
   const voiced = new Map();

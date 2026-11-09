@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
-import { adjacentColumn, legatoColumns } from '../../web/column-navigation.js';
+import { adjacentColumn } from '../../web/column-navigation.js';
 
 const a = { start: 0, end: 2, pitch: 60 }, b = { start: 1, end: 2, pitch: 64 },
   c = { start: 1, end: 2, pitch: 67 };
@@ -16,7 +16,7 @@ const { stepColumnFocus, stepVoiceFocus } = await mockImport(new URL('../../web/
   './geometry.js': { xOf: t => t * 100, yOf: pitch => pitch },
   './lanes.js': { editLanes: () => [lane] }, './layer-role.js': { selectedTablatureLane: () => lane },
   './voicing-core.js': { chordColumns: () => columns },
-  './column-navigation.js': { adjacentColumn, legatoColumns },
+  './column-navigation.js': { adjacentColumn },
   './util.js': { clamp: (v, min, max) => Math.min(max, Math.max(min, v)) },
   './tracing.js': { setPlaybackCursor: t => { time = t; } },
   './playback.js': { playbackTime: () => time,
@@ -48,17 +48,30 @@ lane.notes.push(source, landing, after);
 columns.push(...[source, landing, after].map(note => ({ t0: note.start, notes: [note] })));
 stepColumnFocus(1); unlocks.shift()(); await Promise.resolve();
 assert.equal(time, 3, 'enter the slide at its source');
-assert.deepEqual([...S.selection], [source, landing], 'select the whole legato gesture');
-assert.deepEqual(heard.pop().notes, [source, landing], 'audition the slide with its landing');
+assert.deepEqual([...S.selection], [source], 'select only the slide source');
+assert.deepEqual(heard.pop().notes, [source], 'audition only the focused onset');
 stepColumnFocus(1); unlocks.shift()(); await Promise.resolve();
-assert.equal(time, 5, 'the next press leaves the entire slide');
-assert.deepEqual([...S.selection], [after]);
-heard.pop();
+assert.equal(time, 4, 'the next press visits the landing');
+assert.deepEqual([...S.selection], [landing]);
+assert.deepEqual(heard.pop().notes, [landing]);
+stepColumnFocus(1); unlocks.shift()(); await Promise.resolve();
+assert.equal(time, 5);
+assert.deepEqual([...S.selection], [after]); heard.pop();
 stepColumnFocus(-1); unlocks.shift()(); await Promise.resolve();
-assert.equal(time, 3, 'backwards enters at the slide source too');
-assert.deepEqual([...S.selection], [source, landing]);
-heard.pop();
+assert.equal(time, 4, 'backwards visits the landing separately');
+assert.deepEqual([...S.selection], [landing]); heard.pop();
 time = 4.5;
 stepColumnFocus(-1); unlocks.shift()(); await Promise.resolve();
-assert.equal(time, 1, 'backwards from a sounding landing leaves the whole gesture');
+assert.equal(time, 3, 'backwards from the landing returns to the source');
+assert.deepEqual([...S.selection], [source]); heard.pop();
+// Overlapping slide parts are also independent choices for vertical navigation.
+source.end = 5;
+time = 4.5; S.selection = new Set([source]);
+stepVoiceFocus(1); unlocks.shift()(); await Promise.resolve();
+assert.deepEqual([...S.selection], [landing]);
+assert.equal(time, 4.5);
+assert.deepEqual(heard.pop().notes, [landing]);
+stepVoiceFocus(-1); unlocks.shift()(); await Promise.resolve();
+assert.deepEqual([...S.selection], [source]);
+assert.equal(source.slide, 'legato', 'selection does not unlink the slide');
 console.log('Arrow navigation auditions notes and chords after audio initialization');

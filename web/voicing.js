@@ -23,7 +23,7 @@ import { S, setSelection } from "./store.js";
 import { setPlaybackCursor } from "./tracing.js";
 import { clamp } from "./util.js";
 import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey } from "./voicing-core.js";
-import { adjacentColumn, legatoColumns } from './column-navigation.js';
+import { adjacentColumn } from './column-navigation.js';
 
 export * from "./voicing-core.js";
 export { analyzeChord, detectChord, PC_NAMES, pcName } from "./chords.js";
@@ -214,7 +214,7 @@ function arrowLane() {
 export function stepColumnFocus(dir) {
   const lane = arrowLane();
   if (!lane) return;
-  const cols = legatoColumns(chordColumns(lane.notes));
+  const cols = chordColumns(lane.notes);
   if (!cols.length) return;
   const next = adjacentColumn(cols, playbackTime(), dir, S.selection);
   if (next) focusColumn(next.notes[0], { column: next });
@@ -228,7 +228,7 @@ export function stepVoiceFocus(dir) {
   const lane = arrowLane();
   if (!lane) return;
   const time = playbackTime() + 1e-3;
-  const sounding = legatoColumns(chordColumns(lane.notes))
+  const sounding = chordColumns(lane.notes)
     .filter(column => column.t0 <= time && column.notes.some(note => note.end > time))
     .sort((a, b) => Math.max(...a.notes.map(note => note.pitch)) - Math.max(...b.notes.map(note => note.pitch)));
   if (sounding.length < 2) return;

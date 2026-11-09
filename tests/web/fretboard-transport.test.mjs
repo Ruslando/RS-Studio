@@ -20,15 +20,13 @@ const elements = new Map(), $ = id => {
 };
 const win = new EventTarget(), S = { selection: new Set() };
 let playing = false;
-const saved = Object.fromEntries(['window', 'localStorage', 'ResizeObserver'].map(key => [key, globalThis[key]]));
+const saved = Object.fromEntries(['window', 'localStorage', 'ResizeObserver', 'document'].map(key => [key, globalThis[key]]));
 const noop = () => {};
 try {
-  Object.assign(globalThis, { window: win, localStorage: { getItem: () => null }, ResizeObserver: class { observe() {} } });
+  Object.assign(globalThis, { document: {activeElement: null}, window: win, localStorage: { getItem: () => null }, ResizeObserver: class { observe() {} } });
   const dom = Object.fromEntries(['editorEl', 'fretboardApply', 'fretboardAuto', 'fretboardBusy', 'fretboardBusyLabel',
-    'fretboardEl', 'fretboardFollow', 'fretboardName', 'fretboardPanel', 'fretboardPin',
+    'fretboardEl', 'fretboardName', 'fretboardPanel', 'fretboardPin',
     'fretboardShape', 'fretboardStage'].map(id => [id, $(id)]));
-  dom.fretboardFollow.children = ['here', 'guided', 'locked'].map(follow =>
-    Object.assign(new Element(), { dataset: { follow } }));
   const board = await mockImport(new URL('../../web/fretboard.js', import.meta.url), {
     './dom.js': { ...dom, $ }, './store.js': { S },
     './playback.js': { transportPlaying: () => playing },

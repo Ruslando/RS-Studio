@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { adjacentColumn, legatoColumns } from '../../web/column-navigation.js';
+import { adjacentColumn } from '../../web/column-navigation.js';
 
 const notes = [
   { start: 0, end: .8 }, { start: 1, end: 1.8 },
@@ -22,17 +22,14 @@ for (const placed of [false, true]) {
     ...(placed ? { auto: { string: 2, fret: 5 + start } } : {}) }));
   chain[1].slide = chain[2].slide = 'legato';
   const columns = chain.map(note => ({ t0: note.start, notes: [note] }));
-  const before = JSON.stringify(columns), units = legatoColumns(columns);
-  assert.equal(units.length, 3);
-  assert.deepEqual(units[1].notes, chain.slice(1, 4), 'the entire legato chain is one unit');
-  for (const time of [1, 1.005, 2.5, 3.9]) {
-    const selected = new Set(units[1].notes);
-    assert.equal(adjacentColumn(units, time, 1, selected), units[2], 'right skips every landing');
-    assert.equal(adjacentColumn(units, time, -1, selected), units[0], 'left skips every landing');
+  const before = JSON.stringify(columns);
+  for (let i = 1; i <= 3; i++) {
+    const selected = new Set([chain[i]]);
+    for (const time of [i, i + .005, i + .5]) {
+      assert.equal(adjacentColumn(columns, time, 1, selected), columns[i + 1], 'right visits each slide part');
+      assert.equal(adjacentColumn(columns, time, -1, selected), columns[i - 1], 'left visits each slide part');
+    }
   }
-  assert.equal(adjacentColumn(units, 4, -1, new Set([chain[4]])), units[1]);
-  assert.equal(JSON.stringify(columns), before, 'navigation does not alter the source columns');
-  chain[1].slide = chain[2].slide = 'shift';
-  assert.equal(legatoColumns(columns).length, 5, 'picked shift slides remain separate steps');
+  assert.equal(JSON.stringify(columns), before, 'navigation preserves notes and slide connections');
 }
 console.log('Column navigation follows the focused chord without repeating it');

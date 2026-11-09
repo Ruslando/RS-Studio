@@ -10,8 +10,6 @@ import { openSectionMarkerPop, closeSectionMarkerPop } from './section-markers.j
 import { openPhraseMarkerPop, closePhraseMarkerPop, phraseLabel } from './phrase-markers.js';
 import { automaticCrowdEvents, closeCrowdEventPop, crowdEventLabel, editCrowdEvent } from './crowd-events.js';
 import { openToneMarkerPop, closeToneMarkerPop } from './tone-markers.js';
-import { openHandAnchorPop, closeHandAnchorPop } from './hand-anchors.js';
-import { handColumnAt, laneHandColumns } from './tablature.js';
 import { sectionTypeLabel } from './section-marker-core.js';
 import { tonePresetLabel, tonePresetMissing } from './tone-marker-core.js';
 import { playbackTime, seekPlayback } from './playback.js';
@@ -25,7 +23,7 @@ import { icon } from './icons.js';
 import { rocksmithEventItems } from './rocksmith-events.js';
 import { RS_EVENT_NAMES } from './section-marker-core.js';
 
-const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['anchor', 'Hand anchors'], ['comment', 'Comments'], ['rocksmith', 'Rocksmith']];
+const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['comment', 'Comments'], ['rocksmith', 'Rocksmith']];
 // Crowd events are Rocksmith's too, so they are listed with the export's own marks.
 const groupOf = kind => (kind === 'crowd' ? 'rocksmith' : kind);
 // The export's own marks (rocksmith-events.js): listed and visited, never edited.
@@ -54,20 +52,6 @@ export function markerArtifacts(requestedLane = null) {
     });
   }
   for (const lane of lanes) {
-    // An anchor that cannot reach its note says so, as on its flag (hand-anchors.js).
-    const reach = lane.handHolds?.length ? laneHandColumns(lane) : null;
-    (lane.handHolds || []).forEach((marker, index) => {
-      const column = handColumnAt(reach, marker.t);
-      const lost = !!column && !column.choices.includes(Number(marker.fret));
-      const fret = Math.round(marker.fret);
-      entries.push({
-        key: `anchor:${lane.id}:${marker.id || index}`, kind: 'anchor', lane, owner: lane.name,
-        marker, t: marker.t, name: `${lost ? '⚠ ' : ''}Fret ${fret}${lost ? " · can't reach" : ''}`,
-        // Listed again under Errors (rocksmith-check.js), where every problem goes.
-        issue: lost ? { id: 'marker.anchor-out-of-reach', tone: 'warning', title: `Hand anchor at fret ${fret} cannot reach the note`,
-          help: 'The hand cannot reach the note from this anchor, so the anchor is not used. Move the anchor or select another fret.' } : null,
-      });
-    });
     [...lane.phraseBoundaries || []].sort((a, b) => a.t - b.t).forEach((marker, index) => entries.push({
       key: `phrase:${lane.id}:${marker.id}`, kind: 'phrase', lane, owner: lane.name,
       marker, t: marker.t, name: phraseLabel(marker, `Phrase ${index + 1}`),
@@ -105,9 +89,9 @@ export function markerArtifacts(requestedLane = null) {
 function actOnMarker(key, edit, target, event) {
   stopArtifactPreview(); stopViewportMotion();
   // Commit an open editor while its original timing and layer still own it.
-  closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeCrowdEventPop(); closeToneMarkerPop(); closeHandAnchorPop(); closeCommentPop();
+  closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeCrowdEventPop(); closeToneMarkerPop(); closeCommentPop();
   const entry = markerArtifacts().find(item => item.key === key);
-  if (!entry || (edit && entry.readOnly) || (edit && ['tone', 'phrase', 'crowd', 'anchor'].includes(entry.kind) && !canEditLane(entry.lane))) return;
+  if (!entry || (edit && entry.readOnly) || (edit && ['tone', 'phrase', 'crowd'].includes(entry.kind) && !canEditLane(entry.lane))) return;
   const { lane, kind, marker, timing, t } = entry;
   if (lane) { lane.visible = true; activateLane(lane); renderLanes(); }
   if (!edit) {
@@ -122,7 +106,6 @@ function actOnMarker(key, edit, target, event) {
   else if (kind === 'section') openSectionMarkerPop(x, y, marker, timing);
   else if (kind === 'phrase') openPhraseMarkerPop(x, y, marker, lane);
   else if (kind === 'crowd') editCrowdEvent(x, y, marker, lane);
-  else if (kind === 'anchor') openHandAnchorPop(x, y, marker, lane);
   else if (kind === 'comment') openCommentPop(x, y, marker);
   else openToneMarkerPop(x, y, marker, lane);
   draw();
@@ -131,7 +114,7 @@ function actOnMarker(key, edit, target, event) {
 export function navigateMarker(direction) {
   if (!S.state) return;
   // Closing a marker editor commits its draft before resolving the live list.
-  closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeCrowdEventPop(); closeToneMarkerPop(); closeHandAnchorPop();
+  closeMarkerPop(); closeSectionMarkerPop(); closePhraseMarkerPop(); closeCrowdEventPop(); closeToneMarkerPop();
   const time = adjacentMarkerTime(markerArtifacts(), playbackTime(), direction, S.state.duration, -S.leadView);
   if (time === null) return;
   stopArtifactPreview(); stopViewportMotion();
@@ -190,7 +173,6 @@ export function renderMarkerArtifacts() {
       let row = rows.get(entry.key);
       if (!row) {
         row = document.createElement('li'); row.className = 'artifact-row artifact-marker-row'; row.dataset.markerKey = entry.key;
-        // The name is drawn as its flag is on the stage; a hand anchor takes its layer's colour.
         row.dataset.kind = entry.kind;
         const copy = document.createElement('div'); copy.className = 'artifact-copy';
         const name = document.createElement('span'); name.className = 'artifact-name';
@@ -212,11 +194,10 @@ export function renderMarkerArtifacts() {
       }
       setText(row.querySelector('.artifact-name'), entry.name);
       setText(row.querySelector('.artifact-detail'), markerTime(entry.t));
-      if (entry.kind === 'anchor') row.style.setProperty('--mark', entry.lane.color);
       // As on the rail: COUNT is a phrase, the ticks keep time like the tempo flags.
       if (entry.kind === 'rocksmith') row.style.setProperty('--mark', `var(${entry.code === 'COUNT' ? '--stage-phrase' : '--stage-marker'})`);
       row.querySelector('.artifact-marker-edit').hidden = !!entry.readOnly;
-      row.querySelector('.artifact-marker-edit').disabled = ['tone', 'phrase', 'crowd', 'anchor'].includes(entry.kind) && !canEditLane(entry.lane);
+      row.querySelector('.artifact-marker-edit').disabled = ['tone', 'phrase', 'crowd'].includes(entry.kind) && !canEditLane(entry.lane);
       if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
     });
   }

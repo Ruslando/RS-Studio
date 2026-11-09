@@ -1,8 +1,7 @@
 // Extension points for the marker rail above the note grid, and for the
 // per-lane marker collections that feed it.
 //
-// Rails register for song sections, practice phrases, amp tone switches and hand
-// anchors. The modules that own their meaning keep their own drawing,
+// Rails register for song sections, practice phrases and amp tone switches. The modules that own their meaning keep their own drawing,
 // hit-testing and menu entries.
 //
 // This was built so those two could live outside the app entirely, and they did
