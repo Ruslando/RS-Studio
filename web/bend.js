@@ -112,10 +112,13 @@ export function slideReach(kind, fret) {
 // where a slide-out goes): signed, 0 when the slide cannot go anywhere.
 export function edgeSlideSpan(n, fret = n?.pos?.fret, kind = n?.slide) {
   if (!SLIDE_SIGN[kind]) return 0;
-  // ponytail: an added slide-in (`slideIn`) spans the default frets; slideFrets is the main slide's.
-  const frets = Math.max(1, Math.round((kind === n.slide && Number(n.slideFrets)) || SLIDE_FRETS[kind]));
-  return SLIDE_SIGN[kind] * Math.min(frets, slideReach(kind, fret)) || 0;
+  return SLIDE_SIGN[kind] * Math.min(edgeSlideFrets(n, kind), slideReach(kind, fret)) || 0;
 }
+
+// How many frets the slide is meant to span, before the neck cuts it short.
+// ponytail: an added slide-in (`slideIn`) spans the default frets; slideFrets is the main slide's.
+export const edgeSlideFrets = (n, kind = n?.slide) =>
+  Math.max(1, Math.round((kind === n.slide && Number(n.slideFrets)) || SLIDE_FRETS[kind]));
 
 // Where a shift/legato slide or a slide-out leaves its fret, as a fraction of the note: the
 // note is held until then and slides over the rest. `slideStart` is absent for a

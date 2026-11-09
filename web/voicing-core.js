@@ -5,7 +5,7 @@
 import { noteName } from "./util.js";
 import { OVERLAP_EPS } from "./constants.js";
 import { NO_FINGER, THUMB, barreSpanSupported, fretboardFor } from "./fretboard-core.js";
-import { SLIDES_TO_NEXT as SLIDE_TO_NEXT } from "./bend.js";
+import { SLIDES_TO_NEXT as SLIDE_TO_NEXT, SLIDE_OUT, edgeSlideFrets, slideInOf, slideReach } from "./bend.js";
 
 // One source of truth for string/fret choice, shared by the chord preview and
 // (via buildTabSpec) the Guitar Pro export, so what you see is what you export.
@@ -850,7 +850,7 @@ function keptShape(notes, tuning, rules, maxFret) {
     const n = notes[k];
     const p = fitsPitch(n.pos, n.pitch, tuning, maxFret) ? n.pos
       : fitsPitch(n.auto, n.pitch, tuning, maxFret) && !(n.auto.n < notes.length) ? n.auto : null;
-    if (!p || used.has(p.string) || (p.fret === 0 && rules[k]?.fretted)) return null;
+    if (!p || used.has(p.string) || (p.fret === 0 && rules[k]?.fretted) || rules[k]?.edge?.(p.fret)) return null;
     used.add(p.string);
     shape.set(n, { string: p.string, fret: p.fret });
   }
@@ -1574,6 +1574,13 @@ function effectRule(note, next) {
   if (needsFret(note)) rule.fretted = true;
   if (note.slap === "tap") rule.free = true;
   if (note.trill) rule.reach = note.trill === "whole" ? 2 : 1;
+  // A slide-in starts on a pitch you hear (B3 into D#4), fretted and slid up, so its
+  // whole span has to fit on the string: D#4 on the B string would start on the open
+  // string. A slide-out only has to go somewhere; a shorter one is ordinary playing
+  // and imported tabs have them low on the neck.
+  const into = slideInOf(note), out = SLIDE_OUT.has(note.slide) ? note.slide : null;
+  if (into || out) rule.edge = (fret) => fret > 0
+    && ((into && slideReach(into, fret) < edgeSlideFrets(note, into)) || (out && slideReach(out, fret) === 0));
   if (SLIDE_TO_NEXT.has(note.slide)) rule.link = note.slide === "legato" ? "fretted" : "any";
   // "any" and not "fretted": a pull-off onto an open string is ordinary playing.
   else if (hammerOrigin(note) && next.some(hammerDest)) rule.link = "any";
@@ -1606,7 +1613,7 @@ export function placementLimits(columns, index, tuning, positionOf, maxFret = MA
   for (const note of col.notes) {
     const rule = effectRule(note, after) || {};
     limits.set(note, {
-      fretted: !!rule.fretted, reach: rule.reach || 0, from: null,
+      fretted: !!rule.fretted, reach: rule.reach || 0, from: null, edge: rule.edge || null,
       onto: rule.link && after.length ? {
         fretted: rule.link === "fretted", pitches: after.map((n) => n.pitch),
         strings: held ? new Set([...held.values()].map((p) => p.string)) : null,
@@ -1638,6 +1645,7 @@ export function placementFault(limit, pitch, string, tuning, maxFret = MAX_FRET)
   const fret = pitch - tuning[string], name = noteName(pitch);
   if (limit.fretted && fret === 0) return `${name} carries a technique an open string cannot play`;
   if (fret + limit.reach > maxFret) return `${name} trills past the last fret there`;
+  if (limit.edge?.(fret)) return `${name} slides in or out, and the slide does not fit on that string`;
   if (limit.from != null && limit.from !== string)
     return `${name} is slid or hammered onto, so it stays on the string it comes from`;
   const onto = limit.onto;
@@ -2118,6 +2126,7 @@ export function fitColumn(tuning, pitches, hand, span = SPAN, rules = null, maxF
       const f = p - tuning[s];
       if (f < 0 || f > maxFret) continue;
       if (f === 0 && rule && rule.fretted) continue;
+      if (rule?.edge?.(f)) continue;
       if (f !== 0 && !(rule && rule.free)
         && (f < hand || f + (rule ? rule.reach || 0 : 0) >= hand + span)) continue;
       got = s;
@@ -2341,6 +2350,7 @@ function gripAt(tuning, pitches, T, o, g, span, maxFret, loose = false) {
     const reach = (rule && rule.reach) || 0;
     if (f < 0 || f + reach > maxFret) return -1;
     if (f === 0 && rule && rule.fretted) return -1;
+    if (rule?.edge?.(f)) return -1;
     if (pitches.length === 1 && f === 0 && hasFrettedPlacement(pitches[i], tuning, maxFret, reach)) return -1;
     // A note that continues onto this string has to be able to LEAVE on it: a
     // slide slides along one string, so a source seated where its target is open
