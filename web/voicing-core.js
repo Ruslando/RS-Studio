@@ -5,7 +5,7 @@
 import { noteName } from "./util.js";
 import { OVERLAP_EPS } from "./constants.js";
 import { NO_FINGER, THUMB, barreSpanSupported, fretboardFor } from "./fretboard-core.js";
-import { SLIDES_TO_NEXT as SLIDE_TO_NEXT, SLIDE_OUT, edgeSlideFrets, slideInOf, slideReach } from "./bend.js";
+import { SLIDES_TO_NEXT as SLIDE_TO_NEXT, SLIDE_OUT, edgeSlideFrets, edgeSlideSpan, slideInOf, slideReach } from "./bend.js";
 
 // One source of truth for string/fret choice, shared by the chord preview and
 // (via buildTabSpec) the Guitar Pro export, so what you see is what you export.
@@ -500,10 +500,32 @@ export function gripCostBreakdown(shape, profile = GUITAR_HAND_PROFILE) {
 
 export const hasPlayableFingering = (shape, profile = GUITAR_HAND_PROFILE) => fingeringOptions(shape, profile).length > 0;
 
+// A SLIDE-IN IS FINGERED WHERE IT STARTS. The finger goes down on the start fret
+// and the hand travels with it to the landing, so the finger is chosen for the
+// start: B3→D#4 on the G string is the index on fret 4 sliding to 8, not a pinky
+// stretched to fret 8 from a hand at 4 (which would have to start on fret 4 with
+// the pinky, under the index). The seat returned is still the landing's.
+// Only when every fretted note slides in by the same amount (a whole grip sliding in).
+export function slideInOffset(shape) {
+  const fretted = [...shape].filter(([, pos]) => pos.fret > 0);
+  const offsets = new Set(fretted.map(([note, pos]) => slideInOf(note) ? edgeSlideSpan(note, pos.fret, slideInOf(note)) : 0));
+  return offsets.size === 1 ? [...offsets][0] : 0;
+}
+
 // Select the fingers AND their anchor from one physical pose. The passage's
 // register is context, not an independent index position. For a chord its pull
 // is bounded so it cannot buy an unnecessarily split barre to save a shift.
 export function handForShape(shape, seat, profile = GUITAR_HAND_PROFILE, required = new Map(), fixedSeat = false) {
+  const into = slideInOffset(shape);
+  if (into) {
+    const start = new Map([...shape].map(([note, pos]) => [note, pos.fret > 0 ? { ...pos, fret: pos.fret + into } : pos]));
+    const hand = handAtStart(start, seat == null ? seat : seat + into, profile, required, fixedSeat);
+    return { ...hand, seat: hand.seat == null ? hand.seat : hand.seat - into };
+  }
+  return handAtStart(shape, seat, profile, required, fixedSeat);
+}
+
+function handAtStart(shape, seat, profile, required, fixedSeat) {
   const contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !noteIsDead(note));
   // ONE FRETTED NOTE: the finger is where the hand puts it (fret − hand + 1, the
   // pinky for a stretch), so any hand within reach plays it and the index is on it
