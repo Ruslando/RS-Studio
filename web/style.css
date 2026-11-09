@@ -1528,26 +1528,25 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardSetup > :first-child { border-left: 0; padding-left: 0; }
 #fretboardChordLabel { color: var(--stage-label); font-size: var(--text-caption); }
 #fretboardPanel:not([data-editing]) #fretboardChordField { display: none; }
-/* The hand selector follows the tapered fretboard instead of living in a menu. */
-#fretboardHandPositions { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+/* The hand selector: a level row under the board, over the canvas fret numbers.
+   Invisible until hovered or focused; the lane colour only tints it. */
+#fretboardHandPositions { position: absolute; inset: 0; pointer-events: none; z-index: 1; --hand-tint: color-mix(in srgb, var(--hand-hue) 14%, var(--stage)); }
 #fretboardHandPositions[hidden], #fretboardSuggestionLabel[hidden] { display: none; }
 #fretboardHandPositions > button {
-  position: absolute; box-sizing: border-box; height: 22px; min-width: 0; padding: 0;
-  pointer-events: auto; border: 0; border-top: 2px solid transparent; border-radius: 0;
-  background: transparent; color: var(--stage-hint); font: 400 11px/18px var(--font-mono);
+  position: absolute; box-sizing: border-box; height: 20px; min-width: 0; padding: 0;
+  pointer-events: auto; border: 0; border-radius: 3px; background: var(--stage);
+  color: var(--stage-hint); font: 400 11px/20px var(--font-mono); font-variant-numeric: tabular-nums;
+  opacity: 0; transition: opacity 120ms ease, background-color 120ms ease;
 }
-#fretboardHandPositions > button.is-allowed { border-top-color: var(--hand-hue); color: var(--stage-text); }
-#fretboardHandPositions > button.is-first { border-left: 2px solid var(--hand-hue); border-top-left-radius: 3px; }
-#fretboardHandPositions > button.is-last { border-right: 2px solid var(--hand-hue); border-top-right-radius: 3px; }
-#fretboardHandPositions > button:disabled { opacity: .3; cursor: default; }
-#fretboardHandPositions > button[aria-checked="true"] {
-  background: var(--stage-text); color: var(--stage); border-radius: 4px; font-weight: 700;
-}
-#fretboardHandPositions > button.is-current:not([aria-checked="true"]) { color: var(--stage-text); font-weight: 700; text-decoration: underline; text-decoration-color: var(--hand-hue); }
-#fretboardHandPositions > button.is-suggested { outline: 1px dashed var(--hand-hue); outline-offset: -3px; opacity: 1; }
-#fretboardHandPositions > button:hover:not(:disabled):not([aria-checked="true"]) { background: var(--stage-chrome-hover); color: var(--stage-text); }
-#fretboardHandPositions > button:focus-visible { outline: 2px solid var(--stage-text); outline-offset: 1px; }
-#fretboardHandPositions > button[data-value="auto"] { font: 400 10px/18px var(--font-ui); }
+#fretboardHandPositions:is(:hover, :focus-within) > button { opacity: 1; }
+#fretboardHandPositions > button:disabled { cursor: default; color: color-mix(in srgb, var(--stage-hint) 55%, transparent); }
+#fretboardHandPositions > button.is-allowed { background: var(--hand-tint); color: var(--stage-label); }
+#fretboardHandPositions > button.is-current { color: var(--stage-text); font-weight: 600; }
+#fretboardHandPositions > button.is-suggested { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hand-hue) 45%, transparent); }
+#fretboardHandPositions > button:hover:not(:disabled) { background: color-mix(in srgb, var(--hand-hue) 24%, var(--stage)); color: var(--stage-text); }
+#fretboardHandPositions > button[aria-checked="true"] { background: color-mix(in srgb, var(--hand-hue) 32%, var(--stage)); color: var(--stage-text); font-weight: 600; }
+#fretboardHandPositions > button:focus-visible { outline: 1px solid var(--stage-text); outline-offset: -1px; }
+#fretboardHandPositions > button[data-value="auto"] { font: 400 10px/20px var(--font-ui); }
 #fretboardControls #fretboardPin {
   position: static; flex: 1 0 auto; min-width: max-content; max-width: none; flex-wrap: nowrap;
   padding: 0; border: 0; border-radius: 0; background: transparent; gap: 12px;

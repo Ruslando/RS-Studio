@@ -2935,8 +2935,6 @@ class EndToEndTests(unittest.TestCase):
         expect(row.locator('button.is-allowed')).to_have_text(['2','3','4','5','6','7'])
         expect(row.locator('[data-value="1"]')).to_be_disabled()
         expect(row.locator('[data-value="8"]')).to_be_disabled()
-        expect(row.locator('.is-first')).to_have_text('2')
-        expect(row.locator('.is-last')).to_have_text('7')
         expect(page.locator('#layerCapo')).to_have_count(1)
         defaults = page.evaluate("async () => (await import('/voicing-core.js')).defaultPinFlags()")
         self.assertEqual(defaults, {"follow": "guided"})

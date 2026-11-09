@@ -933,8 +933,9 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
 - Planned automatically: index on the lowest note to start, stay while the notes
   are in reach, otherwise move.
 - A hand anchor fixes the hand of its own note or chord only. It moves no note. The
-  fret-number row highlights all legal positions (`handChoices`) with a continuous
-  rule and end caps. Other positions are disabled. Clicking a number chooses it;
+  fret-number row is a level strip under the board, shown only on hover or focus;
+  it tints all legal positions (`handChoices`) in the layer colour. Other positions
+  are disabled. Clicking a number chooses it;
   Auto removes the manual hand. Arrow keys traverse available positions.
   A hand that no longer reaches its notes is ignored. Capo is edited in layer
   settings and only displayed on the fretboard.

@@ -752,7 +752,7 @@ function boardProjection(ctx, s, w, h, tuning, lastFret = s.frets) {
   return { scale, X, Y, strung, tunePx };
 }
 
-function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, offered = 0, strung = null, tunePx = 11, lastFret = s.frets, handControls = false }) {
+function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, offered = 0, strung = null, tunePx = 11, lastFret = s.frets }) {
   const last = fretDistance(lastFret, s.scale);
   const nutHalf = boardHalfWidthAt(0, s), endHalf = boardHalfWidthAt(last, s);
 
@@ -947,10 +947,11 @@ function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, o
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const fromCapo = s.capo && $("fretNumbering")?.value !== "nut" ? s.capo : 0;
-  for (const n of handControls ? [] : s.dots.filter(n => n <= lastFret)) {
+  // One level line under the board's widest end, shared with the hand-position row.
+  const numberTop = Math.max(Y(endHalf), Y(-endHalf)) + 5;
+  for (const n of s.dots.filter(n => n <= lastFret)) {
     if (n <= fromCapo) continue;
-    const cx = dotCentre(n, s);
-    ctx.fillText(String(n - fromCapo), X(cx), Math.max(Y(boardHalfWidthAt(cx, s)), Y(-boardHalfWidthAt(cx, s))) + 4);
+    ctx.fillText(String(n - fromCapo), X(dotCentre(n, s)), numberTop);
   }
 
   // The tuning, at the nut, where a player looks for it — it is the one thing the
@@ -1013,7 +1014,8 @@ function drawSuggestion(ctx, s, scale, X, Y, lane) {
 }
 
 // The numbers are real buttons, aligned to the exact fret boundaries of the
-// canvas. A continuous top rule and end caps show each legal range.
+// canvas on one level line under the board. They stay invisible over the
+// canvas fret numbers until the pointer or focus enters the row.
 function drawHandPositions(s, X, Y, lane) {
   const row = $("fretboardHandPositions"), at = lane && handColumnHere(lane);
   const choices = new Set(at?.choices || []);
@@ -1038,13 +1040,13 @@ function drawHandPositions(s, X, Y, lane) {
     }));
   }
   const capo = s.capo || 0, fromNut = $("fretNumbering")?.value === 'nut';
+  const endHalf = boardHalfWidthAt(fretDistance(s.frets, s.scale), s);
+  const top = Math.max(Y(endHalf), Y(-endHalf)) + 1;
   for (const button of row.children) {
     const fret = button.dataset.value === 'auto' ? 0 : Number(button.dataset.value);
     const left = fret ? X(fretDistance(capo + fret - 1, s.scale)) : X(fretDistance(capo, s.scale)) - 42;
     const right = fret ? X(fretDistance(capo + fret, s.scale)) : left + 38;
-    const centre = fret ? fretDistance(capo + fret - .5, s.scale) : fretDistance(capo, s.scale);
-    const bottom = Math.max(Y(boardHalfWidthAt(centre, s)), Y(-boardHalfWidthAt(centre, s)));
-    button.style.left = `${left}px`; button.style.top = `${bottom + 3}px`;
+    button.style.left = `${left}px`; button.style.top = `${top}px`;
     button.style.width = `${right - left}px`;
     const allowed = !fret || choices.has(fret), chosen = fret ? !!held && Number(held.fret) === fret : !held;
     button.disabled = !canEditLane(lane) || !allowed;
@@ -1054,8 +1056,6 @@ function drawHandPositions(s, X, Y, lane) {
     button.tabIndex = chosen ? 0 : -1;
     button.title = fret ? `Hand position ${fret}${allowed ? '' : ' cannot play these notes'}` : 'Use the automatic hand position';
     button.classList.toggle('is-allowed', !!fret && allowed);
-    button.classList.toggle('is-first', !!fret && allowed && !choices.has(fret - 1));
-    button.classList.toggle('is-last', !!fret && allowed && !choices.has(fret + 1));
     button.classList.toggle('is-current', fret === seat);
     button.classList.toggle('is-suggested', suggestionVisible() && fret === suggestion.preview.seat);
   }
@@ -1174,9 +1174,9 @@ export function drawFretboard() {
   if (!gripsShown && offering) spots = null;   // hidden rings are not targets either
   const now = impossible || shaping ? null : handNow(lane, s);
   syncSuggestion(lane, s);
-  const handControls = drawHandPositions(s, X, Y, lane);
+  drawHandPositions(s, X, Y, lane);
   const seat = anchorFret(lane), offered = impossible ? 0 : offeredSeat(lane);
-  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, offered, strung, tunePx, handControls });
+  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, offered, strung, tunePx });
 
   // WHICH GRAIN IS DECIDED BY THE COLUMN, not by a second switch. A lone note has one
   // question — which string — and every answer to it is legal, so it gets circles and
