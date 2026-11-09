@@ -64,3 +64,14 @@ test("the hand travels to where a slide-in starts and leaves from where a slide-
   const ended = x0(out, 0.999), left = x0(out, 1.0 + 1e-3);
   assert.ok(Math.abs(ended - left) < 2, "no jump back to fret 8 when the hand leaves");
 });
+
+test("a remembered finger puts the hand under a single note, unless the hand is held", async () => {
+  const { handForShape } = await import("../../web/voicing-core.js");
+  const note = { pitch: 63, slide: "inBelow" };
+  const shape = new Map([[note, { string: 3, fret: 13 }]]);
+  // From a passage at 5, the slide-in from 9 would be the pinky; asked for the index, the hand goes to 9.
+  assert.equal(handForShape(shape, 9, undefined, new Map()).fingers.get(note), 4);
+  const asked = handForShape(shape, 9, undefined, new Map([[note, 1]]));
+  assert.deepEqual([asked.fingers.get(note), asked.seat], [1, 13]);
+  assert.equal(handForShape(shape, 9, undefined, new Map([[note, 1]]), true).fingers.get(note), 4);
+});

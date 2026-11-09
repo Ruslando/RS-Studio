@@ -532,7 +532,11 @@ function handAtStart(shape, seat, profile, required, fixedSeat) {
   // when the hand is on its fret. Out of reach, the hand comes to the note.
   if (contacts.length === 1) {
     const [note, pos] = contacts[0];
-    const at = Number.isFinite(seat) && seat >= 1 && pos.fret - seat >= 0 && pos.fret - seat < handReach(profile) ? seat : pos.fret;
+    const reached = Number.isFinite(seat) && seat >= 1 && pos.fret - seat >= 0 && pos.fret - seat < handReach(profile);
+    // A finger asked for (the same slide played before) puts the hand under it,
+    // unless the player fixed the hand.
+    const asked = required.get(note);
+    const at = fixedSeat && reached ? seat : asked >= 1 && pos.fret - asked + 1 >= 1 ? pos.fret - asked + 1 : reached ? seat : pos.fret;
     const fingers = new Map([...shape].filter(([, p]) => p.fret === 0).map(([n]) => [n, NO_FINGER]));
     fingers.set(note, Math.min(4, pos.fret - at + 1));
     return { fingers, seat: at, playable: true };
@@ -1895,15 +1899,21 @@ function registerColumns(columns, tuning, options = {}) {
       // The fingers this column must have: the ones chosen for it, or else the ones
       // the same grip had last time (a preference: a hand that cannot play them
       // there picks its own).
-      const key = shapeKey(shape), contacts = [...shape.values()].filter((p) => p.fret > 0).length;
+      // A grip, or a single note with its slide: a lone note's finger otherwise
+      // follows the passage around it, which differs from one time to the next.
+      const slides = [...shape].filter(([n, p]) => p.fret > 0 && n.slide).map(([n]) => n.slide).sort().join(",");
+      const key = `${shapeKey(shape)}|${slides}`, contacts = [...shape.values()].filter((p) => p.fret > 0).length;
+      const remembers = contacts > 1 || (contacts === 1 && !!slides);
       let required = input[i].fingers;
-      if (!required.size && contacts > 1 && fingerMemory.has(key))
+      if (!required.size && remembers && fingerMemory.has(key))
         required = new Map([...shape].map(([note, p]) => [note, fingerMemory.get(key).get(p.string)]).filter(([, f]) => f != null));
       const hand = handForShape(shape, seats[i], handProfileForTuning(tuning), required,
         !!holds[i] || input[i].fingers.size > 0 || !!gripped[i]);
       options.hands[i] = hand;
-      if (contacts > 1 && !input[i].aside)
-        fingerMemory.set(key, new Map([...shape].map(([note, p]) => [p.string, hand.fingers.get(note)])));
+      // A finger the player typed onto a note is what the next same grip remembers.
+      if (remembers && !input[i].aside)
+        fingerMemory.set(key, new Map([...shape].map(([note, p]) => [p.string,
+          isChosenFinger(note.finger) && p.fret > 0 ? note.finger : hand.fingers.get(note)])));
     }
     return shape.size ? shape : null;
   });
