@@ -1007,7 +1007,9 @@ function drawSuggestion(ctx, s, scale, X, Y, lane) {
   if (!shown) return;
   const { marks, seat } = suggestion.preview;
   status.classList.remove("busy");
-  status.textContent = seat ? `Suggested hand: ${seat}` : "Suggested position";
+  // Counted from where a slide-in goes down, like the hand row and the band.
+  const hand = seat ? Math.max(1, seat + (handColumnHere(lane)?.shift || 0)) : 0;
+  status.textContent = hand ? `Suggested hand: ${hand}` : "Suggested position";
   ctx.save(); ctx.setLineDash([4, 3]);
   drawPreviewGrip(ctx, s, scale, X, Y, marks, lane.color || PAINT.accent, false);
   ctx.restore();
