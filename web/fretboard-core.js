@@ -33,6 +33,7 @@
 import { bendSnapAt } from "./string-techniques.js";
 import { hammerLink } from "./articulations.js";
 import { graceBefore } from "./grace.js";
+import { whammyChartNote } from "./whammy.js";
 import { SLIDES_TO_NEXT, SLIDE_IN, SLIDE_OUT, bendCurve, edgeSlideSpan, slideInOf, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
 
 // Finger numbers as Rocksmith has them: 1 index … 4 pinky, 0 the thumb (only ever
@@ -257,7 +258,7 @@ const markAt = (f, s) => ({
 // A vibrato is the same push, small and repeated, so it moves the finger the same way.
 export const BEND_SPACING_PER_SEMI = 0.5;
 export function bendLift(mark, t, strings) {
-  const note = mark.note;
+  const note = whammyChartNote(mark.note);   // a whammy dip shows as vibrato, as in Rocksmith
   if (!pitchMoves(note) || !(mark.fret > 0)) return 0;
   const span = note.end - note.start;
   const semi = pitchOffsetAt(note, span > 0 ? (t - note.start) / span : 0, t - note.start);

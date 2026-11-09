@@ -33,12 +33,10 @@ export function whammyKind(points) {
   return "custom";
 }
 
-// Less string tension reads as a smaller, lighter held finger, without moving
-// its fret/string position. The style applies only while the whammy note is sounding.
-export function whammyGripStyle(note, time) {
-  if (!whammyCurve(note) || !(note.start <= time && time < note.end))
-    return { size: 1, opacity: 1 };
-  const u = (time - note.start) / (note.end - note.start);
-  const tensionLoss = -whammyAt(note, u) / 2;
-  return { size: 1 - 0.35 * tensionLoss, opacity: 1 - 0.55 * tensionLoss };
+// The note as the Rocksmith export writes it (rocksmith/chart.py _whammy_as_official):
+// a dip, a curve that comes back, is vibrato. A dive only loses its sustain.
+export function whammyChartNote(n) {
+  const c = whammyCurve(n);
+  if (!c || Math.abs(c.at(-1)[1]) > 1e-6 || c.every(([, v]) => Math.abs(v) < 1e-6)) return n;
+  return { ...n, fx: { ...n.fx, vibrato: true } };
 }

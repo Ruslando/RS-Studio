@@ -11,29 +11,29 @@ def _compile(**fields):
     return compiled.sng.levels[-1].notes, [code for code, _ in compiled.fixes]
 
 
-class WhammyAsSlidesTest(unittest.TestCase):
-    def test_dip_slides_down_and_back_up(self):
-        (down, up), _ = _compile(whammy="dip")
-        self.assertEqual((down.fret, down.slide_to), (7, 5))
-        self.assertTrue(down.mask & S.PARENT)
-        self.assertTrue(up.mask & S.CHILD, "the way back is not picked again")
-        self.assertEqual((up.fret, up.slide_unpitch_to), (5, 7))
+class WhammyAsOfficialTest(unittest.TestCase):
+    """CustomsForge "Guidelines for official looking customs" 11.3."""
 
-    def test_held_part_after_the_slide_is_linked(self):
-        (down, held), _ = _compile(whammy="custom", whammyPoints=[[0, 0], [0.25, -1], [1, -1]])
-        self.assertEqual((down.slide_to, held.fret), (6, 6))
-        self.assertTrue(held.mask & S.CHILD)
+    def test_dip_is_vibrato(self):
+        (note,), _ = _compile(whammy="dip")
+        self.assertEqual(note.fret, 7)
+        self.assertTrue(note.mask & S.VIBRATO)
+        self.assertGreater(note.sustain, 0)
 
-    def test_curve_ending_early_holds_to_the_note_end(self):
-        notes, _ = _compile(whammy="dip", whammyPoints=[[0, 0], [0.4, -2], [0.6, 0]])
-        self.assertEqual([n.fret for n in notes], [7, 5, 7])
-        self.assertAlmostEqual(notes[-1].time, 1.6)
-        self.assertTrue(notes[-1].mask & S.CHILD, "the held end is not picked again")
+    def test_dive_has_no_sustain(self):
+        (note,), _ = _compile(whammy="dive")
+        self.assertEqual((note.fret, note.sustain), (7, 0))
+        self.assertFalse(note.mask & (S.VIBRATO | S.SLIDE))
 
-    def test_open_string_cannot_go_lower(self):
-        notes, fixes = _compile(fret=0, pitch=45, whammy="dip")
-        self.assertEqual(len(notes), 1)
-        self.assertIn("whammy", fixes)
+    def test_dive_with_vibrato_keeps_its_tail(self):
+        (note,), _ = _compile(whammy="dive", fx={"vibrato": True})
+        self.assertTrue(note.mask & S.VIBRATO)
+        self.assertGreater(note.sustain, 0)
+
+    def test_open_string_dip_is_vibrato_too(self):
+        (note,), fixes = _compile(fret=0, pitch=45, whammy="dip")
+        self.assertTrue(note.mask & S.VIBRATO)
+        self.assertNotIn("whammy", fixes)
 
 
 class TrillAsHammersTest(unittest.TestCase):

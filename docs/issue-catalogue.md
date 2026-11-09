@@ -77,8 +77,6 @@ tuning pitch, turn, unpitched slide, vibrato, and whammy. Product and UI names k
 | `export.late-fx` | warning | Slide or vibrato starts with the note | Rocksmith cannot start this effect partway through a bent note. The export starts the slide or vibrato at the beginning of the note. |
 | `export.grace` | warning | Grace note removed | The export cannot place a lower note before this note. Check for an open string, the song start, or another note on the same string. |
 | `export.slide-in` | warning | Slide-in removed | The slide-in overlaps another note, has no duration, or has no valid start fret. Shorten the slide-in, move the other note, or change the slide direction. |
-| `export.whammy` | warning | Whammy removed | The whammy would leave frets 1 to 24, or this note has a bend. Change the whammy curve, move the note, or remove Bend. |
-| `export.whammy-slide` | warning | Whammy replaces the slide | The export uses the final whammy slide and leaves out the separate slide out. Remove Whammy bar to keep the separate slide. |
 | `export.trill` | warning | Trill removed | The note is too short for the trill, or its upper note is above fret 24. Extend the note or select a smaller trill interval. |
 | `export.ornament` | warning | Ornament removed | The note is too short for the figure, or a figure note is outside frets 0 to 24. Extend the note, change its fret, or select another ornament. |
 | `export.slide-open` | warning | Slide removed from an open string | An open string cannot slide. Use a fretted note to keep the slide. |
@@ -115,7 +113,7 @@ tuning pitch, turn, unpitched slide, vibrato, and whammy. Product and UI names k
 | `editor.adapt.ghost` | warning | Ghost note is not scored | Rocksmith has no ghost-note dynamics. The export shows this note but excludes it from scoring. |
 | `editor.adapt.trill` | note | Trill uses hammer-ons and pull-offs | Rocksmith has no trill notation. The export writes alternating notes with hammer-ons and pull-offs. |
 | `editor.adapt.grace` | note | Grace note uses a short hammer-on | Rocksmith has no grace-note notation. The export writes a short note before the main note and connects the notes with a hammer-on. |
-| `editor.adapt.whammy` | warning | Whammy uses slides | Rocksmith has no whammy-bar notation. The export uses slides to represent the pitch changes. |
+| `editor.adapt.whammy` | note | Whammy as official charts write it | Rocksmith has no whammy-bar notation. As in official charts, the export writes a dive as a note without sustain and a dip as vibrato. |
 | `editor.adapt.ornament` | note | Ornament uses hammer-ons and pull-offs | Rocksmith has no turn or mordent notation. The export writes the figure as notes with hammer-ons and pull-offs. |
 | `editor.adapt.artificial` | warning | Artificial harmonic uses pinch harmonic notation | Rocksmith has no separate notation for this artificial harmonic. The export uses pinch harmonic notation. |
 | `editor.shape.stretch` | warning | Chord needs a large hand stretch | The editor found a fingering that needs a large hand stretch. Change the string positions or notes if the stretch is too difficult. |

@@ -19,5 +19,5 @@ assert.equal(bend.time, 3, 'a bend stack sits at its points, not the note start'
 assert.deepEqual(kinds([note(0, 1, 33, { fx: { ghost: true, staccato: true, letRing: true } })]),
   [['ghost', 'warning'], ['staccato', 'warning'], ['letRing', 'warning']]);
 assert.deepEqual(kinds([note(0, 1, 33, { stroke: 'down' }), note(0, 1, 40, { stroke: 'down' })]), [], 'one per chord');
-assert.deepEqual(kinds([note(0, 1, 33, { whammy: 'dip', trill: 'half', grace: 'half' })]), [['trill', 'note'], ['grace', 'note'], ['whammy', 'warning']]);
+assert.deepEqual(kinds([note(0, 1, 33, { whammy: 'dip', trill: 'half', grace: 'half' })]), [['trill', 'note'], ['grace', 'note'], ['whammy', 'note']]);
 console.log('note issues passed');

@@ -20,8 +20,6 @@ The generic `export.compile-failed` fallback still carries the original exceptio
 | `export.late-fx` | Revised | `_split_late_effects` | Bends prevent splitting the note for late effects; states the timing change and cause. |
 | `export.grace` | Revised | `_add_grace_notes` | Failure includes fret zero, no time before the song start, or another onset on the same string. |
 | `export.slide-in` | Revised | `_add_slide_ins` | The added lead occupies the start of the note, not time before it; covers overlap, duration, and fret reach. |
-| `export.whammy` | Revised | `_whammy_as_slides` | Rounded offsets must stay in frets 1–24 and the note must not have a bend; suggests curve or fret edits. |
-| `export.whammy-slide` | Revised | `_whammy_as_slides` | Only a final moving whammy segment replaces the separate slide; explains how to keep that slide. |
 | `export.trill` | Revised | `_trill_as_hammers` | Failure is a short duration or upper fret above 24; avoids fixed-rate instructions in the hover text. |
 | `export.ornament` | Revised | `_ornament_as_hammers` | Failure is duration or a figure pitch outside frets 0–24; offers note length, position, and figure choices. |
 | `export.slide-open` | Kept | `_emit_notes` | The string is open; using a fretted note is the necessary correction. |
@@ -103,7 +101,7 @@ The generic `export.compile-failed` fallback still carries the original exceptio
 | `editor.adapt.ghost` | Revised | `chart._base_note_mask / _ignored / _emit_notes` | The note remains visible but receives Ignore; describes scoring rather than offering another Ignore action. |
 | `editor.adapt.trill` | Kept | `chart._trill_as_hammers` | Alternating hammered/pulled notes are written out; omits rate assumptions and references to other warnings. |
 | `editor.adapt.grace` | Revised | `chart._add_grace_notes` | A lower lead note connects to the main note by hammer-on; explicitly starts with the missing Rocksmith notation. |
-| `editor.adapt.whammy` | Kept | `chart._whammy_as_slides` | Slides represent the pitch curve; this is not native whammy-bar notation. |
+| `editor.adapt.whammy` | Revised | `chart._whammy_as_official` | Dive without sustain, dip as vibrato, as in CustomsForge's official-looking guidelines 11.3. |
 | `editor.adapt.ornament` | Kept | `chart._ornament_as_hammers` | The figure is written as hammered/pulled notes; omits implementation rate and warning-system commentary. |
 | `editor.adapt.artificial` | Revised | `chart._base_note_mask / _ignored` | Pinch-harmonic notation represents this artificial harmonic; explains the notation substitution. |
 | `editor.shape.stretch` | Revised | `chordPlayability` | A stretch profile found a fingering; the message is an assessment rather than an instruction to change a valid chord. |

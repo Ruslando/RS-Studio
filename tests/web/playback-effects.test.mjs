@@ -87,15 +87,11 @@ playSampleEvent(synth, plan(n({ whammy: "dip" }))[0], 11, 11.02, 1);
 assert.ok(calls.some((c) => c.curve?.length > 2));
 console.log("playback effects OK");
 
-// Dip returns its finger markers to full strength along the same pitch curve.
-const { whammyGripStyle } = await import("../../web/whammy.js");
-const dip = n({ whammy: "dip" });
-assert.deepEqual(whammyGripStyle(dip, 1), { size: 1, opacity: 1 });
-const bottom = whammyGripStyle(dip, 1.5);
-assert.ok(bottom.size < 1 && bottom.opacity < 1);
-assert.deepEqual(whammyGripStyle(dip, 1.25), whammyGripStyle(dip, 1.75));
-assert.deepEqual(whammyGripStyle(dip, 2), { size: 1, opacity: 1 });
-assert.deepEqual(whammyGripStyle(n({ whammy: "dive" }), 1.5), whammyGripStyle(dip, 1.25));
+// The fretboard shows a whammy as the export writes it (tests/test_chart_imitations.py).
+const { whammyChartNote } = await import("../../web/whammy.js");
+assert.equal(whammyChartNote(n({ whammy: "dip" })).fx.vibrato, true, "a dip is vibrato");
+assert.equal(whammyChartNote(n({ whammy: "dive" })).fx, undefined, "a dive is not");
+assert.equal(whammyChartNote(n()).fx, undefined, "nor a note without whammy");
 
 const { strikeTime, strumOffset, tremoloStep, hammerDirections } = await import("../../web/articulations.js");
 const repeating = n({ tremPick: "16" });

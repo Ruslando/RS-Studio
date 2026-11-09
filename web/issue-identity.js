@@ -32,8 +32,6 @@ const legacyIds = {
   "late-fx": "export.late-fx",
   "grace": "export.grace",
   "slide-in": "export.slide-in",
-  "whammy": "export.whammy",
-  "whammy-slide": "export.whammy-slide",
   "trill": "export.trill",
   "ornament": "export.ornament",
   "slide-open": "export.slide-open",

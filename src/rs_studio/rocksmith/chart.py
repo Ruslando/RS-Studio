@@ -262,57 +262,25 @@ def _later_piece(n: dict, start: float, end: float, offset: int) -> dict:
     return piece
 
 
-def _whammy_as_slides(notes: list, fixes: list) -> list:
-    """A whammy curve as Rocksmith can show it: slides along the string.
-
-    Rounded to whole frets. A part that rises or falls slides into the next part;
-    the last one, landing on no note, is an unpitched slide out. Not on a bent
-    note (the two curves cannot both be slides) or past the neck's ends.
+def _whammy_as_official(notes: list) -> list:
+    """A whammy as official charts write it (CustomsForge "Guidelines for official
+    looking customs" 11.3): a dive, which stays down, has no sustain; a dip, which
+    comes back, is a short vibrato. Rocksmith has no whammy-bar notation.
     """
     out = []
     for n in notes:
         pts = n.get("whammyPoints") or _WHAMMY_PRESETS.get(n.get("whammy"))
-        if not pts or n.get("string") is None or n.get("fret") is None:
+        if not pts:
             out.append(n)
             continue
-        # A curve that starts late or ends early holds its pitch from the pick and to the end.
-        pts = [*([[0, pts[0][1]]] if _f(pts[0][0]) > 0 else []), *pts, *([[1, pts[-1][1]]] if _f(pts[-1][0]) < 1 else [])]
-        frets = [round(_f(v)) for _, v in pts]
-        if all(f == 0 for f in frets):
-            out.append({k: v for k, v in n.items() if k not in ("whammy", "whammyPoints")})
-            continue
-        fret = int(n["fret"])
-        if n.get("bend") or fret + min(frets) < 1 or fret + max(frets) > MAX_FRET or (fret == 0 and frets[0] == 0):
-            fixes.append(("whammy", _f(n.get("start"))))
-            out.append(n)
-            continue
-        start, end = _f(n.get("start")), _f(n.get("end"))
-        # (from, to, offset at its start, offset it goes to): runs of one offset merged.
-        parts = []
-        for (t0, _), (t1, _), f0, f1 in zip(pts, pts[1:], frets, frets[1:]):
-            a, b = start + _f(t0) * (end - start), start + _f(t1) * (end - start)
-            if b - a < 1e-6:
-                continue
-            if parts and f0 == f1 and parts[-1][2] == parts[-1][3] == f0:
-                parts[-1][1] = b
-            else:
-                parts.append([a, b, f0, f1])
-        for i, (a, b, f0, f1) in enumerate(parts):
-            piece = {k: v for k, v in n.items() if k not in ("whammy", "whammyPoints", "slideStart", "vibratoStart", "vibratoEnd")}
-            if i:
-                piece = _later_piece(piece, a, b, f0)
-            else:
-                piece.update(start=a, end=b, fret=fret + f0, pitch=_f(n.get("pitch")) + f0)
-            last = i == len(parts) - 1
-            if f0 != f1:
-                piece["slide"] = "legato" if not last else ("outDown" if f1 < f0 else "outUp")
-                piece["slideFrets"] = abs(f1 - f0)
-                if last and n.get("slide"):
-                    fixes.append(("whammy-slide", start))
-            elif not last:
-                piece.pop("slide", None)
-                piece["linkNext"] = True
-            out.append(piece)
+        n = {k: v for k, v in n.items() if k not in ("whammy", "whammyPoints")}
+        if all(abs(_f(v)) < 1e-6 for _, v in pts):
+            pass
+        elif abs(_f(pts[-1][1])) > 1e-6:
+            n["noSustain"] = True
+        else:
+            n["fx"] = {**(n.get("fx") or {}), "vibrato": True}
+        out.append(n)
     return out
 
 
@@ -608,7 +576,7 @@ def _gen_beats(grid: dict, song_length: float) -> list[tuple[float, int, int]]:
 # fx.letRing and fx.staccato have no Rocksmith equivalent and are dropped.
 # Ghost notes are shown with Ignore enabled; strum direction is not an editor effect.
 # the editor warns at the note (web/note-issues.js DROPPED_TEXT). A whammy goes out
-# as slides, a trill as hammer-ons (_whammy_as_slides, _trill_as_hammers).
+# as official charts write it, a trill as hammer-ons (_whammy_as_official, _trill_as_hammers).
 def _base_note_mask(n: dict, fret: int, sustain: float) -> tuple[int, int]:
     """Mask bits + companion fields shared by single notes and chord notes."""
     mask = 0
@@ -897,7 +865,8 @@ def _voiced_entities(track: dict, n_str: int, tuning_low: list,
             carried[s] = bool(n.get("linkNext") or n.get("slide") == "legato")
         for notes in ([[item] for item in notes] if split else [notes]):
             dur = max(_f(n.get("end"), t) - t for _, _, n in notes)
-            sustain = dur if sustained(t, dur) else 0.0
+            # A whammy dive has no tail (_whammy_as_official).
+            sustain = dur if sustained(t, dur) and not all(n.get("noSustain") for _, _, n in notes) else 0.0
             if not sustain and any((n.get("fx") or {}).get("vibrato") or n.get("tremPick") for _, _, n in notes):
                 # Vibrato and tremolo are drawn on the tail; without one DLC Builder
                 # reports I40. Such a note keeps the length it has in the editor.
@@ -2028,7 +1997,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
                "ignore": bool(n.get("ignore") or (n.get("fx") or {}).get("ghost"))} for n in track.get("notes") or [] if not n.get("gripOnly")]
     notes = _add_grace_notes(played, grid, fixes)
     notes = _add_slide_ins(notes, grid, fixes, capo)
-    notes = _trill_as_hammers(_whammy_as_slides(notes, fixes), grid, fixes)
+    notes = _trill_as_hammers(_whammy_as_official(notes), grid, fixes)
     notes = _pick_slides(_ornament_as_hammers(notes, grid, fixes))
     notes = _link_bend_continuations(_split_late_effects(notes, fixes))
     onsets = {round(_f(n.get("start")) * 1000) for n in notes if abs(_f(n.get("start")) - n["noteStart"]) < 1e-6}

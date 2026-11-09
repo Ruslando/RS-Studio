@@ -42,7 +42,6 @@ import { S } from "./store.js";
 import { fingerLightAt, fingerPulseAt, fingerWaveAt, popLiftAt, popPreparation, popThicknessAt } from "./string-techniques.js";
 import { fretStrikeAt, stringAttackPulse, stringGlow } from "./string-glow.js";
 import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulations.js";
-import { whammyGripStyle } from "./whammy.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
 import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
@@ -1378,13 +1377,12 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
       m, x: X(m.x), y: Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s)),
       r: markRadius(m.x, scale, s),
     }));
-    const style = filled && time != null && !g[0].shapeHeld ? whammyGripStyle(g[0].note, time) : { size: 1, opacity: 1 };
-    const x = pts[0].x, r = pts[0].r * style.size * (g[0].grow ?? 1);
+    const x = pts[0].x, r = pts[0].r * (g[0].grow ?? 1);
     ctx.save();
     const ghost = !!g[0].note?.fx?.ghost;
-    ctx.globalAlpha *= style.opacity * (g[0].opacity ?? 1) * (ghost ? 0.4 : 1);
+    ctx.globalAlpha *= (g[0].opacity ?? 1) * (ghost ? 0.4 : 1);
     const pressed = g[0].pressed ?? filled;
-    ctx.font = stageMono(STAGE_ANCHORED * style.size, 600);
+    ctx.font = stageMono(STAGE_ANCHORED, 600);
     const ys = pts.map((p) => p.y), y0 = Math.min(...ys), y1 = Math.max(...ys);
     if (g[0].note?.harmonic === "natural") {
       const cy = (y0 + y1) / 2;
@@ -1421,9 +1419,9 @@ function drawGrip(ctx, s, scale, X, Y, marks, hue, filled, { digits = true, time
       : showFingers ? fingerLabel(g[0].finger, "") : "";
     if (ghost && glyph && !g[0].dead) {
       glyph = `(${glyph})`;
-      ctx.font = stageMono(STAGE_ANCHORED * style.size * 0.8, 600);
+      ctx.font = stageMono(STAGE_ANCHORED * 0.8, 600);
     }
-    if (glyph && r >= STAGE_ANCHORED * style.size / 2) ctx.fillText(glyph, x, (y0 + y1) / 2 + 0.5);
+    if (glyph && r >= STAGE_ANCHORED / 2) ctx.fillText(glyph, x, (y0 + y1) / 2 + 0.5);
     ctx.restore();
   }
   if (mode === "notes" || mode === "both") drawGripNoteNames(ctx, s, scale, X, Y, marks, hue, true, mode === "notes");

@@ -48,7 +48,7 @@ export const ADAPTED_TEXT = {
   ghost: ["Rocksmith: Ghost note not supported", "Rocksmith has no ghost-note dynamics. The export shows this note but excludes it from scoring."],
   trill: ["Rocksmith: Trill not supported", "Rocksmith has no trill notation. The export writes alternating notes with hammer-ons and pull-offs."],
   grace: ["Rocksmith: Grace note not supported", "Rocksmith has no grace-note notation. The export writes a short note before the main note and connects the notes with a hammer-on."],
-  whammy: ["Rocksmith: Whammy not supported", "Rocksmith has no whammy-bar notation. The export uses slides to represent the pitch changes."],
+  whammy: ["Rocksmith: Whammy not supported", "Rocksmith has no whammy-bar notation. As in official charts, the export writes a dive as a note without sustain and a dip as vibrato."],
   ornament: ["Rocksmith: Ornament not supported", "Rocksmith has no turn or mordent notation. The export writes the figure as notes with hammer-ons and pull-offs."],
   artificial: ["Rocksmith: Artificial harmonic not supported", "Rocksmith has no separate notation for this artificial harmonic. The export uses pinch harmonic notation."],
 };
@@ -125,7 +125,7 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
     for (const b of stackedBends(n)) out.push(issue("bendStack", "warning", ISSUE_TEXT.bendStack, [n], b.time));
     const adapted = [n.slide?.startsWith("pick") && "pickSlide", n.fx?.ghost && "ghost", n.trill && "trill",
       n.grace && "grace", n.whammy && "whammy", n.ornament && "ornament", n.harmonic === "artificial" && "artificial"];
-    for (const kind of adapted.filter(Boolean)) out.push(issue(kind, ["ghost", "whammy", "artificial"].includes(kind) ? "warning" : "note", ADAPTED_TEXT[kind], [n]));
+    for (const kind of adapted.filter(Boolean)) out.push(issue(kind, ["ghost", "artificial"].includes(kind) ? "warning" : "note", ADAPTED_TEXT[kind], [n]));
     for (const kind of [...gpOnlyTechniques(n), ...droppedEffects(n)]) {
       // A beat's technique (a rasgueado on a chord) is one warning for the chord.
       const key = BEAT_TECHNIQUES.has(kind) ? `${kind}@${n.start}` : null, same = key && byBeat.get(key);
