@@ -142,6 +142,8 @@ body {
 .welcome-opt .wo-copy { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-pair); }
 .welcome-opt .wo-title { font: 600 var(--text-control)/1.4 var(--font-ui); }
 .welcome-opt .wo-desc { font: 400 var(--text-caption)/1.4 var(--font-ui); color: var(--label); }
+.welcome-opt:disabled { cursor: not-allowed; }
+.welcome-opt:disabled :is(.wo-icon, .wo-desc) { color: inherit; }
 /* Every action keeps room for two lines of description, so the column has one rhythm. */
 .welcome-actions .wo-desc { min-height: 2lh; }
 .welcome-settings .welcome-opt { min-height: var(--h-list); }
