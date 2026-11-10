@@ -1,4 +1,4 @@
-import { chordColumns, chordPlayability } from './voicing-core.js';
+import { chordColumns, chordPlayability, needsFret } from './voicing-core.js';
 import { paintMemo } from './paint-memo.js';
 
 // What each kind says, on the fretboard and on the stage's warning mark.
@@ -20,7 +20,8 @@ export const chordWarnings = paintMemo(function chordWarnings(lane, tuning, maxF
   if (cached?.signature === signature) return cached.warnings;
   // kind: "stretch" (only the widest hands reach it) or "impossible".
   const warnings = chordColumns(lane.notes).flatMap(column => {
-    const key = JSON.stringify([tuning, maxFret, column.notes.map(n => [n.pitch, n.pos?.string, n.pos?.fret])]);
+    // A technique that needs a fret changes the answer (enumerateShapes), so it is in the key.
+    const key = JSON.stringify([tuning, maxFret, column.notes.map(n => [n.pitch, n.pos?.string, n.pos?.fret, needsFret(n)])]);
     if (!shapeCache.has(key)) {
       shapeCache.set(key, chordPlayability(column.notes, tuning, maxFret));
       if (shapeCache.size > 512) shapeCache.delete(shapeCache.keys().next().value);

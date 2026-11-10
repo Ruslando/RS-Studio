@@ -20,4 +20,15 @@ assert.deepEqual(kinds([note(0, 1, 33, { fx: { ghost: true, staccato: true, letR
   [['ghost', 'warning'], ['staccato', 'warning'], ['letRing', 'warning']]);
 assert.deepEqual(kinds([note(0, 1, 33, { stroke: 'down' }), note(0, 1, 40, { stroke: 'down' })]), [], 'one per chord');
 assert.deepEqual(kinds([note(0, 1, 33, { whammy: 'dip', trill: 'half', grace: 'half' })]), [['trill', 'note'], ['grace', 'note'], ['whammy', 'note']]);
+// Positions stay where they are set, so what no longer fits them is said, with why.
+// BASS strings: 0 G2 (43), 1 D2 (38), 2 A1 (33), 3 E1 (28).
+assert.deepEqual(kinds([note(0, 1, 38, { pos: { string: 1, fret: 0 }, fx: { vibrato: true } })]), [['position', 'warning']],
+  'an open string under vibrato, said once (not also as a chord)');
+assert.deepEqual(kinds([note(0, 1, 33, { pos: { string: 2, fret: 0 }, slide: 'shift' }), note(1, 2, 45, { pos: { string: 0, fret: 2 } })]
+  .map((n, i) => i ? n : { ...n, pos: { string: 2, fret: 0 } })), [['position', 'warning']], 'a slide, said once');
+const shape = (more) => ({ shapeId: 's', shapeKind: 'arpeggio', ...more });
+const [grip] = laneIssues({ notes: [note(0, 1, 33, shape({ pos: { string: 2, fret: 0 } })), note(1, 2, 36, shape({ pos: { string: 2, fret: 3 } }))] }, BASS, 20);
+assert.equal(grip.kind, 'shapeGrip');
+assert.match(grip.help, /both on the A string/);
+assert.deepEqual(kinds([note(0, 1, 33, shape({ pos: { string: 2, fret: 0 } })), note(1, 2, 38, shape({ pos: { string: 1, fret: 0 } }))]), [], 'one grip: fine');
 console.log('note issues passed');

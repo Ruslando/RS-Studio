@@ -1678,6 +1678,51 @@ function holdsByColumn(columns, holds) {
 // usual, and the export says so at the shape.
 //
 // Returns Map(note -> { string, fret, finger, seat }) or null when there is none.
+// The grips one shape could be held with, keeping its notes' positions (`withPins`)
+// or not. One note per pitch stands for all its repeats: a repeated pitch is the
+// same finger on the same fret.
+function gripCandidates(members, tuning, frets, profile, withPins) {
+  const reps = new Map();
+  for (const n of members) if (!reps.has(n.pitch)) reps.set(n.pitch, n);
+  const voices = [...reps.values()];
+  if (voices.length > tuning.length) return { reps, candidates: [] };
+  const pins = new Map();
+  if (withPins) for (const n of members) {
+    const pin = pinnedPositions([n], tuning).get(n), voice = reps.get(n.pitch);
+    if (pin && !pins.has(voice)) pins.set(voice, pin);
+  }
+  const fretted = new Set(members.filter(needsFret).map((n) => n.pitch));
+  const candidates = enumerateShapes(voices, tuning, frets, pins, profile).filter((grip) =>
+    grip.size === voices.length
+    && new Set([...grip.values()].map((p) => p.string)).size === voices.length
+    && [...grip].every(([voice, p]) => p.fret <= frets && !(p.fret === 0 && fretted.has(voice.pitch)))
+    && hasPlayableFingering(grip, profile)
+    // Every position is kept: a grip that moves one is no grip for these notes.
+    && [...pins].every(([voice, p]) => grip.get(voice)?.string === p.string && grip.get(voice)?.fret === p.fret));
+  return { reps, candidates };
+}
+
+// Why a shape's notes, where they are now, are not one grip although another place
+// for them would be; null when they are one, or when no grip holds these pitches at
+// all (the export says so). Positions are kept, so the player is told instead.
+export function shapeGripFault(members, tuning, frets = MAX_FRET) {
+  const profile = handProfileForTuning(tuning);
+  if (gripCandidates(members, tuning, frets, profile, true).candidates.length) return null;
+  if (!gripCandidates(members, tuning, frets, profile, false).candidates.length) return null;
+  const placed = members.filter((n) => fitsPitch(n.pos, n.pitch, tuning, frets));
+  const open = (s) => noteName(tuning[s]).replace(/-?\d+$/, "");
+  for (const a of placed) for (const b of placed) {
+    if (a.pitch < b.pitch && a.pos.string === b.pos.string)
+      return `${noteName(a.pitch)} and ${noteName(b.pitch)} are both on the ${open(a.pos.string)} string, so one grip cannot hold both`;
+  }
+  const bad = placed.find((n) => n.pos.fret === 0 && needsFret(n));
+  if (bad) return `${noteName(bad.pitch)} is on an open string, but its technique needs a fret`;
+  const fretsUsed = placed.map((n) => n.pos.fret).filter((f) => f > 0);
+  return fretsUsed.length
+    ? `Its notes span frets ${Math.min(...fretsUsed)} to ${Math.max(...fretsUsed)}, too far apart for one hand`
+    : "Its notes cannot be held as one grip where they are";
+}
+
 function shapeGrips(columns, tuning, options) {
   const groups = new Map();
   for (const { notes } of columns) for (const n of notes) {
@@ -1702,23 +1747,7 @@ function shapeGrips(columns, tuning, options) {
   const profile = handProfileForTuning(tuning);
   const grips = new Map();
   for (const members of groups.values()) {
-    // One note per pitch stands for all its repeats: a repeated pitch is the same
-    // finger on the same fret.
-    const reps = new Map();
-    for (const n of members) if (!reps.has(n.pitch)) reps.set(n.pitch, n);
-    const voices = [...reps.values()];
-    if (voices.length > tuning.length) continue;
-    const pins = new Map();
-    for (const n of members) {
-      const pin = pinnedPositions([n], tuning).get(n), voice = reps.get(n.pitch);
-      if (pin && !pins.has(voice)) pins.set(voice, pin);
-    }
-    const fretted = new Set(members.filter(needsFret).map((n) => n.pitch));
-    const candidates = enumerateShapes(voices, tuning, frets, pins, profile).filter((grip) =>
-      grip.size === voices.length
-      && new Set([...grip.values()].map((p) => p.string)).size === voices.length
-      && [...grip].every(([voice, p]) => p.fret <= frets && !(p.fret === 0 && fretted.has(voice.pitch)))
-      && hasPlayableFingering(grip, profile));
+    const { reps, candidates } = gripCandidates(members, tuning, frets, profile, true);
     if (!candidates.length) continue;
     const moved = (grip) => members.filter((n) => {
       const was = placed.get(n), now = grip.get(reps.get(n.pitch));

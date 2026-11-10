@@ -6,7 +6,8 @@
 // An issue: { id, kind, tone: "error" | "warning" | "note", title, help, time, notes }.
 
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
-import { outOfFretboardRange } from "./voicing-core.js";
+import { chordColumns, outOfFretboardRange, placementFault, placementLimits, shapeGripFault } from "./voicing-core.js";
+import { SHAPE_KINDS, shapeGroups } from "./shapes.js";
 import { bendCurve } from "./bend.js";
 import { OVERLAP_EPS } from "./constants.js";
 import { paintMemo } from "./paint-memo.js";
@@ -15,7 +16,12 @@ export const ISSUE_TEXT = {
   outOfRange: ["Note is outside the fret range", "No string can play this pitch within the selected fret range. Change the pitch, tuning, or fret range."],
   stack: ["Notes with the same pitch overlap", "Notes with the same pitch overlap on the same string or have no separate string positions. Remove the overlap or place them on different strings."],
   bendStack: ["Rocksmith: Bend points have the same time", "Rocksmith keeps only the first bend point at this time. Move or remove the other points."],
+  // Positions stay where they are set, so a technique or a shape that no longer fits
+  // them is said here; the help names what does not fit.
+  position: ["Position does not fit the technique", "Select the note and choose Recalculate positions, or place it on the fretboard."],
+  shapeGrip: ["Shape notes are not one grip", "Select the shape and choose Recalculate positions to find a grip that holds them."],
 };
+const because = (text, fault) => `${fault}. ${text[1]}`;
 
 // Playing techniques an imported note has in its Guitar Pro data (n.gp, guitar-pro-core.js)
 // that the editor has no field for, so the Rocksmith chart does not show them. Kept for
@@ -117,8 +123,21 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
   const out = [];
   const outside = (n) => outOfFretboardRange(n.pitch, tuning, maxFret);
   const byBeat = new Map();
-  // A chord with a note no fret reaches is that note's problem, said once, below.
-  for (const { notes, kind } of chordWarnings(lane, tuning, maxFret, revision)) if (!notes.some(outside))
+  // A position the note's technique cannot be played at, said with the reason. A
+  // slide is said once, at the note it starts on.
+  const misplaced = new Set(), columns = chordColumns(lane.notes);
+  columns.forEach((_, i) => {
+    for (const [n, limit] of placementLimits(columns, i, tuning, (m) => m.pos, maxFret)) {
+      if (!Number.isInteger(n.pos?.string) || tuning[n.pos.string] + n.pos.fret !== n.pitch) continue;
+      const fault = placementFault({ ...limit, from: null }, n.pitch, n.pos.string, tuning, maxFret);
+      if (!fault) continue;
+      misplaced.add(n);
+      out.push({ ...issue("position", "warning", ISSUE_TEXT.position, [n]), help: because(ISSUE_TEXT.position, fault) });
+    }
+  });
+  // A chord with a note no fret reaches is that note's problem, said once, below; one
+  // with a misplaced note is said above.
+  for (const { notes, kind } of chordWarnings(lane, tuning, maxFret, revision)) if (!notes.some(outside) && !notes.some((n) => misplaced.has(n)))
     out.push({ ...issue("shape", kind === "stretch" ? "note" : "warning", SHAPE_WARNINGS[kind], notes), id: `editor.shape.${kind}` });
   for (const n of lane.notes) {
     if (outside(n)) out.push(issue("outOfRange", "warning", ISSUE_TEXT.outOfRange, [n]));
@@ -134,5 +153,10 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
     }
   }
   for (const notes of stackClusters(lane.notes)) out.push(issue("stack", "warning", ISSUE_TEXT.stack, notes));
+  for (const members of shapeGroups(lane.notes).values()) {
+    const fault = shapeGripFault(members, tuning, maxFret);
+    if (fault) out.push({ ...issue("shapeGrip", "warning", ISSUE_TEXT.shapeGrip, members),
+      title: `${SHAPE_KINDS[members[0].shapeKind]} notes are not one grip`, help: because(ISSUE_TEXT.shapeGrip, fault) });
+  }
   return out.sort((a, b) => a.time - b.time);
 });
