@@ -57,7 +57,7 @@ export const EDITOR_COMMAND_HANDLERS = {
   unmarkMotif: () => withSelection(unmarkSelectedMotifs),
   markArpeggio: () => withSelection(() => markSelectionAsShape('arpeggio')),
   markHandshape: () => withSelection(() => markSelectionAsShape('handshape')),
-  unmarkShape: () => withSelection(unmarkSelectedShapes),
+  unmarkShape: () => withSelection(() => unmarkSelectedShapes()),
   fretboardShape: () => click('fretboardShape'), applyFretboardShape: () => click('fretboardApply'),
   autoFretboard: () => click('fretboardAuto'),
   ...Object.fromEntries(['palmMute', 'hammer', 'vibrato', 'dead', 'accent', 'letRing'].map(key =>

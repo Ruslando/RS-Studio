@@ -1,5 +1,3 @@
-import { rowsFor } from './rocksmith-check.js';
-import { issueIgnoreActions } from './issue-state.js';
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { isTablatureLane } from "./layer-role.js";
 // Note editing: undo/redo across all edit lanes, clipboard (incl. paste-as-reference),
@@ -29,7 +27,7 @@ import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { confirmStemRemoval } from "./stem-settings.js";
 import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
-import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
+import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, occurrenceNotes, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { SHAPE_KINDS, markShape, remintShapes, shapeGroups, unmarkShape } from "./shapes.js";
 import { beginArtifactRename } from "./artifact-names.js";
@@ -819,19 +817,20 @@ export function markSelectionAsShape(kind) {
   return true;
 }
 
-export function selectEntireShape() {
-  const member = [...S.selection].find(note => note.shapeId && laneOf(note));
+// `kind` (arpeggio / handshape) limits these to shapes of that kind; null takes any.
+export function selectEntireShape(kind = null) {
+  const member = [...S.selection].find(note => note.shapeId && laneOf(note) && (!kind || note.shapeKind === kind));
   const notes = member && shapeGroups(laneOf(member).notes).get(member.shapeId);
   if (!notes) return;
   setSelection(new Set(notes)); draw();
 }
 
-export function unmarkSelectedShapes() {
+export function unmarkSelectedShapes(kind = null) {
   const previous = snapshotEdit();
   let changed = false;
   for (const note of S.selection) {
     const lane = laneOf(note);
-    if (lane && canEditLane(lane) && note.shapeId) { unmarkShape(lane.notes, note.shapeId); changed = true; }
+    if (lane && canEditLane(lane) && note.shapeId && (!kind || note.shapeKind === kind)) { unmarkShape(lane.notes, note.shapeId); changed = true; }
   }
   if (!changed) return;
   commit(previous); draw();
@@ -1383,6 +1382,27 @@ export function openCanvasMenu(clientX, clientY, atTime) {
   placeCtxMenu(m, clientX, clientY);
 }
 
+// What can be done to one reference occurrence: on its badge and in the note menu.
+function refActions(occ, clientX, clientY) {
+  const { lane, ref, group } = occ, locked = !!group.locked;
+  return {
+    manage: [
+      { label: locked ? "Unlock reference" : "Lock reference", fn: () => toggleRefEditLock(lane, ref) },
+      { label: "Rename", disabled: locked, fn: () => beginArtifactRename("reference", lane, ref, { left: clientX, top: clientY, width: 0, height: 0 }) },
+      group.transposable
+        ? { label: "Use the same pitch", disabled: locked, fn: () => setRefPitchLock(lane, ref, true) }
+        : { label: "Allow transposition", disabled: locked, fn: () => setRefPitchLock(lane, ref, false) },
+    ],
+    remove: [
+      { label: "Delete this occurrence", disabled: locked, fn: () => deleteRefOccurrence(occ) },
+      { label: "Delete entire reference", disabled: locked, fn: () => deleteRefGroup(lane, ref) },
+      { sep: true },
+      { label: "Detach this occurrence (keep notes)", disabled: locked, fn: () => detachSelection() },
+      { label: "Detach entire reference (keep notes)", disabled: locked, fn: () => detachRefGroup(lane, ref) },
+    ],
+  };
+}
+
 // Right-clicking a reference badge: a minimal, reference-only menu — no note
 // effects and no filter box (those don't apply to a reference). Acts on the
 // occurrence the badge identifies (so it works even for an empty box); Detach
@@ -1394,22 +1414,15 @@ export function openRefMenu(clientX, clientY, occ, { origin = "editor" } = {}) {
   // remembers the source reference, so Paste can re-link it as a new occurrence.
   // Cut copies, then removes the whole occurrence (box + notes) — not just the
   // notes, which would leave an empty box behind.
+  const { manage, remove } = refActions(occ, clientX, clientY);
   buildMenu(m, [
     { label: refName(occ.group, occ.ref), header: true },
-    { label: occ.group.locked ? "Unlock reference" : "Lock reference", fn: () => toggleRefEditLock(occ.lane, occ.ref) },
-    { label: "Rename", disabled: !!occ.group.locked, fn: () => beginArtifactRename("reference", occ.lane, occ.ref, { left: clientX, top: clientY, width: 0, height: 0 }) },
-    occ.group?.transposable
-      ? { label: "Use the same pitch", disabled: !!occ.group.locked, fn: () => setRefPitchLock(occ.lane, occ.ref, true) }
-      : { label: "Allow transposition", disabled: !!occ.group.locked, fn: () => setRefPitchLock(occ.lane, occ.ref, false) },
+    ...manage,
     { sep: true },
     { label: "Copy", fn: () => doCopy() },
     { label: "Cut", disabled: !!occ.group.locked, fn: () => { doCopy(); deleteRefOccurrence(occ); } },
     { sep: true },
-    { label: "Delete this occurrence", disabled: !!occ.group.locked, fn: () => deleteRefOccurrence(occ) },
-    { label: "Delete entire reference", disabled: !!occ.group.locked, fn: () => deleteRefGroup(occ.lane, occ.ref) },
-    { sep: true },
-    { label: "Detach this occurrence (keep notes)", disabled: !!occ.group.locked, fn: () => detachSelection() },
-    { label: "Detach entire reference (keep notes)", disabled: !!occ.group.locked, fn: () => detachRefGroup(occ.lane, occ.ref) },
+    ...remove,
   ]);
   markWalkthroughMenu(m);
   menuOpenCount++;
@@ -1471,7 +1484,6 @@ function similarEntries() {
       { label: "Next similar passage", kw: "search match forward", keepOpen: true,
         fn: () => focusAdjacentMatch(1, { preview: true }) },
     ] : []),
-    { sep: true },
   ];
 }
 
@@ -1541,28 +1553,39 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // { keepOpen: true } = an action you repeat, so the menu survives the click.
   // { sep:true } = divider, { family:true } = a top-level grouping (transparent to
   // search, so results read "Bend · full", not "Bends & slides · Bend · full").
-  // The reference entry only for an un-referenced selection; notes already inside a
-  // reference return null here (managed via the badge → openRefMenu). Drop the entry
-  // and its divider entirely when it doesn't apply.
-  const refEntry = refMenuEntry(sel);
-  const selectedMotifIds = [...new Set(sel.map((n) => n.motifId).filter(Boolean))];
+  // Grouping: reference, motif, arpeggio and handshape each get a submenu of the
+  // same shape: make one from the selection, or act on the one it is in.
+  const rect = { left: clientX, top: clientY, width: 0, height: 0 };
   const oneLane = new Set(sel.map(laneOf)).size === 1;
+  const refEntry = refMenuEntry(sel);
+  const occ = refEntry ? null : sel.map(boxOfNote).find(Boolean);
+  const refActs = occ && refActions(occ, clientX, clientY);
+  const refItems = refEntry ? [refEntry] : occ ? [
+    { label: "Select entire reference", fn: () => { setSelection(new Set(occurrenceNotes(occ))); draw(); } },
+    ...refActs.manage, { sep: true }, ...refActs.remove,
+  ] : [];
+  const selectedMotifIds = [...new Set(sel.map((n) => n.motifId).filter(Boolean))];
   const motifActions = [
     ...(sel.length >= 1 && oneLane ? [{ label: "Mark as motif", fn: markSelectionAsMotif }] : []),
-    ...(selectedMotifIds.length === 1 ? [{ label: "Select entire motif", fn: selectEntireMotif }] : []),
-    ...(selectedMotifIds.length ? [{ label: "Unmark motif", fn: unmarkSelectedMotifs }] : []),
+    ...(selectedMotifIds.length === 1 ? [
+      { label: "Select entire motif", fn: selectEntireMotif },
+      { label: "Rename", fn: () => beginArtifactRename("motif", laneOf(sel[0]), selectedMotifIds[0], rect) },
+    ] : []),
+    ...(selectedMotifIds.length ? [{ label: "Unmark motif (keep notes)", fn: unmarkSelectedMotifs }] : []),
   ];
   // Only shapes that still frame two notes or more (shapes.js shapeGroups).
   const liveShapes = oneLane ? shapeGroups(laneOf(sel[0]).notes) : new Map();
   const selectedShapeIds = [...new Set(sel.map((n) => n.shapeId).filter((id) => liveShapes.has(id)))];
-  const shapeActions = [
-    ...(sel.length >= 2 && oneLane ? [
-      { label: "Mark as arpeggio", kw: "arp broken chord grip frame rocksmith", fn: () => markSelectionAsShape("arpeggio") },
-      { label: "Mark as handshape", kw: "grip frame hold chord shape rocksmith", fn: () => markSelectionAsShape("handshape") },
-    ] : []),
-    ...(selectedShapeIds.length === 1 ? [{ label: "Select entire shape", fn: selectEntireShape }] : []),
-    ...(selectedShapeIds.length ? [{ label: "Remove shape (keep notes)", fn: unmarkSelectedShapes }] : []),
-  ];
+  const shapeMenu = (kind, kw) => {
+    const name = SHAPE_KINDS[kind], low = name.toLowerCase();
+    const ids = selectedShapeIds.filter((id) => liveShapes.get(id)[0].shapeKind === kind);
+    const children = [
+      ...(sel.length >= 2 && oneLane ? [{ label: `Mark as ${low}`, fn: () => markSelectionAsShape(kind) }] : []),
+      ...(ids.length === 1 ? [{ label: `Select entire ${low}`, fn: () => selectEntireShape(kind) }] : []),
+      ...(ids.length ? [{ label: `Remove ${low} (keep notes)`, fn: () => unmarkSelectedShapes(kind) }] : []),
+    ];
+    return children.length ? [{ label: name, kw, children }] : [];
+  };
   // Rocksmith-only settings of the selected notes. The export decides how chords
   // are drawn by itself, as EOF does; these override it, and keep EOF's names in
   // brackets for those who know them.
@@ -1633,40 +1656,21 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   const chordEntry = selChord && sel.every((n) => selChord.notes.includes(n)) && canEditLane(laneOf(sel[0]))
     ? [{ label: "Rename chord…", kw: "chord name symbol", fn: () => beginChordRename(selChord, { left: clientX, top: clientY, width: 0, height: 0 }) }]
     : [];
-  // "Return to automatic" is the one thing the deleted Tab preview sidebar owned
-  // that the neck does not: a way back off an override. It shows only on a column
-  // that has one, so the menu on plain notes is unchanged — and it names the state
-  // it restores, not the act of undoing. It is also available on the fretboard.
-  const pinnedNote = sel.find((n) => n.pos || n.arrangement || n.written);
-  const pinnedCol = pinnedNote ? columnOf(pinnedNote)?.col : null;
-  // HOW FAR AN OVERRIDE REACHES IS ON THE NECK NOW, not here. Both halves of that
-  // question are about grips the fretboard is drawing — how far this one re-fingers
-  // its neighbours is exactly what onion skin ghosts either side of it — so two rows
-  // of text describing something a few pixels away was the wrong home for it.
-  //
-  // The way BACK off an override stays in both places, and the split is not a
-  // compromise: reach only means anything while you can see the neighbours it moves,
-  // where "return this column to automatic" is about one column and is wanted
-  // wherever you are.
+  // Recalculate positions: one way back to the engine's answer for any selected tab
+  // note, whoever set its position.
   const columnActions = [
     ...chordEntry,
-    ...(pinnedCol
-      ? [{ label: "Return to automatic", kw: "reset unpin fingering position voicing",
-        fn: () => applyColumnAlternative(pinnedCol.notes, null) }]
-      : []),
-    ...(sel.some((n) => n.auto && !n.pos && canEditLane(laneOf(n)))
-      ? [{ label: "Recalculate positions", kw: "revoice refinger automatic fingering position hand",
+    ...(sel.some((n) => canEditLane(laneOf(n)) && isTablatureLane(laneOf(n)))
+      ? [{ label: "Recalculate positions", kw: "revoice refinger reset unpin return automatic fingering position voicing hand",
         fn: revoiceSelection }]
       : []),
-    ...(motifActions.length === 1
-      ? [{ ...motifActions[0], kw: "motif group phrase label" }]
-      : motifActions.length > 1
-        ? [{ label: "Motif", kw: "group phrase label", children: motifActions }]
-        : []),
-    ...rocksmithActions,
-    ...(shapeActions.length
-      ? [{ label: "Arpeggio / handshape", kw: "arpeggio handshape grip frame rocksmith", children: shapeActions }]
-      : []),
+  ];
+  const grouping = [
+    ...(refItems.length ? [{ label: "Reference", kw: "repeat copies linked duplicate group", children: refItems }] : []),
+    ...(motifActions.length ? [{ label: "Motif", kw: "group phrase label", children: motifActions }] : []),
+    ...shapeMenu("arpeggio", "arp broken chord grip frame rocksmith group"),
+    ...shapeMenu("handshape", "grip frame hold chord shape rocksmith group"),
+    ...similarEntries(),
   ];
   // Other layers to copy or move the selection into; hidden/locked ones are shown
   // but disabled, so the list does not change shape with layer state.
@@ -1676,28 +1680,21 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     tip: canEditLane(l) ? undefined : `Layer is ${l.visible ? "locked" : "hidden"}`,
     fn: () => sendSelectionToLane(l, { move }),
   }));
-  const laneTargets = others.length ? [
-    { label: "Copy to layer", kw: "duplicate layer lane", children: laneItems(false) },
-    { label: "Move to layer", kw: "transfer layer lane", children: laneItems(true) },
-  ] : [];
-  const tree = [
-    // Grouping a selection leads the menu. It sat under the whole effect tree,
-    // which is where you put something nobody reaches for — and while charting a
-    // song built on repeats it is the first thing you do to a selection, not the
-    // last. Every entry above a divider is conditional, so the divider is too: a
-    // menu that opens on a rule is the same accident as an inset one.
-    // One group: everything you do WITH a selection (group it, find it again). They
-    // were three groups of one or two entries each, divided by rules that said nothing.
-    ...(refEntry ? [refEntry] : []),
-    ...columnActions,
-    ...similarEntries(),
-    ...families,
-    { sep: true },
+  const laneTargets = others.length ? [{ label: "Send to layer", kw: "layer lane", children: [
+    { label: "Copy to", header: true }, ...laneItems(false),
+    { label: "Move to", header: true }, ...laneItems(true),
+  ] }] : [];
+  const edit = [
     { label: "Copy", kw: "clipboard duplicate", fn: () => doCopy() },
     { label: "Cut", kw: "clipboard", fn: () => doCut() },
-    ...laneTargets,
     { label: "Delete", kw: "remove erase", fn: () => doDelete() },
+    ...laneTargets,
   ];
+  // Effects (with how Rocksmith shows the notes), chord & fingering, grouping, edit.
+  // Any group can be empty, and an empty one takes its divider with it.
+  const tree = [[...families, ...rocksmithActions], columnActions, grouping, edit]
+    .filter((group) => group.length)
+    .flatMap((group, i) => (i ? [{ sep: true }, ...group] : group));
   // Quick-remove strip pinned above the effect tree: one click strips an applied
   // effect, no submenu diving. keepOpen re-renders the menu in place so several
   // can be cleared in a row. Browse-only — kept out of the flat search list.
@@ -1714,20 +1711,16 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // path; the families are the browse fallback.
   const search = document.createElement("input");
   search.className = "ctxmenu-search"; search.type = "text";
-  search.placeholder = "Search effects…"; search.spellcheck = false;
+  search.placeholder = "Search…"; search.spellcheck = false;
   const browse = document.createElement("div");
   const results = document.createElement("div"); results.className = "ctxmenu-results"; results.hidden = true;
-  const diagnostics = editLanes().flatMap(lane => rowsFor(lane).filter(issue => issue.notes?.some(n => S.selection.has(n))).map(issue => {
-    return {label: issue.title, children: issueIgnoreActions(lane, issue)};
-  }));
-  buildMenu(browse, [...appliedSection, ...tree, ...(diagnostics.length ? [{sep: true}, ...diagnostics] : [])]);
+  buildMenu(browse, [...appliedSection, ...tree]);
   m.append(search, browse, results);
   markWalkthroughMenu(m);
   menuOpenCount++;
 
-  // The input is explicitly an effects search: contextual actions such as Tab
-  // preview, shaping, references, and Delete remain browse-only.
-  const flat = flattenActions(families);
+  // Search finds every action in the menu; only the applied strip is browse-only.
+  const flat = flattenActions(tree);
   let matches = [], hi = 0;
   const paint = () => [...results.children].forEach((c, i) => c.classList.toggle("ctxmenu-hi", i === hi));
   const renderResults = () => {
@@ -1737,7 +1730,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     browse.hidden = true; results.hidden = false;
     matches = flat.filter((a) => terms.every((t) => a.search.includes(t))).slice(0, 12);
     if (!matches.length) {
-      const none = document.createElement("div"); none.className = "ctxmenu-empty"; none.textContent = "No matching effect";
+      const none = document.createElement("div"); none.className = "ctxmenu-empty"; none.textContent = "No matching action";
       results.append(none);
     } else matches.forEach((a, i) => {
       const b = document.createElement("button"); b.className = "ctxmenu-item"; labelItem(b, a.display, a.note);
@@ -1778,14 +1771,17 @@ function openSelectedNoteMenu() {
 // full". `kw` rides along as hidden synonyms — matched, but never shown.
 function flattenActions(entries, crumb = "", crumbKw = "", crumbNote = undefined) {
   const out = [];
+  let head = "";   // a header ("Copy to") names the items after it
   for (const e of entries) {
+    if (e.header) { head = e.label; continue; }
     if (e.sep) continue;
     if (e.children) {
       if (e.family) out.push(...flattenActions(e.children));
       else out.push(...flattenActions(e.children, e.label.replace(/^✓ /, ""), e.kw || "", e.note));
     } else if (e.fn && !e.disabled) {
-      const display = crumb ? `${crumb} · ${e.label}` : e.label;
-      out.push({ display, note: e.note || crumbNote, search: `${crumb} ${e.label} ${crumbKw} ${e.kw || ""}`.toLowerCase(), fn: e.fn });
+      const label = head ? `${head} ${e.label}` : e.label;
+      const display = crumb ? `${crumb} · ${label}` : label;
+      out.push({ display, note: e.note || crumbNote, search: `${crumb} ${label} ${crumbKw} ${e.kw || ""}`.toLowerCase(), fn: e.fn });
     }
   }
   return out;
@@ -1826,14 +1822,20 @@ function buildMenu(parent, entries) {
   }
 }
 
+// A menu item is `label`, or the submenu row that leads to it.
+export function menuItemLeadsTo(item, label) {
+  if (!item) return false;
+  const inside = item.classList.contains("ctxmenu-parent") ? [...item.nextElementSibling.querySelectorAll(".ctxmenu-item")] : [];
+  return [item, ...inside].some((b) => b.textContent.replace(/^[✓✕]\s*/, "").startsWith(label));
+}
+
 function markWalkthroughMenu(menu) {
   const action = walkthroughMenuAction;
   if (!action) return;
   for (const button of menu.querySelectorAll("button.ctxmenu-item")) {
-    const label = button.textContent.replace(/^[✓✕]\s*/, "");
     const wanted = action === "noteEffects"
       ? !!button.closest(".ctxmenu-family, .ctxmenu-results") || button.textContent.startsWith("✕ ")
-      : label.startsWith(action);
+      : menuItemLeadsTo(button, action);
     button.disabled = !wanted;
     button.classList.toggle("tour-menu-target", wanted);
   }

@@ -439,7 +439,7 @@ export const TOURS = {
         do: ACT.seedFirstPhrase,
         spot: "spectrogramArea",
         title: "References",
-        body: "If your song has repeating parts or recurring motifs, you can use references to chart them once and reuse them as often as you like.\n\nSelect these notes, then right-click and choose Group into reference.",
+        body: "If your song has repeating parts or recurring motifs, you can use references to chart them once and reuse them as often as you like.\n\nSelect these notes, then right-click and choose Reference, then Create from selection.",
         until: UNTIL.refs,
         tasks: [
           { label: "Select the notes with [[Shift]]", until: UNTIL.selection },
@@ -450,7 +450,7 @@ export const TOURS = {
         allowButtons: [0, 2],
         allowKeys: ["Shift"],
         requireModifier: "Shift",
-        allowMenu: "Group into reference",
+        allowMenu: "Create from selection",
         menuSpot: true,
         lockCard: true,
         placement: "top-right",

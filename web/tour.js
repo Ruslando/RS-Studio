@@ -15,7 +15,7 @@ import { fretboardVisible, setFretboardVisible } from "./fretboard.js";
 import { railBand, railsBottom, railsHidden } from "./marker-rails.js";
 import { firstMarkerViewportRect, openFirstMarkerPop } from "./markers.js";
 import { cancelPendingDetection, detectCompletionCount, openDetectPanel, requireDetectModel, updateDetectStatus } from "./detect.js";
-import { doCopy, doPaste, restoreEditSnapshot, restrictContextMenuTo, snapshotEdit, updateUndoButtons, walkthroughMenuOpenCount } from "./edit.js";
+import { doCopy, doPaste, restoreEditSnapshot, menuItemLeadsTo, restrictContextMenuTo, snapshotEdit, updateUndoButtons, walkthroughMenuOpenCount } from "./edit.js";
 import { refMenuEntry } from "./references.js";
 import { addStemMenuMode, closeAddStemMenu, closeProject } from "./project.js";
 import { ACT, FIRST, TOURS, UNTIL, previousTourStep } from "./tour-core.js";
@@ -978,7 +978,7 @@ function guard(e) {
     if (!scoped) return; // older chapters retain their existing open interaction
     if (step.allow && e.target.closest?.(step.allow)) return;
     if (step.allowKeys?.includes(e.key)) return;
-    if (step.allowMenu && e.target.closest?.(".ctxmenu-item")?.textContent.startsWith(step.allowMenu)) return;
+    if (step.allowMenu && menuItemLeadsTo(e.target.closest?.(".ctxmenu-item"), step.allowMenu)) return;
     const allowedButtons = step.allowButtons || (step.allowButton === undefined ? null : [step.allowButton]);
     const buttonMatches = !allowedButtons || allowedButtons.some((button) =>
       e.type === "mousemove" ? !!(e.buttons & (1 << button)) : e.button === button);

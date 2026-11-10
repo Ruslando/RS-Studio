@@ -1,10 +1,10 @@
 // Walkthrough instructions use text nodes, action labels, and input glyphs.
 const ACTIONS = [
   "Export Rocksmith CDLC (.psarc)", "Export legacy Guitar Pro (.gp5)",
-  "Export Guitar Pro (.gp)", "Group into reference", "Mark as motif",
+  "Export Guitar Pro (.gp)", "Create from selection", "Mark as motif",
   "Edit note layer settings", "Find similar passage", "Rocksmith arrangement",
   "Add audio layer", "Note layers", "Audio layers", "Upload my own", "Detect notes", "Export .chart",
-  "Palm mute", "Vibrato", "Slide", "Reset override", "Heat", "Snap", "Edit", "File",
+  "Palm mute", "Vibrato", "Slide", "Recalculate position", "Heat", "Snap", "Edit", "File",
 ];
 const INPUTS = {
   "left mouse button": ["mouse", "LMB"],

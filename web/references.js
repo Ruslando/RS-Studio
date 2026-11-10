@@ -107,7 +107,7 @@ export function overlapsRefBox(lane, box, except = null) {
 }
 
 // A note moved to another pitch cannot keep its string, fret or written chord.
-export function dropFingering(note) { delete note.pos; delete note.arrangement; delete note.auto; delete note.finger; }
+export function dropFingering(note) { delete note.pos; delete note.arrangement; delete note.finger; }
 
 // Notes from `arr` that sit inside `box`: pitch within range, and at least one
 // full cell (the smallest a note may be) of the note lies inside the box's time
@@ -202,6 +202,9 @@ export function boxOfNote(note) {
 
 // The box whose notes are exactly `notes`, or null. Only a whole occurrence can be
 // pasted as that reference: a part of it would be a second, different view of it.
+// The notes inside one occurrence's box.
+export const occurrenceNotes = (occ) => notesInBox(boxRect(occ.group, occ.i, laneClock(occ.lane)), occ.lane.notes);
+
 export function wholeBoxOf(notes) {
   const b = notes.length ? boxOfNote(notes[0]) : null;
   if (!b) return null;
@@ -676,10 +679,9 @@ export function resizeRefBox(drag, x, y) {
   draw();
 }
 
-// The reference entry for the NOTE menu: only the action to turn an un-referenced
-// selection into a reference. Notes/chords already inside a reference return null
-// here — managing an existing reference happens in openRefMenu, off its badge.
+// The action that turns an un-referenced selection into a reference. Notes already
+// inside one return null: the note menu offers that reference's own actions instead.
 export function refMenuEntry(sel) {
-  if (sel.some((n) => boxOfNote(n))) return null;   // inside a reference → managed via its badge
-  return { label: "Group into reference", kw: "repeat copies linked duplicate", fn: () => markSelectionAsReference() };
+  if (sel.some((n) => boxOfNote(n))) return null;
+  return { label: "Create from selection", kw: "repeat copies linked duplicate", fn: () => markSelectionAsReference() };
 }

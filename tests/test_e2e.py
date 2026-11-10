@@ -4185,6 +4185,7 @@ class EndToEndTests(unittest.TestCase):
             setSelection(new Set(notes.filter(n => n.start === 8 || n.start === 9)));
             (await import('/edit.js')).openNoteMenu(600, 300);
         }""")
+        page.locator('.ctxmenu').get_by_text('Motif', exact=True).click()
         page.locator('.ctxmenu').get_by_text('Mark as motif', exact=True).click()
         expect(page.locator('#motifList .artifact-row')).to_have_count(1)
         motif = page.locator('#motifList .artifact-row').first
