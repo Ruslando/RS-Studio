@@ -43,9 +43,16 @@ export function markerSelectClick(e, x, y) {
   const flags = allFlags(), hit = flags.find((f) => x >= f.x0 && x <= f.x1 && y >= f.y0 && y <= f.y1);
   if (!hit) return false;
   e.preventDefault();
+  pickMarker(e, hit, flags.filter((f) => f.kind === hit.kind));
+  return true;
+}
+
+// Ctrl toggles `hit` ({ kind, key, t }); Shift adds every one of `same` (its kind,
+// in any order) from the last one picked. Shared by the rails and the marker list.
+export function pickMarker(e, hit, same) {
   const keys = new Set(markerSelection()), key = markerKey(hit.kind, hit.key);
   if (e.shiftKey && anchor?.kind === hit.kind) {
-    for (const f of markerRange(flags.filter((f) => f.kind === hit.kind), anchor.t, hit.t)) keys.add(markerKey(f.kind, f.key));
+    for (const f of markerRange(same, anchor.t, hit.t)) keys.add(markerKey(f.kind, f.key));
   } else {
     if (keys.has(key)) keys.delete(key); else keys.add(key);
     anchor = hit;
@@ -53,7 +60,6 @@ export function markerSelectClick(e, x, y) {
   setMarkerSelection(keys);
   if (keys.size && S.selection.size) setSelection(new Set());   // one selection at a time
   draw();
-  return true;
 }
 
 // The copy of one flag: what it is, minus its identity.

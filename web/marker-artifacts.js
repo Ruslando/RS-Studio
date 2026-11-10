@@ -22,6 +22,8 @@ import { draw } from './repaint.js';
 import { icon } from './icons.js';
 import { rocksmithEventItems } from './rocksmith-events.js';
 import { RS_EVENT_NAMES } from './section-marker-core.js';
+import { clearMarkerSelection, pickMarker } from './marker-clipboard.js';
+import { isMarkerSelected } from './marker-rails.js';
 
 const categories = [['tempo', 'Tempo & meter'], ['section', 'Sections'], ['phrase', 'Phrases'], ['tone', 'Tone switches'], ['comment', 'Comments'], ['rocksmith', 'Rocksmith']];
 // Crowd events are Rocksmith's too, so they are listed with the export's own marks.
@@ -31,6 +33,10 @@ const EXPORT_NAMES = Object.fromEntries(RS_EVENT_NAMES);
 const sections = new Map(), rows = new Map();
 const chevron = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
+// The kinds the clipboard copies, and the key a rail flag has for each
+// (markers.js tempoKey, the others their id).
+const COPYABLE = new Set(['tempo', 'section', 'phrase', 'tone']);
+const flagKey = entry => (entry.kind === 'tempo' ? (entry.marker.seg0 ? 'start' : (+entry.t).toFixed(4)) : entry.marker.id);
 const markerTime = t => `${t < 0 ? '-' : ''}${Math.floor(Math.abs(t) / 60)}:${(Math.abs(t) % 60).toFixed(3).padStart(6, '0')}`;
 
 export function markerArtifacts(requestedLane = null) {
@@ -84,6 +90,25 @@ export function markerArtifacts(requestedLane = null) {
     code: item.code, t: item.t, name: item.name || EXPORT_NAMES[item.code] || item.code,
   }));
   return entries.sort((a, b) => a.t - b.t || a.key.localeCompare(b.key));
+}
+
+function pickRow(key, event) {
+  const entries = markerArtifacts(), entry = entries.find(item => item.key === key);
+  if (!entry || !COPYABLE.has(entry.kind)) return false;
+  const flag = e => ({ kind: e.kind, key: flagKey(e), t: e.t });
+  pickMarker(event, flag(entry), entries.filter(e => e.kind === entry.kind).map(flag));
+  syncMarkerRowSelection(entries);
+  return true;
+}
+
+// Selected markers are marked in the list too; cheap, so it runs every pass.
+export function syncMarkerRowSelection(entries = markerArtifacts()) {
+  if (!rows.size) return;
+  const byKey = new Map(entries.map(entry => [entry.key, entry]));
+  for (const [key, row] of rows) {
+    const entry = byKey.get(key);
+    row.classList.toggle('is-selected', !!entry && COPYABLE.has(entry.kind) && isMarkerSelected(entry.kind, flagKey(entry)));
+  }
 }
 
 function actOnMarker(key, edit, target, event) {
@@ -186,7 +211,13 @@ export function renderMarkerArtifacts() {
           controls.append(button);
         }
         // A click on the row itself moves there; the buttons stay for keyboard use.
-        row.addEventListener('click', event => { if (!event.target.closest('button')) actOnMarker(key, false, row); });
+        // With Ctrl or Shift it picks the marker instead, as on the rail, for copy and paste.
+        row.addEventListener('click', event => {
+          if (event.target.closest('button')) return;
+          if ((event.ctrlKey || event.metaKey || event.shiftKey) && !event.altKey && pickRow(key, event)) { event.preventDefault(); return; }
+          clearMarkerSelection();
+          actOnMarker(key, false, row);
+        });
         row.addEventListener('contextmenu', event => {
           event.preventDefault(); event.stopPropagation(); actOnMarker(key, true, row, event);
         });

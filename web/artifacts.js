@@ -19,7 +19,7 @@ import { clipOf, doCopy, doPaste, openRefMenu, openMotifMenu, placeClip } from "
 
 import { motifGroups } from './motifs.js';
 import { artifactName, beginArtifactRename } from './artifact-names.js';
-import { initMarkerArtifacts, renderMarkerArtifacts, clearMarkerArtifacts, syncMarkerButtons } from './marker-artifacts.js';
+import { initMarkerArtifacts, renderMarkerArtifacts, clearMarkerArtifacts, syncMarkerButtons, syncMarkerRowSelection } from './marker-artifacts.js';
 import { checkResults, initRocksmithIssues, renderRocksmithIssues, scheduleCheck } from './rocksmith-check.js';
 import { PAINT } from './stage-paint.js';
 
@@ -68,7 +68,7 @@ const sameKey = (a, b) => a && b && a.length === b.length && a.every((v, i) => v
 export function renderArtifacts() {
   if (!$('artifactList')) return;
   // The transport's marker buttons and the export check run whether or not the pane shows.
-  const markers = syncMarkerButtons(); scheduleCheck();
+  const markers = syncMarkerButtons(); scheduleCheck(); syncMarkerRowSelection(markers);
   const key = paneKey(markers);
   if (!key || sameKey(key, shownKey)) return;
   shownKey = key;
