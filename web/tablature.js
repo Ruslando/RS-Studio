@@ -33,6 +33,7 @@ import { parseTuning, songTimeToTabMs, tabMsToSongTime } from "./util.js";
 import { TUNINGS } from "./tunings.js";
 import { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
 import { draw } from "./repaint.js";
+import { withoutDirtying } from "./project.js";
 import { paintMemo } from "./paint-memo.js";
 
 // ---- tablature (Guitar Pro export + alphaTab preview) ----
@@ -353,7 +354,7 @@ export async function laneFingering(lane, signal) {
   // longer fits (keepVoicing). No undo step and no new revision — the answer is the
   // same, it is only remembered.
   // Only for the lane itself: previews voice a copy, and their answer is hypothetical.
-  if (S.state?.editLanes?.includes(lane)) keepVoicing(lane.notes, found, tuning);
+  if (S.state?.editLanes?.includes(lane)) withoutDirtying((before) => keepVoicing(lane.notes, found, tuning, before));
   return { tuning, notes, ...found };
 }
 

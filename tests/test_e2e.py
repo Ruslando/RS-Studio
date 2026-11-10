@@ -4172,7 +4172,9 @@ class EndToEndTests(unittest.TestCase):
             .sort((a, b) => a.start - b.start).map(n => [n.start, n.pitch, n.pos ?? null])""")
         self.assertAlmostEqual(placed[0][0], 13, delta=0.3)
         self.assertEqual([p for _, p, _ in placed], [p + 3 for p in original])
-        self.assertTrue(all(pos is None for _, _, pos in placed))
+        # The source's positions do not come along; a later solve places the copy anew.
+        tuning = [64, 59, 55, 50, 45, 40]
+        self.assertTrue(all(pos is None or tuning[pos['string']] + pos['fret'] == p for _, p, pos in placed))
 
     def test_motifs_are_only_note_labels_and_live_artifacts(self):
         self.open_reference_project()

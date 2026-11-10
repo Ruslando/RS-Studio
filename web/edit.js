@@ -934,7 +934,7 @@ const putFinger = (note, finger) => { if (finger == null) delete note.finger; el
 export function draftNoteFinger(original, note, finger, positions = null) {
   const lane = laneOf(note);
   if (!canEditLane(lane)) return;
-  const group = slideFingerGroup(lane.notes, note, n => positions ? positions.get(n) : n.pos || n.auto);
+  const group = slideFingerGroup(lane.notes, note, n => positions ? positions.get(n) : n.pos);
   let changed = false;
   for (const member of group) {
     if ((member.finger ?? null) === finger) continue;
@@ -960,14 +960,26 @@ export function settleFingerDraft(original, keep) {
   draw();
 }
 
-// Forget where the selection was voiced, so the next solve places it again around
-// everything else, which stays put (keepVoicing). Overrides are left alone: their way
-// back is "Return to automatic".
+// Forget the selection's positions, so the next solve places it again around
+// everything else, which stays put (keepVoicing). One undo step.
 export function revoiceSelection() {
-  const notes = [...S.selection].filter((n) => n.auto && !n.pos && canEditLane(laneOf(n)));
-  if (!notes.length) return;
+  const lanes = [...new Set([...S.selection].map(laneOf))].filter((l) => l && canEditLane(l) && isTablatureLane(l));
+  if (!lanes.length) return;
   const prev = snapshotEdit();
-  for (const n of notes) delete n.auto;
+  const picked = new Set(S.selection);
+  for (const lane of lanes) {
+    // A column rewritten to other notes comes back as it was written, as new note
+    // objects, so the selection swaps them in.
+    for (const col of chordColumns(lane.notes)) {
+      if (!col.notes.some((n) => picked.has(n)) || !col.notes.some((n) => n.pos || n.arrangement || n.written)) continue;
+      writeAlternative(col.notes, null, null);   // a rewrite selects the new column
+      const now = new Set(lane.notes);
+      if (col.notes.every((n) => now.has(n))) continue;
+      col.notes.forEach((n) => picked.delete(n));
+      S.selection.forEach((n) => picked.add(n));
+    }
+  }
+  setSelection(picked);
   commit(prev); draw(); refreshTabIfOpen();
 }
 
@@ -1010,7 +1022,7 @@ export function setHandAnchor(lane, t, fret) {
   // does that, for fingers that came after it (or with an import).
   const column = fret === null ? [] : chordColumns(lane.notes).find((c) => c.t0 >= t - 1e-6)?.notes || [];
   const fingered = column.some((n) => n.pos?.finger != null
-    || slideFingerGroup(lane.notes, n, (m) => m.pos || m.auto).some((m) => m.finger != null));
+    || slideFingerGroup(lane.notes, n, (m) => m.pos).some((m) => m.finger != null));
   if ((!had && fret === null) || (had && Number(had.fret) === fret && !fingered)) return;
   const prev = snapshotEdit();
   lane.handHolds = (fret === null ? rest : [...rest, { id: had?.id || `anchor_${nid()}`, t, fret }]).sort((a, b) => a.t - b.t);
@@ -1027,7 +1039,7 @@ function dropChosenFingers(lane, notes) {
       const { finger, ...pos } = n.pos;
       n.pos = pos;
     }
-    for (const member of slideFingerGroup(lane.notes, n, (m) => m.pos || m.auto)) delete member.finger;
+    for (const member of slideFingerGroup(lane.notes, n, (m) => m.pos)) delete member.finger;
   }
 }
 
@@ -1042,12 +1054,8 @@ export function setColumnFingers(lane, placed, fingers) {
   const { follow } = overrideFlow(placed.map(({ note }) => note));
   for (const { note, string, fret } of placed) {
     const finger = fret > 0 ? fingers.get(note) : null;
-    // A note the engine placed keeps knowing it: Auto (clearColumnFingers) then
-    // returns it to the engine entirely, not to a pinned position nobody chose.
-    const fingerOnly = !note.pos || note.pos.fingerOnly;
     // Number.isInteger: an open string's finger is null, and null >= 0 is true.
-    note.pos = { string, fret, scope: "local", follow, ...(Number.isInteger(finger) && finger >= 0 ? { finger } : {}),
-      ...(fingerOnly ? { fingerOnly: true } : {}) };
+    note.pos = { string, fret, scope: "local", follow, ...(Number.isInteger(finger) && finger >= 0 ? { finger } : {}) };
   }
   const columns = chordColumns(lane.notes), t0 = Math.min(...placed.map(({ note }) => note.start));
   const i = columns.findIndex((c) => Math.abs(c.t0 - t0) < 1e-6);
@@ -1056,16 +1064,15 @@ export function setColumnFingers(lane, placed, fingers) {
   commit(prev); draw(); refreshTabIfOpen();
 }
 
-// The fingering back to the engine's: a chosen finger is dropped, and a note that
-// was only pinned to carry it is unpinned. One undo step.
+// The fingering back to the engine's: a chosen finger is dropped, the position stays.
+// One undo step.
 export function clearColumnFingers(lane, notes) {
   const chosen = (n) => n.pos && (n.pos.fingerOnly || "finger" in n.pos);
   if (!canEditLane(lane) || !notes.some(chosen)) return;
   const prev = snapshotEdit();
   for (const n of notes) {
     if (!chosen(n)) continue;
-    if (n.pos.fingerOnly) delete n.pos;
-    else { const { finger, ...pos } = n.pos; n.pos = pos; }
+    const { finger, fingerOnly, ...pos } = n.pos; n.pos = pos;
   }
   commit(prev); draw(); refreshTabIfOpen();
 }

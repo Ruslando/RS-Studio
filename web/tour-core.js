@@ -556,7 +556,7 @@ export const TOURS = {
       {
         target: "fretboardStage",
         title: "Override settings",
-        body: "An override guides later placements where the hand allows. Existing note positions stay saved until you ask to change them. Show suggestion compares the current placement with a fresh automatic position.\n\nIf you want to undo the change, click Reset override.",
+        body: "An override guides later placements where the hand allows. Existing note positions stay saved until you ask to change them. Show suggestion compares the current placement with a fresh automatic position.\n\nTo let the app pick again, click Recalculate position.",
       },
       {
         target: "fretboardStage",

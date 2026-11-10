@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import { suggestionLane, suggestionDiffers } from '../../web/fretboard-suggestion.js';
 const lane = { notes: [
-  {id:'a',pitch:57,start:0,end:1,pos:{string:4,fret:12},auto:{string:2,fret:2},finger:2},
-  {id:'b',pitch:57,start:2,end:3,pos:{string:4,fret:12},auto:{string:4,fret:12}},
+  {id:'a',pitch:57,start:0,end:1,pos:{string:4,fret:12},finger:2},
+  {id:'b',pitch:57,start:2,end:3,pos:{string:4,fret:12}},
 ], handHolds:[{t:0,fret:10},{t:2,fret:12}],refBoxes:{} };
 const before = structuredClone(lane), preview = suggestionLane(lane, [lane.notes[0]]);
 assert.equal(preview.notes[0].pos, undefined);
-assert.equal(preview.notes[0].auto, undefined);
 assert.equal(preview.notes[0].finger, undefined);
 assert.deepEqual(preview.notes[1], lane.notes[1], 'other notes retain saved positions');
 assert.notEqual(preview.notes[1], lane.notes[1], 'the worker receives detached data');

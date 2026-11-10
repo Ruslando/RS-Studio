@@ -1,8 +1,8 @@
 // Run: node tests/web/voicing-kept.test.mjs
-// Once voiced, a note keeps its position (note.auto): adding a note voices only the
-// new one, around the rest. The hand is planned anew every time.
+// Once voiced, a note keeps its position (note.pos), however it got it: adding a note
+// voices only the new one, around the rest. The hand is planned anew every time.
 import assert from "node:assert/strict";
-import { keepVoicing, moveCapo, staleKept, voiceNotesFingered } from "../../web/voicing-core.js";
+import { keepVoicing, moveCapo, voiceNotesFingered } from "../../web/voicing-core.js";
 
 const tuning = [64, 59, 55, 50, 45, 40];              // app order: string 0 = high E
 const note = (start, pitch) => ({ start, end: start + 0.2, pitch });
@@ -47,72 +47,47 @@ assert.deepEqual(where(voice(lane), lane), where(second, lane), "solving again i
   assert.equal(new Set(strings).size, 2, "two notes, two strings");
 }
 
-// An override wins over a kept position; taking it off brings the kept one back.
+// A position set by hand is a position like any other: kept, and not rewritten.
 {
   const n = note(20, 57), notes = [n];
-  keepVoicing(notes, voice(notes), tuning);
-  const kept = n.auto;
   n.pos = { string: 2, fret: 2, scope: "local" };          // A3 on the G string, fret 2
   const found = voice(notes);
   assert.equal(found.voiced.get(n).string, 2);
-  keepVoicing(notes, found, tuning);
-  assert.equal(n.auto, kept, "the kept answer waits under the override");
-  delete n.pos;
-  assert.equal(voice(notes).voiced.get(n).string, kept.string, "back to where it was");
+  assert.equal(keepVoicing(notes, found, tuning), false, "nothing to write");
+  delete n.pos;                                            // Recalculate positions
+  keepVoicing(notes, voice(notes), tuning);
+  assert.ok(n.pos, "placed again and kept");
 }
 
-// A note moved onto another one's onset joins its column: the chord is voiced anew.
+// A note moved onto another one's onset keeps its position: both stay where they were.
 {
   const a = note(40, 57), b = note(41, 60), notes = [a, b];
   keepVoicing(notes, voice(notes), tuning);
+  const was = [a.pos, b.pos];
   b.start = a.start; b.end = a.end;
   const found = voice(notes);
-  const fresh = voice(notes.map(({ auto, ...n }) => n));
-  assert.deepEqual(where(found, notes), where(fresh, fresh.voiced.keys().toArray()), "voiced like a new chord");
-  keepVoicing(notes, found, tuning);
-  assert.equal(a.auto.n, 2, "kept as a chord of two");
+  if (was[0].string !== was[1].string)
+    assert.deepEqual(notes.map((n) => found.voiced.get(n)), was.map(({ string, fret }) => ({ string, fret })));
 }
 
-// The hand is not kept: a stale stored hand is ignored and dropped on the next keep.
+// What is stored is what is played: a position overruled after the solve (a reference
+// plays its first occurrence's) is written over. `before` runs once, ahead of it.
 {
-  const notes = run.slice(0, 8).map((n) => ({ ...n, start: n.start + 50, end: n.end + 50 }));
-  const plain = voice(notes);
-  keepVoicing(notes, plain, tuning);
-  assert.equal(notes[3].auto.hand, undefined, "no hand is kept");
-  const hand = plain.seats.get(notes[3]);
-  notes.forEach((n) => { n.auto = { ...n.auto, hand: hand + 3, finger: 4 }; });   // an older project
-  const again = voice(notes);
-  assert.equal(again.seats.get(notes[3]), hand, "the stored hand decides nothing");
-  assert.equal(keepVoicing(notes, again, tuning), true, "and is dropped");
-  assert.equal(notes[3].auto.hand, undefined);
+  const n = { ...note(60, 57), pos: { string: 4, fret: 12 } }, m = { ...note(61, 57), pos: { string: 2, fret: 2 } };
+  let calls = 0;
+  const found = { voiced: new Map([[n, { string: 2, fret: 2 }], [m, { string: 2, fret: 2 }]]) };
+  assert.equal(keepVoicing([n, m], found, tuning, () => calls++), true);
+  assert.deepEqual(n.pos, { string: 2, fret: 2 });
+  assert.equal(calls, 1);
+  assert.equal(keepVoicing([n, m], found, tuning, () => calls++), false);
+  assert.equal(calls, 1, "no write, no call");
 }
 
-// Moving the capo moves a kept position with the strings.
+// Moving the capo moves a position with the strings.
 {
-  const n = { ...note(30, 57), auto: { string: 3, fret: 7 } };
+  const n = { ...note(30, 57), pos: { string: 3, fret: 7 } };
   moveCapo({ capo: 0, notes: [n] }, 2);
-  assert.deepEqual(n.auto, { string: 3, fret: 5 });
-}
-
-// A chord slides into a kept chord on other strings: the target follows the slide.
-{
-  const a = { ...note(70, 44), slide: "shift" }, b = { ...note(70, 58), slide: "shift" };
-  a.auto = { string: 5, fret: 4, hand: 3, n: 2 }; b.auto = { string: 2, fret: 3, hand: 3, n: 2 };
-  const c = note(70.5, 46), d = note(70.5, 61);
-  c.auto = { string: 5, fret: 6, hand: 1, n: 2 }; d.auto = { string: 1, fret: 2, hand: 1, n: 2 };
-  const found = voice([a, b, c, d]);
-  assert.deepEqual([c, d].map((n) => found.voiced.get(n).string), [5, 2], "the slides keep their strings");
-  assert.deepEqual([a, b].map((n) => found.voiced.get(n).string), [5, 2], "the source stays");
-}
-
-// A kept place the engine would not choose today is pointed at, with today's answer.
-{
-  const n = note(80, 57), notes = [n];                     // A3: fret 2 on the G string fresh
-  const today = voice(notes).voiced.get(n);
-  n.auto = { string: 4, fret: 12, n: 1 };                  // an older solve: fret 12 on the A string
-  assert.deepEqual(staleKept(notes, tuning, { bars: [0, 2, 4, 6, 8] }), [{ string: today.string, fret: today.fret }]);
-  n.auto = { string: today.string, fret: today.fret, n: 1 };
-  assert.deepEqual(staleKept(notes, tuning, { bars: [0, 2, 4, 6, 8] }), [null], "same as today: nothing to say");
+  assert.deepEqual(n.pos, { string: 3, fret: 5 });
 }
 
 console.log("voicing-kept: ok");

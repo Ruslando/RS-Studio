@@ -7,7 +7,7 @@ export function suggestionLane(lane, columnNotes) {
   const notes = structuredClone(lane.notes);
   for (const index of indices) {
     if (index < 0) return null;
-    for (const field of ['auto', 'pos', 'finger', 'arrangement']) delete notes[index][field];
+    for (const field of ['pos', 'finger', 'arrangement']) delete notes[index][field];
   }
   const time = Math.min(...columnNotes.map(note => note.start));
   return { ...lane, notes,

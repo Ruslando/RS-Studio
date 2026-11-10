@@ -40,48 +40,12 @@ import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePat
 import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
-import { songBarStarts } from "./song-bars.js";
 import { displayGridStep, gridSegments, segBarSec } from "./grid.js";
-import { noteName } from "./util.js";
 import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
 
 const omittedArrangementCache = new WeakMap();
-const staleCache = new WeakMap(), staleJobs = new WeakMap();
-const STALE_DELAY = 700;   // ms after edits settle, like the Rocksmith check
 const FLAT = [[0, 0], [1, 0]];   // a curve that stays on the note's row
 
-// Kept positions the engine would place elsewhere today (staleKept): one whole-lane
-// pass in a worker, started once edits settle, reused until the next edit.
-function staleForLane(lane) {
-  const key = `${S.voicingRevision}:${songBarStarts().join(",")}`;
-  const cached = staleCache.get(lane);
-  if (cached?.key === key && cached.notes === lane.notes) return cached.stale;
-  const job = staleJobs.get(lane);
-  if (job?.key === key) return cached?.stale ?? null;
-  if (job) { clearTimeout(job.timer); job.worker?.terminate(); }
-  const notes = lane.notes, entry = { key };
-  entry.timer = setTimeout(() => {
-    try {
-      const worker = entry.worker = new Worker(new URL("./voicing-worker.js", import.meta.url), { type: "module" });
-      const done = (stale) => {
-        worker.terminate();
-        if (staleJobs.get(lane) !== entry) return;
-        staleJobs.delete(lane);
-        staleCache.set(lane, { key, notes, stale });
-        draw();
-      };
-      worker.onmessage = (event) => {
-        if (event.data.task !== "stale") return;
-        done(new Map((event.data.stale || []).flatMap((p, i) => (p && notes[i] ? [[notes[i], p]] : []))));
-      };
-      worker.onerror = () => done(new Map());
-      worker.postMessage({ task: "stale", notes, tuning: laneFretTuning(lane), bars: songBarStarts(),
-        instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
-    } catch { staleJobs.delete(lane); }
-  }, STALE_DELAY);
-  staleJobs.set(lane, entry);
-  return cached?.stale ?? null;   // the last answer until the new one is in
-}
 let warningMarks = [];   // last frame's warning marks: { x0, x1, y0, y1, tip }
 const BEND_STACK_TIP = { title: ISSUE_TEXT.bendStack[0], body: ISSUE_TEXT.bendStack[1], tone: "warning" };
 
@@ -523,7 +487,6 @@ function paintFrame({ panels = true } = {}) {
   const editTargets = fretboardEditTargets();
   const omittedCrosses = [];
   const outOfRange = [];
-  const staleMarks = [];
   const ghostNotes = [];
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
@@ -543,7 +506,6 @@ function paintFrame({ panels = true } = {}) {
     const edgeKey = (pitch, time) => `${pitch}|${Number(time).toFixed(5)}`;
     const reattackEdges = new Set(lane.notes.map((note) => edgeKey(note.pitch, note.end)));
     sctx.globalAlpha = laneAlpha;
-    const stale = lane.notes.some((n) => n.auto && !n.pos) ? staleForLane(lane) : null;
     const slurred = legatoTargets(lane);
     for (const n of lane.notes) {
       const motion = noteMotion(lane, n);
@@ -640,7 +602,7 @@ function paintFrame({ panels = true } = {}) {
         sctx.beginPath(); sctx.moveTo(x + 0.5, y + 2); sctx.lineTo(x + 0.5, y + rowH - 2); sctx.stroke();
         sctx.restore();
       }
-      if (n.pos || n.arrangement) {  // Only explicitly stored overrides get a star.
+      if (n.arrangement || n.written) {  // A column rewritten to other notes gets a star.
         // The mark follows the end of a bent note's bar.
         // Drawn above-left, outside the bar, so it never competes with the
         // note's own fill color or the name label.
@@ -651,23 +613,6 @@ function paintFrame({ panels = true } = {}) {
         sctx.lineWidth = 1; sctx.fillStyle = PAINT.error;
         sctx.fillText("*", x, py - 1);
         sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
-      }
-      const other = stale?.get(n);
-      if (other && !n.pos) {
-        // The engine would place it elsewhere today. Above-right in the warn colour,
-        // where the override's red star is above-left, so the two never meet.
-        const py = curve ? y - curve[curve.length - 1][1] * rowH : y;
-        sctx.font = stageUi(11, 700); sctx.textAlign = "right"; sctx.textBaseline = "alphabetic";
-        sctx.lineWidth = 2.5; sctx.strokeStyle = halo();
-        sctx.strokeText("*", x + w, py - 1);
-        sctx.lineWidth = 1; sctx.fillStyle = PAINT.warn;
-        sctx.fillText("*", x + w, py - 1);
-        sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
-        const open = noteName(laneFretTuning(lane)[other.string]).replace(/-?\d+$/, "");
-        staleMarks.push({ x: x + w - 8, y: py - 12, tip: {
-          title: "Automatic would place this elsewhere",
-          body: `Placed by an earlier solve. Today the automatic choice is fret ${other.fret} on the ${open} string. Recalculate positions takes it.`,
-          tone: "warning" } });
       }
       if (omittedNotes.has(n)) {
         const crossY = drop ? y - drop : y;
@@ -736,7 +681,6 @@ function paintFrame({ panels = true } = {}) {
   };
   const frames = [];
   const hoverMark = (x, y, w, h, tip) => warningMarks.push({ x0: x, x1: x + w, y0: y, y1: y + h, tip });
-  for (const m of staleMarks) hoverMark(m.x, m.y, 10, 12, m.tip);
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
     for (const issue of frameIssues.get(lane)) {

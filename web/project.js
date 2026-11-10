@@ -142,11 +142,8 @@ let savedSig = null;
 
 function dirtySig() {
   const b = projectBody();
-  // A kept automatic position (note.auto) is written on its own as lanes are voiced;
-  // remembering an answer is not an edit.
-  const withoutAuto = (key, value) => key === "auto" ? undefined : value;
   return JSON.stringify({ editLanes: b.editLanes, grid: b.grid, sectionMarkers: b.sectionMarkers, timings: b.timings,
-    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, projectStart: b.projectStart, stemSettings: b.stemSettings, mix: b.mix }, withoutAuto);
+    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, projectStart: b.projectStart, stemSettings: b.stemSettings, mix: b.mix });
 }
 
 function isDirty() { return !!S.state && S.state.job !== "tutorial" && dirtySig() !== savedSig; }
@@ -154,6 +151,13 @@ function isDirty() { return !!S.state && S.state.job !== "tutorial" && dirtySig(
 // The current state is now the clean baseline (call after a successful save/export
 // or a fresh load). Also refreshes the tab.
 export function markSaved() { savedSig = S.state ? dirtySig() : null; refreshSaveState(); }
+
+// Runs `write` (positions a solve fills in): it is no edit, so a saved project stays
+// saved. `write(before)` calls before() ahead of its first change.
+export function withoutDirtying(write) {
+  let clean = false;
+  if (write(() => { clean = !isDirty(); }) && clean) markSaved();
+}
 
 // Reflect the open project + dirty state in the app-bar tab.
 export function refreshSaveState() {
@@ -259,7 +263,9 @@ export function mapLane(l, startAt = 0) {
   // own label. Nothing displayed it and one migration heuristic read it, so it is
   // dropped on the way in and the next save writes the project without it. A note
   // is a note however it got there.
-  const notes = (l.notes || []).map(({ source, ...n }) => {
+  const notes = (l.notes || []).map(({ source, auto, ...n }) => {
+    // Older projects kept the engine's answer apart (`auto`); a position is a position.
+    if (!n.pos && Number.isInteger(auto?.string) && Number.isInteger(auto?.fret)) n.pos = { string: auto.string, fret: auto.fret };
     // Every saved override uses Guided, including retired Only here / Locked modes.
     for (const field of ['pos', 'arrangement']) if (n[field])
       n[field] = { ...n[field], ...normalizeOverrideInfluence(n[field]) };
