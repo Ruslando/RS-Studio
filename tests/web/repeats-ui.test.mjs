@@ -12,7 +12,8 @@ class Element extends EventTarget {
   click() { if (!this.disabled) this.dispatchEvent(new Event('click')); }
 }
 const ids = ['repeatNavigator', 'repeatGroup', 'repeatGroupPrevious', 'repeatGroupNext', 'repeatPosition', 'repeatPrevious', 'repeatNext',
-  'repeatChangePrevious', 'repeatChangeNext', 'repeatChangePosition', 'repeatHover', 'repeatHoverRows', 'repeatHoverTitle',
+  'repeatVariation', 'repeatVariationNavigation',
+  'repeatChangeNavigation', 'repeatChangePrevious', 'repeatChangeNext', 'repeatChangePosition', 'repeatHover', 'repeatHoverRows', 'repeatHoverTitle',
   'repeatNoteNavigation', 'repeatNoteFirst', 'repeatNoteCurrent', 'repeatNoteVersion', 'repeatNoteJump', 'repeatHoverClose', 'repeatClose'];
 const controls = Object.fromEntries(ids.map(id => [id, new Element()]));
 const riff = [40, 43, 45, 47, 45, 43, 40, 38];
@@ -34,7 +35,8 @@ class TestWorker {
   terminate() { this.terminated = true; }
   postMessage(notes) { this.notes = notes; }
   finish() {
-    const data = findRepeats(this.notes).map(r => ({ copies: r.copies.map(c => c.notes.map(n => n.note.id)) }));
+    const data = findRepeats(this.notes).map(r => ({ ...(r.phraseLength > 0 ? { phraseLength: r.phraseLength,
+      offsets: r.copies.map(c => c.notes[0].beat) } : {}), copies: r.copies.map(c => c.notes.map(n => n.note.id)) }));
     this.onmessage({ data });
   }
 }
@@ -301,6 +303,7 @@ try {
   controls.repeatChangeNext.click(); module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, false);
   assert.notEqual(controls.repeatChangePosition.textContent, '– / 0');
+  assert.equal(controls.repeatChangeNavigation.hidden, false, 'changed-note navigation appears when differences exist');
   assert.equal(S.selection, selection);
   const key = (key, extra = {}) => {
     const event = { key, target: { tagName: 'DIV' }, prevented: false, stopped: false,
@@ -314,7 +317,7 @@ try {
   lane.notes.push(...identical);
   lane.repeatGroups.push({ id: 'repeat_3', name: 'Already consistent', copies: [lane.repeatGroups[0].copies[0], identical.map(n => n.id)] });
   S.voicingRevision++; controls.repeatGroup.value = 'repeat_3'; controls.repeatGroup.dispatchEvent(new Event('change')); module.renderRepeatNavigator();
-  assert.equal(controls.repeatChangeNext.disabled, false);
+  assert.equal(controls.repeatChangeNavigation.hidden, true, 'identical instances do not duplicate the instance selector');
   assert.equal(controls.repeatPosition.textContent, '1 / 2');
   assert.equal(key('ArrowRight').handled, true);
   assert.equal(controls.repeatPosition.textContent, '2 / 2', 'arrows move through instances when there are no differences');
@@ -327,6 +330,7 @@ try {
   lane.notes[0].finger = 4; identical[0].finger = 3;
   lane.handHolds = [{ t: lane.notes[0].start, fret: 5 }, { t: identical[0].start, fret: 6 }];
   S.voicingRevision++; module.renderRepeatNavigator(); module.drawRepeats(); hoverNote(lane.notes[0]); controls.repeatNoteCurrent.click();
+  assert.equal(controls.repeatChangeNavigation.hidden, false, 'navigation reappears after a new difference');
   const fieldCell = label => controls.repeatHoverRows.children.find(row => row.children[0].textContent === label).children[1];
   assert.equal(fieldCell('Finger').className, 'repeat-uncommon', 'a two-instance tie compares against the opened note');
   assert.ok(rows().some(row => row.join('|') === 'Hand anchor|F6'));
@@ -342,8 +346,80 @@ try {
   controls.repeatClose.click(); module.renderRepeatNavigator();
   assert.equal(controls.repeatNavigator.hidden, true, 'the close button exits repeat review');
   assert.deepEqual(lane.repeatGroups, savedGroups, 'closing leaves saved groups intact');
+
+  // A substantial one-off passage uses the same review UI without inventing a
+  // counterpart, allowing note inspection and a normal close action.
+  module.runFindRepeats(lane);
+  worker.onmessage({ data: [{ copies: [identical.map(n => n.id)] }] });
+  module.renderRepeatNavigator();
+  assert.equal(controls.repeatNavigator.hidden, false);
+  assert.equal(controls.repeatPosition.textContent, '1 / 1');
+  assert.equal(controls.repeatChangeNavigation.hidden, true, 'a one-off passage has only one instance selector');
+  assert.equal(controls.repeatPrevious.disabled, true);
+  assert.equal(controls.repeatNext.disabled, true);
+  module.drawRepeats(); assert.equal(hoverNote(identical[0]), true);
+  assert.equal(controls.repeatNoteVersion.textContent, '1 / 1');
+  assert.equal(controls.repeatNoteFirst.disabled, true);
+  assert.equal(controls.repeatNoteCurrent.disabled, true);
+  assert.equal(action('presence'), undefined);
+  assert.equal(action('finger'), undefined, 'there is no suggestion against an imaginary counterpart');
+  assert.ok(rows().some(row => row[0] === 'Pitch'));
+  controls.repeatClose.click(); module.renderRepeatNavigator();
+  assert.equal(controls.repeatNavigator.hidden, true);
+
+  // A delayed first attack must not shift every counterpart and hide the
+  // genuinely missing opening of a structurally bounded passage.
+  const withOpening = lane.notes;
+  lane.notes = lane.notes.filter(n => n !== identical[0]); S.voicingRevision++;
+  module.runFindRepeats(lane);
+  worker.onmessage({ data: [{ phraseLength: 4, offsets: [0, .5], copies: [
+    lane.notes.slice(0, 8).map(n => n.id), identical.slice(1).map(n => n.id),
+  ] }] });
+  module.renderRepeatNavigator(); controls.repeatNext.click(); module.renderRepeatNavigator(); module.drawRepeats();
+  assert.equal(module.hoverRepeatDifference(identical[0].start * 10 + 1, 100 - identical[0].pitch, 200, 200), true);
+  assert.deepEqual(rows(), [['Note', 'Missing']], 'the absent opening remains inspectable inside the phrase');
+  module.hideRepeatHover(); module.drawRepeats(); assert.equal(hoverNote(identical[1]), true);
+  assert.ok(rows().some(row => row.join('|') === 'Onset in passage|0.5 beats'), 'tooltip onset is relative to the phrase, not its first surviving attack');
+  controls.repeatClose.click(); module.renderRepeatNavigator();
+  lane.notes = withOpening; S.voicingRevision++;
   lane.repeatGroups = []; S.voicingRevision++; module.renderRepeatNavigator();
   assert.equal(controls.repeatNavigator.hidden, true);
+
+  // Comparison suggestions and previews stay inside the chosen variation.
+  const originalNotes = lane.notes;
+  const versions = [60.3, 70.3, 80.3, 90.3].map(start => make(start));
+  versions[0][0].fx = versions[3][0].fx = { vibrato: true };
+  lane.notes = versions.flat(); S.voicingRevision++;
+  module.runFindRepeats(lane); worker.finish();
+  const group = lane.repeatGroups[0];
+  group.variations = [{ id: 'variation_1', name: 'Variation A', copies: [versions[0][0].id, versions[3][0].id] },
+    { id: 'variation_2', name: 'Variation B', copies: [versions[1][0].id, versions[2][0].id] }];
+  S.voicingRevision++; module.renderRepeatNavigator(); module.drawRepeats();
+  assert.equal(controls.repeatPosition.textContent, '1 / 2 · #1');
+  assert.equal(hoverNote(versions[0][0]), true);
+  assert.equal(action('fx.vibrato'), undefined, 'another variation cannot supply the default suggestion');
+  controls.repeatNoteCurrent.click();
+  assert.equal(controls.repeatNoteVersion.textContent, '2 / 2 · #4');
+  assert.equal(previews.at(-1)[1], versions[3][0]);
+  const chooseVariation = value => {
+    controls.repeatVariation.value = value; controls.repeatVariation.dispatchEvent(new Event('change')); module.renderRepeatNavigator();
+  };
+  chooseVariation('all'); module.drawRepeats(); hoverNote(versions[0][0]);
+  assert.equal(controls.repeatNoteVersion.textContent, '1 / 4');
+  assert.ok(action('fx.vibrato'), 'whole-group comparison can inspect differences between variations');
+  chooseVariation('variation_1');
+  controls.repeatNext.click(); module.renderRepeatNavigator();
+  assert.equal(controls.repeatPosition.textContent, '2 / 2 · #4');
+  const beforeMove = commits;
+  chooseVariation('move:variation_2');
+  assert.equal(commits, beforeMove + 1, 'manual assignment is one undoable annotation edit');
+  assert.equal(lane.repeatGroups[0].variationMode, 'manual');
+  assert.deepEqual(lane.repeatGroups[0].variations.map(v => v.copies.length), [1, 3]);
+  assert.equal(controls.repeatPosition.textContent, '3 / 3 · #4');
+  lane.locked = true; chooseVariation('move:new');
+  assert.equal(commits, beforeMove + 1, 'locked layers cannot receive manual assignments');
+  lane.locked = false; controls.repeatClose.click();
+  lane.notes = originalNotes; lane.repeatGroups = []; S.voicingRevision++;
 
   module.runFindRepeats(lane);
   lane.notes[0].pitch++;

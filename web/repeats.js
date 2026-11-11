@@ -1,6 +1,6 @@
 // Persistent, named repeat groups for the current layer. Scanning only annotates;
 // applying positions is a separate, explicit edit.
-import { compareCopy, groupsFromRepeats, resolveRepeatGroups } from './repeats-core.js';
+import { compareCopy, copyOrigin, groupsFromRepeats, resolveRepeatGroups } from './repeats-core.js';
 import { commit, commitStructure, snapshotEdit, setHandAnchor } from './edit.js';
 import { scroll, sctx, stage } from './dom.js';
 import { xOf, yOf } from './geometry.js';
@@ -29,6 +29,7 @@ const $ = id => document.getElementById(id);
 let worker = null, scanLane = null, scanProject = null, scanSignature = null;
 let hover = null, hoverTargets = [], hideHoverTimer = 0;
 let stopCache = null;
+let groupsCache = null;
 let handSeats = null;
 let review = null, navKey = null, optionsKey = null, handRequest = null, handResult = null;
 // Use the same generated fingers as the fretboard, without selecting notes.
@@ -50,7 +51,12 @@ const signature = lane => {
   const beatAt = laneClock(lane).beatAt;
   return JSON.stringify(lane.notes.map(n => [n.id, n.start, n.end, beatAt(n.start), n.pitch, n.gripOnly]));
 };
-const groupsOf = lane => resolveRepeatGroups(lane, laneClock(lane).beatAt);
+const groupsOf = lane => {
+  const key = [S.state, lane, lane.notes, lane.repeatGroups, S.voicingRevision];
+  if (!groupsCache || key.some((v, i) => v !== groupsCache.key[i]))
+    groupsCache = { key, groups: resolveRepeatGroups(lane, laneClock(lane).beatAt) };
+  return groupsCache.groups;
+};
 const timeLabel = copy => {
   const b = noteBounds(copy.notes.map(n => n.note));
   const fmt = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
@@ -60,23 +66,33 @@ function current() {
   const lane = S.state ? activeLane() : null;
   if (!review || !lane || review.lane !== lane.id) return null;
   const groups = groupsOf(lane);
-  const group = groups.find(g => g.id === review.group) || groups[0];
-  if (!group) return null;
-  review.group = group.id;
+  const parent = groups.find(g => g.id === review.group) || groups[0];
+  if (!parent) return null;
+  review.group = parent.id;
+  const variations = parent.variations;
+  const variation = review.variation === 'all' ? null : variations.find(v => v.id === review.variation)
+    || variations.find(v => v.copies.includes(review.copyKey)) || variations[0];
+  review.variation = variation?.id || 'all';
+  const group = { ...parent, copies: variation ? parent.copies.filter(c => variation.copies.includes(c.ids[0])) : parent.copies };
   const index = Math.max(0, group.copies.findIndex(c => review.copyKey ? c.ids[0] === review.copyKey : c.notes[0].note.id === review.first));
   const copy = group.copies[index];
   review.first = copy.notes[0].note.id; review.copyKey = copy.ids[0];
-  return { lane, groups, group, copy, index, model: group.copies[0] };
+  return { lane, groups, parent, variations, variation, group, copy, index, model: group.copies[0] };
 }
+const originalIndex = (state, copy) => state.parent.copies.findIndex(c => c.ids[0] === copy.ids[0]) + 1;
+const instancePosition = (state, index) => `${index + 1} / ${state.group.copies.length}` +
+  (state.parent.copies.length !== state.group.copies.length ? ` · #${originalIndex(state, state.group.copies[index])}` : '');
 function repeatCopyBounds(state, copy) {
-  const clock = laneClock(state.lane), origin = clock.beatAt(copy.notes[0].note.start);
+  const clock = laneClock(state.lane), origin = copyOrigin(copy, clock.beatAt);
   const projected = state.group.copies.flatMap(other => other.notes.map(({ note, beat }) => ({
     pitch: note.pitch, start: clock.timeAt(origin + beat),
     end: clock.timeAt(origin + beat + clock.beatAt(note.end) - clock.beatAt(note.start)),
   })));
   // Interior missing notes still belong to the passage. Include their pitch
   // and sustain in its frame, even when no present note reaches that row.
-  return noteBounds([...copy.notes.map(entry => entry.note), ...projected]);
+  const bounds = noteBounds([...copy.notes.map(entry => entry.note), ...projected]);
+  return copy.phraseLength > 0 ? { ...bounds, t0: Math.min(clock.timeAt(origin), copy.notes[0].note.start),
+    t1: clock.timeAt(origin + copy.phraseLength) } : bounds;
 }
 function revealCurrent() {
   hideRepeatHover();
@@ -99,7 +115,7 @@ export function closeRepeats() {
   if (!review && !worker) return false;
   hideRepeatHover();
   worker?.terminate(); worker = null; scanLane = null; scanProject = null;
-  review = null; navKey = null; handRequest = null; handResult = null; handSeats = null; stopCache = null;
+  review = null; navKey = null; handRequest = null; handResult = null; handSeats = null; stopCache = null; groupsCache = null;
   renderRepeatNavigator(); draw();
   return true;
 }
@@ -132,8 +148,12 @@ export function runFindRepeats(lane = activeLane()) {
       toast('The layer changed during the scan. Find repeats again.'); draw(); return;
     }
     const byId = new Map(lane.notes.map(n => [n.id, n]));
-    const repeats = data.map(r => ({ copies: r.copies.map(ids => ({ notes: ids.map(id => ({ note: byId.get(id) })) })) }));
-    const groups = groupsFromRepeats(repeats, lane.repeatGroups);
+    const repeats = data.map(r => ({ ...(r.phraseLength > 0 ? { phraseLength: r.phraseLength } : {}),
+      copies: r.copies.map((ids, index) => {
+        const origin = beatAt(byId.get(ids[0]).start) - (r.offsets?.[index] || 0);
+        return { notes: ids.map(id => ({ note: byId.get(id), beat: beatAt(byId.get(id).start) - origin })) };
+      }) }));
+    const groups = groupsFromRepeats(repeats, lane.repeatGroups, beatAt);
     if (JSON.stringify(groups) !== JSON.stringify(lane.repeatGroups || [])) editGroups(lane, () => { lane.repeatGroups = groups; });
     review = groups.length ? { lane: lane.id, group: groups[0].id } : null;
     navKey = null;
@@ -158,7 +178,7 @@ export function renderRepeatNavigator() {
   if (hover && (hover.lane !== lane || hover.group !== state?.group.id || hover.instance !== state?.copy.ids[0]
     || hover.revision !== S.voicingRevision || S.drag)) hideRepeatHover();
   const key = [S.state, lane, lane?.notes, lane?.repeatGroups, S.voicingRevision,
-    review?.group, review?.first, review?.changeKey, scanning, !!lane?.locked, !!lane?.visible, S.fingerRevision, handResult];
+    review?.group, review?.variation, review?.first, review?.changeKey, scanning, !!lane?.locked, !!lane?.visible, S.fingerRevision, handResult];
   if (navKey && key.every((v, i) => v === navKey[i])) return;
   navKey = key;
   const groups = state?.groups || [];
@@ -176,16 +196,39 @@ export function renderRepeatNavigator() {
   select.value = state?.group.id || '';
   select.disabled = scanning || !state;
   nav.setAttribute('aria-busy', String(scanning));
-  $('repeatPosition').textContent = state ? `${state.index + 1} / ${state.group.copies.length}` : 'Scanning…';
+  const variationSelect = $('repeatVariation');
+  $('repeatVariationNavigation').hidden = scanning || !state || state.parent.copies.length < 2;
+  variationSelect.replaceChildren();
+  if (state) {
+    const choices = document.createElement('optgroup'); choices.setAttribute('label', 'Compare');
+    for (const v of state.variations) {
+      const option = document.createElement('option'); option.value = v.id;
+      option.textContent = `${v.name} (${v.copies.length})`; choices.append(option);
+    }
+    if (state.variations.length > 1) {
+      const option = document.createElement('option'); option.value = 'all'; option.textContent = `All variations (${state.parent.copies.length})`; choices.append(option);
+    }
+    variationSelect.append(choices);
+    if (canEditLane(state.lane)) {
+      const moves = document.createElement('optgroup'); moves.setAttribute('label', `Move instance ${originalIndex(state, state.copy)} to`);
+      for (const v of state.variations) {
+        const option = document.createElement('option'); option.value = `move:${v.id}`; option.textContent = v.name; moves.append(option);
+      }
+      const option = document.createElement('option'); option.value = 'move:new'; option.textContent = 'New variation'; moves.append(option);
+      variationSelect.append(moves);
+    }
+    variationSelect.value = review.variation;
+  }
+  variationSelect.disabled = scanning || !state;
+  $('repeatPosition').textContent = state ? instancePosition(state, state.index) : 'Scanning…';
   $('repeatPosition').title = state ? timeLabel(state.copy) : 'Finding repeated passages';
   $('repeatPrevious').disabled = $('repeatNext').disabled = scanning || !state || state.group.copies.length < 2;
   $('repeatGroupPrevious').disabled = $('repeatGroupNext').disabled = scanning || groups.length < 2;
   const stops = state ? changeStops(state) : [];
   const changeIndex = stops.findIndex(stop => stop.key === review?.changeKey);
-  $('repeatChangePosition').textContent = stops.length ? `${changeIndex < 0 ? '–' : changeIndex + 1} / ${stops.length}` :
-    state ? `${state.index + 1} / ${state.group.copies.length}` : '– / 0';
-  if ($('repeatChangeLabel')) $('repeatChangeLabel').textContent = stops.length ? 'Change' : 'Instance';
-  $('repeatChangePrevious').disabled = $('repeatChangeNext').disabled = scanning || !state || (!stops.length && state.group.copies.length < 2);
+  $('repeatChangeNavigation').hidden = scanning || !stops.length;
+  $('repeatChangePosition').textContent = stops.length ? `${changeIndex < 0 ? '–' : changeIndex + 1} / ${stops.length}` : '– / 0';
+  $('repeatChangePrevious').disabled = $('repeatChangeNext').disabled = scanning || !state || !stops.length;
   if (hover && state) fillHoverRows(state);
 
 }
@@ -204,12 +247,12 @@ function comparisonDetails(state) {
     // A played difference takes precedence over finger-only highlighting.
     if (!marker.kind || kind === 'played') Object.assign(marker, { kind, color });
   };
-  const origin = clock.beatAt(state.copy.notes[0].note.start);
+  const origin = copyOrigin(state.copy, clock.beatAt);
   for (const other of state.group.copies) {
     if (other === state.copy) continue;
     const comparison = compareCopy(state.copy, other, clock.beatAt, fingers);
     for (const change of comparison.changes) {
-      const firstOrigin = clock.beatAt(state.copy.notes[0].note.start), otherOrigin = clock.beatAt(other.notes[0].note.start);
+      const firstOrigin = copyOrigin(state.copy, clock.beatAt), otherOrigin = copyOrigin(other, clock.beatAt);
       const rows = noteChangeRows(change.from, change.to, { beatAt: clock.beatAt, fingers,
         firstBeat: clock.beatAt(change.from.start) - firstOrigin, currentBeat: clock.beatAt(change.to.start) - otherOrigin });
       if (rows.some(row => row.key !== 'whammy' && (row.before !== row.after || row.curves))) changed(change.from, 'played', PAINT.warn);
@@ -218,6 +261,7 @@ function comparisonDetails(state) {
     for (const [a] of comparison.fingerDifferences) changed(a, 'finger', PAINT.accent);
     for (const { note } of comparison.missing) changed(note, 'extra', PAINT.ok);
     for (const { note, beat } of comparison.added) {
+      if (state.copy.phraseLength > 0 && (beat < -.06 || beat >= state.copy.phraseLength - .06)) continue;
       const key = `${Math.round(beat * 10000)}:${note.pitch}`;
       if (ghosts.has(key)) continue;
       const start = clock.timeAt(origin + beat);
@@ -234,11 +278,35 @@ function stepGroup(delta) {
   const state = current();
   if (!state) return;
   const index = (state.groups.findIndex(group => group.id === state.group.id) + delta + state.groups.length) % state.groups.length;
-  review.group = state.groups[index].id; review.first = null; review.copyKey = null;
+  review.group = state.groups[index].id; review.variation = null; review.first = null; review.copyKey = null;
+  revealCurrent();
+}
+function selectVariation(value) {
+  const state = current();
+  if (!state) return;
+  if (value.startsWith('move:')) {
+    if (!canEditLane(state.lane)) return;
+    const variants = state.variations.map(v => ({ ...v, copies: [...v.copies] }));
+    let id = value.slice(5);
+    if (id === 'new') {
+      const serial = Math.max(0, ...variants.map(v => Number(v.id.match(/(\d+)$/)?.[1]) || 0)) + 1;
+      id = `variation_${serial}`;
+      variants.push({ id, name: `Variation ${String.fromCharCode(64 + serial)}`, copies: [] });
+    }
+    if (!variants.some(v => v.id === id)) return;
+    for (const v of variants) v.copies = v.copies.filter(key => key !== state.copy.ids[0]);
+    variants.find(v => v.id === id).copies.push(state.copy.ids[0]);
+    editGroups(state.lane, () => {
+      const saved = state.lane.repeatGroups.find(g => g.id === state.parent.id);
+      saved.variations = variants.filter(v => v.copies.length); saved.variationMode = 'manual';
+    });
+    review.variation = id;
+  } else review.variation = value;
+  navKey = null; stopCache = null;
   revealCurrent();
 }
 function changeStops(state) {
-  const key = [S.state, state.lane, state.lane.notes, state.lane.repeatGroups, state.group.id, S.voicingRevision, S.fingerRevision, handResult];
+  const key = [S.state, state.lane, state.lane.notes, state.lane.repeatGroups, state.group.id, review.variation, S.voicingRevision, S.fingerRevision, handResult];
   if (stopCache && key.every((value, i) => value === stopCache.key[i])) return stopCache.stops;
   const stops = state.group.copies.flatMap((copy, index) => comparisonDetails({ ...state, copy, index }).markers.map(marker =>
     ({ key: markerKey(copy, marker), copy, marker })));
@@ -284,11 +352,11 @@ function jumpToNoteInstance() {
   const copy = state.group.copies[hover.selected], anchorCopy = state.group.copies.find(c => c.ids[0] === hover.anchorKey);
   if (!copy || !anchorCopy || !hover.marker.anchor) return;
   const selected = hover.marker.first, anchor = hover.marker.anchor, beatAt = laneClock(state.lane).beatAt;
-  const relativeBeat = beatAt(anchor.start) - beatAt(anchorCopy.notes[0].note.start);
+  const relativeBeat = beatAt(anchor.start) - copyOrigin(anchorCopy, beatAt);
   review.copyKey = copy.ids[0]; review.first = copy.notes[0].note.id; navKey = null;
   const next = current();
   if (!next) return;
-  const origin = beatAt(next.copy.notes[0].note.start);
+  const origin = copyOrigin(next.copy, beatAt);
   const marker = comparisonDetails(next).targets.find(target => selected ? target.current?.id === selected.id :
     !target.current && target.note.pitch === anchor.pitch && Math.abs(beatAt(target.note.start) - origin - relativeBeat) <= .125);
   if (marker) focusRepeatMarker(next, marker);
@@ -336,7 +404,7 @@ function hoverInstances(state) {
   const anchorCopy = state.group.copies.find(copy => copy.ids[0] === hover.anchorKey);
   return state.group.copies.map(copy => {
     const note = anchorCopy ? counterpart(state, anchorCopy, hover.marker.anchor, copy) : null;
-    return { note, handAnchor: handAnchorAt(state.lane, note), onset: note ? beatAt(note.start) - beatAt(copy.notes[0].note.start) : null,
+    return { note, handAnchor: handAnchorAt(state.lane, note), onset: note ? beatAt(note.start) - copyOrigin(copy, beatAt) : null,
       slideCurve: note ? noteRibbon(state.lane, note)?.points || [] : [] };
   });
 }
@@ -354,7 +422,7 @@ function applyCommonValue(key, sourceIndex = null, targetIndex = null) {
   if (target && boxOfNote(target)?.group.locked) return;
   const targetCopy = state.group.copies[selected], sourceCopy = state.group.copies[row.commonIndex];
   const options = { ...clock, fingers: displayedFingers(state.lane), mintId: nid, targetIds: targetCopy.ids,
-    sourceOrigin: clock.beatAt(sourceCopy.notes[0].note.start), targetOrigin: clock.beatAt(targetCopy.notes[0].note.start) };
+    sourceOrigin: copyOrigin(sourceCopy, clock.beatAt), targetOrigin: copyOrigin(targetCopy, clock.beatAt) };
   const prev = snapshotEdit(), anchorId = hover.marker.anchor?.id, currentId = hover.marker.current?.id;
   let result = null, changed = false, alreadyCommitted = false;
   if (key === 'handAnchor' && target) {
@@ -459,7 +527,7 @@ function showNoteVersion(delta) {
   hover.selected = (hover.selected + delta + state.group.copies.length) % state.group.copies.length;
   const copy = state.group.copies[hover.selected], anchorCopy = state.group.copies.find(c => c.ids[0] === hover.anchorKey);
   hover.marker.first = anchorCopy ? counterpart(state, anchorCopy, hover.marker.anchor, copy) : null;
-  hover.origins.first = laneClock(state.lane).beatAt(copy.notes[0].note.start);
+  hover.origins.first = copyOrigin(copy, laneClock(state.lane).beatAt);
   hover.showFirst = hover.selected !== hover.index;
   fillHoverRows(state);
   updateHoverPreview();
@@ -502,9 +570,10 @@ function hoverAvoidance() {
 function updateHoverPreview() {
   if (!hover) return;
   $('repeatHoverTitle').textContent = hover.marker.first ? `${noteName(hover.marker.first.pitch)} · Note` : 'Missing note';
-  $('repeatNoteVersion').textContent = `${hover.selected + 1} / ${current()?.group.copies.length || 1}`;
+  const state = current();
+  $('repeatNoteVersion').textContent = state ? instancePosition(state, hover.selected) : '1 / 1';
   $('repeatNoteFirst').disabled = $('repeatNoteCurrent').disabled = (current()?.group.copies.length || 0) < 2;
-  previewFretboardNote(hover.lane, hover.marker.first, `Instance ${hover.selected + 1}`);
+  previewFretboardNote(hover.lane, hover.marker.first, `Instance ${state ? originalIndex(state, state.group.copies[hover.selected]) : hover.selected + 1}`);
   placeFloatingAvoiding($('repeatHover'), hoverAvoidance);
   draw();
 }
@@ -542,7 +611,7 @@ function openRepeatMarker(state, marker, pinned = false) {
   marker.anchor ||= marker.current || marker.first; marker.first = marker.current;
   hover = { lane: state.lane, group: state.group.id, instance: state.copy.ids[0], marker, pinned, revision: S.voicingRevision,
     selected: state.index, index: state.index, anchorKey: anchorCopy.ids[0],
-    origins: { first: clock.beatAt(state.copy.notes[0].note.start), current: clock.beatAt(state.copy.notes[0].note.start) } };
+    origins: { first: copyOrigin(state.copy, clock.beatAt), current: copyOrigin(state.copy, clock.beatAt) } };
   hideTooltip();
   fillHoverRows(state);
   $('repeatHoverTitle').textContent = `${noteName(marker.note.pitch)} · Note`;
@@ -603,7 +672,7 @@ export function drawRepeats() {
     sctx.globalAlpha = active ? 1 : 0.5;
     sctx.strokeStyle = PAINT.trace; sctx.lineWidth = active ? 2 : 1; sctx.setLineDash(active ? [] : [5, 3]);
     sctx.strokeRect(x0, y0, Math.max(1, x1 - x0), y1 - y0); sctx.setLineDash([]);
-    const label = `${group.name} · instance ${i + 1}`, labelX = Math.max(left + 3, x0 + 3);
+    const label = `${group.name} · instance ${originalIndex(state, copy)}`, labelX = Math.max(left + 3, x0 + 3);
     sctx.strokeStyle = halo(); sctx.lineWidth = 3; sctx.strokeText(label, labelX, y0 - 2);
     sctx.fillStyle = PAINT.trace; sctx.fillText(label, labelX, y0 - 2);
   });
@@ -646,9 +715,10 @@ export function init_repeats() {
   registerEscapeLayer(ESC_DEPTH.popover, hideRepeatHover);
   $('repeatGroup').addEventListener('change', () => {
     if (!review) return;
-    review.group = $('repeatGroup').value; review.first = null; review.copyKey = null;
+    review.group = $('repeatGroup').value; review.variation = null; review.first = null; review.copyKey = null;
     revealCurrent();
   });
+  $('repeatVariation').addEventListener('change', () => selectVariation($('repeatVariation').value));
   $('repeatPrevious').addEventListener('click', () => stepCopy(-1));
   $('repeatNext').addEventListener('click', () => stepCopy(1));
   $('repeatGroupPrevious').addEventListener('click', () => stepGroup(-1));

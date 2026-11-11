@@ -37,8 +37,10 @@ import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
 import { S, setSelection } from "./store.js";
-import { laneFretCount, laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
+import { laneFingeringNow, laneFretCount, laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
 import { runFindRepeats } from "./repeats.js";
+import { hammerPositionGroup, hammerPositionPlan } from './hammer-positions.js';
+import { noteHandAnchors, pasteHandAnchors } from './clipboard-fingering.js';
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { modalOpen } from "./modal-focus.js";
@@ -306,17 +308,30 @@ export function sliceNoteCuts(cuts) {
 // A clipboard entry remembers where its note sits in beats on its own layer's
 // grid, so a paste under another tempo keeps the rhythm, not the seconds.
 export function clipOf(notes) {
-  const clocks = new Map();
+  const clocks = new Map(), hands = new Map(), fingerings = new Map();
   return notes.map((n) => {
     const lane = laneOf(n);
     if (lane && !clocks.has(lane)) clocks.set(lane, laneClock(lane));
+    if (lane && !hands.has(lane)) hands.set(lane, noteHandAnchors(lane.notes, lane.handHolds));
+    if (lane && !fingerings.has(lane)) {
+      const found = laneFingeringNow(lane);
+      fingerings.set(lane, { found, byId: new Map(found.notes.map(note => [note.id, note])) });
+    }
     const clock = lane && clocks.get(lane);
-    return copyEffects(n, {
+    const fingering = fingerings.get(lane), played = fingering?.byId.get(n.id) || n;
+    const finger = n.finger ?? fingering?.found.fingers.get(played);
+    const anchor = fingering?.found.seats.get(played) ?? hands.get(lane)?.get(n);
+    const copied = copyEffects(n, {
       start: n.start, end: n.end, pitch: n.pitch,
+      ...(Number.isInteger(finger) && finger >= 0 ? { finger } : {}),
+      ...(Number.isFinite(anchor) && anchor > 0 ? { handAnchor: anchor } : {}),
       ...(clock ? { beat0: clock.beatAt(n.start), beat1: clock.beatAt(n.end) } : {}),
       ...(n.motifId ? { motifId: n.motifId } : {}),
       ...(n.shapeId ? { shapeId: n.shapeId, shapeKind: n.shapeKind, ...(n.shapeName ? { shapeName: n.shapeName } : {}) } : {}),
     });
+    const position = fingering?.found.voiced.get(played);
+    if (position) copied.pos = { ...copied.pos, ...position };
+    return copied;
   });
 }
 
@@ -438,6 +453,7 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
     }
     const note = copyEffects(c, {
       id: nid(), start: q.start, end: q.end, pitch: c.pitch + shift,
+      ...(c.finger != null ? { finger: c.finger } : {}),
       ...(pastedMotifId ? { motifId: pastedMotifId } : {}),
     });
     // A transposed copy cannot keep its string and fret; fingering places it anew.
@@ -446,6 +462,7 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
   });
   remintShapes(S.clipboard.map((c, k) => [c, added[k]]), shapeId);
   lane.notes.push(...added);
+  if (!shift && S.clipboard.some(c => c.handAnchor != null)) pasteHandAnchors(lane, S.clipboard, placed, nid);
   if (asReference) linkPasteAsReference(added, lane, refShift);
   commit(prev);
   setSelection(new Set(added));
@@ -498,25 +515,27 @@ export function doDelete({ hovered = false } = {}) {
 }
 
 // Copy or move the selection into another layer at the same time and pitch.
-// Fingering is dropped: it was placed for the source layer's tuning.
+// Copies retain their playing instructions, as clipboard paste does.
 export function sendSelectionToLane(target, { move = false } = {}) {
   if (!canEditLane(target)) return;
   const picked = [...S.selection].map((note) => [note, laneOf(note)])
     .filter(([, lane]) => lane && lane !== target && (!move || canEditLane(lane)));
   if (!picked.length) return;
   const prev = snapshotEdit(), motifs = new Map();
-  const added = picked.map(([n, lane]) => {
+  const clip = move ? null : clipOf(picked.map(([n]) => n));
+  const added = picked.map(([n, lane], index) => {
     if (move) { lane.notes.splice(lane.notes.indexOf(n), 1); dropFingering(n); return n; }
-    const note = copyEffects(n, { id: nid(), start: n.start, end: n.end, pitch: n.pitch });
+    const note = copyEffects(clip[index], { id: nid(), start: n.start, end: n.end, pitch: n.pitch,
+      ...(clip[index].finger != null ? { finger: clip[index].finger } : {}) });
     if (n.motifId) {
       if (!motifs.has(n.motifId)) motifs.set(n.motifId, motifId());
       note.motifId = motifs.get(n.motifId);
     }
-    dropFingering(note);
     return note;
   });
   remintShapes(picked.map(([n], k) => [n, added[k]]), shapeId);
   target.notes.push(...added);
+  if (clip?.some(c => c.handAnchor != null)) pasteHandAnchors(target, clip, added, nid);
   commit(prev);
   setSelection(new Set(added));
   S.state.lanes.forEach((l) => (l.active = l === target));
@@ -1100,6 +1119,11 @@ export function setColumnShape(colNotes, shape, limits = null, maxFret = undefin
   if (shared.handled) return shared.error;
   const lane = laneOf(colNotes?.[0]);
   if (!lane) return "These notes are not in an editable note layer";
+  if (colNotes.some(n => hammerPositionGroup(lane.notes, n).length > 1)) {
+    const before = handsBefore(lane);
+    const linked = applyHammerPosition(lane, shape, n => before.voiced.get(n), maxFret);
+    if (linked.handled) return linked.error;
+  }
   const wrong = shapeFault(colNotes, laneFretTuning(lane), shape, limits, maxFret);
   if (wrong) return wrong;
   applyColumnPos(colNotes, shape, "local", overrideFlow(colNotes));
@@ -1135,7 +1159,24 @@ export function setNotePosition(note, string, fret) {
   }
   const shared = applySelectedPosition(ctx.col.notes, shape);
   if (shared.handled) { if (shared.error) toast(shared.error); return; }
+  const linked = applyHammerPosition(ctx.lane, shape, n => before.voiced.get(n));
+  if (linked.handled) return;
   applyColumnPos(ctx.col.notes, shape, "local", overrideFlow(ctx.col.notes));
+}
+function applyHammerPosition(lane, shape, positionOf, maxFret = laneFretCount(lane)) {
+  const linked = hammerPositionPlan(lane, shape, laneFretTuning(lane), positionOf, maxFret);
+  if (linked.linked) {
+    const error = linked.error || (!canEditLane(lane) || linked.changes.some(c => boxOfNote(c.note)?.group.locked)
+      ? 'The connected notes are locked' : null);
+    if (error) return { handled: true, error };
+    if (linked.changes.every(({ note, pos }) => !note.arrangement && note.pos &&
+      Object.keys(pos).every(key => note.pos[key] === pos[key]))) return { handled: true, error: null };
+    const prev = snapshotEdit();
+    for (const { note: member, pos } of linked.changes) { member.pos = { ...pos }; delete member.arrangement; }
+    commit(prev, undefined, null, { preserveTiming: true }); draw(); refreshTabIfOpen();
+    return { handled: true, error: null };
+  }
+  return { handled: false, error: null };
 }
 
 // Pin a column where the board shows it, with `note` at (string, fret). Notes the

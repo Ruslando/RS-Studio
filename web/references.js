@@ -12,6 +12,7 @@ import { gridAt, minDur, segStep, snap } from "./grid.js";
 import { nid } from "./ids.js";
 import { editLanes, laneOf, refreshCounts } from "./lanes.js";
 import { EFFECT_FIELDS, copyEffects } from "./note-effects.js";
+import { referenceHands, referenceHandSig, mirrorReferenceHands } from './reference-hands.js';
 import { toast } from "./notify.js";
 import { beatShape, effectSig, inRefBox, occurrenceBox, shiftOf, spanAt } from "./reference-core.js";
 export { occurrenceBox, shiftOf, spanAt } from "./reference-core.js";
@@ -143,6 +144,8 @@ export function lockedReferenceSnapshot() {
     const clock = laneClock(lane);
     const boxes = group.anchors.map((_, i) => boxRect(group, i, clock));
     protectedRefs.push({ lane: lane.id, ref, shape: lockShape(group), boxes,
+      holds: boxes.map((box, i) => referenceHands(lane.notes, lane.handHolds, box, group.anchors[i], clock, boxMinIn(box.t0))
+        .map(({ hold }) => ({ t: hold.t, fret: hold.fret }))),
       notes: boxes.map(box => lockNotes(notesInBox(box, lane.notes))) });
   });
   return protectedRefs;
@@ -168,6 +171,10 @@ export function lockedReferenceFault(previous, translation = 0) {
         expectedBox.t0 += translation; expectedBox.t1 += translation;
         for (const note of expectedNotes) { note.start += translation; note.end += translation; }
       }
+      const expectedHolds = (protectedRef.holds?.[i] || []).map(h => ({ ...h, t: h.t + translation }));
+      const actualHolds = referenceHands(lane.notes, lane.handHolds, box, group.anchors[i], clock, boxMinIn(box.t0))
+        .map(({ hold }) => ({ t: hold.t, fret: hold.fret }));
+      if (!same(actualHolds, expectedHolds)) return protectedRef.ref;
       if (!same(box, expectedBox) || !same(JSON.parse(lockNotes(notesInBox(box, lane.notes))), expectedNotes)) return protectedRef.ref;
     }
   }
@@ -495,6 +502,8 @@ function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock, mint
     nn.start = clock.timeAt(b + p.dt); nn.end = clock.timeAt(b + p.dt + p.dur); nn.pitch = p.pitch + shift;
     for (const f of EFFECT_FIELDS) delete nn[f];
     copyEffects(p.src, nn);
+    delete nn.finger;
+    if (p.src.finger != null) nn.finger = p.src.finger;
     for (const f of OCCURRENCE_FIELDS) delete nn[f];
     Object.assign(nn, kept.get(at(b + p.dt, nn.pitch)));
     if (shift !== srcShift) dropFingering(nn);
@@ -510,33 +519,41 @@ function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock, mint
 // The source box is the one whose contents changed vs prev (or `forced` = { ref, i }
 // after a resize); its contents are replayed into every other box. A structural
 // change (box added/removed) is left to its own handler — never auto-mirrored.
-function reconcileRefGroup(lane, ref, group, prevNotes, prevGroup, mirrorSource, mintId = nid) {
+function reconcileRefGroup(lane, ref, group, prevNotes, prevGroup, mirrorSource, mintId = nid, prevHolds = []) {
   if (group.locked) return;
   const clock = laneClock(lane);
   const contents = group.anchors.map((a, i) => notesInBox(boxRect(group, i, clock), lane.notes));
+  const hands = (notes, holds, g, i) => {
+    const box = boxRect(g, i, clock);
+    return referenceHands(notes, holds, box, g.anchors[i], clock, boxMinIn(box.t0));
+  };
   let src = mirrorSource && mirrorSource.ref === ref ? mirrorSource.i : -1;
   if (src < 0 && prevGroup && prevGroup.anchors.length === group.anchors.length) {
     for (let i = 0; i < group.anchors.length; i++) {
       // A box whose shift changed was moved, not edited: it is never the source.
       if (shiftOf(group, i) !== shiftOf(prevGroup, i)) continue;
       const before = notesInBox(boxRect(prevGroup, i, clock), prevNotes);
-      if (boxSig(contents[i], group.anchors[i], shiftOf(group, i), true, clock) !== boxSig(before, prevGroup.anchors[i], shiftOf(prevGroup, i), true, clock)) { src = i; break; }
+      if (boxSig(contents[i], group.anchors[i], shiftOf(group, i), true, clock) !== boxSig(before, prevGroup.anchors[i], shiftOf(prevGroup, i), true, clock)
+        || referenceHandSig(hands(lane.notes, lane.handHolds, group, i)) !== referenceHandSig(hands(prevNotes, prevHolds, prevGroup, i))) { src = i; break; }
     }
   }
   if (src < 0) return;
   const srcShift = shiftOf(group, src);
   const pattern = relPattern(contents[src], group.anchors[src], srcShift, clock);
+  const handPattern = hands(lane.notes, lane.handHolds, group, src);
   for (let j = 0; j < group.anchors.length; j++) {
     if (j === src) continue;
     const shift = shiftOf(group, j), same = shift === srcShift;
-    if (boxSig(contents[j], group.anchors[j], shift, same, clock) === boxSig(contents[src], group.anchors[src], srcShift, same, clock)) continue;
-    mirrorBox(lane, group.anchors[j], contents[j], pattern, shift, srcShift, clock, mintId);
+    const previousHands = same ? hands(lane.notes, lane.handHolds, group, j) : null;
+    if (boxSig(contents[j], group.anchors[j], shift, same, clock) !== boxSig(contents[src], group.anchors[src], srcShift, same, clock))
+      mirrorBox(lane, group.anchors[j], contents[j], pattern, shift, srcShift, clock, mintId);
+    if (same) mirrorReferenceHands(lane, group, j, handPattern, clock, boxMinIn(boxRect(group, j, clock).t0), mintId, previousHands);
   }
 }
 
 export function reconcileReferences(prev, mirrorSource) {
   eachRefGroup((lane, ref, group) => reconcileRefGroup(lane, ref, group,
-    prev.lanes?.[lane.id] || [], prev.boxes?.[lane.id]?.[ref], mirrorSource));
+    prev.lanes?.[lane.id] || [], prev.boxes?.[lane.id]?.[ref], mirrorSource, nid, prev.holds?.[lane.id] || []));
 }
 
 // Use the same reference propagation as commit, on detached preview data.
@@ -545,7 +562,7 @@ export function previewPositionReferences(original, preview) {
   let id = 0;
   for (const [ref, group] of Object.entries(preview.refBoxes || {}))
     reconcileRefGroup(preview, ref, group, original.notes, original.refBoxes?.[ref],
-      null, () => `position-preview-${++id}`);
+      null, () => `position-preview-${++id}`, original.handHolds || []);
 }
 
 // Paint each reference occurrence: a gold capture box plus its name, drawn like a

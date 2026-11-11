@@ -1,6 +1,7 @@
 import { fretboardPreviewPhrase } from './fretboard-preview-phrase.js';
+import { hammerPositionGroup, hammerPositionPlan, hammerPositionPreview } from './hammer-positions.js';
 import { fretboardShapeFrames, shapeHandAt } from './fretboard-shapes.js';
-import { previewPositionReferences } from "./references.js";
+import { boxOfNote, previewPositionReferences } from "./references.js";
 import { positionPreviewHand, positionPreviewLane } from "./position-preview.js";
 import { positionEditTargets, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { fretboardHandKey } from "./fretboard-cache.js";
@@ -112,7 +113,7 @@ function sharedShapeAllowed(lane, notes, shape) {
       note.arrangement || !note.pos || Object.keys(pos).some(k => note.pos[k] !== pos[k]));
     if (plan.error) sharedSelection.failures.add(plan.error);
     else if (!changed) sharedSelection.unchanged = true;
-    sharedSelection.checks.set(key, !plan.error && changed);
+    sharedSelection.checks.set(key, !plan.error && changed && !plan.changes.some(c => boxOfNote(c.note)?.group.locked));
   }
   return sharedSelection.checks.get(key);
 }
@@ -138,7 +139,8 @@ function previewPosition(lane, notes, shape, kind) {
     positionPreview = request;
     laneFingering(prepared.lane, controller.signal).then(result => {
       if (positionPreview !== request || currentLane() !== lane || S.selection !== selection || handKey(lane) !== found.key) return;
-      request.hand = positionPreviewHand(notes, prepared.noteFor, result);
+      const linkedNotes = [...new Set(notes.flatMap(n => hammerPositionGroup(lane.notes, n, m => found.voiced.get(m))))];
+      request.hand = positionPreviewHand(linkedNotes, prepared.noteFor, result);
       request.pending = false;
       drawFretboard();
     }).catch(() => {
@@ -252,7 +254,7 @@ function gripsFor(lane) {
         .filter(column => column.kind === "impossible").map(column => column.t0));
       const playableColumns = columns.filter(column => !blockedStarts.has(column.start));
       const fingers = playableColumns.flatMap(column => column.fingers);
-      hand = { key, vkey, strings: fingering.tuning.length, columns, playableColumns, shapes, blockedStarts, voiced: fingering.voiced,
+      hand = { key, vkey, strings: fingering.tuning.length, columns, playableColumns, shapes, blockedStarts, voiced: fingering.voiced, fingers: fingering.fingers,
         ringFingers: fingers.filter((f) => f.note.fx?.letRing),
         releaseFingers: [...fingers].reverse(),
         popFingers: fingers.filter((f) => f.note.slap === "pop") };
@@ -300,6 +302,12 @@ const allowedAt = (lane, tuning, s) => (p) => {
       return !placementFault({ fretted: needsFret(target), reach: target.trill === "whole" ? 2 : target.trill ? 1 : 0 },
         target.pitch, p.string, tuning, s.frets);
     });
+  }
+  const found = gripsFor(lane);
+  if (found) {
+    const plan = hammerPositionPlan(lane, new Map([[p.note, { string: p.string, fret: p.fret }]]),
+      tuning, n => found.voiced.get(n), s.frets);
+    if (plan.linked) return !plan.error && !plan.changes.some(c => boxOfNote(c.note)?.group.locked);
   }
   return !placementFault(limit, p.note.pitch, p.string, tuning, s.frets);
 };
@@ -1654,8 +1662,8 @@ function spotBox(p, scale, s, X, Y) {
 // filled, and so is anywhere the note's technique rules out (allowedAt) — no open
 // string under a slide, no string a slide's target cannot follow onto. What is left
 // is exactly the set of legal single-note moves, so a ring is never an offer that
-// lapses. A note that is slid or hammered ONTO has no rings at all: it goes where the
-// note before it goes, so that is the one to move.
+// lapses. A hammer destination moves its connected notes with it; slide targets
+// retain the source's string unless that source is moved.
 // Limitation: a swap (two notes trading strings) is two clicks, not one gesture.
 function notePlaces(lane, s, at) {
   const tuning = lane && laneFretTuning(lane);
@@ -1724,13 +1732,17 @@ function drawNoteRings(ctx, lane) {
 function drawNoteOffer(ctx, s, scale, X, Y, lane, { hovered, at, hand }) {
   if (!hand) return;
   // The moved note's slide is worked out again from its new fret.
-  const moved = (m) => (m.note === hovered.note
-    ? { ...m, string: hovered.string, fret: hovered.fret, x: fretCentre(hovered.fret, s),
-      slideSpan: slideSpan({ note: m.note, fret: hovered.fret, string: hovered.string }, null, undefined, s) } : m);
+  const moved = m => {
+    const pos = hand.positions?.get(m.note) || (m.note === hovered.note ? hovered : null);
+    return pos ? { ...m, string: pos.string, fret: pos.fret, x: fretCentre(pos.fret, s),
+      slideSpan: slideSpan({ note: m.note, fret: pos.fret, string: pos.string }, null, undefined, s) } : m;
+  };
   const marks = at.marks.map(moved);
   drawPreviewGrip(ctx, s, scale, X, Y,
     marks.map((m) => ({ ...m, finger: hand.fingers.get(m.note) ?? NO_FINGER })),
     lane.color || PAINT.accent, true);
+  drawHammerConnections(ctx, s, scale, X, Y, lane, marks,
+    n => hand.positions?.get(n) || gripsFor(lane)?.voiced.get(n), n => hand.fingers.get(n));
 }
 
 // The grip before and the grip after, ghosted. Filled rather than outlined so a ghost
@@ -1912,7 +1924,7 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
     if (m.trill) return [m, { ...m, ...m.trill, noteLabel: false, trill: undefined, lift: 0, pressed: m.trill.down,
       opacity: m.trill.down ? 1 : 0.55 }];
     const extra = m.hammerSupport || m.hammerTarget;
-    if (extra) return [{ ...m, ...extra, noteLabel: false, lift: 0 }, m];
+    if (extra && moving) return [{ ...m, ...extra, noteLabel: false, lift: 0 }, m];
     return [m];
   });
   drawGrip(ctx, s, scale, X, Y, at.gripMarks || marks, hue, at.pressed, { time: $("fretboardAnimations")?.checked === false ? null : t, liveStrings: moving });
@@ -1927,6 +1939,32 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
     ctx.strokeStyle = PAINT.paper; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
   }
   if (!moving) for (const m of at.marks) if (m.slideSpan) drawSlideArrow(ctx, s, scale, X, Y, m);
+  if (!moving) drawHammerConnections(ctx, s, scale, X, Y, lane, at.marks,
+    n => found.voiced.get(n), n => found.fingers?.get(n));
+}
+
+function drawHammerConnections(ctx, s, scale, X, Y, lane, marks, positionOf, fingerOf) {
+  const links = hammerPositionPreview(lane.notes, marks.map(m => m.note).filter(Boolean), positionOf);
+  const current = new Set(marks.map(m => m.note)), shown = new Set();
+  const hue = lane.color || PAINT.accent;
+  for (const link of links) {
+    for (const p of [link.from, link.to]) if (!current.has(p.note) && !shown.has(p.note)) {
+      shown.add(p.note);
+      drawGrip(ctx, s, scale, X, Y, [{ ...p, pitch: p.note.pitch, x: fretCentre(p.fret, s),
+        finger: fingerOf(p.note) ?? NO_FINGER, pressed: false, opacity: .6, lift: 0 }], hue, false);
+    }
+    const from = { ...link.from, x: fretCentre(link.from.fret, s) }, to = { ...link.to, x: fretCentre(link.to.fret, s) };
+    const x0 = X(from.x), x1 = X(to.x), middle = (x0 + x1) / 2;
+    const y0 = Y(stringOffsetAt(from.string, from.x, s)), y1 = Y(stringOffsetAt(to.string, to.x, s));
+    const top = Math.min(y0, y1) - Math.max(markRadius(from.x, scale, s), markRadius(to.x, scale, s)) * 1.8;
+    ctx.save(); ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(x0, y0 - 4);
+    ctx.quadraticCurveTo(middle, top, x1, y1 - 4);
+    ctx.lineWidth = 4; ctx.strokeStyle = PAINT.ground; ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = hue; ctx.stroke();
+    ctx.font = stageUi(11, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3; ctx.strokeStyle = PAINT.ground; ctx.strokeText(link.kind, middle, top);
+    ctx.fillStyle = PAINT.text; ctx.fillText(link.kind, middle, top); ctx.restore();
+  }
 }
 
 // Stopped on a slide: where it starts, pressed, and a ghost where it lands.

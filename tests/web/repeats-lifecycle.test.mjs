@@ -24,7 +24,9 @@ try {
     './project.js': { refreshSaveState: noop }, './tablature.js': { refreshTabIfOpen: noop },
   }, { './util.js': true });
   const original = structuredClone(lane.notes);
-  const groups = [{ id: 'repeat_1', name: 'Verse', copies: [['a'], ['b']] }];
+  const groups = [{ id: 'repeat_1', name: 'Verse', copies: [['a'], ['b']], phraseLength: 2, offsets: [0, .5],
+    variationMode: 'manual', variations: [{ id: 'variation_1', name: 'Variation A', copies: ['a'] },
+      { id: 'variation_2', name: 'Variation B', copies: ['b'] }] }];
   const prev = edit.snapshotEdit();
   lane.repeatGroups = structuredClone(groups);
   edit.commitStructure(prev, { preserveTiming: true });

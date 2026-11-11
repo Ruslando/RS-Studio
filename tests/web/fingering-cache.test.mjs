@@ -4,7 +4,7 @@ import { chordColumns, isChosenFinger } from '../../web/voicing-core.js';
 
 let liveBars = [0, 4], ownBars = [0, 3], solves = 0;
 const S = { voicingRevision: 1 };
-const { laneFingering, laneFingeringKey } = await mockImport(new URL('../../web/tablature.js', import.meta.url), {
+const { laneFingering, laneFingeringNow, laneFingeringKey } = await mockImport(new URL('../../web/tablature.js', import.meta.url), {
   './store.js': { S },
   './song-bars.js': { songBarStarts: timing => timing ? timing.bars : liveBars },
   './timing.js': { onLiveTiming: lane => !lane.timing, timingIdOf: lane => lane.timing,
@@ -21,6 +21,8 @@ const firstKey = laneFingeringKey(lane);
 assert.equal((await laneFingering(lane)).voiced.get(lane.notes[0]).fret, 3);
 await laneFingering(lane);
 assert.equal(solves, 1, 'unchanged fingering is cached');
+assert.deepEqual(laneFingeringNow(lane).fingers, (await laneFingering(lane)).fingers);
+assert.equal(solves, 1, 'synchronous clipboard capture uses the existing displayed solve');
 ownBars = [0, 5];
 assert.notEqual(laneFingeringKey(lane), firstKey, 'the lane own timing invalidates label positions');
 assert.equal((await laneFingering(lane)).voiced.get(lane.notes[0]).fret, 5);

@@ -81,9 +81,11 @@ export function effectSig(note, { includePos = false } = {}) {
       fret: value.fret,
       scope: value.scope || "local",
       follow: value.follow,
+      finger: value.finger,
     });
     else if (key === "arrangement") value = arrangementSignature(value);
     signature += key + ":" + value + ";";
   }
+  if (includePos && note.finger != null) signature += `finger:${note.finger};`;
   return signature;
 }

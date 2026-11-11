@@ -329,6 +329,24 @@ function buildSpecFromPrepared(prepared) {
 export async function laneFingering(lane, signal) {
   const tuning = laneFretTuning(lane), notes = arrangedNotes(lane.notes);
   const found = await voiceLaneAsync(lane, notes, tuning, signal);
+  return finishLaneFingering(lane, notes, tuning, found, true);
+}
+
+// Clipboard capture is synchronous: a paste immediately after Copy must already
+// contain the displayed fingers and hand, including automatically solved values.
+export function laneFingeringNow(lane) {
+  const tuning = laneFretTuning(lane), notes = arrangedNotes(lane.notes);
+  const cached = laneVoicingCache.get(lane);
+  const key = laneFingeringKey(lane, tuning), hit = cached?.key === key && cached.positions.length === notes.length;
+  const found = hit ? handedMap(notes, cached) : voiceNotesFingered(notes, tuning, Infinity,
+      { bars: laneBars(lane), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
+  if (!hit) laneVoicingCache.set(lane, { key,
+    positions: notes.map(n => found.voiced.get(n) || null),
+    fingers: notes.map(n => found.fingers.get(n) ?? null), seats: notes.map(n => found.seats.get(n) ?? null) });
+  return finishLaneFingering(lane, notes, tuning, found, false);
+}
+
+function finishLaneFingering(lane, notes, tuning, found, remember) {
   // A finger typed in by the player is shown and exported as typed: no check that a
   // hand can hold it. On an open string there is nothing to finger, so it waits.
   // Before the references, so a repeat takes it from its first time; after, so a
@@ -354,7 +372,7 @@ export async function laneFingering(lane, signal) {
   // longer fits (keepVoicing). No undo step and no new revision — the answer is the
   // same, it is only remembered.
   // Only for the lane itself: previews voice a copy, and their answer is hypothetical.
-  if (S.state?.editLanes?.includes(lane)) withoutDirtying((before) => keepVoicing(lane.notes, found, tuning, before));
+  if (remember && S.state?.editLanes?.includes(lane)) withoutDirtying((before) => keepVoicing(lane.notes, found, tuning, before));
   return { tuning, notes, ...found };
 }
 

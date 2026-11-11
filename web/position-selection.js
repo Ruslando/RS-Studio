@@ -1,5 +1,6 @@
 import { noteName } from "./util.js";
 import { chordColumns, placementLimits, shapeFault, writeColumnOverride } from './voicing-core.js';
+import { hammerPositionGroup, hammerPositionPlan } from './hammer-positions.js';
 
 const pitchKey = notes => notes.map(n => n.pitch).sort((a, b) => a - b).join(',');
 const ordered = notes => [...notes].sort((a, b) => a.pitch - b.pitch);
@@ -18,6 +19,9 @@ export function positionSelection(lane, selection) {
   const columns = lane ? chordColumns(lane.notes) : [];
   const targets = columns.filter(c => c.notes.some(n => selection.has(n)));
   const voices = targets.map(c => c.notes.filter(n => selection.has(n)));
+  if (selected.length > 1 && selected.every(n => lane?.notes.includes(n)) &&
+    selected.every(n => hammerPositionGroup(lane.notes, selected[0]).includes(n)))
+    return { multiple: false, columns: targets, voices, error: null, linked: true };
   const multiple = targets.length > 1 || selected.some(n => !lane?.notes.includes(n));
   if (!multiple) return { multiple: false, columns: targets, voices, error: null };
   const kind = targets.every(c => c.notes.length === 1) ? 'note' : 'chord';
@@ -56,6 +60,9 @@ export function sharedPositionPlan(lane, selection, sourceNotes, shape, tuning, 
       changes.push({ note, pos: { string: pos.string, fret: pos.fret, scope: 'local', follow: 'guided' } });
     }
   }
+  const linked = hammerPositionPlan(lane, new Map(changes.map(({ note, pos }) => [note, pos])), tuning, positionOf, maxFret);
+  if (linked.error) return { ...group, error: linked.error, changes: [] };
+  if (linked.linked) changes.splice(0, changes.length, ...linked.changes);
   const proposed = new Map(changes.map(({ note, pos }) => [note, pos]));
   const originalOf = new Map();
   const notes = lane.notes.map(note => {

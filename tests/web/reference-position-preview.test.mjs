@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { EFFECT_FIELDS, copyEffects } from '../../web/note-effects.js';
 import { effectSig, inRefBox, occurrenceBox, shiftOf } from '../../web/reference-core.js';
+import { referenceHands, referenceHandSig, mirrorReferenceHands } from '../../web/reference-hands.js';
 
 // Exercise the actual reference commit/preview functions without importing the
 // editor's DOM/audio graph. Timing and geometry are fixed for these fixtures.
@@ -15,13 +16,15 @@ let uid = 0;
 const clock = { beatAt: t => t, timeAt: t => t };
 const OCCURRENCE_FIELDS = JSON.parse(source.match(/const OCCURRENCE_FIELDS = (\[[^\]]*\]);/)[1]);
 const api = new Function('deps', `const { EFFECT_FIELDS, copyEffects, effectSig, shiftOf,
-  laneClock, boxRect, notesInBox, noteOrder, dropFingering, nid, OCCURRENCE_FIELDS } = deps;
+  laneClock, boxRect, notesInBox, noteOrder, dropFingering, nid, OCCURRENCE_FIELDS,
+  referenceHands, referenceHandSig, mirrorReferenceHands, boxMinIn } = deps;
   ${functions}
   return { previewPositionReferences, reconcileRefGroup };`)({
   EFFECT_FIELDS, copyEffects, effectSig, shiftOf, laneClock: () => clock,
+  referenceHands, referenceHandSig, mirrorReferenceHands, boxMinIn: () => .1,
   boxRect: occurrenceBox, notesInBox: (box, notes) => notes.filter(n => inRefBox(n, box, .1)),
   noteOrder: (a, b) => a.start - b.start || a.pitch - b.pitch,
-  dropFingering: n => { delete n.pos; delete n.arrangement; }, nid: () => `real-${++uid}`, OCCURRENCE_FIELDS,
+  dropFingering: n => { delete n.pos; delete n.arrangement; delete n.finger; }, nid: () => `real-${++uid}`, OCCURRENCE_FIELDS,
 });
 
 for (const shifted of [false, true]) {
@@ -76,6 +79,65 @@ for (const shifted of [false, true]) {
 }
 
 console.log('reference position preview: commit propagation, transposition and isolated ids passed');
+
+// An explicit finger is a reference edit even when string and fret stay put.
+{
+  const lane = { notes: [{ id: 'a', start: 0, end: .8, pitch: 52, finger: 1 },
+    { id: 'b', start: 4, end: 4.8, pitch: 52, finger: 1 }],
+    refBoxes: { a: { rt0: 0, rt1: 1, pLo: 52, pHi: 52, anchors: [0, 4] } } };
+  const edited = structuredClone(lane); edited.notes[1].finger = 3;
+  api.previewPositionReferences(lane, edited);
+  assert.deepEqual(edited.notes.map(n => n.finger), [3, 3]);
+  assert.deepEqual(lane.notes.map(n => n.finger), [1, 1]);
+  const cleared = structuredClone(edited); delete cleared.notes[0].finger;
+  api.previewPositionReferences(edited, cleared);
+  assert.ok(cleared.notes.every(n => n.finger == null), 'clearing the finger propagates too');
+  assert.equal(effectSig({ pitch: 52, finger: 1 }), effectSig({ pitch: 52, finger: 3 }), 'discovery still ignores downstream fingering');
+}
+
+// Hand-only changes, including anchors placed in the preceding gap, propagate
+// without rewriting notes or removing anchors belonging to unrelated attacks.
+{
+  const beforeIds = uid;
+  const lane = { notes: [{ id: 'a', start: 0, end: .8, pitch: 52 },
+    { id: 'outside', start: 2, end: 2.5, pitch: 45 }, { id: 'b', start: 4, end: 4.8, pitch: 52 }],
+    handHolds: [{ id: 'outside-hand', t: 1.9, fret: 2 }],
+    refBoxes: { a: { rt0: 0, rt1: 1, pLo: 52, pHi: 52, anchors: [0, 4] } } };
+  const edited = structuredClone(lane); edited.handHolds.push({ id: 'chosen', t: 3.9, fret: 7 });
+  api.previewPositionReferences(lane, edited);
+  assert.deepEqual(edited.notes, lane.notes);
+  assert.deepEqual(edited.handHolds.map(h => [h.t, h.fret]), [[0, 7], [1.9, 2], [3.9, 7]]);
+  assert.equal(edited.handHolds[1].id, 'outside-hand');
+  const cleared = structuredClone(edited); cleared.handHolds = cleared.handHolds.filter(h => h.id !== 'chosen');
+  api.previewPositionReferences(edited, cleared);
+  assert.deepEqual(cleared.handHolds, lane.handHolds, 'Auto removes the counterpart anchor as well');
+  assert.equal(uid, beforeIds, 'anchor previews use private IDs');
+}
+
+// The same beat offset can have different seconds under a tempo change.
+{
+  clock.beatAt = t => t < 4 ? t : 4 + (t - 4) * 2;
+  clock.timeAt = b => b < 4 ? b : 4 + (b - 4) / 2;
+  const lane = { notes: [{ id: 'a', start: 0, end: .4, pitch: 52 }, { id: 'b', start: .5, end: .9, pitch: 55 },
+    { id: 'c', start: 4, end: 4.2, pitch: 52 }, { id: 'd', start: 4.25, end: 4.45, pitch: 55 }],
+    refBoxes: { a: { rt0: 0, rt1: 1, rb0: 0, rb1: 1, pLo: 52, pHi: 55, anchors: [0, 4] } } };
+  const edited = structuredClone(lane); edited.handHolds = [{ id: 'at-second-note', t: .5, fret: 5 }];
+  api.previewPositionReferences(lane, edited);
+  assert.deepEqual(edited.handHolds.map(h => [h.t, h.fret]), [[.5, 5], [4.25, 5]]);
+  clock.beatAt = t => t; clock.timeAt = t => t;
+}
+
+{
+  const lane = { notes: [{ id: 'a', start: 0, end: .8, pitch: 52, finger: 1 },
+    { id: 'b', start: 4, end: 4.8, pitch: 56, finger: 4 }],
+    handHolds: [{ id: 'other-pitch', t: 4, fret: 9 }],
+    refBoxes: { a: { rt0: 0, rt1: 1, pLo: 52, pHi: 52, anchors: [0, 4], shifts: [0, 4], transposable: true } } };
+  const edited = structuredClone(lane); edited.notes[0].finger = 2;
+  edited.handHolds.push({ id: 'source-hand', t: 0, fret: 5 });
+  api.previewPositionReferences(lane, edited);
+  assert.equal(edited.notes[1].finger, 4, 'a transposed copy keeps its own finger');
+  assert.equal(edited.handHolds.find(h => h.id === 'other-pitch').fret, 9);
+}
 
 {
   // Only a whole box counts as its reference: a part of it pastes as a copy.
