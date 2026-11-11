@@ -36,6 +36,7 @@ import { laneChords } from "./chord-names.js";
 import { PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
+import { drawRepeats, hoverRepeatDifference, renderRepeatNavigator, repeatPreviewHiddenNote, repeatPreviewNote, scheduleRepeatHoverHide } from "./repeats.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
@@ -174,6 +175,7 @@ function drawBendHandles(vx0, vx1) {
   const curved = S.state.lanes.filter((lane) => lane.visible).flatMap((lane) => lane.notes.filter((n) =>
     (n.bend || n.whammy) && !S.selection.has(n) && xOf(n.end) >= vx0 && xOf(n.start) <= vx1));
   for (const n of [...curved, ...S.selection]) {
+    if (n === repeatPreviewHiddenNote()) continue;
     // Where a slide leaves or vibrato sets in only moves in time: a stem from
     // the note to an upright grip beside it (note-render.js).
     for (const slide of effectStartHandles(n, laneOf(n))) {
@@ -394,6 +396,7 @@ function drawBarNumbers(vx0, vx1) {
 // The frame itself. Registered with repaint.js at boot; everything else asks for
 // a paint through draw()/drawNow() there and never imports this module.
 function paintFrame({ panels = true } = {}) {
+  renderRepeatNavigator();
   if (panels) renderArtifacts();
   beginNoteMotionFrame(S.state, S.drag);
   const playheadTime = playbackTime();
@@ -488,6 +491,7 @@ function paintFrame({ panels = true } = {}) {
   const omittedCrosses = [];
   const outOfRange = [];
   const ghostNotes = [];
+  const repeatPreview = repeatPreviewNote();
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
     const { omitted: omittedNotes, added: addedNotes } = arrangementMarksForLane(lane);
@@ -507,10 +511,16 @@ function paintFrame({ panels = true } = {}) {
     const reattackEdges = new Set(lane.notes.map((note) => edgeKey(note.pitch, note.end)));
     sctx.globalAlpha = laneAlpha;
     const slurred = legatoTargets(lane);
-    for (const n of lane.notes) {
-      const motion = noteMotion(lane, n);
-      const ribbon = noteRibbon(lane, n);
-      const x = xOf(motion.start), w = Math.max(2, xOf(ribbon?.end ?? motion.end) - x), y = yOf(n.pitch);
+    const hasPreview = repeatPreview?.lane === lane;
+    for (let ni = 0; ni < lane.notes.length + (hasPreview ? 1 : 0); ni++) {
+      const isPreview = ni === lane.notes.length, n = isPreview ? repeatPreview.note : lane.notes[ni];
+      if (!isPreview && n === repeatPreviewHiddenNote()) continue;
+      const source = isPreview ? repeatPreview.source : n;
+      const motion = isPreview ? { start: n.start, end: n.end, scaleX: 1, scale: 1, alpha: repeatPreview.alpha, emphasis: 0, reveal: 1, cut: 0 } : noteMotion(lane, n);
+      const ribbon = noteRibbon(lane, source);
+      const ratio = isPreview && source.end > source.start ? (n.end - n.start) / (source.end - source.start) : 1;
+      const ribbonEnd = ribbon && isPreview ? n.start + (ribbon.end - source.start) * ratio : ribbon?.end;
+      const x = xOf(motion.start), w = Math.max(2, xOf(ribbonEnd ?? motion.end) - x), y = yOf(n.pitch);
       if (x > vx1 || x + w < vx0) continue; // off-screen
       const rowH = S.state.rowH;
       const fill = stackCount.has(n) && !ignoredStackNotes.has(n) ? PAINT.warn : laneColor;
@@ -523,9 +533,9 @@ function paintFrame({ panels = true } = {}) {
       // so the drawn pitch always matches what's exported. A prebend's bar sits
       // flat but *above* the fretted row, which is what it actually sounds.
       // A note a legato slide lands on is not picked: drawn flat, as the slide's ribbon goes on.
-      const curve = pitchCurve(n) || ribbon?.points || (slurred.has(n) ? FLAT : null);
-      const active = editTargets.has(n);
-      const glow = notePlaybackGlow(lane, n);
+      const curve = pitchCurve(n) || ribbon?.points || (slurred.has(source) ? FLAT : null);
+      const active = !isPreview && editTargets.has(n);
+      const glow = isPreview ? 0 : notePlaybackGlow(lane, n);
       if (glow > 0) {
         sctx.beginPath();
         if (curve) traceBendPath(x, w, y + rowH / 2, curve, rowH);
@@ -595,7 +605,7 @@ function paintFrame({ panels = true } = {}) {
         sctx.beginPath(); sctx.moveTo(x, y - 2 * motion.cut); sctx.lineTo(x, y + rowH + 2 * motion.cut); sctx.stroke();
         sctx.restore();
       }
-      if (reattackEdges.has(edgeKey(n.pitch, n.start))) {
+      if (!isPreview && reattackEdges.has(edgeKey(n.pitch, n.start))) {
         sctx.save();
         sctx.globalAlpha = laneAlpha;
         sctx.strokeStyle = PAINT.text; sctx.lineWidth = 1.5;
@@ -618,7 +628,7 @@ function paintFrame({ panels = true } = {}) {
         const crossY = drop ? y - drop : y;
         omittedCrosses.push({ x, y: crossY, w, h: rowH + drop + dip, alpha: laneAlpha });
       }
-      if (outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)) && (showIgnoredIssues || !issueIgnored(lane, {id: 'editor.note.outOfRange', notes: [n]})))
+      if (!isPreview && outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)) && (showIgnoredIssues || !issueIgnored(lane, {id: 'editor.note.outOfRange', notes: [n]})))
         outOfRange.push({ x, y: drop ? y - drop : y, w, h: rowH + drop + dip, alpha: laneAlpha * (issueIgnored(lane, {id: 'editor.note.outOfRange', notes: [n]}) ? .35 : 1) });
       sctx.restore();
     }
@@ -648,7 +658,7 @@ function paintFrame({ panels = true } = {}) {
   drawShapes(vx0, vx1);
   drawDropPreview();
   drawStackBadges(stackBadges, vx0, vx1);
-  drawNoteFx();
+  drawNoteFx(repeatPreviewHiddenNote(), repeatPreview);
   drawBendHandles(vx0, vx1);   // over the names, which would hide them
   drawOmittedNoteCrosses(omittedCrosses);
   drawOutOfRangeNotes(outOfRange);
@@ -721,6 +731,7 @@ function paintFrame({ panels = true } = {}) {
   drawReferences();
   drawChordNames(vx0, vx1);
   drawMatches();
+  drawRepeats();
 
   if (S.drag && S.drag.mode === "trace") drawTracePath(S.drag.points);
   if (S.marquee) {
@@ -901,7 +912,7 @@ export function init_draw() {
       ...tip, actionKey: issueInstanceKey(tip.diagnostic.lane, tip.diagnostic.issue),
       actions: issueIgnoreActions(tip.diagnostic.lane, tip.diagnostic.issue),
     } : tip);
-    showTooltip(blocks, e.clientX, e.clientY);
+    if (!hoverRepeatDifference(x, y, e.clientX, e.clientY)) showTooltip(blocks, e.clientX, e.clientY);
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
     S.refLockHover = refLockAt(x, y);
     S.mouseX = x;
@@ -913,6 +924,7 @@ export function init_draw() {
     S.pitchHoverClientY = null;
     stage.style.cursor = "default";
     scheduleTooltipHide();
+    scheduleRepeatHoverHide();
     cancelHoverPreview();
     S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; S.refEdgeHover = null; S.refLockHover = null; draw();
   });

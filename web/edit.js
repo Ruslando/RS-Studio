@@ -38,6 +38,7 @@ import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
 import { S, setSelection } from "./store.js";
 import { laneFretCount, laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
+import { runFindRepeats } from "./repeats.js";
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { modalOpen } from "./modal-focus.js";
@@ -107,7 +108,7 @@ export function snapshotEdit() {
   const snap = {
     ignoredDiagnostics: cloneJson(S.state?.metadata?.rocksmith || {}),
     lockedReferences: lockedReferenceSnapshot(),
-    lanes: {}, boxes: {}, ui: {}, holds: {}, capo: {}, marks: {},
+    lanes: {}, boxes: {}, repeats: {}, ui: {}, holds: {}, capo: {}, marks: {},
     active: a ? a.id : null,
     stem: S.state ? S.state.curStem : null,
     grid: currentGridState(),
@@ -119,6 +120,7 @@ export function snapshotEdit() {
     snap.lanes[l.id] = snap.lockedReferences.some(r => r.lane === l.id)
       ? cloneJson(l.notes) : l.notes.map((n) => ({ ...n }));
     snap.boxes[l.id] = l.refBoxes ? JSON.parse(JSON.stringify(l.refBoxes)) : {};
+    snap.repeats[l.id] = cloneJson(l.repeatGroups || []);
     // Where the hand was put. Not a note field, so nothing above captures it, and a
     // hold that undo cannot reach is an edit with no way back.
     snap.holds[l.id] = (l.handHolds || []).map((h) => ({ ...h }));
@@ -218,6 +220,7 @@ function restore(snap) {
   for (const l of editLanes()) {
     if (snap.lanes && snap.lanes[l.id]) l.notes = snap.lanes[l.id].map((n) => ({ ...n }));
     if (snap.boxes) l.refBoxes = JSON.parse(JSON.stringify(snap.boxes[l.id] || {}));
+    if (snap.repeats) l.repeatGroups = cloneJson(snap.repeats[l.id] || []);
     if (snap.holds) l.handHolds = (snap.holds[l.id] || []).map((h) => ({ ...h }));
     if (snap.capo && snap.capo[l.id] != null) l.capo = snap.capo[l.id];
     if (snap.marks && snap.marks[l.id]) {
@@ -1379,6 +1382,7 @@ export function openCanvasMenu(clientX, clientY, atTime) {
     { label: "Detect notes…", fn: () => openDetectPanel(clientX, clientY) },
     ...(S.detectRegion ? [{ label: "Find similar to range", kw: "search match repeat", fn: runFindSimilar }] : []),
     ...addMarker,
+    { label: "Find repeats in this layer", kw: "search match similar passage fingering same", fn: () => runFindRepeats(targetLane()) },
     { label: "Add comment", kw: "note annotation", fn: () => addCommentAt(clientX, clientY) },
     { sep: true },
     { label: "Paste", fn: () => doPaste() },
@@ -1483,6 +1487,7 @@ function appliedEffects(sel) {
 function similarEntries() {
   return [
     { label: "Find similar passage", kw: "search match repeat copies duplicate", fn: runFindSimilar },
+    { label: "Find repeats in this layer", kw: "search match similar passage fingering same", fn: () => runFindRepeats(laneOf([...S.selection][0]) || targetLane()) },
     ...(S.matches.length ? [
       { label: "Previous similar passage", kw: "search match back", keepOpen: true,
         fn: () => focusAdjacentMatch(-1, { preview: true }) },

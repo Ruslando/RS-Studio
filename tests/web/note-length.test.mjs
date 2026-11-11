@@ -22,3 +22,5 @@ assert.equal(hasFreeNoteLength({start: 1, end: 1.125000001}, divisions), false, 
 assert.equal(hasFreeNoteLength({start: 1, end: 1.137}, []), false, 'without a grid there is no grid-length distinction');
 assert.equal(hasFreeNoteLength({start: 1.1875, end: 1.23}, [...divisions, {t: 1.23, bpm: 60, subdiv: 8}]), true, 'a truncated boundary cell is marked');
 console.log('note length: remembered rhythm, tempo changes and project isolation passed');
+assert.equal(hasFreeNoteLength({start: 1, end: 1.0625}, [{t: 0, bpm: 120, tsNum: 4, tsDen: 4, subdiv: 4}]), false, 'visible 32nd lengths are regular even on an authored 16th grid');
+assert.equal(hasFreeNoteLength({start: 1, end: 1 + .5 / 3}, [{t: 0, bpm: 120, tsNum: 4, tsDen: 4, subdiv: 3}]), false, 'authored triplet lengths also remain regular');

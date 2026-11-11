@@ -1,5 +1,8 @@
 import { segBeatSec, segBarSec } from './bars.js';
 
+// The smallest regular division the adaptive grid can display.
+export const finestGridStep = segment => Math.max(segBeatSec(segment) / 8, (60 / segment.bpm) / 8);
+
 // Pick the finest division with at least 12 screen pixels per cell. At small
 // scales use whole beats/bars; zooming never changes stored note positions.
 export function autoGridStep(segment, pixelsPerSecond) {

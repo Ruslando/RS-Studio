@@ -422,6 +422,40 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <button type="button" id="matchAsCopy" class="btn--compact" title="Paste as copy (Enter)" hidden>Paste as copy</button>
               <button type="button" id="matchAsRef" class="btn--compact primary" title="Paste as reference (Shift+Enter)" hidden>Paste as reference</button>
             </nav>
+            <nav id="repeatNavigator" aria-label="Repeat navigation" hidden>
+              <div class="repeat-nav-group" role="group" aria-label="Groups">
+                <button type="button" id="repeatGroupPrevious" aria-label="Previous group" title="Previous group (Shift+←)">‹</button>
+                <select id="repeatGroup" aria-label="Repeat group"></select>
+                <button type="button" id="repeatGroupNext" aria-label="Next group" title="Next group (Shift+→)">›</button>
+              </div>
+              <div class="repeat-nav-group" role="group" aria-label="Instances">
+                <span>Instance</span>
+                <button type="button" id="repeatPrevious" aria-label="Previous instance" title="Previous instance (Alt+←)">‹</button>
+                <output id="repeatPosition" aria-live="polite">0 / 0</output>
+                <button type="button" id="repeatNext" aria-label="Next instance" title="Next instance (Alt+→)">›</button>
+              </div>
+              <div class="repeat-nav-group" role="group" aria-label="Changed notes">
+                <span id="repeatChangeLabel">Change</span>
+                <button type="button" id="repeatChangePrevious" aria-label="Previous difference or instance" title="Previous difference, or instance when identical (←)">‹</button>
+                <output id="repeatChangePosition" aria-live="polite">– / 0</output>
+                <button type="button" id="repeatChangeNext" aria-label="Next difference or instance" title="Next difference, or instance when identical (→)">›</button>
+              </div>
+              <button type="button" id="repeatClose" aria-label="Close repeat review" title="Close repeat review">×</button>
+            </nav>
+            <section id="repeatHover" role="dialog" aria-label="Note in each instance" hidden>
+              <div class="repeat-hover-head">
+                <strong id="repeatHoverTitle"></strong>
+                <div id="repeatNoteNavigation" role="group" aria-label="Preview note in each instance" hidden>
+                  <button type="button" id="repeatNoteFirst" aria-label="Previous instance of this note" title="Previous instance">‹</button>
+                  <output id="repeatNoteVersion" aria-live="polite">1 / 1</output>
+                  <button type="button" id="repeatNoteCurrent" aria-label="Next instance of this note" title="Next instance">›</button>
+                </div>
+                <button type="button" id="repeatNoteJump" aria-label="Jump to this instance" title="Jump to this instance">Jump ↗</button>
+                <button type="button" id="repeatHoverClose" aria-label="Close note comparison">×</button>
+              </div>
+              <div class="repeat-hover-table"><table><tbody id="repeatHoverRows"></tbody></table></div>
+
+            </section>
             <canvas id="rulerRight" aria-label="Right pitch scale"></canvas>
             <button type="button" id="projectStartHandle" class="splitter splitter--x timeline-start" aria-label="Project start: move entire project" hidden>
               <svg class="splitter-dots" width="5" height="26" viewBox="0 0 5 26" fill="none" aria-hidden="true"><circle cx="2.5" cy="5" r="1.4" fill="currentColor"/><circle cx="2.5" cy="13" r="1.4" fill="currentColor"/><circle cx="2.5" cy="21" r="1.4" fill="currentColor"/></svg>

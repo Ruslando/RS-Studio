@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
 
-const painted = [], noop = () => {};
+const painted = [], transforms = [], noop = () => {};
 let strokes = 0;
-const ctx = new Proxy({ stroke() { strokes++; }, measureText(text) { return { width: text.length * parseFloat(this.font.match(/[\d.]+(?=px)/)[0]) * 0.5 }; }, fillText(text, x, y) { painted.push({ text, x, y, font: this.font }); } }, {
+const ctx = new Proxy({ stroke() { strokes++; }, translate(...args) { transforms.push(['translate', ...args]); }, scale(...args) { transforms.push(['scale', ...args]); }, measureText(text) { return { width: text.length * parseFloat(this.font.match(/[\d.]+(?=px)/)[0]) * 0.5 }; }, fillText(text, x, y) { painted.push({ text, x, y, font: this.font, alpha: this.globalAlpha }); } }, {
   get: (target, name) => name in target ? target[name] : noop,
 });
 const controls = { spectrogramNoteNames: { value: 'always' }, spectrogramPositions: { value: 'hover' },
@@ -56,5 +56,12 @@ try {
   assert.equal(strokes, 1, 'a free-length note retains its hollow tail marker with labels off');
   note.end = 1.125; strokes = 0; drawNoteFx();
   assert.equal(strokes, 0, 'a regular grid duration has no free-length marker');
+  controls.spectrogramNoteNames.value = 'always'; note.end = 2; lane.active = true;
+  painted.length = 0; transforms.length = 0; ctx.globalAlpha = 1;
+  drawNoteFx(note, { lane, source: note, note: { ...note, start: 2.5, end: 4.5 }, alpha: .55 });
+  assert.deepEqual(painted.map(item => item.text), ['E4'], 'the preview uses the normal note label even when the original is hidden');
+  assert.equal(painted[0].alpha, .55, 'the normal label and effects use preview opacity');
+  assert.ok(painted[0].x >= 250 && painted[0].x < 450, 'the label follows the destination time and tempo');
+  assert.deepEqual(transforms, [], 'previewing at another tempo does not stretch note labels');
 } finally { globalThis.document = oldDocument; }
 console.log('Note appearance visibility, font and slide placement passed');

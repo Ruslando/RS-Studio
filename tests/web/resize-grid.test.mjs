@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
-import { noteLength } from '../../web/note-length.js';
+import { noteLength, hasFreeNoteLength } from '../../web/note-length.js';
 
 class Surface {
   listeners = new Map(); style = {};
@@ -22,13 +22,14 @@ const noop = () => {}, commits = [];
 // A dip's end handles sit on the note's edges, on its row (y 100).
 const endHandles = n => n.whammy ? [{ i: 0, kind: 'whammy', note: n, x: n.start * 100, y: 100 }, { i: 2, kind: 'whammy', note: n, x: n.end * 100, y: 100 },
   { i: 1, kind: 'whammy', note: n, x: (n.start + n.end) * 50, y: 300 }] : [];
+const subdivision = { value: '8' };
 const oldWindow = globalThis.window;
 try {
   globalThis.window = win;
   const grid = await mockImport(new URL('../../web/grid.js', import.meta.url), {
     './store.js': { S }, './dom.js': {
       bpmInput: { value: '120' }, offsetInput: { value: '0' }, tsNumInput: { value: '4' },
-      tsDenInput: { value: '4' }, subdivSel: { value: '8' }, subdivCustom: { value: '8' },
+      tsDenInput: { value: '4' }, subdivSel: subdivision, subdivCustom: { value: '8' },
     },
   }, { './bars.js': true, './constants.js': true, './project-position-core.js': true, './auto-grid.js': true });
   const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
@@ -145,6 +146,26 @@ try {
   win.emit('mouseup', {clientX: 165});
   assert.equal(note.start, 1.5);
   assert.equal(note.end, 1.75);
+
+  // Zoom can display divisions finer than the authored grid. Normal resizing
+  // must not turn a regular note into a precise/free-length one.
+  subdivision.value = '4'; S.pxPerSec = 2000;
+  note.start = 1; note.end = 1.5;
+  stage.emit('mousedown', {clientX: 149});
+  win.emit('mousemove', {clientX: 156});
+  win.emit('mouseup', {clientX: 156});
+  assert.equal(note.end, 1.5625, 'normal resize reaches visible 32nd divisions');
+  assert.equal(hasFreeNoteLength(note, grid.gridSegments()), false, 'ordinary resize keeps the regular-length classification');
+  stage.emit('mousedown', {clientX: 120});
+  win.emit('mousemove', {clientX: 174});
+  win.emit('mouseup', {clientX: 174});
+  assert.equal(note.start, 1.5625, 'subsequent movement follows the visible grid');
+  assert.equal(hasFreeNoteLength(note, grid.gridSegments()), false);
+  stage.emit('mousedown', {clientX: note.end * 100 - 1, altKey: true});
+  win.emit('mousemove', {clientX: note.end * 100 + 9, altKey: true});
+  win.emit('mouseup', {altKey: true});
+  assert.equal(hasFreeNoteLength(note, grid.gridSegments()), true, 'explicit Alt resizing still permits precise lengths');
+  subdivision.value = '8'; S.pxPerSec = 100;
 
   // Mixed lengths and off-grid spacing move as one group, even at the bounds.
   note.start = 1; note.end = 1.237;

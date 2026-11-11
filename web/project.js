@@ -42,6 +42,7 @@ import { normalizeSectionMarkers, sectionMarkersFromScoreBars, withEndSection } 
 import { normalizeComments } from "./comments.js";
 import { inferTablatureEnabled, laneScrollSpeed } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
+import { normalizeRepeatGroups } from "./repeats-core.js";
 import { isValidTuningKey, parseTuning, setView, tuningKeyFor } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
@@ -70,6 +71,7 @@ function projectBody() {
     ...(Number.isFinite(l.transpositionPitch) ? { transpositionPitch: l.transpositionPitch } : {}),
     ...(Number.isFinite(l.displayTranspositionPitch) ? { displayTranspositionPitch: l.displayTranspositionPitch } : {}),
     ...(l.refBoxes && Object.keys(l.refBoxes).length ? { refBoxes: l.refBoxes } : {}),
+    ...(l.repeatGroups?.length ? { repeatGroups: l.repeatGroups } : {}),
     // Where the player put the fretting hand, in seconds. Written only when there is
     // one, so an untouched project gains no field.
     ...(l.handHolds?.length ? { handHolds: l.handHolds.map((h) => ({ id: h.id, t: h.t, fret: h.fret })) } : {}),
@@ -319,6 +321,7 @@ export function mapLane(l, startAt = 0) {
     ...normalizedLaneFields(l),
     toneMarkers: withStartTone(normalizedLaneFields(l).toneMarkers, { instrument, rocksmithArrangement: l.rocksmithArrangement }, undefined, startAt),
     refBoxes: l.refBoxes && typeof l.refBoxes === "object" ? l.refBoxes : {},
+    repeatGroups: normalizeRepeatGroups(l.repeatGroups, notes),
   };
 }
 

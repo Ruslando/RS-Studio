@@ -1,5 +1,6 @@
 // Remember a rhythmic length, rather than seconds, so drawing the same note
 // value in a different tempo still produces the same musical duration.
+import { finestGridStep } from './auto-grid.js';
 import { segBeatSec } from './bars.js';
 
 const bpmAt = (time, segments) => {
@@ -7,20 +8,25 @@ const bpmAt = (time, segments) => {
   return Number(segment?.bpm) > 0 ? Number(segment.bpm) : 120;
 };
 
-// Use the authored division rather than the zoom-dependent visible grid.
+// Recognize every regular division the visible grid can offer, regardless
+// of the authored subdivision or current zoom.
 // A shortened cell at a tempo boundary also has a nonstandard duration.
 export function hasFreeNoteLength(note, segments) {
   if (!segments.length || !(note.end > note.start)) return false;
-  let time = note.start, cells = 0, shortest = Infinity;
+  let time = note.start, cells = 0, shortest = Infinity, authoredCells = 0, authoredShortest = Infinity;
   for (const end of [...segments.filter(segment => segment.t > time && segment.t < note.end).map(segment => segment.t), note.end]) {
     const seg = [...segments].reverse().find(segment => segment.t <= time) || segments[0];
-    const step = segBeatSec(seg) / Math.max(1, Number(seg.subdiv) || 1);
+    const step = finestGridStep(seg);
     if (!(step > 0)) return false;
     cells += (end - time) / step;
+    const authoredStep = segBeatSec(seg) / Math.max(1, Number(seg.subdiv) || 1);
+    authoredCells += (end - time) / authoredStep;
+    authoredShortest = Math.min(authoredShortest, authoredStep);
     shortest = Math.min(shortest, step);
     time = end;
   }
-  return Math.abs(cells - Math.round(cells)) * shortest > 1e-4;
+  return Math.abs(cells - Math.round(cells)) * shortest > 1e-4
+    && Math.abs(authoredCells - Math.round(authoredCells)) * authoredShortest > 1e-4;
 }
 
 export function lengthInBeats(start, end, segments) {
