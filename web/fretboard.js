@@ -1388,8 +1388,9 @@ export function paintFretboardInto(canvas) {
   const s = laneSpec(lane), projection = boardProjection(ctx, s, w, h - 12, laneTuning(lane));
   if (!projection) return;
   const { scale, X, Y, strung, tunePx } = projection;
-  const now = handNow(lane, s);
-  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat: anchorFret(lane), offered: 0, strung, tunePx });
+  // Its own playhead: the live pane's selection freezes only the live board.
+  const t = boardTime(), now = handNow(lane, s, t);
+  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat: anchorFret(lane, t), offered: 0, strung, tunePx });
   drawHand(ctx, s, scale, X, Y, lane, now, null, { onion: false });
 }
 
@@ -1923,11 +1924,11 @@ function drawOnion(ctx, s, scale, X, Y, columns, i, hue) {
 //            already placed, so the old grip steps right back to an outline.
 // Which fret the hand is anchored on right now — the same column drawHand draws, so
 // the band and the grip can never disagree about which moment they are showing.
-function anchorFret(lane) {
+function anchorFret(lane, time = frozenAt(lane) ?? boardTime()) {
   if (!lane?.notes?.length) return 0;
   const found = gripsFor(lane);
   if (!found) return 0;
-  const i = gripIndex(found.columns, frozenAt(lane) ?? boardTime());
+  const i = gripIndex(found.columns, time);
   return i >= 0 ? Number(found.columns[i].seat) || 0 : 0;
 }
 
