@@ -145,7 +145,7 @@ function confirmDetectMerge(count, laneName, scoped) {
 
 // A note counts as "in the frame" if its span overlaps it at all — so the merge
 // prompt fires (and Replace clears) for anything visibly inside the band.
-export const inFrame = (n, r) => n.start < r.t1 && n.end > r.t0;
+const inFrame = (n, r) => n.start < r.t1 && n.end > r.t0;
 
 async function runDetect() {
   if (!S.state || !detectModelSel.value ||

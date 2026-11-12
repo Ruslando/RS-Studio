@@ -39,7 +39,9 @@ Object.seal(UI_PAINT);
 // pick. A wash tints data you still have to read through it. A veil carries
 // chrome that sits on top of the song and may hide it. A halo backs a single
 // glyph, which is a hairline of ink and needs the most help.
-export const WASH = 0.14, VEIL = 0.72, HALO = 0.85;
+export const WASH = 0.14;
+const VEIL = 0.72;
+const HALO = 0.85;
 
 // A glyph drawn straight onto the spectrogram is unreadable over a bright
 // partial, so every one of them is stroked with the ground colour first. This is

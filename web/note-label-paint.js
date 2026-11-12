@@ -4,7 +4,7 @@ import { edgeSlide } from './spectrogram-labels.js';
 
 const NOTE_LABEL_SIZE = 12;
 const NOTE_LABEL_SIZES = [10, 12, 14, 16];
-export function noteLabelSize() {
+function noteLabelSize() {
   const size = Number(document.getElementById('noteLabelSize')?.value);
   return NOTE_LABEL_SIZES.includes(size) ? size : NOTE_LABEL_SIZE;
 }

@@ -28,7 +28,7 @@ function updateRegionLoop() {
   if (next !== null) seekPlayback(next);
 }
 
-export let scheduled = new Set();   // notes scheduled in the current play cycle
+let scheduled = new Set();   // notes scheduled in the current play cycle
 
 let scheduledBeats = new Set(); // metronome beat indices scheduled this cycle
 let scrollingSuspended = false;
@@ -235,7 +235,7 @@ export function auditionNote(note, lane) {
 
 // Raw AudioContext clock (NO Tone lookAhead) — this is what audio.currentTime
 // maps onto, so notes fire exactly when the playhead crosses them.
-export const ctxNow = () => (window.Tone ? Tone.getContext().currentTime : 0);
+const ctxNow = () => (window.Tone ? Tone.getContext().currentTime : 0);
 
 export const rate = () => audio.playbackRate || 1;
 // The pitch the audio is heard at, relative to A440: notes play along with it.

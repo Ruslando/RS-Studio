@@ -47,9 +47,9 @@ const REF_TIME_TOL = 0.03;   // s — timing slack when matching repeats
 export const refName = (group, ref) => group?.name || `Reference #${ref}`;
 const REF_ACCENT = PAINT.ref;  // one hue for all refs; the number disambiguates
 
-export const REF_BOX_EDGE_TOL = 5;   // px from a box edge that grabs it for resizing
+const REF_BOX_EDGE_TOL = 5;   // px from a box edge that grabs it for resizing
 
-export const noteOrder = (a, b) => (a.start - b.start) || (a.pitch - b.pitch);
+const noteOrder = (a, b) => (a.start - b.start) || (a.pitch - b.pitch);
 
 // Tight time+pitch bounds of a set of notes.
 export function noteBounds(notes) {
@@ -219,7 +219,7 @@ export function wholeBoxOf(notes) {
 }
 
 // Canonical signature of a note's written notation/fingering metadata.
-export { effectSig } from "./reference-core.js";
+
 
 // Pattern of a set of notes: anchor t0 + per-slot relative timing/pitch/notation.
 function patternOf(notes) {

@@ -163,7 +163,7 @@ export function drawRuler() {
 // hit-test a drag on one, which is why it lives with the renderer rather than
 // with the mouse code that grabs them. A whammy curve has its own (`kind`); each
 // handle sits on the drawn line, which is bend and whammy together (pitchCurve).
-export function bendHandles(n, kind = "bend") {
+function bendHandles(n, kind = "bend") {
   const pts = kind === "whammy" ? whammyCurve(n) : bendCurve(n);
   if (!pts) return [];
   const other = kind === "whammy" ? bendCurve(n) : whammyCurve(n);

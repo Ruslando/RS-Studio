@@ -8,7 +8,7 @@
 
 // Roots and basses as guitar charts spell them: flats where flats are usual.
 export const PC_NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
-export const pcName = (pc) => PC_NAMES[((pc % 12) + 12) % 12];
+const pcName = (pc) => PC_NAMES[((pc % 12) + 12) % 12];
 const norm = (p) => ((p % 12) + 12) % 12;
 
 // How much more contrived than the name an alternative may be and still be offered.

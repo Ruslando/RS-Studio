@@ -168,7 +168,7 @@ function savedAgo(iso) {
 
 // One library-project row (welcome list + Open-project picker share it).
 // onPick(job) opens it; onDeleted() re-renders the list after a delete.
-export function buildProjectRow(p, { onPick, onDeleted }) {
+function buildProjectRow(p, { onPick, onDeleted }) {
   const info = projectCardInfo(p);
   const label = info.title;
   const row = document.createElement("div");

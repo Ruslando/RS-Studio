@@ -7,7 +7,7 @@ export function configureEditHistory(dependencies) {
 }
 
 // ---- undo / redo (all edit lanes) ----
-export const MAX_UNDO = 200;
+const MAX_UNDO = 200;
 
 // The song's structure — tempo/meter markers, section markers, the bar list —
 // travels in every snapshot alongside the notes. It has to: bar insert and

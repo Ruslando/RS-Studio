@@ -242,7 +242,7 @@ function instrumentFor(program, family) {
 // a note slides. Measured from alphaTab's own playback over real files
 // (tools/gp-audit): a slide out of the note moves in the last quarter, a slide onto
 // the next note in the second half. The export reverses it (guitar-pro-edit.js).
-export const GP_SLIDE_AT = { out: 0.75, next: 0.5 };
+const GP_SLIDE_AT = { out: 0.75, next: 0.5 };
 export const gpSlideAt = (kind) => ["outUp", "outDown", "pickUp", "pickDown"].includes(kind) ? GP_SLIDE_AT.out : GP_SLIDE_AT.next;
 
 const SLIDE_INTO = { 1: "inBelow", 2: "inAbove" };
@@ -347,7 +347,7 @@ const TRACK_OWN = new Set(["index", "score", "staves", "playbackInfo", "color", 
 const CHORD_OWN = new Set(["name", "staff"]);
 const PLAYBACK_OWN = new Set(["program", "port", "primaryChannel", "secondaryChannel"]);
 const STAFF_OWN = new Set(["index", "track", "bars", "chords", "stringTuning", "capo", "transpositionPitch", "displayTranspositionPitch", "isPercussion"]);
-export function fileExtras(object, own) {
+function fileExtras(object, own) {
   const fresh = new object.constructor(), out = {};
   for (const key of Object.keys(object)) {
     if (own.has(key)) continue;
@@ -571,6 +571,50 @@ function toneSwitches(track, staff, timeline) {
 // As the file spells it (♯, ♭): Rocksmith gets # and b (rocksmith/chart.py _chord_name).
 const chordNameOf = (beat) => beat.chord?.name || "";
 
+// Beat annotations that have no sounding note to carry them in the editor.
+function appendBeatAnnotation(beat, voice, timeline, scoreText) {
+  // Text, and a chord name over a rest: nothing in the editor to hang them on.
+  const restLyrics = !beat.notes.length && beat.lyrics?.some((l) => l) ? beat.lyrics : null;
+  if (beat.text || (chordNameOf(beat) && !beat.notes.length) || restLyrics)
+    scoreText.push({ t: tickToSeconds(beat.absolutePlaybackStart, timeline), voice: voice.index,
+      ...(beat.text ? { text: beat.text } : {}), ...(chordNameOf(beat) && !beat.notes.length ? { chord: chordNameOf(beat) } : {}),
+      ...(restLyrics ? { lyrics: [...restLyrics] } : {}) });
+}
+
+// Import sounding origins with their complete tied-part timing and provenance.
+function appendStaffBeatNotes(beat, context, notes) {
+  const { track, staff, bar, voice, tuning, timeline } = context;
+  // The file's chord name, given to these tones (chord-names.js setChordName).
+  const chordName = chordNameOf(beat);
+  const chordNameFor = [...new Set(beat.notes.filter((n) => !n.isDead).map((n) => n.realValueWithoutHarmonic))]
+    .sort((a, b) => a - b).join(",");
+  for (const note of beat.notes || []) {
+    if (note.isTieDestination) continue; // represented by the origin's exact tieSegments
+    const startTick = beat.absolutePlaybackStart;
+    const { endTick, segments, chain } = tiedEnd(note);
+    const startSeconds = tickToSeconds(startTick, timeline), endSeconds = tickToSeconds(endTick, timeline);
+    const at = (tick) => endSeconds > startSeconds ? (tickToSeconds(tick, timeline) - startSeconds) / (endSeconds - startSeconds) : 0;
+    const parts = chain.map((part) => ({ note: part, beat: part.beat, from: at(part.beat.absolutePlaybackStart),
+      to: at(part.beat.absolutePlaybackStart + part.beat.playbackDuration) }));
+    const effects = editorEffects(note, beat, parts);
+    // alphaTab numbers internal strings low-to-high (1 = lowest), while the
+    // editor and GP5 adapter use 0 = highest. Do not use note.string - 1 here.
+    const editorString = tuning.length - note.string;
+    const basePitch = note.realValueWithoutHarmonic;
+    notes.push({
+      id: `gp_${track.index}_${staff.index}_${note.id}`,
+      start: Math.max(0, tickToSeconds(startTick, timeline)),
+      end: Math.max(0.001, tickToSeconds(endTick, timeline)),
+      pitch: basePitch,
+      soundingPitch: note.realValue,
+      pos: { string: editorString, fret: note.fret, scope: "local", ...defaultPinFlags() },
+      ...effects,
+      ...(chordName ? { chordName, chordNameFor } : {}),
+      gp: exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, segments, effects),
+    });
+  }
+}
+
 function staffLane(track, staff, classification, timeline, laneNumber, beatRecords) {
   const tuning = [...(staff.stringTuning?.tunings || [])];
   const notes = [], scoreText = [];
@@ -578,41 +622,8 @@ function staffLane(track, staff, classification, timeline, laneNumber, beatRecor
     if (voice.isEmpty) continue;
     for (const beat of voice.beats || []) {
       beatRecords.push(exactGpBeat(beat, track, staff, bar, voice));
-      // Text, and a chord name over a rest: nothing in the editor to hang them on.
-      const restLyrics = !beat.notes.length && beat.lyrics?.some((l) => l) ? beat.lyrics : null;
-      if (beat.text || (chordNameOf(beat) && !beat.notes.length) || restLyrics)
-        scoreText.push({ t: tickToSeconds(beat.absolutePlaybackStart, timeline), voice: voice.index,
-          ...(beat.text ? { text: beat.text } : {}), ...(chordNameOf(beat) && !beat.notes.length ? { chord: chordNameOf(beat) } : {}),
-          ...(restLyrics ? { lyrics: [...restLyrics] } : {}) });
-      // The file's chord name, given to these tones (chord-names.js setChordName).
-      const chordName = chordNameOf(beat);
-      const chordNameFor = [...new Set(beat.notes.filter((n) => !n.isDead).map((n) => n.realValueWithoutHarmonic))]
-        .sort((a, b) => a - b).join(",");
-      for (const note of beat.notes || []) {
-      if (note.isTieDestination) continue; // represented by the origin's exact tieSegments
-      const startTick = beat.absolutePlaybackStart;
-      const { endTick, segments, chain } = tiedEnd(note);
-      const startSeconds = tickToSeconds(startTick, timeline), endSeconds = tickToSeconds(endTick, timeline);
-      const at = (tick) => endSeconds > startSeconds ? (tickToSeconds(tick, timeline) - startSeconds) / (endSeconds - startSeconds) : 0;
-      const parts = chain.map((part) => ({ note: part, beat: part.beat, from: at(part.beat.absolutePlaybackStart),
-        to: at(part.beat.absolutePlaybackStart + part.beat.playbackDuration) }));
-      const effects = editorEffects(note, beat, parts);
-      // alphaTab numbers internal strings low-to-high (1 = lowest), while the
-      // editor and GP5 adapter use 0 = highest. Do not use note.string - 1 here.
-      const editorString = tuning.length - note.string;
-      const basePitch = note.realValueWithoutHarmonic;
-      notes.push({
-        id: `gp_${track.index}_${staff.index}_${note.id}`,
-        start: Math.max(0, tickToSeconds(startTick, timeline)),
-        end: Math.max(0.001, tickToSeconds(endTick, timeline)),
-        pitch: basePitch,
-        soundingPitch: note.realValue,
-        pos: { string: editorString, fret: note.fret, scope: "local", ...defaultPinFlags() },
-        ...effects,
-        ...(chordName ? { chordName, chordNameFor } : {}),
-        gp: exactGpNote(note, beat, track, staff, bar, voice, startTick, endTick, segments, effects),
-      });
-    }
+      appendBeatAnnotation(beat, voice, timeline, scoreText);
+      appendStaffBeatNotes(beat, { track, staff, bar, voice, tuning, timeline }, notes);
     }
   }
   notes.sort((a, b) => a.start - b.start || a.gp.voice - b.gp.voice || a.pitch - b.pitch);

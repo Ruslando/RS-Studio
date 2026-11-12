@@ -11,7 +11,7 @@ import { normalizeMotifIds } from "./motifs.js";
 // their number is also their visible name.
 export const nid = () => "n" + (S.uid++);
 
-export const laneId = () => "edit_" + (S.uid++);
+const laneId = () => "edit_" + (S.uid++);
 
 export const motifId = () => "motif_v2_" + (S.motifUid++);
 

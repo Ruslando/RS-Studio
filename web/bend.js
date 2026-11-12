@@ -86,7 +86,7 @@ export const trillOffsetAt = (n, sec, bpm = 120) => sec >= 0
 // same seconds; past `dur` (a legato note carried into its target) it stays landed.
 // `to` is a shift/legato target in semitones. `steps: false` is the finger's own
 // path, which glides between the frets the pitch steps across.
-export const SLIDE = { eighth: 0.25 };   // 120 BPM, when no tempo is known
+const SLIDE = { eighth: 0.25 };   // 120 BPM, when no tempo is known
 export const SLIDES_TO_NEXT = new Set(["shift", "legato"]);
 export const SLIDE_IN = new Set(["inBelow", "inAbove"]);
 export const SLIDE_OUT = new Set(["outDown", "outUp", "pickDown", "pickUp"]);
@@ -94,7 +94,7 @@ export const SLIDE_OUT = new Set(["outDown", "outUp", "pickDown", "pickUp"]);
 // the slide out or onto the next note and `slideIn` the slide into it. A note with
 // only a slide-in keeps it in `slide`, as it always did.
 export const slideInOf = (n) => SLIDE_IN.has(n?.slide) ? n.slide : SLIDE_IN.has(n?.slideIn) ? n.slideIn : null;
-export const SLIDE_FRETS = { inBelow: 4, inAbove: 4, outDown: 5, outUp: 5, pickDown: 5, pickUp: 5 };
+const SLIDE_FRETS = { inBelow: 4, inAbove: 4, outDown: 5, outUp: 5, pickDown: 5, pickUp: 5 };
 const SLIDE_SIGN = { inBelow: -1, inAbove: 1, outDown: -1, outUp: 1, pickDown: -1, pickUp: 1 };   // where the far end sits
 // ponytail: Rocksmith's neck, not the lane's; a shorter neck is clamped by the export.
 
@@ -170,7 +170,7 @@ export const noteOffsetAt = (n, sec, dur, slide = {}) =>
 // same size moves as a shape (k-th voice from the bottom onto the k-th), and
 // anything else takes the nearest unclaimed pitch. The shape rule covers callers
 // that know no strings.
-export const ORNAMENT_FIGURES = { upperMordent: [0, 2, 0], lowerMordent: [0, -1, 0], turn: [2, 0, -1, 0], invertedTurn: [-1, 0, 2, 0] };
+const ORNAMENT_FIGURES = { upperMordent: [0, 2, 0], lowerMordent: [0, -1, 0], turn: [2, 0, -1, 0], invertedTurn: [-1, 0, 2, 0] };
 export function ornamentOffsetAt(n, sec, bpm = 120) {
   const figure = ORNAMENT_FIGURES[n.ornament];
   return figure ? figure[Math.min(figure.length - 1, Math.floor(sec / (7.5 / (bpm || 120))))] : 0;

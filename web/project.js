@@ -344,14 +344,8 @@ export function mapLane(l, startAt = 0) {
 let projectVisuals = Promise.resolve();
 export const waitForProjectVisuals = () => projectVisuals;
 
-export async function applyProject(data) {
-  try { await loadPresetFolderData(); }
-  catch (error) { console.warn("Tone presets could not be loaded", error); }
-  projectVisuals = Promise.resolve();
-  // 1. tear down the previous project
-  disposeSynths();
-  closeStemSettings();   // an open stem panel targets the previous project's stem
-
+// Restore file-owned structure before replacing the currently open state.
+function restoredProjectStructure(data) {
   // 2. score structure. The imported file's bars stand in for the song's only while
   // its layers follow the song; on their own timing they are that timing's bars.
   const gpOwnTiming = (data.editLanes || []).some((lane) => lane.sourceTrackIndex != null && data.timings?.[lane.timing]);
@@ -376,9 +370,11 @@ export async function applyProject(data) {
       candidate.text === marker.text &&
       candidate.sectionType === marker.sectionType));
 
-  // 4. the state object itself — nothing above may read S.state, nothing below
-  //    may assume it is the old one.
-  S.state = {
+  return { sourceLanes, coveredBars, restoredSections };
+}
+
+function restoredProjectState(data, { sourceLanes, coveredBars, restoredSections }) {
+  return {
     job: data.job,
     name: data.name,
     filename: data.filename,
@@ -408,17 +404,9 @@ export async function applyProject(data) {
     curStem: null,         // set by selectStem below
     spec: null, rowH: 0, lanes: [],
   };
-  // 5. ids
-  syncUidPastLoaded();   // bump uid past loaded ids so new notes/lanes never collide
-  const idsRepaired = dedupeIds();   // heal duplicate ids baked in by the old uid bug
+}
 
-  // 6. active layer. Restore the saved one; only fall back to the first edit lane when
-  // nothing was marked active (older projects, or all-empty restores).
-  const anyActive = S.state.editLanes.some((l) => l.active);
-  if (!anyActive && S.state.editLanes[0]) S.state.editLanes[0].active = true;
-
-  // 7. view settings (which stem, zoom, speed) so reload lands where you left off.
-  // Where you left it last time, over what the file saved (see project-view.js).
+function restoreLoadedProjectView(data) {
   const v = { ...(data.view || {}), ...(savedView(data.job) || {}) };
   S.state.viewIntensity = Array.isArray(v.intensity) ? v.intensity : [0, 100];
   S.state.specView = typeof v.spectrogram === 'string' ? v.spectrogram : 'fine';
@@ -428,14 +416,10 @@ export async function applyProject(data) {
   S.pxPerSec = PX_PER_SEC * S.zoomX;
   updateZoomLabels();
   speedSel.value = data.job === "tutorial" ? "1" : String(v.speed ?? "1");
+  return v;
+}
 
-  S.selection = new Set();
-  S.clipboard = []; S.clipboardRef = null; S.clipboardSrc = [];
-  S.detectRegion = null;
-  clearMatches();
-  S.undoStack = []; S.redoStack = []; updateUndoButtons();
-
-  // 8. the grid, then the stem mixer below it
+function restoreLoadedProjectGrid(data) {
   const g = data.grid || {};
   S.state.baseGrid = { bpm: Number(g.bpm) || 120, offset: Number(g.offset) || 0,
     subdiv: Number(g.subdiv) || 2, tsNum: Number(g.tsNum) || 4, tsDen: Number(g.tsDen) || 4 };
@@ -451,7 +435,9 @@ export async function applyProject(data) {
     : [];
   S.appliedGrid = currentGridState();
   S.appliedOffset = S.appliedGrid.offset;   // baseline so the first offset tweak shifts notes by the delta, not the absolute value
+}
 
+function renderLoadedProjectWarnings(data, idsRepaired) {
   const warnings = [...(data.warnings || [])];
   if (idsRepaired) warnings.unshift(
     `Repaired ${idsRepaired} duplicate id${idsRepaired === 1 ? "" : "s"} from an older save.`);
@@ -463,6 +449,44 @@ export async function applyProject(data) {
     el.textContent = `⚠ ${w}`;
     return el;
   }));
+}
+
+export async function applyProject(data) {
+  try { await loadPresetFolderData(); }
+  catch (error) { console.warn("Tone presets could not be loaded", error); }
+  projectVisuals = Promise.resolve();
+  // 1. tear down the previous project
+  disposeSynths();
+  closeStemSettings();   // an open stem panel targets the previous project's stem
+
+  // 2–3. Restore score structure and migrate old per-layer section markers.
+  const structure = restoredProjectStructure(data);
+
+  // 4. Publish the payload-derived state before repairing ids and restoring views.
+  S.state = restoredProjectState(data, structure);
+  // 5. ids
+  syncUidPastLoaded();   // bump uid past loaded ids so new notes/lanes never collide
+  const idsRepaired = dedupeIds();   // heal duplicate ids baked in by the old uid bug
+
+  // 6. active layer. Restore the saved one; only fall back to the first edit lane when
+  // nothing was marked active (older projects, or all-empty restores).
+  const anyActive = S.state.editLanes.some((l) => l.active);
+  if (!anyActive && S.state.editLanes[0]) S.state.editLanes[0].active = true;
+
+  // 7. view settings (which stem, zoom, speed) so reload lands where you left off.
+  // Where you left it last time, over what the file saved (see project-view.js).
+  const v = restoreLoadedProjectView(data);
+
+  S.selection = new Set();
+  S.clipboard = []; S.clipboardRef = null; S.clipboardSrc = [];
+  S.detectRegion = null;
+  clearMatches();
+  S.undoStack = []; S.redoStack = []; updateUndoButtons();
+
+  // 8. the grid, then the stem mixer below it
+  restoreLoadedProjectGrid(data);
+
+  renderLoadedProjectWarnings(data, idsRepaired);
 
   // 9. reveal the editor and paint
   hideWelcome();

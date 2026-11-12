@@ -126,7 +126,7 @@ export function drawMarkers() {
 }
 
 // A tempo flag's selection key: its time, or "start" for the grid start.
-export const tempoKey = (seg) => (seg.seg0 ? "start" : (+seg.t).toFixed(4));
+const tempoKey = (seg) => (seg.seg0 ? "start" : (+seg.t).toFixed(4));
 // The flags as drawn, for marker selection (marker-clipboard.js).
 export const tempoFlags = () => markerRects.map((r) => ({ ...r, kind: "tempo", key: tempoKey(r.seg), t: r.seg.t }));
 

@@ -3,7 +3,7 @@ import { clipOf, placeClip } from "./note-clipboard.js";
 export { clipOf, placeClip };
 import { columnOf } from "./column-context.js";
 export { columnOf };
-export { toggleStemMute };
+
 import { configureEditHistory, snapshotEdit, commit, commitStructure, undo, redo, updateUndoButtons } from "./edit-history.js";
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { isTablatureLane } from "./layer-role.js";
@@ -63,7 +63,7 @@ import { normLayerVolume } from "./util.js";
 import { slideFingerGroup, chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
 
 // Preserve the editor API for existing integrations. Features use edit-history directly.
-export { MAX_UNDO, STATE_RESTORED, snapshotEdit, commit, commitStructure, commitDiagnostics, restoreEditSnapshot, undo, redo, updateUndoButtons } from "./edit-history.js";
+export { snapshotEdit, commit, commitStructure, commitDiagnostics, restoreEditSnapshot, undo, redo, updateUndoButtons } from "./edit-history.js";
 
 configureEditHistory({
   get S() { return S; },
@@ -530,7 +530,7 @@ function clearConflicts(n, name) {
 
 // Set/clear one effect flag on every selected edit note. Replaces the fx object
 // (never mutates it) so the {...n} undo snapshots taken earlier stay intact.
-export function setFxOnSelection(key, on) {
+function setFxOnSelection(key, on) {
   const notes = [...S.selection].filter((n) => laneOf(n));
   if (!notes.length) return;
   const prev = snapshotEdit();
@@ -572,13 +572,13 @@ export function markSelectionAsMotif() {
   return true;
 }
 
-export function selectEntireMotif() {
+function selectEntireMotif() {
   const member = [...S.selection].find(note => note.motifId && laneOf(note));
   if (!member) return;
   setSelection(new Set(motifGroups(laneOf(member).notes).get(member.motifId) || [])); draw();
 }
 
-export function unmarkSelectedMotifs() {
+function unmarkSelectedMotifs() {
   const previous = snapshotEdit();
   for (const note of S.selection) {
     const lane = laneOf(note);
@@ -588,7 +588,7 @@ export function unmarkSelectedMotifs() {
 }
 
 // ---- grip shapes: Rocksmith arpeggio and handshape frames (shapes.js) ----
-export function markSelectionAsShape(kind) {
+function markSelectionAsShape(kind) {
   const selected = [...S.selection].filter(note => laneOf(note));
   const lanes = [...new Set(selected.map(laneOf))];
   if (lanes.length !== 1 || !canEditLane(lanes[0])) return false;
@@ -607,7 +607,7 @@ function selectEntireShape(kind = null) {
   setSelection(new Set(notes)); draw();
 }
 
-export function unmarkSelectedShapes(kind = null) {
+function unmarkSelectedShapes(kind = null) {
   const previous = snapshotEdit();
   let changed = false;
   for (const note of S.selection) {

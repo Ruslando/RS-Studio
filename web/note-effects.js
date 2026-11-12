@@ -71,7 +71,7 @@ export const FX_GLYPHS = { hammer: "H", palmMute: "PM", ghost: "( )", letRing: "
 
 export const HARMONIC_TAG = { natural: "◎", pinch: "Pnch. harm.", artificial: "Art. harm." };
 
-export const SLAP_TAG = { tap: "tap", slap: "slap", pop: "pop" };
+const SLAP_TAG = { tap: "tap", slap: "slap", pop: "pop" };
 
 // The compact text marks drawn above a note. Slide, bend and harmonic have their
 // own shape renderers; everything else appears here as a tag.
@@ -102,7 +102,7 @@ export function noteMarks(n) {
 
 const hasNoteEffects = (n) => !!(n.slide || n.slideIn || n.bend || n.whammy || n.harmonic || noteMarks(n).length);
 
-export const cloneFx = (fx) => (fx ? { ...fx } : undefined);
+const cloneFx = (fx) => (fx ? { ...fx } : undefined);
 
 const cloneArrangement = (arrangement) => {
   if (!arrangement) return undefined;

@@ -514,7 +514,7 @@ const hasPlayableFingering = (shape, profile = GUITAR_HAND_PROFILE) => fingering
 // stretched to fret 8 from a hand at 4 (which would have to start on fret 4 with
 // the pinky, under the index). The seat returned is still the landing's.
 // Only when every fretted note slides in by the same amount (a whole grip sliding in).
-export function slideInOffset(shape) {
+function slideInOffset(shape) {
   const fretted = [...shape].filter(([, pos]) => pos.fret > 0);
   const offsets = new Set(fretted.map(([note, pos]) => slideInOf(note) ? edgeSlideSpan(note, pos.fret, slideInOf(note)) : 0));
   return offsets.size === 1 ? [...offsets][0] : 0;
@@ -594,7 +594,7 @@ export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infi
 // other fretted note, with the next string left out (its tip mutes it): EOF's
 // thumb shapes, D/F# 2x0232 and the E-shape 1x3211. The other notes are fingered
 // as usual, and the hand is theirs.
-export function thumbPoses(shape, profile = GUITAR_HAND_PROFILE) {
+function thumbPoses(shape, profile = GUITAR_HAND_PROFILE) {
   const loose = looseIn(shape), fretted = [...shape].filter(([note, p]) => p.fret > 0 && !loose(note));
   const low = fretted.find(([, p]) => p.string === profile.stringCount - 1);
   if (!low || fretted.length < 2 || [...shape.values()].some((p) => p.string === profile.stringCount - 2)) return [];
@@ -843,7 +843,7 @@ export function assignFingers(shape, profile = GUITAR_HAND_PROFILE) {
 // The notes of a column whose own `pos` is still a real place for them: in range,
 // sounding the note's pitch, and on a string no earlier note of the column took. A
 // pin left stale by a later pitch edit simply lapses instead of corrupting the tab.
-export function pinnedPositions(notes, tuning) {
+function pinnedPositions(notes, tuning) {
   const shape = new Map();
   const usedStrings = new Set();
   for (const n of notes) {
@@ -1163,7 +1163,7 @@ export function columnShapeChoices(notes, tuning, cap = SHAPES_PER_COL) {
 // Build playable guitar realizations of a chord formula rather than preserving
 // the source pitches. Used by the non-destructive "playable alternative" UI:
 // every pitch class must occur at least once; extra strings duplicate tones.
-export function chordArrangementChoices(pcs, root, count, tuning, sourcePitches = [], cap = SHAPES_PER_COL) {
+function chordArrangementChoices(pcs, root, count, tuning, sourcePitches = [], cap = SHAPES_PER_COL) {
   const profile = handProfileForTuning(tuning);
   const wanted = new Set(pcs.map((p) => ((p % 12) + 12) % 12));
   if (!wanted.size || count < wanted.size || count > tuning.length) return [];
@@ -1924,7 +1924,7 @@ function handOfFingers(shape, fingers, profile) {
 // Every entry point below goes through here, so this is the one place the engine
 // is named. `registerColumns` is that engine: a register per bar, and each note on
 // the string that lands nearest it. See its section at the foot of this file.
-export function voiceColumns(columns, tuning, options = {}) {
+function voiceColumns(columns, tuning, options = {}) {
   const grips = shapeGrips(columns, tuning, options);
   return registerColumns(columns, tuning, grips ? { ...options, grips } : options);
 }
@@ -2780,6 +2780,74 @@ function rememberAhead(tuning, columns, start, registers, memory, stand, directe
     : { out: fitAtRegister(tuning, c.pitches, T, opts), g: stand };
 }
 
+// Keep every per-pitch constraint aligned while sorting a column once.
+function sortedRegisterColumn(c) {
+  const idx = c.pitches.map((_, i) => i).sort((a, b) => c.pitches[a] - c.pitches[b]);
+  return {
+    idx, t0: c.t0, end: c.end, hold: c.hold, handAt: c.handAt ?? null, cut: !!c.cut, soft: !!c.soft, aside: !!c.aside,
+    guided: !!c.guided,
+    pitches: idx.map((i) => c.pitches[i]),
+    fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
+    shadow: c.shadow ? idx.map((i) => c.shadow[i]) : null,
+    decided: c.decided ? idx.map((i) => c.decided[i]) : null, steer: !!c.steer,
+    pinned: c.pinned ? idx.map((i) => c.pinned[i]) : null,
+    rules: c.rules ? idx.map((i) => c.rules[i]) : null,
+    dead: c.dead ? idx.map((i) => c.dead[i]) : null,
+  };
+}
+
+function priceRegisterShapes(tuning, c, T, shapes, memory, stand, span, maxFret) {
+  return shapes.map(given => {
+    const assignment = c.idx.map(k => given[k]);
+    const got = priceAssignment(tuning, c.pitches, assignment, T, null, span, maxFret);
+    if (!got) return null;
+    const fretted = assignment.map((s, k) => c.rules?.[k]?.free || c.dead?.[k] ? 0 : c.pitches[k] - tuning[s]).filter(f => f > 0);
+    const lo = Math.max(1, Math.max(...fretted, 1) - span + 1);
+    const hi = Math.min(handCeiling(maxFret), Math.min(...fretted, handCeiling(maxFret)));
+    const target = Math.max(lo, Math.min(hi, stand ?? lo));
+    return { ...got, cost: got.cost * MEMORY_REGISTER_WEIGHT
+      + memoryShiftCost(stand, target) - rememberedBonus(memory, c, assignment) };
+  });
+}
+
+// Draw the hand from the placement that was actually chosen, including relaxed
+// dead/tapped notes and authored anchors that still fit the resulting grip.
+function writeRegisterSeats(seats, tuning, sorted, strings, stood, registers, blocks, span) {
+  const n = sorted.length;
+  const named = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) if (stood[i] != null) named[i] = stood[i];
+  const loose = new Array(n).fill(null);
+  const reach = sorted.map((c, i) => {
+    let lo = Infinity, hi = -Infinity, llo = Infinity, lhi = -Infinity;
+    const at = [], on = [];
+    for (let k = 0; k < c.pitches.length; k++) {
+      const s = strings[i][k];
+      if (s < 0) continue;
+      const f = c.pitches[k] - tuning[s];
+      // A tapped note is the other hand's, and an open string is nobody's. A muted
+      // one is the hand relaxing where it already is: its fret is whatever the
+      // tab wrote down (an imported scratch says 22 beside a 3), not a reach. Its
+      // fret only says which neighbouring hand it sits under (`loose`, planHand).
+      if ((c.rules && c.rules[k] && c.rules[k].free) || c.dead?.[k]) {
+        if (f > 0) { llo = Math.min(llo, f); lhi = Math.max(lhi, f); }
+        continue;
+      }
+      if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); at.push(f); on.push(s); }
+    }
+    if (Number.isFinite(llo)) loose[i] = { lo: llo, hi: lhi };
+    return Number.isFinite(lo) ? { lo, hi, at, on } : null;
+  });
+  const maxReach = handReach(handProfileForTuning(tuning));
+  // The player's hand, where it can play what is there; otherwise it has lapsed.
+  sorted.forEach((c, i) => {
+    const g = c.handAt, r = reach[i];
+    if (g != null && r && g >= 1 && g <= r.lo && r.hi - g < maxReach) named[i] = g;
+  });
+  const fingerCost = handProfileForTuning(tuning).id.startsWith(BASS_HAND_PROFILE.id) ? FINGER_COST : null;
+  const planned = planHand(reach, named, span, maxReach, sorted, fingerCost, loose);
+  for (let i = 0; i < n; i++) seats[i] = planned[i] ?? Math.max(1, registers[blocks.findIndex((idx) => idx.includes(i))] || 1);
+}
+
 /**
  * @param tuning  open-string MIDI pitches, physical order, index 0 = fattest
  *                string. Standard guitar is [40,45,50,55,59,64].
@@ -2820,20 +2888,7 @@ function voiceRegister(tuning, columns, span = SPAN, seats = null, bars = null, 
   if (!n) return [];
 
   // Sort each column once; placement walks it lowest pitch first.
-  const sorted = columns.map((c) => {
-    const idx = c.pitches.map((_, i) => i).sort((a, b) => c.pitches[a] - c.pitches[b]);
-    return {
-      idx, t0: c.t0, end: c.end, hold: c.hold, handAt: c.handAt ?? null, cut: !!c.cut, soft: !!c.soft, aside: !!c.aside,
-      guided: !!c.guided,
-      pitches: idx.map((i) => c.pitches[i]),
-      fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
-      shadow: c.shadow ? idx.map((i) => c.shadow[i]) : null,
-      decided: c.decided ? idx.map((i) => c.decided[i]) : null, steer: !!c.steer,
-      pinned: c.pinned ? idx.map((i) => c.pinned[i]) : null,
-      rules: c.rules ? idx.map((i) => c.rules[i]) : null,
-      dead: c.dead ? idx.map((i) => c.dead[i]) : null,
-    };
-  });
+  const sorted = columns.map(sortedRegisterColumn);
 
   const { blocks, bar } = blocksOf(sorted, bars);
   // WHERE THE LANE LIVES is measured on bars alone. A hold splits the bar it lands
@@ -2867,17 +2922,7 @@ function voiceRegister(tuning, columns, span = SPAN, seats = null, bars = null, 
     }
     const T = directed && stand != null ? stand + ((span - 1) >> 1) : registerAt[i];
     if (price && price.index === i) {
-      price.out = price.shapes.map(given => {
-        const assignment = c.idx.map(k => given[k]);
-        const got = priceAssignment(tuning, c.pitches, assignment, T, null, span, maxFret);
-        if (!got) return null;
-        const fretted = assignment.map((s, k) => c.rules?.[k]?.free || c.dead?.[k] ? 0 : c.pitches[k] - tuning[s]).filter(f => f > 0);
-        const lo = Math.max(1, Math.max(...fretted, 1) - span + 1);
-        const hi = Math.min(handCeiling(maxFret), Math.min(...fretted, handCeiling(maxFret)));
-        const target = Math.max(lo, Math.min(hi, stand ?? lo));
-        return { ...got, cost: got.cost * MEMORY_REGISTER_WEIGHT
-          + memoryShiftCost(stand, target) - rememberedBonus(memory, c, assignment) };
-      });
+      price.out = priceRegisterShapes(tuning, c, T, price.shapes, memory, stand, span, maxFret);
     }
     // An override "only here" is planned around as the placement it replaced.
     const plan = c.aside && c.shadow ? Object.assign(sorted.slice(), { [i]: { ...c, fixed: c.shadow, aside: false } }) : sorted;
@@ -2904,40 +2949,7 @@ function voiceRegister(tuning, columns, span = SPAN, seats = null, bars = null, 
   // The hand the board draws. The register is a centroid, not a finger — an
   // asymmetric cost that treated it as the index measured ten points worse — so the
   // anchor is read back off what was actually played. See planHand.
-  if (seats) {
-    const named = new Array(n).fill(null);
-    for (let i = 0; i < n; i++) if (stood[i] != null) named[i] = stood[i];
-    const loose = new Array(n).fill(null);
-    const reach = sorted.map((c, i) => {
-      let lo = Infinity, hi = -Infinity, llo = Infinity, lhi = -Infinity;
-      const at = [], on = [];
-      for (let k = 0; k < c.pitches.length; k++) {
-        const s = strings[i][k];
-        if (s < 0) continue;
-        const f = c.pitches[k] - tuning[s];
-        // A tapped note is the other hand's, and an open string is nobody's. A muted
-        // one is the hand relaxing where it already is: its fret is whatever the
-        // tab wrote down (an imported scratch says 22 beside a 3), not a reach. Its
-        // fret only says which neighbouring hand it sits under (`loose`, planHand).
-        if ((c.rules && c.rules[k] && c.rules[k].free) || c.dead?.[k]) {
-          if (f > 0) { llo = Math.min(llo, f); lhi = Math.max(lhi, f); }
-          continue;
-        }
-        if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); at.push(f); on.push(s); }
-      }
-      if (Number.isFinite(llo)) loose[i] = { lo: llo, hi: lhi };
-      return Number.isFinite(lo) ? { lo, hi, at, on } : null;
-    });
-    const maxReach = handReach(handProfileForTuning(tuning));
-    // The player's hand, where it can play what is there; otherwise it has lapsed.
-    sorted.forEach((c, i) => {
-      const g = c.handAt, r = reach[i];
-      if (g != null && r && g >= 1 && g <= r.lo && r.hi - g < maxReach) named[i] = g;
-    });
-    const fingerCost = handProfileForTuning(tuning).id.startsWith(BASS_HAND_PROFILE.id) ? FINGER_COST : null;
-    const planned = planHand(reach, named, span, maxReach, sorted, fingerCost, loose);
-    for (let i = 0; i < n; i++) seats[i] = planned[i] ?? Math.max(1, registers[blocks.findIndex((idx) => idx.includes(i))] || 1);
-  }
+  if (seats) writeRegisterSeats(seats, tuning, sorted, strings, stood, registers, blocks, span);
 
   return sorted.map((c, i) => {
     const out = new Array(c.idx.length);

@@ -19,7 +19,7 @@ export const UPLOAD_ARROW_ICON = `<svg width="18" height="18" viewBox="0 0 24 24
 // button next to a cover or a file. One mark for both, because they are the same
 // gesture at two scales, and the button around it is what says which.
 // aria-hidden — the button carries the name, not the glyph.
-export const CLOSE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+const CLOSE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 // Shared 24-unit outline family, sized by the control's role.
 const OUTLINE = {
   plus: '<path d="M12 5v14M5 12h14"/>',

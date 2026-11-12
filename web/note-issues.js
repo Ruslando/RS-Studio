@@ -39,14 +39,14 @@ const GP_ONLY_TEXT = {
 
 // Editor effects the Rocksmith chart leaves out, having nothing to show them with
 // (rocksmith/chart.py). A whammy, a trill and a grace note it imitates instead.
-export const DROPPED_TEXT = {
+const DROPPED_TEXT = {
   ghost: ["Rocksmith: Ghost note not supported", "Rocksmith cannot show the quiet dynamics of this note."],
   staccato: ["Rocksmith: Staccato not supported", "Rocksmith has no staccato notation. Shorten the note to represent the short sound."],
   letRing: ["Rocksmith: Let ring not supported", "Rocksmith has no let-ring notation. Extend the note to represent how long it sounds."],
   strum: ["Rocksmith: Strum direction not supported", "Rocksmith has no strum-direction notation. It shows the chord without the picking direction."],
 };
 
-export const droppedEffects = (n) => [
+const droppedEffects = (n) => [
   ...["staccato", "letRing"].filter((key) => n.fx?.[key])];
 
 const ADAPTED_TEXT = {

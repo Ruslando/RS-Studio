@@ -70,7 +70,7 @@ export const GUITAR = {
   doubleDots: [12],
 };
 
-export const ACOUSTIC = {
+const ACOUSTIC = {
   name: "Acoustic guitar",
   // Martin dreadnought, the shape everything else copies. Everything here is off
   // the D-28 spec sheet.
@@ -112,7 +112,7 @@ export const ACOUSTIC = {
   doubleDots: [],
 };
 
-export const BASS = {
+const BASS = {
   name: "Bass guitar",
   // Fender Jazz Bass. The 34" scale is the same one the voicing engine's
   // BASS_HAND_PROFILE already uses, so the drawn neck and the cost model agree
@@ -148,7 +148,7 @@ export const BASS = {
 // either side. It was four to three while one field named both the guitar and its
 // sound, and `guitar` and `guitar_dist` pointing at one object was that field's
 // duplication showing through here.
-export const FRETBOARDS = { electric: GUITAR, acoustic: ACOUSTIC, bass: BASS };
+const FRETBOARDS = { electric: GUITAR, acoustic: ACOUSTIC, bass: BASS };
 // An unknown or absent instrument draws the electric, which is what instrKey() also
 // falls back to. A lane must never leave the panel with no neck on it.
 export const fretboardFor = (instrument) => FRETBOARDS[instrument] || GUITAR;
@@ -494,8 +494,8 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
 // Releases remain at their last played position for a short, smooth fade.
 // Keep this out of the paused/editing view, where travel is zero. A played
 // marker goes quicker (MARK_FADE_SECONDS) than its string settles.
-export const MARK_RELEASE_SECONDS = 0.18;
-export const MARK_FADE_SECONDS = 0.08;
+const MARK_RELEASE_SECONDS = 0.18;
+const MARK_FADE_SECONDS = 0.08;
 export function handAt(columns, t, travel, s = GUITAR, animate = true) {
   if (!animate) {
     const col = columns[startedBy(columns, t)];

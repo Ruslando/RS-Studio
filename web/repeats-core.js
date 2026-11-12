@@ -242,17 +242,9 @@ function extend(events, i, j, allowed = () => true) {
   return best === forward ? [best] : [forward, best];
 }
 
-export function findRepeats(notes, beatAt = t => t) {
-  const pulse = pulsePassages(notes, beatAt);
-  if (pulse) return pulse;
-  const events = onsetEvents(notes, beatAt), candidates = [];
-  const structure = passageStructure(events, beatAt);
-  const structured = events.filter(e => e.notes.length >= 3).length >= events.length / 2;
-  const boundaries = new Set(structure.blocks.flatMap(b => [b.from, b.to]));
-  const inRegion = index => structured && structure.regions.some(r => index >= r.from && index < r.to);
-  const allowed = (i, j, a, b) => [i, j].every(k => !inRegion(k) || boundaries.has(k)) &&
-    [a, b].every(k => !inRegion(k - 1) || boundaries.has(k));
-  const eventOf = new Map(events.flatMap((event, i) => event.notes.map(note => [note, i])));
+// Matching onset candidates retain pitch-index and suffix insertion order.
+function indexRepeatCandidates(events, allowed) {
+  const candidates = [];
   // The pitch-class index includes octave variants. Keep suffix starts too:
   // different phrase boundaries must compete before any notes are claimed.
   const byPitch = new Map();
@@ -275,34 +267,12 @@ export function findRepeats(notes, beatAt = t => t) {
     if (!byStart.has(c.i)) byStart.set(c.i, []);
     byStart.get(c.i).push(c);
   }
+  return byStart;
+}
+
+// Let alternative phrase lengths compete before claiming any of their notes.
+function planRepeatCandidates(events, byStart, passagePlan) {
   const plans = [], planKeys = new Set();
-  const phraseLike = copy => {
-    const indices = [...new Set(copy.notes.map(e => eventOf.get(e.note)))];
-    if (indices.length < MIN_PHRASE_ONSETS) return false;
-    if (new Set(indices.map(i => events[i].pitchKey)).size > 1) return true;
-    if (structured && indices.every(i => events[i].notes.length >= 3)) return false;
-    const gap = events[indices[1]].beat - events[indices[0]].beat;
-    return indices.slice(2).some((i, k) => Math.abs(events[i].beat - events[indices[k + 1]].beat - gap) > BEAT_TOL);
-  };
-  const passagePlan = spans => {
-    const bounded = boundRepeat({ copies: spans.map(span => copyOf(events, ...span)) });
-    if (!bounded || bounded.copies.some(copy => !phraseLike(copy))) return null;
-    // Chord-based regions may be cut between harmonic blocks, never halfway
-    // through one strumming/picking pattern merely because a suffix matches.
-    if (bounded.copies.some(copy => {
-      const from = eventOf.get(copy.notes[0].note), to = eventOf.get(copy.notes.at(-1).note) + 1;
-      return (inRegion(from) && !boundaries.has(from)) || (inRegion(to - 1) && !boundaries.has(to));
-    })) return null;
-    const first = bounded.copies[0];
-    const savings = bounded.copies.slice(1).reduce((score, copy) => {
-      const matches = attackEvidence(first.notes, copy.notes);
-      const { pairs, substitutions } = alignPassages(first.notes, copy.notes);
-      const aligned = new Set([...pairs, ...substitutions].map(([note]) => eventOf.get(note))).size;
-      return score + matches + .25 * (aligned - matches) - .25 * (Math.max(attackCount(first.notes), attackCount(copy.notes)) - aligned);
-    }, 0);
-    return { spans: bounded.copies.map(copy => [eventOf.get(copy.notes[0].note), eventOf.get(copy.notes.at(-1).note) + 1]),
-      count: bounded.copies.reduce((sum, copy) => sum + attackCount(copy.notes), 0), savings };
-  };
   for (const seeds of byStart.values()) {
     seeds.sort((a, b) => a.j - b.j);
     const lengths = new Set();
@@ -336,16 +306,10 @@ export function findRepeats(notes, beatAt = t => t) {
       if (plan) plans.push(plan);
     }
   }
-  const out = [];
-  for (const plan of choosePassages(plans, passagePlan)) {
-    const model = copyOf(events, ...plan.spans[0]);
-    const members = plan.spans.map(span => ({ span, copy: copyOf(events, ...span) })).filter(({ copy }) =>
-      attackEvidence(model.notes, copy.notes) / Math.max(attackCount(model.notes), attackCount(copy.notes)) >= REPEAT_SIMILARITY);
-    if (members.length < 2) continue;
-    const bounded = boundRepeat({ copies: members.map(m => m.copy) });
-    if (!bounded || bounded.copies.some(copy => !phraseLike(copy))) continue;
-    out.push(bounded);
-  }
+  return plans;
+}
+
+function includeSingletonPassages(out, events, structure, structured, eventOf) {
   // A coherent, substantial region is a passage even without another copy.
   // Prefer it whole when repeats only explain a minority of its attacks. A
   // handful of recycled chords must not turn a unique progression into scraps.
@@ -364,6 +328,59 @@ export function findRepeats(notes, beatAt = t => t) {
     }
     for (const region of singletons) out.push({ copies: [copyOf(events, region.from, region.to)] });
   }
+}
+
+export function findRepeats(notes, beatAt = t => t) {
+  const pulse = pulsePassages(notes, beatAt);
+  if (pulse) return pulse;
+  const events = onsetEvents(notes, beatAt);
+  const structure = passageStructure(events, beatAt);
+  const structured = events.filter(e => e.notes.length >= 3).length >= events.length / 2;
+  const boundaries = new Set(structure.blocks.flatMap(b => [b.from, b.to]));
+  const inRegion = index => structured && structure.regions.some(r => index >= r.from && index < r.to);
+  const allowed = (i, j, a, b) => [i, j].every(k => !inRegion(k) || boundaries.has(k)) &&
+    [a, b].every(k => !inRegion(k - 1) || boundaries.has(k));
+  const eventOf = new Map(events.flatMap((event, i) => event.notes.map(note => [note, i])));
+  const byStart = indexRepeatCandidates(events, allowed);
+  const phraseLike = copy => {
+    const indices = [...new Set(copy.notes.map(e => eventOf.get(e.note)))];
+    if (indices.length < MIN_PHRASE_ONSETS) return false;
+    if (new Set(indices.map(i => events[i].pitchKey)).size > 1) return true;
+    if (structured && indices.every(i => events[i].notes.length >= 3)) return false;
+    const gap = events[indices[1]].beat - events[indices[0]].beat;
+    return indices.slice(2).some((i, k) => Math.abs(events[i].beat - events[indices[k + 1]].beat - gap) > BEAT_TOL);
+  };
+  const passagePlan = spans => {
+    const bounded = boundRepeat({ copies: spans.map(span => copyOf(events, ...span)) });
+    if (!bounded || bounded.copies.some(copy => !phraseLike(copy))) return null;
+    // Chord-based regions may be cut between harmonic blocks, never halfway
+    // through one strumming/picking pattern merely because a suffix matches.
+    if (bounded.copies.some(copy => {
+      const from = eventOf.get(copy.notes[0].note), to = eventOf.get(copy.notes.at(-1).note) + 1;
+      return (inRegion(from) && !boundaries.has(from)) || (inRegion(to - 1) && !boundaries.has(to));
+    })) return null;
+    const first = bounded.copies[0];
+    const savings = bounded.copies.slice(1).reduce((score, copy) => {
+      const matches = attackEvidence(first.notes, copy.notes);
+      const { pairs, substitutions } = alignPassages(first.notes, copy.notes);
+      const aligned = new Set([...pairs, ...substitutions].map(([note]) => eventOf.get(note))).size;
+      return score + matches + .25 * (aligned - matches) - .25 * (Math.max(attackCount(first.notes), attackCount(copy.notes)) - aligned);
+    }, 0);
+    return { spans: bounded.copies.map(copy => [eventOf.get(copy.notes[0].note), eventOf.get(copy.notes.at(-1).note) + 1]),
+      count: bounded.copies.reduce((sum, copy) => sum + attackCount(copy.notes), 0), savings };
+  };
+  const plans = planRepeatCandidates(events, byStart, passagePlan);
+  const out = [];
+  for (const plan of choosePassages(plans, passagePlan)) {
+    const model = copyOf(events, ...plan.spans[0]);
+    const members = plan.spans.map(span => ({ span, copy: copyOf(events, ...span) })).filter(({ copy }) =>
+      attackEvidence(model.notes, copy.notes) / Math.max(attackCount(model.notes), attackCount(copy.notes)) >= REPEAT_SIMILARITY);
+    if (members.length < 2) continue;
+    const bounded = boundRepeat({ copies: members.map(m => m.copy) });
+    if (!bounded || bounded.copies.some(copy => !phraseLike(copy))) continue;
+    out.push(bounded);
+  }
+  includeSingletonPassages(out, events, structure, structured, eventOf);
   return out.sort((a, b) => a.copies[0].notes[0].note.start - b.copies[0].notes[0].note.start);
 }
 

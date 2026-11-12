@@ -698,8 +698,9 @@ function rebuildVoice(alphaTab, staff, barIndex, voiceIndex, allItems, tuning, s
   }
 }
 
-function planLane(score, staff, lane, points, bounds, rebuildAll = false) {
-  const { byId, origins } = sourceNotes(staff), items = [];
+// Interpret edited seconds once, retaining exact source ticks at unchanged edges.
+function projectedLaneItems(lane, points, bounds) {
+  const items = [];
   const scoreEnd = bounds[bounds.length - 1]?.end || 0;
   for (const projected of lane.notes) {
     const rawStart = secondsToTick(projected.start, points), rawEnd = secondsToTick(projected.end, points);
@@ -715,7 +716,11 @@ function planLane(score, staff, lane, points, bounds, rebuildAll = false) {
     const grace = gp?.graceType && startTick === gp.startTick && endTick === gp.endTick ? gp.graceType : 0;
     items.push({ projected, startTick, endTick, string: Number(projected.pos.string), grace, points });
   }
-  const assignments = chooseVoices(items), affected = new Set();
+  return items;
+}
+
+// Grace runs borrow sounding time without changing their written attachment.
+function attachLaneGraces(items, assignments) {
   // A grace note takes its time in playback only: before the beat from the note
   // before it, which is written on to the beat; on the beat from the note it leads
   // into, which is written from the beat. `attach` is the beat it is written at.
@@ -735,6 +740,10 @@ function planLane(score, staff, lane, points, bounds, rebuildAll = false) {
       if (onBeat && item.startTick === last) item.writtenFrom = first;
     }
   }
+}
+
+// Removing a tied origin invalidates every source voice its chain occupied.
+function markRemovedLaneVoices(origins, items, affected) {
   const currentIds = new Set(items.map((item) => item.projected.gp?.noteId).filter(Number.isFinite));
   for (const origin of origins) if (!currentIds.has(origin.id)) {
     let tail = origin, guard = 0;
@@ -743,6 +752,10 @@ function planLane(score, staff, lane, points, bounds, rebuildAll = false) {
       tail = tail.isTieOrigin ? tail.tieDestination : null;
     }
   }
+}
+
+// Changed notes invalidate both their former and current bar/voice spans.
+function markChangedLaneVoices(items, assignments, bounds, rebuildAll, affected) {
   for (const item of items) {
     const gp = item.projected.gp, assigned = assignments.get(item.projected);
     const changed = rebuildAll || !gp || Math.abs(item.startTick - gp.startTick) > 1 || Math.abs(item.endTick - gp.endTick) > 1 || assigned !== gp.voice
@@ -754,6 +767,15 @@ function planLane(score, staff, lane, points, bounds, rebuildAll = false) {
       for (const bar of barsOverlapping(bounds, item.startTick, item.endTick)) affected.add(`${bar}:${assigned}`);
     }
   }
+}
+
+function planLane(score, staff, lane, points, bounds, rebuildAll = false) {
+  const { byId, origins } = sourceNotes(staff);
+  const items = projectedLaneItems(lane, points, bounds);
+  const assignments = chooseVoices(items), affected = new Set();
+  attachLaneGraces(items, assignments);
+  markRemovedLaneVoices(origins, items, affected);
+  markChangedLaneVoices(items, assignments, bounds, rebuildAll, affected);
   return { byId, items, assignments, affected };
 }
 

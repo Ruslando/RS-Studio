@@ -4940,6 +4940,43 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#appshell")).to_be_visible()
         notes(2)
 
+    def test_project_restore_migrates_sections_and_repairs_ids_without_audio(self):
+        self.open_reference_project()
+        got = self.page.evaluate('''async () => {
+            const {S} = await import('/store.js');
+            const {applyProject, saveToServer} = await import('/project.js');
+            const data = await (await fetch(`/api/projects/${S.state.job}`)).json();
+            const pitches = data.editLanes.flatMap(lane => lane.notes.map(n => [n.start, n.end, n.pitch]));
+            const count = data.editLanes.flatMap(lane => lane.notes).length;
+            data.stems = [];
+            data.sectionMarkers = [];
+            for (const lane of data.editLanes) {
+                lane.active = false;
+                lane.sectionMarkers = [
+                    {id:'old-verse-a', t:1, text:'Verse', sectionType:'verse'},
+                    {id:'old-verse-b', t:1, text:'Verse', sectionType:'verse'}];
+            }
+            data.editLanes[0].notes[1].id = data.editLanes[0].notes[0].id;
+            await applyProject(data);
+            await saveToServer();
+            const restored = await (await fetch(`/api/projects/${S.state.job}`)).json();
+            const notes = restored.editLanes.flatMap(lane => lane.notes);
+            return {count, restoredCount:notes.length, uniqueIds:new Set(notes.map(n => n.id)).size,
+                pitches, restoredPitches:notes.map(n => [n.start, n.end, n.pitch]),
+                verses:restored.sectionMarkers.filter(m => m.text === 'Verse' && m.t === 1).length,
+                active:restored.editLanes.filter(lane => lane.active).map(lane => lane.id),
+                firstLane:restored.editLanes[0].id, stems:S.state.stems.length,
+                warnings:document.getElementById('warnings').textContent};
+        }''')
+        self.assertGreater(got['count'], 1)
+        self.assertEqual(got['restoredCount'], got['count'])
+        self.assertEqual(got['uniqueIds'], got['count'])
+        self.assertEqual(got['restoredPitches'], got['pitches'])
+        self.assertEqual(got['verses'], 1)
+        self.assertEqual(got['active'], [got['firstLane']])
+        self.assertEqual(got['stems'], 0)
+        self.assertIn('Repaired 1 duplicate id', got['warnings'])
+
     def test_project_start_translates_all_timings_and_locked_references(self):
         self.open_reference_project()
         page = self.page

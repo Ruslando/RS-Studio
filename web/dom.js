@@ -15,8 +15,11 @@ export function clearArriving(container) {
   }));
 }
 export const form = $("form"), fileInput = $("file");
-export const goBtn = $("go"), statusEl = $("status"), warnEl = $("warnings");
-export const transport = $("transport"), appshell = $("appshell");
+export const goBtn = $("go");
+const statusEl = $("status");
+export const warnEl = $("warnings");
+const transport = $("transport");
+export const appshell = $("appshell");
 export const lanesEl = $("lanes");
 export const stemTabsEl = $("stemTabs");
 export const detectModelSel = $("detectModel"), detectBtn = $("detectBtn");
@@ -44,7 +47,9 @@ export const openProjBackdrop = $("openProjBackdrop"), openProjList = $("openPro
 export const newProjBtn = $("newProj");
 export const tabViewBackdropEl = $("tabViewBackdrop"), tabViewCloseEl = $("tabViewClose"), editorEl = $("editor");
 export const tabWarnEl = $("tabWarn"), tabRenderEl = $("tabRender"), tabScrollEl = $("tabScroll");
-export const fretboardPanel = $("fretboardPanel"), fretboardEl = $("fretboard"), fretboardToggle = $("fretboardToggle");
+export const fretboardPanel = $("fretboardPanel");
+export const fretboardEl = $("fretboard");
+const fretboardToggle = $("fretboardToggle");
 export const fretboardBusy = $("fretboardBusy"), fretboardBusyLabel = $("fretboardBusyLabel");
 export const fretboardStage = $("fretboardStage"), fretboardName = $("fretboardName");
 export const fretboardPin = $("fretboardPin"), fretboardAuto = $("fretboardAuto");
@@ -54,7 +59,8 @@ export const projTab = $("projTab"), projTabName = $("projTabName"), projDirtyDo
 export const welcome = $("welcome"), welcomeNewBtn = $("welcomeNew"), welcomeOpenBtn = $("welcomeOpen");
 export const welcomeGpBtn = $("welcomeGp");
 export const welcomeRecent = $("welcomeRecent"), recentListEl = $("recentList"), recentSearchEl = $("recentSearch"), recentCountEl = $("recentCount"), recentPaginationEl = $("recentPagination"), recentPrevBtn = $("recentPrev"), recentPageEl = $("recentPage"), recentNextBtn = $("recentNext"), welcomeVersion = $("welcomeVersion");
-export const fileMenuBtn = $("fileMenuBtn"), fileMenu = $("fileMenu");
+const fileMenuBtn = $("fileMenuBtn");
+const fileMenu = $("fileMenu");
 export const modalBackdrop = $("modalBackdrop");
 export const npDrop = $("npDrop"), npDropTitle = $("npDropTitle"), npDropSub = $("npDropSub"), npClear = $("npClear");
 export const stemsListEl = $("stemsList"), stemsAddEl = $("stemsAdd");
@@ -85,7 +91,8 @@ export const crowdEventCode = $("crowdEventCode"), crowdEventTime = $("crowdEven
 export const toneMarkerPop = $("toneMarkerPop"), toneMarkerPopClose = $("toneMarkerPopClose");
 export const toneMarkerPreset = $("toneMarkerPreset"), toneMarkerTime = $("toneMarkerTime");
 export const toneMarkerDelete = $("toneMarkerDelete");
-export const sctx = $("stage").getContext("2d"), rctx = $("ruler").getContext("2d");
+export const sctx = $("stage").getContext("2d");
+const rctx = $("ruler").getContext("2d");
 export const stage = $("stage"), ruler = $("ruler"), scroll = $("scroll"), viewer = $("viewer");
 export const rulerRight = $("rulerRight");
 export const stageSpacer = $("stageSpacer");
