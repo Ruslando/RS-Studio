@@ -3,7 +3,7 @@
 // text. One undoable step; an empty name returns to the engine's.
 import { setChordName } from "./chord-names.js";
 import { commit, snapshotEdit } from "./edit-history.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { draw } from "./repaint.js";
 
 // Name `chord` `text` as one undo step; the engine's own name clears a given one.

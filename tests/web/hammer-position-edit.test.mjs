@@ -24,7 +24,7 @@ try {
     './references.js': { lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop,
       boxOfNote: n => n?.id === locked ? { group: { locked: true } } : null },
     './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop },
-    './tracing.js': { clearMatches: noop }, './repaint.js': { draw: noop }, './project.js': { refreshSaveState: noop },
+    './tracing.js': { clearMatches: noop }, './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop },
     './tablature.js': { laneFretTuning: () => [43, 38, 33, 28], laneFretCount: () => 24, refreshTabIfOpen: noop },
     './voicing.js': { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, voiceNotes, voiceNotesFingered },
     './song-bars.js': { songBarStarts: () => [0, 4, 8] },

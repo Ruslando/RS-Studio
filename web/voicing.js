@@ -26,7 +26,6 @@ import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey }
 import { adjacentColumn } from './column-navigation.js';
 
 export * from "./voicing-core.js";
-export { analyzeChord, detectChord, PC_NAMES, pcName } from "./chords.js";
 
 // Live voicing state for one column: its current (sounding) shape, the ranked
 // playable shapes (easiest first), the current shape's rank, and whether it's

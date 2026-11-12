@@ -10,7 +10,7 @@ const S = { state: { duration: 10, stems: [], editLanes: [lane], lanes: [lane] }
 let hover = second, tab = false;
 const { doDelete } = await mockImport(new URL('../../web/edit.js', import.meta.url), {
     './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
-  './interaction.js': { hoveredStageNote: () => hover },
+  './stage-hit-test.js': { hoveredStageNote: () => hover },
   './store.js': { S }, './dom.js': { undoMI: null, redoMI: null },
   './lanes.js': { activeLane: () => lane, editLanes: () => [lane],
     canEditLane: lane => lane.visible && !lane.locked, refreshCounts: noop },
@@ -18,7 +18,7 @@ const { doDelete } = await mockImport(new URL('../../web/edit.js', import.meta.u
   './timing.js': { timingSnapshot: () => ({}), eachTiming: noop },
   './references.js': { lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop },
   './note-motion.js': { animateNoteChanges: noop }, './tracing.js': { clearMatches: noop },
-  './repaint.js': { draw: noop }, './project.js': { refreshSaveState: noop },
+  './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop },
   './tablature.js': { tabViewOn: () => tab }, './note-effects.js': { FX_KEYS: [] },
 }, { './util.js': true });
 

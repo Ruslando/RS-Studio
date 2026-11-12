@@ -7,7 +7,8 @@
 // lifecycle — the same reason tour.js listens for "cw-project-opened" instead of
 // being called by it.
 
-import { addStem, applyProject, confirmLeave, refreshSaveState, removeStem, selectStem, waitForProjectVisuals } from "./project.js";
+import { addStem, applyProject, confirmLeave, removeStem, selectStem, waitForProjectVisuals } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { loadWithScreen } from "./project-loading.js";
 import { nid } from "./ids.js";
 import { draw } from "./repaint.js";

@@ -16,7 +16,7 @@ import { normalizeToneMarkers } from "./tone-marker-core.js";
 import { activeLane } from "./lanes.js";
 import { playbackTime } from "./playback.js";
 import { toast } from "./notify.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { refreshTabIfOpen } from "./tablature.js";
 import { S, setSelection } from "./store.js";
 import { landMarkers, markerRange } from "./marker-clipboard-core.js";

@@ -9,7 +9,7 @@ import { pitchAt, timeAt, xOf, yOf } from './geometry.js';
 import { snap } from './grid.js';
 import { placeFloating } from './floating-position.js';
 import { registerEscapeLayer, ESC_DEPTH } from './escape-stack.js';
-import { refreshSaveState } from './project.js';
+import { refreshSaveState } from "./save-state.js";
 import { draw } from './repaint.js';
 import { PAINT } from './stage-paint.js';
 import { S } from './store.js';
@@ -17,11 +17,6 @@ import { S } from './store.js';
 const H = 20, MAX_W = 220;
 let rects = [], editing = null;
 
-export function normalizeComments(list) {
-  return (Array.isArray(list) ? list : [])
-    .filter(c => c && Number.isFinite(+c.t) && Number.isFinite(+c.pitch))
-    .map(c => ({ id: String(c.id || `comment_${Math.random().toString(36).slice(2)}`), t: +c.t, pitch: Math.round(+c.pitch), text: String(c.text || '') }));
-}
 const comments = () => (S.state.comments ||= []);
 const clampTime = t => Math.max(0, Math.min(Number(S.state.duration) || Infinity, snap(Math.max(0, t))));
 const toCanvas = (clientX, clientY) => {

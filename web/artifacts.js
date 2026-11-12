@@ -2,10 +2,10 @@
 import { $, audio, scroll } from "./dom.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
 import { snap } from "./grid.js";
-import { localXY } from "./interaction.js";
+import { localXY } from "./stage-hit-test.js";
 import { activateLane, activeLane, canEditLane, renderLanes } from "./lanes.js";
 import { seekPlayback } from "./playback.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { eachRefGroup, laneClock, noteBounds, notesInBox, occurrenceBox, overlapsRefBox, shiftOf, spanAt, toggleRefEditLock, toggleRefPitchLock } from "./references.js";
 import { toast } from "./notify.js";
 import { icon } from "./icons.js";

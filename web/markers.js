@@ -21,7 +21,7 @@ import { editLanes } from "./lanes.js";
 import { onLiveTiming, sectionsOnLiveTempo, SONG, withTiming } from "./timing.js";
 import { sectionMarkersChanged } from "./section-markers.js";
 import { gridDivLabelFor } from "./ui.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 
 export const MARK_H = 24;   // marker-flag band height (px), pinned to the viewport top
 

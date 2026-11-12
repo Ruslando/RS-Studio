@@ -12,7 +12,7 @@ import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { MARK_H } from "./markers.js";
 import { inRailBand, isMarkerSelected, railBand, registerMarkerRail, setRailOrigin } from "./marker-rails.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import {
   SECTION_GROUPS, SECTION_HELP, normalizeSectionMarkers, sectionTypeLabel,
   validSectionType,

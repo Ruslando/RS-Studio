@@ -12,7 +12,7 @@ import { onLiveTiming, sectionsOnLiveTempo } from "./timing.js";
 
 // The layers the live grid belongs to; a layer with its own timing is not moved by it.
 const timedLanes = () => editLanes().filter(onLiveTiming);
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { S } from "./store.js";
 import { projectStart } from "./project-position-core.js";
 import { autoGridStep } from './auto-grid.js';

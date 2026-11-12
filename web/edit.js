@@ -7,7 +7,7 @@ import { isTablatureLane } from "./layer-role.js";
 // override, and the right-click note context menu.
 
 import { wireContextSubmenu } from "./context-submenu.js";
-import { hoveredStageNote } from "./interaction.js";
+import { hoveredStageNote } from "./stage-hit-test.js";
 import { whammyCurve, whammyKind } from "./whammy.js";
 import { MAX_POINTS, SLIDE_END_MIN, SLIDE_IN, SLIDE_OUT, SLIDES_TO_NEXT, SLIDE_START_MAX, bendAt, slideReach, bendCurve, normalizeCurve, slideInOf, vibratoStartOf, vibratoEndOf } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
@@ -28,7 +28,8 @@ import { ensureTone, isMasterStem, playbackTime, previewNotes, togglePlay } from
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { confirmStemRemoval } from "./stem-settings.js";
-import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem, toggleStemMute } from "./project.js";
+import { openProject, saveProject, selectStem, toggleStemMute } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, occurrenceNotes, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { SHAPE_KINDS, markShape, remintShapes, shapeGroups, unmarkShape } from "./shapes.js";

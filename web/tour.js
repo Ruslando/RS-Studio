@@ -974,28 +974,32 @@ function guard(e) {
     if (e.target.closest?.(step.freeApp)) return;
     return blockTourEvent(e);
   }
-  if (step?.until || step?.allowMenuInspect) {
-    const scoped = step.allow || step.allowSpot || step.allowMenu || step.allowKeys;
-    if (!scoped) return; // older chapters retain their existing open interaction
-    if (step.allow && e.target.closest?.(step.allow)) return;
-    if (step.allowKeys?.includes(e.key)) return;
-    if (step.allowMenu && menuItemLeadsTo(e.target.closest?.(".ctxmenu-item"), step.allowMenu)) return;
-    const allowedButtons = step.allowButtons || (step.allowButton === undefined ? null : [step.allowButton]);
-    const buttonMatches = !allowedButtons || allowedButtons.some((button) =>
-      e.type === "mousemove" ? !!(e.buttons & (1 << button)) : e.button === button);
-    if (step.allowSpot && e.target === stage && e.clientX !== undefined && buttonMatches) {
-      // The modifier is for the left button; a right-click on the same card opens the menu.
-      const modifier = e.button === 2 ? null : step.requireModifier;
-      if (modifier === "Shift" && !e.shiftKey) return blockTourEvent(e);
-      if (modifier === "Alt" && !e.altKey) return blockTourEvent(e);
-      if (modifier === "S" && !S.sliceHeld) return blockTourEvent(e);
-      const r = SPOTS[step.allowSpot]?.();
-      if (r && e.clientX >= r.left && e.clientX <= r.left + r.width &&
-          e.clientY >= r.top && e.clientY <= r.top + r.height) return;
-    }
-    return blockTourEvent(e);
-  }
+  if ((step?.until || step?.allowMenuInspect) && scopedTourEventAllowed(step, e)) return;
   blockTourEvent(e);
+}
+
+function scopedTourEventAllowed(step, e) {
+  const scoped = step.allow || step.allowSpot || step.allowMenu || step.allowKeys;
+  if (!scoped) return true; // older chapters retain their existing open interaction
+  if (step.allow && e.target.closest?.(step.allow)) return true;
+  if (step.allowKeys?.includes(e.key)) return true;
+  if (step.allowMenu && menuItemLeadsTo(e.target.closest?.(".ctxmenu-item"), step.allowMenu)) return true;
+  return tourSpotEventAllowed(step, e);
+}
+
+function tourSpotEventAllowed(step, e) {
+  const allowedButtons = step.allowButtons || (step.allowButton === undefined ? null : [step.allowButton]);
+  const buttonMatches = !allowedButtons || allowedButtons.some((button) =>
+    e.type === "mousemove" ? !!(e.buttons & (1 << button)) : e.button === button);
+  if (!step.allowSpot || e.target !== stage || e.clientX === undefined || !buttonMatches) return false;
+  // The modifier is for the left button; a right-click on the same card opens the menu.
+  const modifier = e.button === 2 ? null : step.requireModifier;
+  if (modifier === "Shift" && !e.shiftKey) return false;
+  if (modifier === "Alt" && !e.altKey) return false;
+  if (modifier === "S" && !S.sliceHeld) return false;
+  const r = SPOTS[step.allowSpot]?.();
+  return !!r && e.clientX >= r.left && e.clientX <= r.left + r.width &&
+    e.clientY >= r.top && e.clientY <= r.top + r.height;
 }
 
 function blockTourEvent(e) {

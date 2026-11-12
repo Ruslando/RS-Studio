@@ -23,7 +23,8 @@ import { beginSoundDraft, dropSoundDraft, saveSoundDraft, selectToneSound, sound
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
 import { panelMotion } from "./panel-motion.js";
 import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
-import { refreshSaveState, setTuning } from "./project.js";
+import { setTuning } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { renderModels, stopModelPolling } from "./models.js";
 import { S } from "./store.js";
 import { exportRocksmith, fillRocksmithSettings } from "./rocksmith-export.js";

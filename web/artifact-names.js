@@ -3,7 +3,7 @@
 import { commit, snapshotEdit } from "./edit-history.js";
 import { motifLabel, motifName, renameMotif } from "./motifs.js";
 import { renameShape, shapeChord, shapeDefaultName, shapeGroups } from "./shapes.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { refName } from "./references.js";
 import { draw } from "./repaint.js";
 

@@ -14,7 +14,7 @@ const { setBendCurve, addBendPoint } = await mockImport(new URL('../../web/edit.
   './timing.js': { timingSnapshot: () => ({}), eachTiming: noop },
   './references.js': { lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop },
   './note-motion.js': { animateNoteChanges: noop }, './tracing.js': { clearMatches: noop },
-  './repaint.js': { draw: noop }, './project.js': { refreshSaveState: noop },
+  './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop },
   './note-effects.js': { FX_KEYS: [] },
 }, { './util.js': true, './bend.js': true, './whammy.js': true });
 

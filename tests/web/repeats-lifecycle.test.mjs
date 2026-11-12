@@ -21,7 +21,7 @@ try {
     './references.js': { lockedReferenceSnapshot: () => [{ lane: lane.id }], lockedReferenceFault: () => null, reconcileReferences: noop },
     './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop },
     './tracing.js': { clearMatches: noop }, './repaint.js': { draw: noop },
-    './project.js': { refreshSaveState: noop }, './tablature.js': { refreshTabIfOpen: noop },
+    './save-state.js': { refreshSaveState: noop }, './tablature.js': { refreshTabIfOpen: noop },
   }, { './util.js': true });
   const original = structuredClone(lane.notes);
   const groups = [{ id: 'repeat_1', name: 'Verse', copies: [['a'], ['b']], phraseLength: 2, offsets: [0, .5],
@@ -70,7 +70,8 @@ try {
     './marker-rails.js': { normalizedLaneFields: () => ({}) },
     './timing.js': { SONG: 'song', timingIdOf: () => 'song', timingData: () => ({ grid: {} }), timingsForSave: () => ({}) },
     './section-marker-core.js': { normalizeSectionMarkers: () => [] },
-    './comments.js': { normalizeComments: () => [] },
+    './comment-core.js': { normalizeComments: () => [] },
+    './save-state.js': { configureSaveState: noop },
     './volume.js': { normMix: () => ({}) },
     './tablature.js': { isValidTuningKey: () => true },
     './layer-role.js': { inferTablatureEnabled: () => true },

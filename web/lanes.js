@@ -8,7 +8,7 @@ import { draw } from "./repaint.js";
 import { icon } from "./icons.js";
 import { commitStructure, snapshotEdit, updateUndoButtons } from "./edit-history.js";
 import { emptyLaneFields } from "./marker-rails.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { S, setSelection } from "./store.js";
 import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, tuningToNames } from "./tablature.js";
 import { closeLayerSettings, layerArrangement, layerCapo, layerOwnSections, layerOwnTempo, layerScrollSpeed, layerBassPicked, layerColor, layerDeleteBtn, layerInstr, layerName, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";

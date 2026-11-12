@@ -42,7 +42,7 @@ try {
     './timing.js': { timingSnapshot: () => ({}), restoreTimingSnapshot: noop, eachTiming: (lanes, cb) => cb(lanes) },
     './references.js': refs, './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop },
     './voicing.js': { chordColumns, slideFingerGroup }, './tracing.js': { clearMatches: noop },
-    './repaint.js': { draw: noop }, './project.js': { refreshSaveState: noop }, './tablature.js': { refreshTabIfOpen: noop },
+    './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop }, './tablature.js': { refreshTabIfOpen: noop },
     './ids.js': { nid: () => `hand${++uid}` }, './notify.js': { toast: noop },
   }, { './util.js': true });
   const draft = new Map(); edit.draftNoteFinger(draft, lane.notes[1], 3); edit.settleFingerDraft(draft, true);

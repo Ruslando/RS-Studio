@@ -11,7 +11,7 @@ const S = { state: { lanes: [lane] }, mouseX: 100, lastPointerX: 10, lastPointer
 const saved = globalThis.document;
 try {
   globalThis.document = { elementFromPoint: () => covered ? {} : stage };
-  const { hoveredStageNote } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
+  const { hoveredStageNote } = await mockImport(new URL('../../web/stage-hit-test.js', import.meta.url), {
     './dom.js': { stage, scroll }, './store.js': { S },
     './lanes.js': { activeLane: () => lane },
     './geometry.js': { timeAt: x => x / 100, pitchAt: () => 64, pitchAtExact: () => 64 },

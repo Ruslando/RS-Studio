@@ -11,7 +11,7 @@ import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { inRailBand, isMarkerSelected, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { normalizePhraseBoundaries, phraseName } from "./section-marker-core.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";

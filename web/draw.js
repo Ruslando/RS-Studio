@@ -1,5 +1,4 @@
 import { warningMarks } from './diagnostic-marks.js';
-export { diagnosticMarksAt } from './diagnostic-marks.js';
 import { issueInstanceKey } from './issue-identity.js';
 import { rowsFor } from './rocksmith-check.js';
 import { issueIgnored, showIgnoredIssues, issueIgnoreActions } from './issue-state.js';
@@ -28,7 +27,8 @@ import { commentCursorAt, drawComments } from "./comments.js";
 import { syncProjectStartHandle } from "./project-position.js";
 import { markerRails, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, pitchAtExact, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
-import { edgeOf, hoveredStageNote, localXY, pickNote } from "./interaction.js";
+import { edgeOf } from "./interaction.js";
+import { hoveredStageNote, localXY, pickNote } from "./stage-hit-test.js";
 import { activeLane, canEditLane, laneOf } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";

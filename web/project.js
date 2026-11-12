@@ -25,7 +25,7 @@ import { currentGridState, gridSubdiv, setSubdiv } from "./grid.js";
 import { dedupeIds, syncUidPastLoaded } from "./ids.js";
 import { curStemObj, rebuildLanes, renderLanes } from "./lanes.js";
 import { metadataPayload, normalizeMetadata, projectName } from "./metadata.js";
-import { applyPreservePitch, applyStemGains, disposeSynths, ensureStemMixer, isMasterStem, masterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, toggleStemSolo, warmSynths } from "./playback.js";
+import { applyPreservePitch, applyStemGains, disposeSynths, ensureStemMixer, isMasterStem, masterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, warmSynths } from "./playback.js";
 import { initNewProject, openNewProject, refreshChoosingCards, setMainFile } from "./new-project.js";
 import { hideWelcome, initProjectLibrary, showWelcome } from "./project-library.js";
 import { backendLabel, loadSeparators, separators } from "./separators.js";
@@ -39,7 +39,9 @@ import { normalizedLaneFields } from "./marker-rails.js";
 import { withStartTone } from "./tone-marker-core.js";
 import { loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets-core.js";
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars, withEndSection } from "./section-marker-core.js";
-import { normalizeComments } from "./comments.js";
+import { normalizeComments } from "./comment-core.js";
+import { configureSaveState, isDirty, markSaved, refreshSaveState } from "./save-state.js";
+export { markSaved };
 import { inferTablatureEnabled, laneScrollSpeed } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
 import { normalizeRepeatGroups } from "./repeats-core.js";
@@ -69,6 +71,14 @@ export function toggleStemMute(stem) {
   renderStemTabs();
   refreshSaveState();
   toast(`${isMaster ? "Full song" : `“${stem.name}”`} ${stem.muted ? "muted" : "unmuted"}`);
+}
+
+function toggleStemSolo(stem) {
+  if (!S.state || !stem || isMasterStem(stem)) return;
+  const master = masterStem();
+  if (master) master.muted = true;
+  stem.solo = !stem.solo;
+  applyStemGains(); renderStemTabs(); refreshSaveState();
 }
 
 // ---- project save / open (self-contained .chart files) ----
@@ -156,43 +166,9 @@ export async function saveToServer() {
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
 }
 
-// ---- unsaved-changes tracking + open-project tab ----
-// Dirty = the content that only persists on an explicit Save (notes, grid, and
-// mixer settings) has diverged from the last saved/loaded baseline. View state
-// (zoom/stem/speed) is deliberately excluded so panning or zooming never reads
-// as "unsaved". Metadata, stem edits and cover changes auto-save to the server,
-// so they aren't tracked here.
-let savedSig = null;
-
-function dirtySig() {
-  const b = projectBody();
-  return JSON.stringify({ editLanes: b.editLanes, grid: b.grid, sectionMarkers: b.sectionMarkers, timings: b.timings,
-    scoreBars: b.scoreBars, scoreDuration: b.scoreDuration, projectStart: b.projectStart, stemSettings: b.stemSettings, mix: b.mix });
-}
-
-function isDirty() { return !!S.state && S.state.job !== "tutorial" && dirtySig() !== savedSig; }
-
-// The current state is now the clean baseline (call after a successful save/export
-// or a fresh load). Also refreshes the tab.
-export function markSaved() { savedSig = S.state ? dirtySig() : null; refreshSaveState(); }
-
-// Runs `write` (positions a solve fills in): it is no edit, so a saved project stays
-// saved. `write(before)` calls before() ahead of its first change.
-export function withoutDirtying(write) {
-  let clean = false;
-  if (write(() => { clean = !isDirty(); }) && clean) markSaved();
-}
-
-// Reflect the open project + dirty state in the app-bar tab.
-export function refreshSaveState() {
-  if (!projTab) return;
-  if (!S.state) { projTab.hidden = true; return; }
-  projTab.hidden = false;
-  projTabName.textContent = projectName(S.state);
-  projDirtyDot.hidden = !isDirty();
-  saveBtn.disabled = S.state.job === "tutorial";
-  saveAsBtn.disabled = S.state.job === "tutorial";
-}
+// Supply lifecycle-owned serialization without making editing features import
+// the project loader, mixer and library back into their dependency graph.
+configureSaveState({ S, projectBody, projectName, projTab, projTabName, projDirtyDot, saveBtn, saveAsBtn });
 
 function projectLabel() { return projectName(S.state); }
 
@@ -722,7 +698,7 @@ function wireStemDrag(row, stem) {
 // Vertical mixer: one row per stem. Clicking the name views that stem (spectrogram).
 // Full song is the default source and only has a dedicated mute button; separated
 // stems expose normal solo/mute controls for the combined stem mix.
-export function renderStemTabs() {
+function renderStemTabs() {
   const actions = document.getElementById('audioLayerActions');
   if (!stemTabsEl) return;
   stemTabsEl.innerHTML = "";

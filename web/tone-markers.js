@@ -12,7 +12,7 @@ import { STATE_RESTORED } from "./edit-history.js";
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { inRailBand, isMarkerSelected, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { toast } from "./notify.js";
 import { PAINT } from "./stage-paint.js";
 import { normalizeToneMarkers, startTone, tonePresetLabel, tonePresetMissing } from "./tone-marker-core.js";

@@ -12,7 +12,7 @@ import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { CROWD_EVENTS, normalizeCrowdEvents } from "./section-marker-core.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";

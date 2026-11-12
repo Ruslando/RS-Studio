@@ -7,7 +7,6 @@ import { $, audio, editorEl, metroOn, playBtn, scroll, seek, speedSel, timeEl } 
 import { draw, drawNow } from "./repaint.js";
 import { gridAt, gridSegments, segBeatSec } from "./grid.js";
 import { applyLaneVolume, disposeLaneSynth, editLanes, releaseLaneSynth, targetLane } from "./lanes.js";
-import { refreshSaveState, renderStemTabs } from "./project.js";
 import { S } from "./store.js";
 import { xOf } from "./geometry.js";
 import { clamp, fmtTime, followerTrim, normLayerVolume, onsetSec, playheadScrollLeft, schedWindow } from "./util.js";
@@ -568,14 +567,6 @@ function resyncFollowers() {
       if (trim !== f.trim) { f.trim = trim; f.el.playbackRate = r * (1 + trim); }
     } catch { /* element not ready; the next resync corrects it */ }
   }
-}
-
-export function toggleStemSolo(stem) {
-  if (!S.state || !stem || isMasterStem(stem)) return;
-  const master = masterStem();
-  if (master) master.muted = true;
-  stem.solo = !stem.solo;
-  applyStemGains(); renderStemTabs(); refreshSaveState();
 }
 
 export function togglePlay() {

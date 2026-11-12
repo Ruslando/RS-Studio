@@ -2704,6 +2704,35 @@ function linkedStrings(tuning, c, got, next, maxFret) {
   return carry;
 }
 
+// Choose one legal hand placement, comparing whole remembered chord shapes
+// with the normal assignment. The caller owns beam state and accumulation order.
+function rememberedPlacement(tuning, c, g, context) {
+  const { T, state, opts, memory, fixed, span, maxFret } = context;
+  let placed;
+  if (fixed) {
+    const frets = c.fixed.map((s, k) => c.pitches[k] - tuning[s]).filter(f => f > 0);
+    if (frets.some(f => f < g || f >= g + span)) return null;
+    placed = { out: c.fixed.slice(), cost: priceAssignment(tuning, c.pitches, c.fixed, T, null, span, maxFret)?.cost || 0 };
+  } else placed = gripAt(tuning, c.pitches, T, opts, g, span, maxFret);
+  // Whole chord memories compete as whole shapes, not as independently
+  // chosen voices. Revalidate every technique and occupied string here.
+  if (!fixed && c.pitches.length > 1) {
+    const known = memory.get(`c:${c.pitches.join(",")}`);
+    for (const key of known?.counts.keys() || []) {
+      const given = key.split(",").map(Number);
+      if (given.some((s, k) => (state.carry?.[k] != null && state.carry[k] !== s)
+        || (c.pinned?.[k] != null && c.pinned[k] !== s)
+        || (!c.rules?.[k]?.free && c.pitches[k] - tuning[s] > 0
+          && (c.pitches[k] - tuning[s] < g || c.pitches[k] - tuning[s] + (c.rules?.[k]?.reach || 0) >= g + span)))) continue;
+      const recalled = gripAt(tuning, c.pitches, T, { ...opts, forced: given }, g, span, maxFret);
+      if (!recalled || recalled.out.some((s, k) => s !== given[k])) continue;
+      if (!placed || recalled.cost * MEMORY_REGISTER_WEIGHT - rememberedBonus(memory, c, recalled.out)
+        < placed.cost * MEMORY_REGISTER_WEIGHT - rememberedBonus(memory, c, placed.out)) placed = recalled;
+    }
+  }
+  return placed;
+}
+
 function rememberAhead(tuning, columns, start, registers, memory, stand, directed, carry, span, maxFret) {
   let beam = [{ g: stand, carry, cost: 0, first: null }];
   for (let i = start; i < Math.min(columns.length, start + MEMORY_LOOKAHEAD); i++) {
@@ -2726,29 +2755,9 @@ function rememberAhead(tuning, columns, start, registers, memory, stand, directe
       const fixed = c.fixed && !c.aside && !yields && i === start;
       const anchored = i === start && c.hold;
       const candidates = anchored ? [state.g] : Array.from({ length: handCeiling(maxFret) }, (_, k) => k + 1);
+      const context = { T, state, opts, memory, fixed, span, maxFret };
       for (const g of candidates) {
-        let placed;
-        if (fixed) {
-          const frets = c.fixed.map((s, k) => c.pitches[k] - tuning[s]).filter(f => f > 0);
-          if (frets.some(f => f < g || f >= g + span)) continue;
-          placed = { out: c.fixed.slice(), cost: priceAssignment(tuning, c.pitches, c.fixed, T, null, span, maxFret)?.cost || 0 };
-        } else placed = gripAt(tuning, c.pitches, T, opts, g, span, maxFret);
-        // Whole chord memories compete as whole shapes, not as independently
-        // chosen voices. Revalidate every technique and occupied string here.
-        if (!fixed && c.pitches.length > 1) {
-          const known = memory.get(`c:${c.pitches.join(",")}`);
-          for (const key of known?.counts.keys() || []) {
-            const given = key.split(",").map(Number);
-            if (given.some((s, k) => (state.carry?.[k] != null && state.carry[k] !== s)
-              || (c.pinned?.[k] != null && c.pinned[k] !== s)
-              || (!c.rules?.[k]?.free && c.pitches[k] - tuning[s] > 0
-                && (c.pitches[k] - tuning[s] < g || c.pitches[k] - tuning[s] + (c.rules?.[k]?.reach || 0) >= g + span)))) continue;
-            const recalled = gripAt(tuning, c.pitches, T, { ...opts, forced: given }, g, span, maxFret);
-            if (!recalled || recalled.out.some((s, k) => s !== given[k])) continue;
-            if (!placed || recalled.cost * MEMORY_REGISTER_WEIGHT - rememberedBonus(memory, c, recalled.out)
-              < placed.cost * MEMORY_REGISTER_WEIGHT - rememberedBonus(memory, c, placed.out)) placed = recalled;
-          }
-        }
+        const placed = rememberedPlacement(tuning, c, g, context);
         if (!placed) continue;
         const shift = anchored ? 0 : memoryShiftCost(state.g, g);
         const cost = state.cost + placed.cost * MEMORY_REGISTER_WEIGHT + shift

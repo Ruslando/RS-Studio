@@ -32,7 +32,7 @@ try {
       tsDenInput: { value: '4' }, subdivSel: subdivision, subdivCustom: { value: '8' },
     },
   }, { './bars.js': true, './constants.js': true, './project-position-core.js': true, './auto-grid.js': true });
-  const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
+  const dependencies = {
     './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
     './store.js': { S, setSelection: value => { S.selection = value; } },
     './dom.js': { stage, scroll }, './repaint.js': { draw: noop }, './grid.js': grid,
@@ -48,8 +48,11 @@ try {
     './edit-history.js': { snapshotEdit: () => structuredClone(lane.notes), commit: (...args) => commits.push(args) },
     './edit.js': {
       curveOf: n => n.whammyPoints || [[0, 0], [0.5, -2], [1, 0]], setBendCurve: (n, pts) => { n.whammyPoints = pts; } },
-  }, { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true, './whammy.js': true,
-    './project-position-core.js': true });
+  };
+  const real = { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true, './whammy.js': true,
+    './project-position-core.js': true };
+  const hitTesting = await mockImport(new URL('../../web/stage-hit-test.js', import.meta.url), dependencies, real);
+  const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), { ...dependencies, './stage-hit-test.js': hitTesting }, real);
   init_interaction();
   stage.emit('mousedown', { clientX: 149 });
   win.emit('mousemove', { clientX: 182 });

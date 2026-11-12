@@ -18,7 +18,7 @@ try {
   globalThis.window = new EventTarget(); globalThis.CustomEvent = class extends Event {};
   const tab = await mockImport(new URL('../../web/tablature.js', import.meta.url), {
     './store.js': { S }, './song-bars.js': { songBarStarts: () => [0, 4, 8, 12, 16] },
-    './timing.js': { onLiveTiming: () => true }, './project.js': { withoutDirtying: write => write(noop) },
+    './timing.js': { onLiveTiming: () => true }, './save-state.js': { withoutDirtying: write => write(noop) },
     './voicing.js': { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered: (...args) => {
       solves++; return voiceNotesFingered(...args);
     } },
@@ -37,7 +37,7 @@ try {
       lockedReferenceFault: () => null, reconcileReferences: noop },
     './marker-clipboard.js': { hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: noop, clearMarkerSelection: noop },
     './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop }, './tracing.js': { clearMatches: noop },
-    './repaint.js': { draw: noop }, './project.js': { refreshSaveState: noop }, './ids.js': { nid: () => `new${++id}` },
+    './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop }, './ids.js': { nid: () => `new${++id}` },
   }, { './util.js': true, './note-effects.js': true, './shapes.js': true, './clipboard-fingering.js': true });
   edit.doCopy();
   assert.equal(solves, count, 'Copy takes the already displayed answer');

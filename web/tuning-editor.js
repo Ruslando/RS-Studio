@@ -14,7 +14,7 @@ import { confirmAction } from "./dialog.js";
 import { toast } from "./notify.js";
 import { icon } from "./icons.js";
 import { renderLayerSettings } from "./lanes.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { draw } from "./repaint.js";
 import { S } from "./store.js";
 import { TUNINGS, customTunings, laneTuning, newTuningId, parseTuning, refreshTabIfOpen, replaceCustomTunings, tuningKeyFor, tuningToNames } from "./tablature.js";

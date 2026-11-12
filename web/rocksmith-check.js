@@ -17,7 +17,7 @@ import { openDiagnosticMenu } from './edit.js';
 import { buildSpecForLanesAsync, laneFretCount, laneFretTuning, laneTuning } from './tablature.js';
 import { laneIssues } from './note-issues.js';
 import { RS_KIND_OPTIONS, isTablatureLane } from './layer-role.js';
-import { rsLeadIn } from './rocksmith-export.js';
+import { rsLeadIn } from './rocksmith-preferences.js';
 import { seekPlayback } from './playback.js';
 import { xOf } from './geometry.js';
 import { moveViewportTo, stopViewportMotion } from './viewport-motion.js';

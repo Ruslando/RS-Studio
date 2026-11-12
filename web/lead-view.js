@@ -6,7 +6,7 @@ import { scroll } from "./dom.js";
 import { layout } from "./geometry.js";
 import { playbackTime, seekPlayback } from "./playback.js";
 import { draw } from "./repaint.js";
-import { rsLeadIn } from "./rocksmith-export.js";
+import { rsLeadIn } from "./rocksmith-preferences.js";
 import { rocksmithLeadIn } from "./rocksmith-check.js";
 import { S } from "./store.js";
 import { rememberPref } from "./util.js";

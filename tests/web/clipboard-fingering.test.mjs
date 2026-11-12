@@ -27,7 +27,7 @@ try {
       dropFingering: n => { delete n.pos; delete n.arrangement; delete n.finger; } },
     './marker-clipboard.js': { hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: noop, clearMarkerSelection: noop },
     './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop }, './tracing.js': { clearMatches: noop },
-    './repaint.js': { draw: noop }, './project.js': { refreshSaveState: noop },
+    './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop },
     './tablature.js': { refreshTabIfOpen: noop, laneFingeringNow: lane => ({ notes: lane.notes,
       voiced: new Map(lane.notes.filter(n => n.pos).map(n => [n, n.pos])),
       fingers: new Map(lane.notes.map(n => [n, n.finger])), seats: noteHandAnchors(lane.notes, lane.handHolds) }) },

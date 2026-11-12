@@ -17,7 +17,7 @@ const noop = () => {};
 const oldWindow = globalThis.window;
 try {
   globalThis.window = win;
-  const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), {
+  const dependencies = {
     './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
     './store.js': { S }, './dom.js': { stage, scroll }, './repaint.js': { draw: noop },
     './lanes.js': { activeLane: () => lane },
@@ -27,7 +27,10 @@ try {
     './marker-rails.js': { markerRails: () => [] },
     './note-render.js': { laneSlides: () => new Map(), regionEdgeAt: x => Math.abs(x - S.detectRegion.t0 * 100) < 7 ? 'l' : Math.abs(x - S.detectRegion.t1 * 100) < 7 ? 'r' : null },
     './detect.js': { updateDetectStatus: noop }, './note-motion.js': { finishNoteGesture: noop },
-  }, { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './bend.js': true });
+  };
+  const real = { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './bend.js': true };
+  const hitTesting = await mockImport(new URL('../../web/stage-hit-test.js', import.meta.url), dependencies, real);
+  const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), { ...dependencies, './stage-hit-test.js': hitTesting }, real);
   init_interaction();
   for (const tool of ['pan', 'trace', 'select', 'frame', 'marquee']) {
     S.toolMode = tool; S.detectRegion = { t0: 2, t1: 4 };

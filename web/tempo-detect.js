@@ -9,7 +9,7 @@ import { editLanes } from "./lanes.js";
 import { projectStart } from "./project-position-core.js";
 import { toast } from "./notify.js";
 import { operationRequest } from "./operation-progress.js";
-import { refreshSaveState } from "./project.js";
+import { refreshSaveState } from "./save-state.js";
 import { draw } from "./repaint.js";
 import { S } from "./store.js";
 import { refreshTabIfOpen } from "./tablature.js";

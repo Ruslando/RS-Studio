@@ -33,7 +33,7 @@ import { parseTuning, songTimeToTabMs, tabMsToSongTime } from "./util.js";
 import { TUNINGS } from "./tunings.js";
 import { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, representPickedOpenSlides, voiceNotesFingered } from "./voicing.js";
 import { draw } from "./repaint.js";
-import { withoutDirtying } from "./project.js";
+import { withoutDirtying } from "./save-state.js";
 import { paintMemo } from "./paint-memo.js";
 
 // ---- tablature (Guitar Pro export + alphaTab preview) ----

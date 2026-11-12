@@ -7,7 +7,8 @@ import { convertGpScore, gpProjectionSignature, inspectGpScore, packLaneSource, 
 import { currentGridState, setSubdiv } from "./grid.js";
 import { rebuildLanes, refreshCounts, renderLanes } from "./lanes.js";
 import { loadWithScreen } from "./project-loading.js";
-import { applyProject, markSaved, mapLane, refreshSaveState, saveToServer } from "./project.js";
+import { applyProject, mapLane, saveToServer } from "./project.js";
+import { markSaved, refreshSaveState } from "./save-state.js";
 import { S } from "./store.js";
 import { dedupeIds } from "./ids.js";
 import { projectShiftPlan, projectStart } from "./project-position-core.js";
