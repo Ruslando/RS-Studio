@@ -43,10 +43,10 @@ const OCCURRENCE_FIELDS = ["motifId", "motifName", "shapeId", "shapeKind", "shap
 // occurrence unless the group is `transposable`, when occurrence i sits
 // `shifts[i]` semitones off it. Pitches mirror relative to each box's shift;
 // effects mirror unchanged, and a shifted copy is fingered anew.
-export const REF_TIME_TOL = 0.03;   // s — timing slack when matching repeats
+const REF_TIME_TOL = 0.03;   // s — timing slack when matching repeats
 
 export const refName = (group, ref) => group?.name || `Reference #${ref}`;
-export const REF_ACCENT = PAINT.ref;  // one hue for all refs; the number disambiguates
+const REF_ACCENT = PAINT.ref;  // one hue for all refs; the number disambiguates
 
 export const REF_BOX_EDGE_TOL = 5;   // px from a box edge that grabs it for resizing
 

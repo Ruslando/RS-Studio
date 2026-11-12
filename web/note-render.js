@@ -179,7 +179,7 @@ export const curveHandles = (n) => [...bendHandles(n), ...bendHandles(n, "whammy
 // such handle. It sits just outside the note's row, on the side the slide does
 // not go to, so it never covers the resize edge at the note's start or the
 // ribbon. `bar` is the row edge its stem starts from.
-export const SLIDE_HANDLE_GAP = 11;
+const SLIDE_HANDLE_GAP = 11;
 export function slideStartHandle(n, lane) {
   const ribbon = !bendCurve(n) && lane ? noteRibbon(lane, n) : null;
   if (!ribbon) return null;
@@ -210,7 +210,7 @@ function noteCentreAt(n, lane, t, ribbonOverride = null) {
 
 // Where vibrato sets in: below the note where it is drawn at that moment, or
 // above it when the slide's handle already sits below.
-export function vibratoStartHandle(n, lane) {
+function vibratoStartHandle(n, lane) {
   if (!n.fx?.vibrato || !lane) return null;
   const t = n.start + vibratoStartOf(n) * (n.end - n.start), rowH = S.state.rowH;
   const slide = slideStartHandle(n, lane), below = !(slide && slide.y > slide.bar);
@@ -219,7 +219,7 @@ export function vibratoStartHandle(n, lane) {
 }
 
 // Every effect-start handle of a note: where its slide leaves and its vibrato sets in.
-export function vibratoEndHandle(n, lane) {
+function vibratoEndHandle(n, lane) {
   const start = vibratoStartHandle(n, lane);
   if (!start) return null;
   const t = n.start + vibratoEndOf(n) * (n.end - n.start);

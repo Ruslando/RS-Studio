@@ -38,11 +38,11 @@ const COST = {
 // One reading of interval set `iv` (semitones above the root, 0 excluded).
 // Returns { suffix, cost, chordTones } or null when the tones do not form a chord
 // on this root.
-function reading(iv) {
+function readChordTones(iv) {
   const has = (n) => iv.has(n);
   const used = new Set();
   const take = (n) => { used.add(n); return true; };
-  let cost = 0, chordTones = new Set([0]);
+  const chordTones = new Set([0]);
   const tone = (n) => { take(n); chordTones.add(n); };
 
   // Third, or what stands in for it.
@@ -66,11 +66,12 @@ function reading(iv) {
   let sixth = false;
   if (!seventh && has(9)) { sixth = true; tone(9); }
 
-  // Power chord: the root and its fifth, nothing else. Any other two tones are an
-  // interval, not a chord, and get no name.
-  if (!third && fifth === "P" && iv.size === 1) return { suffix: "5", cost: 0, chordTones };
-  if (iv.size < 2) return null;
+  return { third, fifth, seventh, sixth, used, chordTones };
+}
 
+function readChordTensions(iv, used, third, fifth) {
+  const has = (n) => iv.has(n);
+  const take = (n) => { used.add(n); return true; };
   // Tensions: what is left. A major third makes 3 a #9; a perfect fifth makes 6 a #11 and 8 a b13.
   const nat = [], alt = [];
   if (has(2) && !used.has(2)) { nat.push(9); take(2); }
@@ -82,21 +83,10 @@ function reading(iv) {
   if (has(9) && !used.has(9)) { nat.push(13); take(9); }
   if ([...iv].some((n) => !used.has(n))) return null;   // a tone nothing above can name
 
-  // Without a third there must be something else that makes it a chord.
-  if (!third) {
-    if (fifth !== "P" || !seventh) return null;
-    cost += COST.noThird;
-  }
-  if (third?.startsWith("sus")) {
-    // A sus chord is root, 2 or 4, and fifth. Without the fifth, C D E would read
-    // as D7sus2/C rather than Cadd9.
-    if (fifth !== "P") return null;
-    cost += COST.sus;
-    if (sixth) cost += COST.unusual;   // C6sus4/G is F/G as anyone writes it
-  }
-  if (!fifth) cost += seventh || sixth ? COST.noFifth : COST.noFifthTriad;
-  if (third === "M" && nat.includes(11)) cost += COST.avoid11;
+  return { nat, alt };
+}
 
+function nameChordReading({ third, fifth, seventh, sixth, nat, alt, cost, chordTones }) {
   // Write it: [quality][seventh or extension][sus][alterations][adds][(no3)].
   const dimTriad = third === "m" && fifth === "b";
   const augTriad = third === "M" && fifth === "#";
@@ -143,6 +133,36 @@ function reading(iv) {
   const addText = adds.map((n) => `add${n}`).join("");
   const suffix = core + sus + altText + addText + (third ? "" : "(no3)");
   return { suffix, cost, chordTones };
+}
+
+
+function reading(iv) {
+  const { third, fifth, seventh, sixth, used, chordTones } = readChordTones(iv);
+  let cost = 0;
+  // Power chord: the root and its fifth, nothing else. Any other two tones are an
+  // interval, not a chord, and get no name.
+  if (!third && fifth === "P" && iv.size === 1) return { suffix: "5", cost: 0, chordTones };
+  if (iv.size < 2) return null;
+
+  const tensions = readChordTensions(iv, used, third, fifth);
+  if (!tensions) return null;
+  const { nat, alt } = tensions;
+  // Without a third there must be something else that makes it a chord.
+  if (!third) {
+    if (fifth !== "P" || !seventh) return null;
+    cost += COST.noThird;
+  }
+  if (third?.startsWith("sus")) {
+    // A sus chord is root, 2 or 4, and fifth. Without the fifth, C D E would read
+    // as D7sus2/C rather than Cadd9.
+    if (fifth !== "P") return null;
+    cost += COST.sus;
+    if (sixth) cost += COST.unusual;   // C6sus4/G is F/G as anyone writes it
+  }
+  if (!fifth) cost += seventh || sixth ? COST.noFifth : COST.noFifthTriad;
+  if (third === "M" && nat.includes(11)) cost += COST.avoid11;
+
+  return nameChordReading({ third, fifth, seventh, sixth, nat, alt, cost, chordTones });
 }
 
 // Every reading of `pitches` (MIDI numbers), simplest first. Empty for one pitch

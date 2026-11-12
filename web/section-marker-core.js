@@ -2,7 +2,7 @@
 // the timeline UI. Section markers are audio-time annotations; exporters map
 // them onto their target's bar/phrase boundaries.
 
-export const SECTION_TYPES = [
+const SECTION_TYPES = [
   ["riff", "Riff"],
   ["intro", "Intro"],
   ["outro", "Outro"],
@@ -277,7 +277,7 @@ export function assignSectionsToBars(bars, markers) {
   return { bars: out, warnings };
 }
 
-export function applySectionMarkersToBars(bars, markers) {
+function applySectionMarkersToBars(bars, markers) {
   return assignSectionsToBars(bars, markers).bars;
 }
 

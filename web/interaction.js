@@ -216,37 +216,148 @@ export function hoveredStageNote() {
 // Apply the active drag at a canvas-space position. Shared by the mousemove
 // handler and the edge auto-scroll loop (which feeds a recomputed position as
 // the viewport pans under a stationary cursor).
+function updatePanDrag(x, y) {
+  const drag = S.drag, dx = S.lastPointerX - drag.clientX, dy = S.lastPointerY - drag.clientY;
+  if (drag.mode === 'panPending') {
+    if (Math.hypot(dx, dy) < 4) return;
+    drag.mode = 'pan'; manualViewportNavigation();
+    stage.style.cursor = 'grabbing';
+  }
+  scroll.scrollLeft = clamp(drag.scrollLeft - dx, 0, Math.max(0, scroll.scrollWidth - scroll.clientWidth));
+  scroll.scrollTop = clamp(drag.scrollTop - dy, 0, Math.max(0, scroll.scrollHeight - scroll.clientHeight));
+  drag.tracker.sample(scroll.scrollLeft, scroll.scrollTop, performance.now());
+  draw(); return;
+}
+
+function updatePendingTrace(x, y) {
+  // Viewport scrolling/zooming moves world coordinates even on a click.
+  // Only actual pointer travel may turn selection into a drawing gesture.
+  if (Math.hypot(S.lastPointerX - S.drag.clientX, S.lastPointerY - S.drag.clientY) < 4) return;
+  S.drag.moved = true;
+  if (!S.spectImg) return;
+  const { x0, y0 } = S.drag;
+  S.drag.mode = "trace";
+  setSelection(new Set());
+  S.drag.points = [];
+  addTracePoint(S.drag.points, x0, y0);
+  addTracePoint(S.drag.points, x, y);
+  draw(); return;
+}
+
+function updateBendPoint(x, y) {
+  // Drag one control point of the curve: its time snaps to the grid, its pitch
+  // to quarter tones; Alt frees both.
+  // A whammy point under a bend (or the other way round) is drawn on both together:
+  // what the pointer sets is its own part.
+  const kind = S.drag.kind || "bend", other = kind === "whammy" ? bendCurve(S.drag.note) : whammyCurve(S.drag.note);
+  const n = S.drag.note, rowH = S.state.rowH, pts = curveOf(n, kind).map((p) => [...p]);
+  const i = S.drag.i, dur = Math.max(1e-6, n.end - n.start);
+  // An end point sits on the note's edge and only moves in pitch: dragged
+  // sideways it is that edge, and resizes the note.
+  const edge = i === 0 ? "l" : i === pts.length - 1 ? "r" : null;
+  if (edge && !S.drag.axis) {
+    const dx = Math.abs(x - S.drag.x0), dy = Math.abs(y - S.drag.y0);
+    if (Math.max(dx, dy) < 4) return;
+    S.drag.axis = dx > dy ? "x" : "y";
+    if (S.drag.axis === "x") {
+      const lane = laneOf(n);
+      S.drag = resizeDrag(n, lane, edge, S.drag.x0, timeAt(S.drag.x0), S.drag.free, S.drag.prev);
+      beginNoteGesture(S.state, lane, S.drag.notes, "resize");
+      updateDrag(x, y); return;
+    }
+  }
+  let t = (pointTime(x, S.drag.free) - n.start) / dur;
+  let semi = (yOf(n.pitch) + rowH / 2 - y) / rowH - (other ? bendAt(other, clamp(t, 0, 1)) : 0);
+  if (!S.drag.free) semi = snapTo(semi, SNAP_SEMI);
+  // The end points pin the curve to the note's edges — only their pitch moves.
+  // Middle points stay between their neighbors so the drag can't reorder them
+  // out from under the cursor.
+  if (i === 0) t = 0;
+  else if (i === pts.length - 1) t = 1;
+  else t = clamp(t, pts[i - 1][0], pts[i + 1][0]);
+  pts[i] = [t, clampSemi(semi)];
+  setBendCurve(n, pts, kind);
+  draw(); return;
+}
+
+function updateNoteResize(x, y) {
+  // Drag one edge; every selected note's matching edge shifts by the same
+  // delta (so a multi-note selection resizes together). Each note is clamped
+  // so it can't invert past its own opposite edge.
+  const o = S.drag.orig.get(S.drag.note), slide = S.drag.slide;
+  if (slide) {
+    const n = S.drag.note;
+    setSlideFrets(n, Math.abs(pitchAtExact(y) - n.pitch), slideFretOf(laneOf(n), n));
+    // A few pixels sideways before the edge moves, so a drag up or down leaves it alone.
+    if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 4) { draw(); return; }
+  }
+  if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 1) return;
+  S.drag.resizeMoved = true;
+  const minimum = resizeMinimum(o, S.drag.edge, S.drag.freeResize);
+  const time = timeAt(x) - (S.drag.resizeGrab || 0);
+  S.drag.resizeTime = time;
+  const target = S.drag.freeResize ? snapFine(time) : snap(time);
+  if (S.drag.edge === "r") {
+    const dt = Math.max(o.start + minimum, target) - o.end;
+    for (const n of S.drag.notes) {
+      const oo = S.drag.orig.get(n);
+      n.end = Math.min(S.state.duration, Math.max(oo.start + resizeMinimum(oo, 'r', S.drag.freeResize), oo.end + dt));
+    }
+  } else {
+    const dt = Math.min(o.end - minimum, Math.max(projectStart(S.state), target)) - o.start;
+    for (const n of S.drag.notes) {
+      const oo = S.drag.orig.get(n);
+      n.start = Math.min(oo.end - resizeMinimum(oo, 'l', S.drag.freeResize), Math.max(projectStart(S.state), oo.start + dt));
+    }
+  }
+  if (slide?.knee != null) {
+    // The slide's knee stays where it was in time; the edge cannot pass it.
+    const n = S.drag.note, k = slide.knee;
+    if (S.drag.edge === "r") n.end = Math.max(n.end, k + minimum);
+    else n.start = Math.min(n.start, k - minimum);
+    EFFECT_START_SETTERS.slide(n, (k - n.start) / (n.end - n.start));
+  }
+  S.drag.lane.notes = makeResizeRoom(S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig,
+    S.drag.edge, minimum, note => !!boxOfNote(note)?.group.locked);
+  updateNoteGesture(S.state, laneOf(S.drag.note), S.drag.notes);
+  draw(); return;
+}
+
+function updateNoteMove(x, y) {
+  S.drag.moved = true;
+  const dt = timeAt(x) - timeAt(S.drag.startX);
+  const originals = S.drag.notes.map(note => S.drag.orig.get(note));
+  const anchor = S.drag.orig.get(S.drag.note);
+  const fine = originals.some(note => hasFreeNoteLength(note, gridSegments()));
+  const target = (fine ? snapFine : snap)(anchor.start + dt);
+  // Snap the grabbed note once, then translate the whole selection by the
+  // same amount. Clamp the group, so neither spacing nor pitch intervals change.
+  const delta = Math.max(projectStart(S.state) - Math.min(...originals.map(note => note.start)),
+    Math.min(S.state.duration - Math.max(...originals.map(note => note.end)), target - anchor.start));
+  const wantedRow = Math.floor(y / S.state.rowH) - Math.floor(S.drag.startY / S.state.rowH);
+  const dRow = Math.max(Math.max(...originals.map(note => note.pitch)) - S.state.spec.midi_high,
+    Math.min(Math.min(...originals.map(note => note.pitch)) - S.state.spec.midi_low, wantedRow));
+  for (const n of S.drag.notes) {
+    const o = S.drag.orig.get(n);
+    n.start = o.start + delta;
+    n.end = o.end + delta;
+    setLaneNotePitch(S.drag.lane, n, o.pitch - dRow);
+  }
+  // Audible feedback: each time the drag crosses to a new pitch row, play the
+  // moved notes so you can hear where you're landing. Pure horizontal nudges
+  // (dRow unchanged) stay silent.
+  if (dRow !== S.drag.lastRow) { S.drag.lastRow = dRow; previewNotes(S.drag.notes, S.drag.lane); }
+  updateNoteGesture(S.state, S.drag.lane, S.drag.notes);
+  draw();
+}
+
 function updateDrag(x, y) {
   if (S.drag.mode === "projectStart") { updateProjectStartAt(x); return; }
-  if (S.drag.mode === 'panPending' || S.drag.mode === 'pan') {
-    const drag = S.drag, dx = S.lastPointerX - drag.clientX, dy = S.lastPointerY - drag.clientY;
-    if (drag.mode === 'panPending') {
-      if (Math.hypot(dx, dy) < 4) return;
-      drag.mode = 'pan'; manualViewportNavigation();
-      stage.style.cursor = 'grabbing';
-    }
-    scroll.scrollLeft = clamp(drag.scrollLeft - dx, 0, Math.max(0, scroll.scrollWidth - scroll.clientWidth));
-    scroll.scrollTop = clamp(drag.scrollTop - dy, 0, Math.max(0, scroll.scrollHeight - scroll.clientHeight));
-    drag.tracker.sample(scroll.scrollLeft, scroll.scrollTop, performance.now());
-    draw(); return;
-  }
+  if (S.drag.mode === 'panPending' || S.drag.mode === 'pan') { updatePanDrag(x, y); return; }
   if (S.drag.mode === "scrub") {
     seekPlayback(cursorTimeAt(x)); return;
   }
-  if (S.drag.mode === "tracePending") {
-    // Viewport scrolling/zooming moves world coordinates even on a click.
-    // Only actual pointer travel may turn selection into a drawing gesture.
-    if (Math.hypot(S.lastPointerX - S.drag.clientX, S.lastPointerY - S.drag.clientY) < 4) return;
-    S.drag.moved = true;
-    if (!S.spectImg) return;
-    const { x0, y0 } = S.drag;
-    S.drag.mode = "trace";
-    setSelection(new Set());
-    S.drag.points = [];
-    addTracePoint(S.drag.points, x0, y0);
-    addTracePoint(S.drag.points, x, y);
-    draw(); return;
-  }
+  if (S.drag.mode === "tracePending") { updatePendingTrace(x, y); return; }
   if (S.drag.mode === "trace") { addTracePoint(S.drag.points, x, y); draw(); return; }
   if (S.drag.mode === "slice") {
     S.drag.x1 = xOf(snap(timeAt(x))); S.drag.y1 = y;
@@ -260,41 +371,7 @@ function updateDrag(x, y) {
     EFFECT_START_SETTERS[S.drag.kind](n, (t - n.start) / Math.max(1e-6, n.end - n.start));
     draw(); return;
   }
-  if (S.drag.mode === "bendPoint") {
-    // Drag one control point of the curve: its time snaps to the grid, its pitch
-    // to quarter tones; Alt frees both.
-    // A whammy point under a bend (or the other way round) is drawn on both together:
-    // what the pointer sets is its own part.
-    const kind = S.drag.kind || "bend", other = kind === "whammy" ? bendCurve(S.drag.note) : whammyCurve(S.drag.note);
-    const n = S.drag.note, rowH = S.state.rowH, pts = curveOf(n, kind).map((p) => [...p]);
-    const i = S.drag.i, dur = Math.max(1e-6, n.end - n.start);
-    // An end point sits on the note's edge and only moves in pitch: dragged
-    // sideways it is that edge, and resizes the note.
-    const edge = i === 0 ? "l" : i === pts.length - 1 ? "r" : null;
-    if (edge && !S.drag.axis) {
-      const dx = Math.abs(x - S.drag.x0), dy = Math.abs(y - S.drag.y0);
-      if (Math.max(dx, dy) < 4) return;
-      S.drag.axis = dx > dy ? "x" : "y";
-      if (S.drag.axis === "x") {
-        const lane = laneOf(n);
-        S.drag = resizeDrag(n, lane, edge, S.drag.x0, timeAt(S.drag.x0), S.drag.free, S.drag.prev);
-        beginNoteGesture(S.state, lane, S.drag.notes, "resize");
-        updateDrag(x, y); return;
-      }
-    }
-    let t = (pointTime(x, S.drag.free) - n.start) / dur;
-    let semi = (yOf(n.pitch) + rowH / 2 - y) / rowH - (other ? bendAt(other, clamp(t, 0, 1)) : 0);
-    if (!S.drag.free) semi = snapTo(semi, SNAP_SEMI);
-    // The end points pin the curve to the note's edges — only their pitch moves.
-    // Middle points stay between their neighbors so the drag can't reorder them
-    // out from under the cursor.
-    if (i === 0) t = 0;
-    else if (i === pts.length - 1) t = 1;
-    else t = clamp(t, pts[i - 1][0], pts[i + 1][0]);
-    pts[i] = [t, clampSemi(semi)];
-    setBendCurve(n, pts, kind);
-    draw(); return;
-  }
+  if (S.drag.mode === "bendPoint") { updateBendPoint(x, y); return; }
   if (S.drag.mode === "marquee") { S.marquee.x1 = x; S.marquee.y1 = y; draw(); return; }
   if (S.drag.mode === "region") { S.detectRegion.t1 = clamp(timeAt(x), 0, S.state.duration); draw(); return; }
   if (S.drag.mode === "regionEdge") {
@@ -303,75 +380,8 @@ function updateDrag(x, y) {
     else S.detectRegion.t1 = Math.max(t, S.detectRegion.t0 + MIN_REGION);
     updateDetectStatus(); draw(); return;
   }
-  if (S.drag.mode === "resize") {
-    // Drag one edge; every selected note's matching edge shifts by the same
-    // delta (so a multi-note selection resizes together). Each note is clamped
-    // so it can't invert past its own opposite edge.
-    const o = S.drag.orig.get(S.drag.note), slide = S.drag.slide;
-    if (slide) {
-      const n = S.drag.note;
-      setSlideFrets(n, Math.abs(pitchAtExact(y) - n.pitch), slideFretOf(laneOf(n), n));
-      // A few pixels sideways before the edge moves, so a drag up or down leaves it alone.
-      if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 4) { draw(); return; }
-    }
-    if (!S.drag.resizeMoved && Math.abs(x - S.drag.startX) < 1) return;
-    S.drag.resizeMoved = true;
-    const minimum = resizeMinimum(o, S.drag.edge, S.drag.freeResize);
-    const time = timeAt(x) - (S.drag.resizeGrab || 0);
-    S.drag.resizeTime = time;
-    const target = S.drag.freeResize ? snapFine(time) : snap(time);
-    if (S.drag.edge === "r") {
-      const dt = Math.max(o.start + minimum, target) - o.end;
-      for (const n of S.drag.notes) {
-        const oo = S.drag.orig.get(n);
-        n.end = Math.min(S.state.duration, Math.max(oo.start + resizeMinimum(oo, 'r', S.drag.freeResize), oo.end + dt));
-      }
-    } else {
-      const dt = Math.min(o.end - minimum, Math.max(projectStart(S.state), target)) - o.start;
-      for (const n of S.drag.notes) {
-        const oo = S.drag.orig.get(n);
-        n.start = Math.min(oo.end - resizeMinimum(oo, 'l', S.drag.freeResize), Math.max(projectStart(S.state), oo.start + dt));
-      }
-    }
-    if (slide?.knee != null) {
-      // The slide's knee stays where it was in time; the edge cannot pass it.
-      const n = S.drag.note, k = slide.knee;
-      if (S.drag.edge === "r") n.end = Math.max(n.end, k + minimum);
-      else n.start = Math.min(n.start, k - minimum);
-      EFFECT_START_SETTERS.slide(n, (k - n.start) / (n.end - n.start));
-    }
-    S.drag.lane.notes = makeResizeRoom(S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig,
-      S.drag.edge, minimum, note => !!boxOfNote(note)?.group.locked);
-    updateNoteGesture(S.state, laneOf(S.drag.note), S.drag.notes);
-    draw(); return;
-  }
-  if (S.drag.mode === "move") {
-    S.drag.moved = true;
-    const dt = timeAt(x) - timeAt(S.drag.startX);
-    const originals = S.drag.notes.map(note => S.drag.orig.get(note));
-    const anchor = S.drag.orig.get(S.drag.note);
-    const fine = originals.some(note => hasFreeNoteLength(note, gridSegments()));
-    const target = (fine ? snapFine : snap)(anchor.start + dt);
-    // Snap the grabbed note once, then translate the whole selection by the
-    // same amount. Clamp the group, so neither spacing nor pitch intervals change.
-    const delta = Math.max(projectStart(S.state) - Math.min(...originals.map(note => note.start)),
-      Math.min(S.state.duration - Math.max(...originals.map(note => note.end)), target - anchor.start));
-    const wantedRow = Math.floor(y / S.state.rowH) - Math.floor(S.drag.startY / S.state.rowH);
-    const dRow = Math.max(Math.max(...originals.map(note => note.pitch)) - S.state.spec.midi_high,
-      Math.min(Math.min(...originals.map(note => note.pitch)) - S.state.spec.midi_low, wantedRow));
-    for (const n of S.drag.notes) {
-      const o = S.drag.orig.get(n);
-      n.start = o.start + delta;
-      n.end = o.end + delta;
-      setLaneNotePitch(S.drag.lane, n, o.pitch - dRow);
-    }
-    // Audible feedback: each time the drag crosses to a new pitch row, play the
-    // moved notes so you can hear where you're landing. Pure horizontal nudges
-    // (dRow unchanged) stay silent.
-    if (dRow !== S.drag.lastRow) { S.drag.lastRow = dRow; previewNotes(S.drag.notes, S.drag.lane); }
-    updateNoteGesture(S.state, S.drag.lane, S.drag.notes);
-    draw();
-  }
+  if (S.drag.mode === "resize") { updateNoteResize(x, y); return; }
+  if (S.drag.mode === "move") { updateNoteMove(x, y); return; }
 }
 
 // ---- edge auto-scroll: pan the timeline whenever a DRAG nears a viewport edge ----
@@ -453,6 +463,120 @@ export function init_interaction() {
     if (!S.drag) stage.style.cursor = "default";
     draw();
   });
+  function startEffectGesture(e, x, y) {
+    const handle = bendHandleAt(x, y);
+    if (handle) {
+      if (!S.selection.has(handle.note)) setSelection(new Set([handle.note]));
+      S.drag = { mode: "bendPoint", note: handle.note, i: handle.i, kind: handle.kind, free: e.altKey, prev: snapshotEdit(), x0: x, y0: y };
+      return true;
+    }
+    const start = effectStartAt(x, y);
+    if (start) {
+      S.drag = { mode: "effectStart", note: start.note, kind: start.kind, free: e.altKey, prev: snapshotEdit() };
+      return true;
+    }
+    // The far end of a slide into or out of a note: up and down sets how many
+    // frets it spans, left and right moves that edge of the note. Where the
+    // slide starts (out) or lands (in) stays put.
+    const far = slideFretsAt(x, y);
+    if (far) {
+      const n = far.note, lane = laneOf(n), into = SLIDE_IN.has(n.slide), dur = n.end - n.start;
+      const knee = n.start + dur * (into ? slideEndOf(n, dur, 30 / (gridAt(n.start)?.bpm || 120)) : slideStartOf(n));
+      S.drag = {
+        mode: "resize", edge: into ? "l" : "r", note: n, notes: [n], prev: snapshotEdit(),
+        startX: x, resizeGrab: 0, freeResize: !!e.altKey, lane, resizeLaneNotes: [...lane.notes],
+        orig: new Map(lane.notes.map((m) => [m, { start: m.start, end: m.end }])),
+        slide: { knee: n.start < knee - 1e-6 ? knee : null },
+      };
+      beginNoteGesture(S.state, lane, S.drag.notes, "resize");
+      return true;
+    }
+    return false;
+  }
+
+  function startReferenceGesture(x, y) {
+    const lock = refLockAt(x, y);
+    if (lock && canEditLane(lock.lane)) {
+      if (lock.kind === "edit") toggleRefEditLock(lock.lane, lock.ref);
+      else toggleRefPitchLock(lock.lane, lock.ref);
+      return true;
+    }
+    // Click an arpeggio's or handshape's name to select all of its notes.
+    const shapeTag = shapeLabelAt(S.shapeLabels, x, y);
+    if (shapeTag) {
+      const members = shapeGroups(shapeTag.lane.notes).get(shapeTag.id);
+      if (members) {
+        S.state.lanes.forEach((l) => (l.active = l === shapeTag.lane)); renderLanes();
+        setSelection(new Set(members)); draw();
+        return true;
+      }
+    }
+    const badge = refBadgeAt(x, y);
+    if (badge && canEditLane(badge.lane)) {
+      const inside = notesInBox(badge.box, badge.lane.notes);
+      S.state.lanes.forEach((l) => (l.active = l === badge.lane)); renderLanes();
+      setSelection(new Set(inside));
+      const group = badge.lane.refBoxes[badge.ref];
+      if (group.locked) { draw(); return true; }
+      S.drag = {
+        mode: "refDrag", lane: badge.lane, ref: badge.ref, i: badge.i,
+        a0: group.anchors[badge.i], grabT: timeAt(x), grabP: pitchAt(y), s0: shiftOf(group, badge.i),
+        notes: inside.map((n) => ({ n, s: n.start, e: n.end, p: n.pitch, pos: n.pos, arrangement: n.arrangement })),
+        prev: snapshotEdit(),
+      };
+      draw();
+      return true;
+    }
+    // Grab a reference box edge to resize its capture region (mirrors to siblings).
+    const redge = refBoxEdgeAt(x, y);
+    if (redge && canEditLane(redge.lane) && !redge.lane.refBoxes?.[redge.ref]?.locked) { S.drag = { mode: "refBox", ...redge, prev: snapshotEdit() }; draw(); return true; }
+    return false;
+  }
+
+  function startNotePointerGesture(e, x, y, t, hit) {
+    if (hit) {
+      // Editing is scoped to the active layer. Clicking a note in a *different*
+      // visible layer just retargets focus to that layer (and selects the note) —
+      // a second grab then edits it. This is what makes selecting a layer mean
+      // something: you only ever edit one layer at a time.
+      if (hit.lane !== activeLane()) {
+        S.state.lanes.forEach((l) => (l.active = l === hit.lane));
+        renderLanes();
+        noteLength.remember(S.state, hit.note, gridSegments());
+        setSelection(new Set([hit.note]));
+        auditionNote(hit.note, hit.lane);
+        draw();
+        return;
+      }
+      noteLength.remember(S.state, hit.note, gridSegments());
+      if (!S.selection.has(hit.note)) setSelection(new Set([hit.note]));
+      // Click-to-hear: audition the clicked note's pitch (also unlocks audio on
+      // this gesture so a follow-up vertical drag can play landing pitches).
+      auditionNote(hit.note, hit.lane);
+      if (boxOfNote(hit.note)?.group.locked) { draw(); return; }
+      const edge = hit.grace ? null : edgeOf(hit.note, x);
+      if (edge) {
+        S.drag = resizeDrag(hit.note, hit.lane, edge, x, t, e.altKey, snapshotEdit());
+        S.lastPointerX = e.clientX; S.lastPointerY = e.clientY;
+      } else {
+        S.drag = {
+          mode: "move", note: hit.note, startX: x, startY: y, moved: false, prev: snapshotEdit(),
+          lane: hit.lane, lastRow: 0,
+          notes: [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked),
+          orig: new Map([...S.selection].map((n) => [n, { start: n.start, end: n.end, pitch: n.pitch }])),
+        };
+      }
+      beginNoteGesture(S.state, hit.lane, S.drag.notes, S.drag.mode);
+      draw();
+    } else {
+      // Wait for the gesture: a click seeks, a drag moves only the viewport.
+      e.preventDefault();
+      S.drag = { mode: 'panPending', time: cursorTimeAt(x), clientX: e.clientX, clientY: e.clientY,
+        scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop,
+        tracker: createPanTracker(scroll.scrollLeft, scroll.scrollTop, performance.now()) };
+    }
+  }
+
   stage.addEventListener("mousedown", (e) => {
     if (!S.state || e.button !== 0) return; // right-click handled by contextmenu
     if (markerSelectClick(e, ...localXY(e))) return;
@@ -506,36 +630,7 @@ export function init_interaction() {
     // other gesture so a handle floating above its note stays grabbable — but
     // only in the Select tool with no Ctrl/Shift, so trace and marquee are never
     // blocked. Alt still reaches here (it means "place freely", not "frame").
-    if (plainSelect) {
-      const handle = bendHandleAt(x, y);
-      if (handle) {
-        if (!S.selection.has(handle.note)) setSelection(new Set([handle.note]));
-        S.drag = { mode: "bendPoint", note: handle.note, i: handle.i, kind: handle.kind, free: e.altKey, prev: snapshotEdit(), x0: x, y0: y };
-        return;
-      }
-      const start = effectStartAt(x, y);
-      if (start) {
-        S.drag = { mode: "effectStart", note: start.note, kind: start.kind, free: e.altKey, prev: snapshotEdit() };
-        return;
-      }
-      // The far end of a slide into or out of a note: up and down sets how many
-      // frets it spans, left and right moves that edge of the note. Where the
-      // slide starts (out) or lands (in) stays put.
-      const far = slideFretsAt(x, y);
-      if (far) {
-        const n = far.note, lane = laneOf(n), into = SLIDE_IN.has(n.slide), dur = n.end - n.start;
-        const knee = n.start + dur * (into ? slideEndOf(n, dur, 30 / (gridAt(n.start)?.bpm || 120)) : slideStartOf(n));
-        S.drag = {
-          mode: "resize", edge: into ? "l" : "r", note: n, notes: [n], prev: snapshotEdit(),
-          startX: x, resizeGrab: 0, freeResize: !!e.altKey, lane, resizeLaneNotes: [...lane.notes],
-          orig: new Map(lane.notes.map((m) => [m, { start: m.start, end: m.end }])),
-          slide: { knee: n.start < knee - 1e-6 ? knee : null },
-        };
-        beginNoteGesture(S.state, lane, S.drag.notes, "resize");
-        return;
-      }
-    }
-
+    if (plainSelect && startEffectGesture(e, x, y)) return;
     // Similar-passage suggestions on screen: placing goes through the buttons
     // beside the focused match; a click outside every match dismisses them. Either
     // way the click falls through to normal editing.
@@ -554,44 +649,7 @@ export function init_interaction() {
     // Click a reference's number badge to select everything inside that box; drag the
     // badge to relocate the whole occurrence (box + its notes) as a unit, leaving the
     // siblings untouched. The select happens up front, so a plain click just selects.
-    if (plainSelect) {
-      const lock = refLockAt(x, y);
-      if (lock && canEditLane(lock.lane)) {
-        if (lock.kind === "edit") toggleRefEditLock(lock.lane, lock.ref);
-        else toggleRefPitchLock(lock.lane, lock.ref);
-        return;
-      }
-      // Click an arpeggio's or handshape's name to select all of its notes.
-      const shapeTag = shapeLabelAt(S.shapeLabels, x, y);
-      if (shapeTag) {
-        const members = shapeGroups(shapeTag.lane.notes).get(shapeTag.id);
-        if (members) {
-          S.state.lanes.forEach((l) => (l.active = l === shapeTag.lane)); renderLanes();
-          setSelection(new Set(members)); draw();
-          return;
-        }
-      }
-      const badge = refBadgeAt(x, y);
-      if (badge && canEditLane(badge.lane)) {
-        const inside = notesInBox(badge.box, badge.lane.notes);
-        S.state.lanes.forEach((l) => (l.active = l === badge.lane)); renderLanes();
-        setSelection(new Set(inside));
-        const group = badge.lane.refBoxes[badge.ref];
-        if (group.locked) { draw(); return; }
-        S.drag = {
-          mode: "refDrag", lane: badge.lane, ref: badge.ref, i: badge.i,
-          a0: group.anchors[badge.i], grabT: timeAt(x), grabP: pitchAt(y), s0: shiftOf(group, badge.i),
-          notes: inside.map((n) => ({ n, s: n.start, e: n.end, p: n.pitch, pos: n.pos, arrangement: n.arrangement })),
-          prev: snapshotEdit(),
-        };
-        draw();
-        return;
-      }
-      // Grab a reference box edge to resize its capture region (mirrors to siblings).
-      const redge = refBoxEdgeAt(x, y);
-      if (redge && canEditLane(redge.lane) && !redge.lane.refBoxes?.[redge.ref]?.locked) { S.drag = { mode: "refBox", ...redge, prev: snapshotEdit() }; draw(); return; }
-    }
-  
+    if (plainSelect && startReferenceGesture(x, y)) return;
     // Frame (Alt-drag) = select a time frame (a vertical band across all pitches)
     // for looping and detection. A click (no drag)
     // clears the frame.
@@ -630,47 +688,7 @@ export function init_interaction() {
   
     // Plain left-click: grab a note (select / move / resize) or move the cursor.
     const hit = noteHit || pickNote(t, pitch, pitchAtExact(y));
-    if (hit) {
-      // Editing is scoped to the active layer. Clicking a note in a *different*
-      // visible layer just retargets focus to that layer (and selects the note) —
-      // a second grab then edits it. This is what makes selecting a layer mean
-      // something: you only ever edit one layer at a time.
-      if (hit.lane !== activeLane()) {
-        S.state.lanes.forEach((l) => (l.active = l === hit.lane));
-        renderLanes();
-        noteLength.remember(S.state, hit.note, gridSegments());
-        setSelection(new Set([hit.note]));
-        auditionNote(hit.note, hit.lane);
-        draw();
-        return;
-      }
-      noteLength.remember(S.state, hit.note, gridSegments());
-      if (!S.selection.has(hit.note)) setSelection(new Set([hit.note]));
-      // Click-to-hear: audition the clicked note's pitch (also unlocks audio on
-      // this gesture so a follow-up vertical drag can play landing pitches).
-      auditionNote(hit.note, hit.lane);
-      if (boxOfNote(hit.note)?.group.locked) { draw(); return; }
-      const edge = hit.grace ? null : edgeOf(hit.note, x);
-      if (edge) {
-        S.drag = resizeDrag(hit.note, hit.lane, edge, x, t, e.altKey, snapshotEdit());
-        S.lastPointerX = e.clientX; S.lastPointerY = e.clientY;
-      } else {
-        S.drag = {
-          mode: "move", note: hit.note, startX: x, startY: y, moved: false, prev: snapshotEdit(),
-          lane: hit.lane, lastRow: 0,
-          notes: [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked),
-          orig: new Map([...S.selection].map((n) => [n, { start: n.start, end: n.end, pitch: n.pitch }])),
-        };
-      }
-      beginNoteGesture(S.state, hit.lane, S.drag.notes, S.drag.mode);
-      draw();
-    } else {
-      // Wait for the gesture: a click seeks, a drag moves only the viewport.
-      e.preventDefault();
-      S.drag = { mode: 'panPending', time: cursorTimeAt(x), clientX: e.clientX, clientY: e.clientY,
-        scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop,
-        tracker: createPanTracker(scroll.scrollLeft, scroll.scrollTop, performance.now()) };
-    }
+    startNotePointerGesture(e, x, y, t, hit);
   });
   // A double-click on empty space adds one grid cell; double-clicking a bend
   // curve still adds a bend point.
@@ -861,111 +879,123 @@ export function init_interaction() {
     if (JSON.stringify(snapshotEdit()) === JSON.stringify(S.drag.prev)) return;
     commit(S.drag.prev, mirrorSource, null, { preserveTiming });
   };
+  function finishPendingTrace(x, y) {
+    const { hit, toggleSelection, moved } = S.drag;
+    if (toggleSelection && !moved) {
+      if (hit) {
+        const selection = new Set(S.selection);
+        if (hit.lane !== activeLane()) {
+          selection.clear();
+          S.state.lanes.forEach(lane => { lane.active = lane === hit.lane; }); renderLanes();
+        }
+        if (selection.has(hit.note)) selection.delete(hit.note); else selection.add(hit.note);
+        setSelection(selection);
+      }
+    } else if (!toggleSelection) seekPlayback(cursorTimeAt(x));
+  }
+
+  function finishTraceDrawing(x, y) {
+    const lane = targetLane();
+    if (lane && lane.visible && !lane.locked) {
+      addTracePoint(S.drag.points, x, y);
+      const prev = snapshotEdit();
+      const added = notesFromTrace(S.drag.points);
+      if (added.length) {
+        lane.notes.push(...added);
+        commit(prev);
+        noteLength.remember(S.state, added[added.length - 1], gridSegments());
+        setSelection(new Set(added));
+        S.state.lanes.forEach((l) => (l.active = l === lane));
+        renderLanes(); refreshCounts();
+      }
+    }
+  }
+
+  function finishSliceGesture(x, y) {
+    const line = S.drag;
+    line.x1 = xOf(snap(timeAt(x))); line.y1 = y;
+    // A stray click (no real drag) while holding S is a no-op, not a cut.
+    if (Math.hypot(line.x1 - line.x0, line.y1 - line.y0) >= 4) {
+      // Intersect each pitch row at its visual centre. This leaves the line's
+      // vertical geometry free (no pitch raster), while each resulting x time is
+      // independently snapped to the grid.
+      const cuts = new Map();
+      for (const lane of editLanes()) {
+        if (!canEditLane(lane)) continue;
+        for (const note of lane.notes) {
+          const cy = yOf(note.pitch) + S.state.rowH / 2;
+          const x = lineXAtRow(line, cy, S.state.rowH);
+          if (x == null) continue;
+          const at = snap(timeAt(x));
+          if (at > note.start && at < note.end) cuts.set(note, at);
+        }
+      }
+      const split = sliceNoteCuts(cuts);
+      if (!split.length) toast("Slice did not cross any notes with a full grid cell on each side");
+    }
+  }
+
+  function finishMarqueeSelection(x, y) {
+    const lane = activeLane();
+    const click = S.drag.from != null && Math.abs(S.marquee.x1 - S.marquee.x0) < 3 && Math.abs(S.marquee.y1 - S.marquee.y0) < 3;
+    // Shift-click on empty space: select the layer's notes starting between the playhead and the click, then move the playhead there.
+    if (click) {
+      const to = clamp(timeAt(S.marquee.x0), 0, S.state.duration);
+      const a = Math.min(S.drag.from, to), b = Math.max(S.drag.from, to);
+      if (canEditLane(lane)) setSelection(new Set(lane.notes.filter((n) => n.start >= a && n.start <= b)));
+      seekPlayback(to);
+    }
+    // A hidden / locked lane is disabled — don't marquee-select into it.
+    else if (canEditLane(lane)) {
+      const x0 = Math.min(S.marquee.x0, S.marquee.x1), x1 = Math.max(S.marquee.x0, S.marquee.x1);
+      const p1 = pitchAt(Math.min(S.marquee.y0, S.marquee.y1));
+      const p0 = pitchAt(Math.max(S.marquee.y0, S.marquee.y1));
+      const next = new Set();   // a new marquee replaces the previous selection
+      for (const n of lane.notes) {
+        if (xOf(n.end) >= x0 && xOf(n.start) <= x1 && n.pitch >= p0 && n.pitch <= p1) next.add(n);
+      }
+      setSelection(next);
+    }
+  }
+
+  function finishRegionSelection(x, y) {
+    let { t0, t1 } = S.detectRegion;
+    if (t1 < t0) [t0, t1] = [t1, t0];
+    // Alt-click clears an existing loop first. With no loop, empty space
+    // spans playhead → click. Alt-drag can still replace the range directly.
+    if (t1 - t0 < MIN_REGION && !S.drag.clearOnClick && S.drag.from != null)
+      [t0, t1] = [Math.min(S.drag.from, t0), Math.max(S.drag.from, t0)];
+    if (t1 - t0 < MIN_REGION) { S.detectRegion = null; }
+    else S.detectRegion = { t0, t1: Math.min(t1, S.state.duration) };
+    updateDetectStatus();
+    // Keep the range available for looping and explicitly requested detection.
+  }
+
+  function finishNoteMotion(x, y) {
+    // Both gestures already placed their edges. Preserve free movement and Alt
+    // resizing on release, including through the commit's stray-note pass.
+    // Pressing a note of a selection keeps the group so it can be dragged together;
+    // a plain click without dragging narrows it to that one note.
+    if (S.drag.mode === 'move' && !S.drag.moved && S.selection.size > 1) setSelection(new Set([S.drag.note]));
+    if (S.drag.mode === "resize") S.drag.lane.notes = makeResizeRoom(
+      S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig, S.drag.edge, Math.min(MIN_DUR, minDur()),
+      note => !!boxOfNote(note)?.group.locked);
+    updateNoteGesture(S.state, S.drag.lane || laneOf(S.drag.note), S.drag.notes);
+    noteLength.remember(S.state, S.drag.note, gridSegments());
+    // Pitch edits leave hand placement to the solver; they do not author anchors.
+    commitIfChanged(undefined, true);
+  }
+
   window.addEventListener("mouseup", (e) => {
     if (!S.drag || !S.state) return;
     if (S.drag.mode === "projectStart") return;
     const [x, y] = localXY(e);
     try {
-    if (S.drag.mode === "tracePending") {
-      const { hit, toggleSelection, moved } = S.drag;
-      if (toggleSelection && !moved) {
-        if (hit) {
-          const selection = new Set(S.selection);
-          if (hit.lane !== activeLane()) {
-            selection.clear();
-            S.state.lanes.forEach(lane => { lane.active = lane === hit.lane; }); renderLanes();
-          }
-          if (selection.has(hit.note)) selection.delete(hit.note); else selection.add(hit.note);
-          setSelection(selection);
-        }
-      } else if (!toggleSelection) seekPlayback(cursorTimeAt(x));
-    } else if (S.drag.mode === 'panPending') {
+    if (S.drag.mode === "tracePending") { finishPendingTrace(x, y); } else if (S.drag.mode === 'panPending') {
       setSelection(new Set()); seekPlayback(S.drag.time);
     } else if (S.drag.mode === 'pan') {
       coastViewport(S.drag.tracker.velocity(performance.now()));
-    } else if (S.drag.mode === "trace") {
-      const lane = targetLane();
-      if (lane && lane.visible && !lane.locked) {
-        addTracePoint(S.drag.points, x, y);
-        const prev = snapshotEdit();
-        const added = notesFromTrace(S.drag.points);
-        if (added.length) {
-          lane.notes.push(...added);
-          commit(prev);
-          noteLength.remember(S.state, added[added.length - 1], gridSegments());
-          setSelection(new Set(added));
-          S.state.lanes.forEach((l) => (l.active = l === lane));
-          renderLanes(); refreshCounts();
-        }
-      }
-    } else if (S.drag.mode === "slice") {
-      const line = S.drag;
-      line.x1 = xOf(snap(timeAt(x))); line.y1 = y;
-      // A stray click (no real drag) while holding S is a no-op, not a cut.
-      if (Math.hypot(line.x1 - line.x0, line.y1 - line.y0) >= 4) {
-        // Intersect each pitch row at its visual centre. This leaves the line's
-        // vertical geometry free (no pitch raster), while each resulting x time is
-        // independently snapped to the grid.
-        const cuts = new Map();
-        for (const lane of editLanes()) {
-          if (!canEditLane(lane)) continue;
-          for (const note of lane.notes) {
-            const cy = yOf(note.pitch) + S.state.rowH / 2;
-            const x = lineXAtRow(line, cy, S.state.rowH);
-            if (x == null) continue;
-            const at = snap(timeAt(x));
-            if (at > note.start && at < note.end) cuts.set(note, at);
-          }
-        }
-        const split = sliceNoteCuts(cuts);
-        if (!split.length) toast("Slice did not cross any notes with a full grid cell on each side");
-      }
-    } else if (S.drag.mode === "marquee") {
-      const lane = activeLane();
-      const click = S.drag.from != null && Math.abs(S.marquee.x1 - S.marquee.x0) < 3 && Math.abs(S.marquee.y1 - S.marquee.y0) < 3;
-      // Shift-click on empty space: select the layer's notes starting between the playhead and the click, then move the playhead there.
-      if (click) {
-        const to = clamp(timeAt(S.marquee.x0), 0, S.state.duration);
-        const a = Math.min(S.drag.from, to), b = Math.max(S.drag.from, to);
-        if (canEditLane(lane)) setSelection(new Set(lane.notes.filter((n) => n.start >= a && n.start <= b)));
-        seekPlayback(to);
-      }
-      // A hidden / locked lane is disabled — don't marquee-select into it.
-      else if (canEditLane(lane)) {
-        const x0 = Math.min(S.marquee.x0, S.marquee.x1), x1 = Math.max(S.marquee.x0, S.marquee.x1);
-        const p1 = pitchAt(Math.min(S.marquee.y0, S.marquee.y1));
-        const p0 = pitchAt(Math.max(S.marquee.y0, S.marquee.y1));
-        const next = new Set();   // a new marquee replaces the previous selection
-        for (const n of lane.notes) {
-          if (xOf(n.end) >= x0 && xOf(n.start) <= x1 && n.pitch >= p0 && n.pitch <= p1) next.add(n);
-        }
-        setSelection(next);
-      }
-    } else if (S.drag.mode === "region") {
-      let { t0, t1 } = S.detectRegion;
-      if (t1 < t0) [t0, t1] = [t1, t0];
-      // Alt-click clears an existing loop first. With no loop, empty space
-      // spans playhead → click. Alt-drag can still replace the range directly.
-      if (t1 - t0 < MIN_REGION && !S.drag.clearOnClick && S.drag.from != null)
-        [t0, t1] = [Math.min(S.drag.from, t0), Math.max(S.drag.from, t0)];
-      if (t1 - t0 < MIN_REGION) { S.detectRegion = null; }
-      else S.detectRegion = { t0, t1: Math.min(t1, S.state.duration) };
-      updateDetectStatus();
-      // Keep the range available for looping and explicitly requested detection.
-    } else if (S.drag.mode === "move" || S.drag.mode === "resize") {
-      // Both gestures already placed their edges. Preserve free movement and Alt
-      // resizing on release, including through the commit's stray-note pass.
-      // Pressing a note of a selection keeps the group so it can be dragged together;
-      // a plain click without dragging narrows it to that one note.
-      if (S.drag.mode === 'move' && !S.drag.moved && S.selection.size > 1) setSelection(new Set([S.drag.note]));
-      if (S.drag.mode === "resize") S.drag.lane.notes = makeResizeRoom(
-        S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig, S.drag.edge, Math.min(MIN_DUR, minDur()),
-        note => !!boxOfNote(note)?.group.locked);
-      updateNoteGesture(S.state, S.drag.lane || laneOf(S.drag.note), S.drag.notes);
-      noteLength.remember(S.state, S.drag.note, gridSegments());
-      // Pitch edits leave hand placement to the solver; they do not author anchors.
-      commitIfChanged(undefined, true);
-    } else if (S.drag.mode === "bendPoint" || S.drag.mode === "effectStart") {
+    } else if (S.drag.mode === "trace") { finishTraceDrawing(x, y); } else if (S.drag.mode === "slice") { finishSliceGesture(x, y); } else if (S.drag.mode === "marquee") { finishMarqueeSelection(x, y); } else if (S.drag.mode === "region") { finishRegionSelection(x, y); } else if (S.drag.mode === "move" || S.drag.mode === "resize") { finishNoteMotion(x, y); } else if (S.drag.mode === "bendPoint" || S.drag.mode === "effectStart") {
       commitIfChanged();
     } else if (S.drag.mode === "refBox") {
       // Box resized: mirror its new contents to the siblings (the dragged box is the

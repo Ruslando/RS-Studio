@@ -96,7 +96,7 @@ function changed(lane) {
 
 export const crowdEventLabel = (event) => NAMES.get(event.code) || event.code;
 
-export function openCrowdEventPop(clientX, clientY, event, lane = activeLane()) {
+function openCrowdEventPop(clientX, clientY, event, lane = activeLane()) {
   endPopEdit();
   editLaneId = lane?.id;
   editEvent = event;

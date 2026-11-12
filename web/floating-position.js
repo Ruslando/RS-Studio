@@ -1,5 +1,5 @@
 // All live editors use the same click anchor and viewport gutter.
-export function floatingBounds(x, y, width, height, viewportWidth, viewportHeight, gap = 6) {
+function floatingBounds(x, y, width, height, viewportWidth, viewportHeight, gap = 6) {
   const gutter = 8;
   return {
     left: Math.max(gutter, Math.min(x, viewportWidth - width - gutter)),

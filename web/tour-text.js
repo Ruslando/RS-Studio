@@ -20,7 +20,7 @@ const pattern = new RegExp(`\\[\\[(.*?)\\]\\]|\\b(${[...ACTIONS, ...Object.keys(
   .sort((a, b) => b.length - a.length).map(escapePattern).join("|")})(?!\\w)`, "gi");
 const KEYS = new Set(["S", "F", "L", "Alt", "Shift", "Ctrl", "Control", "Escape", "Space", "←", "→", "↑", "↓"]);
 
-export function instructionParts(text) {
+function instructionParts(text) {
   const parts = [];
   let offset = 0;
   for (const match of text.matchAll(pattern)) {

@@ -33,7 +33,7 @@ import { detectTempoMap } from "./tempo-detect.js";
 
 // ---- spectrogram drag mode ----
 // Empty-space drag pans; Ctrl/Cmd draws and Shift/Alt retain selection gestures.
-export const TOOL_CURSOR = { pan: "grab", select: "default", trace: "crosshair", marquee: "crosshair", frame: "col-resize" };
+const TOOL_CURSOR = { pan: "grab", select: "default", trace: "crosshair", marquee: "crosshair", frame: "col-resize" };
 
 function setTool(tool) {
   S.toolMode = tool;
@@ -42,7 +42,7 @@ function setTool(tool) {
 }
 
 // ---- menu bar (File / Edit / View) ----
-export const menubarEl = $("menubar");
+const menubarEl = $("menubar");
 
 export const wireMenu = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };
 
@@ -87,7 +87,7 @@ export function closeLayerSettings() {
   layerActions = null; layerSnapshot = null; layerSettingsBackdrop.hidden = true;
   actions?.save();
 }
-export function cancelLayerSettings() {
+function cancelLayerSettings() {
   revertInputs(layerSnapshot); layerSnapshot = null;
   layerSettingsBackdrop.hidden = true;
   const actions = layerActions;

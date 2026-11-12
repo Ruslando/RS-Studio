@@ -129,7 +129,7 @@ function modelTitle(model) {
   return "";
 }
 
-export function modelRow(model, root) {
+function modelRow(model, root) {
   const row = document.createElement("div");
   row.className = "list-row list-row--fields model-row";
 

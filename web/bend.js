@@ -1,3 +1,5 @@
+import { MAX_FRET } from "./constants.js";
+
 // Bend curves. A bend is a list of [t, semi] control points: t = 0..1 across the
 // note's duration, semi = semitones above the fretted pitch. Rocksmith stores
 // float times and steps, so a point's time is free; its pitch snaps to quarter
@@ -33,7 +35,7 @@ export function bendCurve(n) {
 // second, so the pitch only ever goes UP from the fret and comes back to it. It
 // swells in over its first moment rather than starting at full width.
 export const VIBRATO = { hz: 5.5, semi: 0.4, swell: 0.15 };
-export const vibratoAt = (sec) => sec <= 0 ? 0
+const vibratoAt = (sec) => sec <= 0 ? 0
   : VIBRATO.semi * (1 - Math.cos(2 * Math.PI * VIBRATO.hz * sec)) / 2 * Math.min(1, sec / VIBRATO.swell);
 
 // Where vibrato sets in, as a fraction of the note (`vibratoStart`, absent from
@@ -95,7 +97,6 @@ export const slideInOf = (n) => SLIDE_IN.has(n?.slide) ? n.slide : SLIDE_IN.has(
 export const SLIDE_FRETS = { inBelow: 4, inAbove: 4, outDown: 5, outUp: 5, pickDown: 5, pickUp: 5 };
 const SLIDE_SIGN = { inBelow: -1, inAbove: 1, outDown: -1, outUp: 1, pickDown: -1, pickUp: 1 };   // where the far end sits
 // ponytail: Rocksmith's neck, not the lane's; a shorter neck is clamped by the export.
-export const MAX_FRET = 24;
 
 // How many frets a slide into or out of a note on `fret` can span in Rocksmith.
 // A slide-out ends on fret 1 at the lowest (the game draws one onto the open

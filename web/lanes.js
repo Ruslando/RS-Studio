@@ -27,7 +27,7 @@ export const editLanes = () => S.state.editLanes;
 
 export const activeLane = () => S.state.lanes.find((l) => l.active);
 let newLaneDraft = null;
-export const settingsLane = () => newLaneDraft || activeLane();
+const settingsLane = () => newLaneDraft || activeLane();
 
 export function targetLane() {
   return activeLane() || editLanes()[0] || null;
@@ -65,7 +65,7 @@ export function rebuildLanes() {
 }
 
 // ---- Settings → Layer pane: instrument & tuning of the active edit lane ----
-export let layerOptsBuilt = false;
+let layerOptsBuilt = false;
 
 function buildLayerOptions() {
   if (layerOptsBuilt || !layerInstr) return;

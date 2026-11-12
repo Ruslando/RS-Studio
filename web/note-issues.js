@@ -26,7 +26,7 @@ const because = (text, fault) => `${fault}. ${text[1]}`;
 // Playing techniques an imported note has in its Guitar Pro data (n.gp, guitar-pro-core.js)
 // that the editor has no field for, so the Rocksmith chart does not show them. Kept for
 // the Guitar Pro export. One whose editor effect was changed since is the editor's now.
-export const GP_ONLY_TEXT = {
+const GP_ONLY_TEXT = {
   pickSlide: ["Rocksmith: Pick slide not supported", "The imported pick slide has no pick-slide effect in the editor. Select Pick slide up or Pick slide down in the Slide menu."],
   harmonic: ["Rocksmith: Harmonic type not supported", "Rocksmith supports natural and pinch harmonics. Select Natural or Pinch in the Harmonic menu."],
   leftTap: ["Rocksmith: Left-hand tap not supported", "Rocksmith has no separate notation for a left-hand tap. Select Tapping under Slap / pop to represent it as tapping."],
@@ -49,7 +49,7 @@ export const DROPPED_TEXT = {
 export const droppedEffects = (n) => [
   ...["staccato", "letRing"].filter((key) => n.fx?.[key])];
 
-export const ADAPTED_TEXT = {
+const ADAPTED_TEXT = {
   pickSlide: ["Rocksmith: Pick slide not supported", "Rocksmith has no pick-slide notation. The export represents the pick slide with a tapped, muted slide."],
   ghost: ["Rocksmith: Ghost note not supported", "Rocksmith has no ghost-note dynamics. The export shows this note but excludes it from scoring."],
   trill: ["Rocksmith: Trill not supported", "Rocksmith has no trill notation. The export writes alternating notes with hammer-ons and pull-offs."],

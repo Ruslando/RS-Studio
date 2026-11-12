@@ -8,7 +8,7 @@ const sameLabel = (a, b) => clean(a).localeCompare(clean(b), undefined, { sensit
 // same form the toolbar uses (metadata.js projectName).
 const withLatin = (value, latin) => (value && clean(latin) && !value.includes(clean(latin)) ? `${value} (${clean(latin)})` : value);
 
-export function durationLabel(seconds) {
+function durationLabel(seconds) {
   const total = Math.round(Number(seconds) || 0);
   if (!total) return "";
   const h = Math.floor(total / 3600);

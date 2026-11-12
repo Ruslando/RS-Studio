@@ -6,7 +6,7 @@ export function alphabeticLabel(index) {
   return label;
 }
 const keyOf = copy => copy.ids?.[0] || copy.notes[0].note.id;
-export function variationSimilarity(a, b, beatAt = t => t) {
+function variationSimilarity(a, b, beatAt = t => t) {
   const used = new Set();
   let score = 0;
   for (const x of a.notes) {

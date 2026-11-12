@@ -118,7 +118,7 @@ export function closeSectionMarkerPop() {
   endPopEdit();
 }
 
-export function addSectionMarkerAtTime(time, clientX, clientY) {
+function addSectionMarkerAtTime(time, clientX, clientY) {
   if (!S.state || !Number.isFinite(Number(time))) return;
   const snapped = snapSectionTime(time);
   const existing = sectionMarkers().find((marker) => Math.abs(Number(marker.t) - snapped) < 1e-5);

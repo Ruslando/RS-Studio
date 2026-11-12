@@ -17,7 +17,7 @@ export function previewIcon(mode) {
     : '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>';
 }
 
-export function fmtPreviewTime(s) {
+function fmtPreviewTime(s) {
   if (!Number.isFinite(s)) return "0:00";
   const m = Math.floor(s / 60), sec = Math.floor(s % 60);
   return m + ":" + String(sec).padStart(2, "0");

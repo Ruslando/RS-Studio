@@ -116,7 +116,7 @@ export function snapPhraseTime(value) {
   return Math.max(0, Math.min(duration, snap(time)));
 }
 
-export function addPhraseBoundaryAtTime(time, clientX, clientY) {
+function addPhraseBoundaryAtTime(time, clientX, clientY) {
   if (!S.state || !Number.isFinite(Number(time))) return;
   const lane = activePhraseLane();
   if (!lane) return;
@@ -141,12 +141,12 @@ function markerAt(x, y) {
     x >= rect.x0 && x <= rect.x1 && y >= rect.y0 && y <= rect.y1) || null;
 }
 
-export function phraseMarkerCursorAt(x, y) {
+function phraseMarkerCursorAt(x, y) {
   if (!S.state || !inBand(y - scroll.scrollTop)) return null;
   return markerAt(x, y) ? "grab" : null;
 }
 
-export function phraseMarkerMouseDown(event) {
+function phraseMarkerMouseDown(event) {
   if (!S.state || event.button !== 0) return false;
   const [x, y] = toCanvas(event.clientX, event.clientY);
   if (!inBand(y - scroll.scrollTop)) return false;
@@ -173,7 +173,7 @@ export function phraseMarkerMouseDown(event) {
   return true;
 }
 
-export function drawPhraseMarkers() {
+function drawPhraseMarkers() {
   markerRects = [];
   if (!S.state) return;
   const lane = activePhraseLane();
@@ -206,7 +206,7 @@ export function drawPhraseMarkers() {
   sctx.restore();
 }
 
-export function drawMinimapPhraseMarkers(at, mmctx = minimapCtx) {
+function drawMinimapPhraseMarkers(at, mmctx = minimapCtx) {
   if (!S.state) return;
   const lane = activePhraseLane();
   if (!lane) return;

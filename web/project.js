@@ -20,13 +20,12 @@ import { appshell, attachAudioBtn, audio, bpmInput, clearArriving, closeProjBtn,
 import { draw } from "./repaint.js";
 import { icon } from "./icons.js";
 import { updateUndoButtons } from "./edit-history.js";
-import { toggleStemMute } from "./edit.js";
 import { layout, syncRowHeight, updateZoomLabels } from "./geometry.js";
 import { currentGridState, gridSubdiv, setSubdiv } from "./grid.js";
 import { dedupeIds, syncUidPastLoaded } from "./ids.js";
-import { rebuildLanes, renderLanes } from "./lanes.js";
+import { curStemObj, rebuildLanes, renderLanes } from "./lanes.js";
 import { metadataPayload, normalizeMetadata, projectName } from "./metadata.js";
-import { applyPreservePitch, applyStemGains, disposeSynths, ensureStemMixer, isMasterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, toggleStemSolo, warmSynths } from "./playback.js";
+import { applyPreservePitch, applyStemGains, disposeSynths, ensureStemMixer, isMasterStem, masterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, toggleStemSolo, warmSynths } from "./playback.js";
 import { initNewProject, openNewProject, refreshChoosingCards, setMainFile } from "./new-project.js";
 import { hideWelcome, initProjectLibrary, showWelcome } from "./project-library.js";
 import { backendLabel, loadSeparators, separators } from "./separators.js";
@@ -49,6 +48,28 @@ import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
 import { busLevel, mountBus, normMix, volumeControl } from "./volume.js";
 import { SONG, loadTimings, timingData, timingIdOf, timingsForSave } from "./timing.js";
+
+// Mute a stem in the mixer. No argument (Shift+M) targets the viewed stem.
+export function toggleStemMute(stem) {
+  if (!S.state) return;
+  stem = stem || curStemObj();
+  if (!stem) return;
+  const isMaster = isMasterStem(stem);
+  if (!isMaster) {
+    const fullSong = masterStem();
+    if (fullSong) fullSong.muted = true;
+  }
+  stem.muted = !stem.muted;
+  if (isMaster && !stem.muted) {
+    for (const other of S.state.stems) {
+      if (!isMasterStem(other)) { other.muted = false; other.solo = false; }
+    }
+  }
+  applyStemGains();
+  renderStemTabs();
+  refreshSaveState();
+  toast(`${isMaster ? "Full song" : `“${stem.name}”`} ${stem.muted ? "muted" : "unmuted"}`);
+}
 
 // ---- project save / open (self-contained .chart files) ----
 // Snapshot the editor state in the shape the server merges into the manifest.
@@ -811,7 +832,7 @@ function stopPendingStem() {
 
 // Popover for adding a stem from the full-song source, even before the first
 // separation has completed. Each new stem can choose its own separator.
-export let addStemMenuEl = null;
+let addStemMenuEl = null;
 
 export function closeAddStemMenu() {
   if (addStemMenuEl) { addStemMenuEl.remove(); addStemMenuEl = null; }

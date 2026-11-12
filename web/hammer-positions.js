@@ -3,7 +3,7 @@ import { chordColumns, placementLimits, shapeFault } from './voicing-core.js';
 
 // Roles and adjacency come from the same relation the neck animates. In a
 // chord, pair voices on their current string; a lone pair can also be repaired.
-export function hammerConnections(notes, positionOf = n => n.pos) {
+function hammerConnections(notes, positionOf = n => n.pos) {
   const columns = chordColumns(notes), edges = [];
   for (let i = 1; i < columns.length; i++) {
     const before = columns[i - 1].notes, after = columns[i].notes, used = new Set();

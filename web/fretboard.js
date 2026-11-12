@@ -768,26 +768,7 @@ function boardProjection(ctx, s, w, h, tuning, lastFret = s.frets) {
   return { scale, X, Y, strung, tunePx };
 }
 
-function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, offered = 0, strung = null, tunePx = 11, lastFret = s.frets }) {
-  const last = fretDistance(lastFret, s.scale);
-  const nutHalf = boardHalfWidthAt(0, s), endHalf = boardHalfWidthAt(last, s);
-
-  // The slab: parallel behind the nut, tapered to the last fret, parallel again
-  // over the overhang.
-  ctx.fillStyle = PAINT.chrome;
-  ctx.beginPath();
-  ctx.moveTo(X(-s.nutDepth), Y(-nutHalf));
-  ctx.lineTo(X(0), Y(-nutHalf));
-  ctx.lineTo(X(last), Y(-endHalf));
-  ctx.lineTo(X(last + s.overhang), Y(-endHalf));
-  ctx.lineTo(X(last + s.overhang), Y(endHalf));
-  ctx.lineTo(X(last), Y(endHalf));
-  ctx.lineTo(X(0), Y(nutHalf));
-  ctx.lineTo(X(-s.nutDepth), Y(nutHalf));
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = PAINT.line; ctx.lineWidth = 1; ctx.stroke();
-
+function paintNeckInlays(ctx, s, scale, X, Y, lastFret) {
   // Inlays, cut into the board, so they sit under the strings and the frets.
   ctx.fillStyle = hexA(PAINT.label, 0.45);
   for (const n of s.dots.filter(n => n <= lastFret)) {
@@ -801,6 +782,9 @@ function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, o
     }
   }
 
+}
+
+function paintHandPositionBand(ctx, s, X, Y, { lane, now, seat, offered }) {
   // THE ANCHOR: the fret the hand is sitting on, which is where the index stands and
   // what every other finger's number is counted from. Cut into the wood like an inlay
   // — after the inlays and before the frets — because it is a fact about the board
@@ -836,6 +820,292 @@ function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, o
     ctx.restore();
   }
 
+}
+
+function paintFretboardString(ctx, s, scale, X, Y, i, { lane, now, last }) {
+  const held = stringContactAt(now, i);
+  const contact = held?.trill?.down ? { ...held, ...held.trill, lift: 0 } : held;
+  const end = last + s.overhang, nut = -s.nutDepth;
+  const start = contact?.fret > 0 ? contact.x : s.capo ? capoLine(s) : 0;
+  const y0 = Y(stringOffsetAt(i + (contact?.lift || 0), Math.max(0, start), s));
+  const nutY = Y(stringOffsetAt(i, 0, s)), bridgeY = Y(stringOffsetAt(i, s.scale, s));
+  const spacing = Math.abs(stringOffsetAt(1, end, s) - stringOffsetAt(0, end, s)) * scale;
+  const preparing = now?.preparations?.find((f) => f.string === i);
+  const pull = preparing ? popPreparation(preparing.note, now.t) : 0;
+  const moving = now?.moving && contact && !contact.shapeHeld && ((contact.pressed ?? now.at?.pressed) || contact.ringing || contact.releasing);
+  const n = contact?.note;
+  const kind = !moving ? null : n?.slap === "slap" ? "slap"
+    : n?.slap === "tap" ? "tap" : contact.hammerMotion === "hammer" ? "hammer" : null;
+  const excitation = kind === "tap" || kind === "hammer" ? contact.start
+    : contact ? strikeTime(contact, now?.t) : null;
+  const age = excitation == null ? -1 : now.t - excitation;
+  const waving = kind === "slap" && age >= 0 && age < 0.24;
+  const baseY = (mm) => mm < start
+    ? nutY + (y0 - nutY) * (mm - nut) / Math.max(0.001, start - nut)
+    : y0 + (bridgeY - y0) * (mm - start) / Math.max(0.001, s.scale - start);
+  const popAnchor = preparing ? fretCentre(preparing.fret, s) : start;
+  const popX = Math.min(end - 2, Math.max(end - 12, popAnchor + 4));
+  const popHeight = (mm) => popLiftAt(mm / s.scale, popX / s.scale, pull, Math.max(0, popAnchor) / s.scale);
+  // A projected lift plus a detached shadow makes the depth visible from above.
+  const yAt = (mm) => baseY(mm) - spacing * 0.65 * popHeight(mm) + (waving ? spacing * fingerWaveAt(
+    (mm - nut) / (end - nut), (start - nut) / (end - nut), age, kind) : 0);
+  const trace = (from) => {
+    ctx.beginPath(); ctx.moveTo(X(from), yAt(from));
+    if (waving || Math.abs(pull) > 0.001) {
+      const steps = Math.max(24, Math.min(120, Math.ceil((X(end) - X(from)) / 7)));
+      for (let k = 1; k <= steps; k++) {
+        const mm = from + (end - from) * k / steps; ctx.lineTo(X(mm), yAt(mm));
+      }
+    } else {
+      if (start > from && start < end) ctx.lineTo(X(start), yAt(start));
+      ctx.lineTo(X(end), yAt(end));
+    }
+  };
+  const width = Math.max(1, s.gauges[i] * scale);
+  ctx.save(); ctx.lineCap = "round";
+  ctx.strokeStyle = hexA(PAINT.label, 0.65); ctx.lineWidth = width;
+  if (Math.abs(pull) > 0.001) {
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(X(Math.max(0, popAnchor)), baseY(Math.max(0, popAnchor)));
+    ctx.lineTo(X(end), baseY(end));
+    ctx.strokeStyle = hexA(PAINT.ink, 0.4 * Math.max(0, pull));
+    ctx.lineWidth = width + 3 * Math.max(0, pull); ctx.stroke();
+    ctx.restore();
+    ctx.lineCap = "butt";
+    const steps = Math.max(24, Math.min(160, Math.ceil((X(end) - X(nut)) / 5)));
+    for (let k = 0; k < steps; k++) {
+      const a = nut + (end - nut) * k / steps, b = nut + (end - nut) * (k + 1) / steps;
+      const depth = popThicknessAt(Math.max(0, (a + b) / 2) / s.scale, popX / s.scale, pull, Math.max(0, popAnchor) / s.scale) - 1;
+      // A little perspective thickening reinforces the projected depth.
+      ctx.lineWidth = Math.max(width * 0.45, width + depth * Math.max(width, 2));
+      ctx.beginPath(); ctx.moveTo(X(a), yAt(a)); ctx.lineTo(X(b), yAt(b)); ctx.stroke();
+    }
+  } else { trace(nut); ctx.stroke(); }
+  const fingerLight = kind === "hammer" || kind === "tap";
+  // Only an open string is struck on the board; a fretted pick pulses its fingertip (drawHand).
+  const open = !(contact?.fret > 0);
+  const glow = moving && open ? stringGlow(contact, now.t) * (fingerLight ? 0.3 : 1) : 0;
+  const pulse = moving && open && !fingerLight ? stringAttackPulse(contact, now.t) : 0;
+  if (glow > 0.001 || pulse > 0.001) {
+    ctx.lineCap = "round"; trace(start);
+    ctx.strokeStyle = hexA(lane.color || PAINT.accent, Math.min(1, glow * 0.3 + pulse * 0.45));
+    ctx.lineWidth = width + 3 + pulse * 3; ctx.stroke();
+    ctx.strokeStyle = hexA(PAINT.paper, Math.max(glow, pulse));
+    ctx.lineWidth = Math.max(1.4, width) + pulse * 1.8; ctx.stroke();
+  }
+  if ((kind === "hammer" || kind === "tap") && age >= 0 && age < 0.24) {
+    ctx.lineCap = "butt";
+    const steps = Math.max(32, Math.min(160, Math.ceil((X(end) - X(nut)) / 5)));
+    for (let k = 0; k < steps; k++) {
+      const a = nut + (end - nut) * k / steps, b = nut + (end - nut) * (k + 1) / steps;
+      const light = fingerLightAt(((a + b) / 2 - nut) / (end - nut),
+        (start - nut) / (end - nut), age, kind);
+      if (light < 0.002 || (kind === "hammer" && b <= start)) continue;
+      ctx.beginPath(); ctx.moveTo(X(kind === "hammer" ? Math.max(start, a) : a), baseY(kind === "hammer" ? Math.max(start, a) : a));
+      ctx.lineTo(X(b), baseY(b));
+      ctx.strokeStyle = hexA(lane.color || PAINT.accent, light * 0.65);
+      ctx.lineWidth = width + 5; ctx.stroke();
+      ctx.strokeStyle = hexA(PAINT.paper, light);
+      ctx.lineWidth = width + 1.5; ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function paintFretNumbers(ctx, s, X, Y, { endHalf, lastFret }) {
+  // Fret numbers below the board, on the dotted frets only — a number under
+  // every fret is 22 numbers nobody reads. Mono, because a fret number is a
+  // value you compare (rule 6). With a capo they count from it, like the tab, unless
+  // the player asked for the nut's numbers (Settings → Editor → Fret numbers).
+  ctx.fillStyle = PAINT.label;
+  ctx.font = stageMono(11);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const fromCapo = s.capo && $("fretNumbering")?.value !== "nut" ? s.capo : 0;
+  // One level line under the board's widest end, shared with the hand-position row.
+  const numberTop = Math.max(Y(endHalf), Y(-endHalf)) + 5;
+  for (const n of s.dots.filter(n => n <= lastFret)) {
+    if (n <= fromCapo) continue;
+    ctx.fillText(String(n - fromCapo), X(dotCentre(n, s)), numberTop);
+  }
+
+}
+
+function syncFretboardWarning(lane, comparing, missingPreview) {
+  const warning = $("fretboardWarning");
+  const warningTime = comparing && comparisonPreview.note ? comparisonPreview.note.start + 1e-6 : frozenAt(lane) ?? boardTime();
+  const here = lane && !missingPreview ? chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
+    .find(({ t0, notes }) => warningTime >= t0 - 1e-5 && warningTime < Math.max(...notes.map(n => n.end))) : null;
+  // Stretched shapes are visible immediately; invalid shapes require opt-in.
+  const invalidKey = here?.kind === "impossible" ? `${lane.id}:${here.t0}` : null;
+  const impossible = !!invalidKey && !shapeRevealed(lane, invalidKey);
+  const selectionError = !comparing && editing && !transportPlaying() ? selectedPositions(lane).error : null;
+  const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
+  warning.hidden = !selectionError && !here;
+  const [shapeTitle, shapeHelp] = SHAPE_WARNINGS[here?.kind] || SHAPE_WARNINGS.impossible;
+  warning.textContent = selectionError || (here ? `${here.kind === "stretch" ? "ⓘ" : "⚠"} ${shapeTitle}` : "");
+  warning.title = selectionError || shapeHelp;
+  warning.toggleAttribute("data-error", here?.kind === "impossible" && !selectionError);
+  fretboardShowAnyway.hidden = !impossible || !!selectionError;
+  fretboardShowAnyway.dataset.key = invalidKey || "";
+  fretboardPanel.toggleAttribute("data-unplayable", impossible);
+  return { impossible, blocked };
+}
+
+function paintComparisonBoard(ctx, s, scale, X, Y, { lane, missingPreview, strung, tunePx }) {
+  board = null; spots = null; activeAlternative = null;
+  if (alts) alts.boxes = [];
+  const now = missingPreview ? null : handNow(lane, s, comparisonPreview.note.start + 1e-6);
+  const index = now ? gripIndex(now.found.columns, now.t) : -1;
+  const seat = index >= 0 ? now.found.columns[index].seat : 0;
+  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, offered: 0, strung, tunePx });
+  if (now) drawHand(ctx, s, scale, X, Y, lane, now, null, { onion: false });
+  fretboardName.textContent = `${comparisonPreview.label} · ${missingPreview ? 'Missing note' : noteName(comparisonPreview.note.pitch)}`;
+  fretboardBusy.hidden = missingPreview || !!now;
+  if (!now && !missingPreview) fretboardBusyLabel.textContent = 'Loading comparison fingering';
+}
+
+function prepareBoardOffers(ctx, s, scale, X, Y, lane, impossible, blocked) {
+  // Resolve the selected preview before painting its hand-position band.
+  const at = editing ? focusGrip(lane, s) : null;
+  board = editing && lane && laneFretTuning(lane).length === s.strings
+    ? { lane, s, scale, X, Y, marks: (at?.marks || []).filter((m) => m.note && !m.releasing) } : null;
+  const chord = (at?.marks.length || 0) > 1;
+  spots = null; if (alts) alts.boxes = [];
+  // And the working views stand down with it. They are offers about one column, so a
+  // column arriving sixty times a second makes them noise — and the boxes would ask the
+  // worker for a fresh set on every one of them.
+  const offering = editing && altsOn && !shaping && !transportPlaying() && !impossible && !blocked && !suggestionVisible();
+  activeAlternative = null; alternativeCount = 0;
+  const chordOffer = offering && chord ? drawAlternatives(ctx, s, scale, X, Y, lane, at) : null;
+  const noteOffer = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
+  const hovered = previewAlternative ? chordOffer : null;
+  const spot = previewAlternative ? noteOffer : null;
+  activeAlternative = (hovered?.hand ? hovered : null) || (spot?.hand ? spot : null);
+  fretboardPanel.dataset.alternativeCount = String(activeAlternative ? 1 : 0);
+  if (!gripsShown && offering) spots = null;   // hidden rings are not targets either
+  return { at, chord, offering, hovered, spot };
+}
+
+function syncFretboardBusy(lane, impossible, offering, chord) {
+  // An empty board is two different answers and it has to say which. The wait that
+  // matters is the lane's fingering — a whole-song DP in a worker, tens of seconds on
+  // a big project, during which there is no hand and no readout at all; the column's
+  // alternatives are the same question a second later. Blank in either case reads as
+  // "there is nothing here", which is what an empty neck means when nothing is
+  // playing, so the two states cannot share a picture.
+  // Two waits, and they are not the same size, so they do not get the same sentence.
+  // The fingering is a whole-song DP in a worker that can run for tens of seconds on
+  // a big project with an empty neck the whole time; the alternatives are a few
+  // hundred milliseconds over one column, on a board that already has a hand on it.
+  // A spinner alone says "not yet" and leaves the user to guess which of those they
+  // are in — and the long one is the one worth naming, because it is the one where
+  // an unlabelled ring starts to read as stuck.
+  // The second wait belongs to the BOXES, and only a chord asks for them: a lone note's
+  // circles are arithmetic on this thread and land in the same frame. Without the
+  // `chord` here the panel announced a worker run that was never started.
+  const waiting = !impossible && lane?.notes?.length
+    ? !gripsFor(lane) ? "Working out the fingering"
+      : positionPreview?.pending && (previewAlternative || shaping?.preview) ? "Calculating position preview"
+        : offering && chord && !alts ? "Finding other positions" : ""
+    : "";
+  fretboardBusy.hidden = !editing || !waiting;
+  if (waiting && fretboardBusyLabel.textContent !== waiting) fretboardBusyLabel.textContent = waiting;
+}
+
+function paintHandImpacts(ctx, s, scale, X, Y, { at, t, moving, hue }) {
+  // Technique pulses are tied to finger impacts, individually even inside barres.
+  if (moving) for (const m of at.marks) {
+    if (m.shapeHeld) continue;
+    const pulse = fingerPulseAt(m, t);
+    if (!pulse || !(m.fret > 0) || !(m.pressed ?? at.pressed)) continue;
+    const x = X(m.x), y = Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s));
+    const r = markRadius(m.x, scale, s);
+    ctx.save();
+    ctx.globalAlpha *= (m.opacity ?? 1) * (m.note?.fx?.ghost ? 0.4 : 1);
+    ctx.lineWidth = pulse.kind === "tap" ? 3 : 3.5;
+    for (let ring = 0; ring < pulse.rings; ring++) {
+      const radius = r * (pulse.radius + ring * 0.45);
+      ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = hexA(hue, pulse.strength * (ring ? 0.65 : 0.9));
+      ctx.stroke();
+    }
+    // A bright, compact impact under the outgoing ripple.
+    ctx.beginPath(); ctx.arc(x, y, r * (1.12 + pulse.progress * 0.25), 0, Math.PI * 2);
+    ctx.fillStyle = hexA(PAINT.paper, pulse.strength * 0.35); ctx.fill();
+    ctx.restore();
+  }
+  // A picked fretted note: a soft disc of the layer's hue closes in on the fingertip.
+  // Filled and contracting, where a technique's rings above are outlined and spread.
+  if (moving) for (const m of at.marks) {
+    if (m.shapeHeld) continue;
+    if (!(m.fret > 0) || !(m.pressed ?? at.pressed) || fingerPulseAt(m, t)) continue;
+    const u = fretStrikeAt(m, t);
+    if (u == null) continue;
+    const x = X(m.x), y = Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s));
+    const r = markRadius(m.x, scale, s), fade = (1 - u) ** 2;
+    const fx = m.note?.fx || {};
+    ctx.save();
+    ctx.globalAlpha *= (m.opacity ?? 1) * (fx.ghost ? 0.4 : fx.accent ? 1 : 0.85);
+    ctx.beginPath(); ctx.arc(x, y, r * (2 - u), 0, Math.PI * 2);
+    ctx.fillStyle = hexA(hue, 0.45 * fade); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r * (1.35 - 0.35 * u), 0, Math.PI * 2);
+    ctx.fillStyle = hexA(PAINT.paper, 0.5 * fade); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function handDisplayMarks(at, moving) {
+  // The low finger stays planted. A second finger taps/releases the upper fret;
+  // its fill follows the same sixteenth-note phase as the audible trill.
+  const marks = at.marks.flatMap((m) => {
+    if (!moving && m.slideSpan) return slideEnds(m);
+    if (m.graceTarget) return [m, { ...m, ...m.graceTarget, noteLabel: false, lift: 0, pressed: false, opacity: 0.55 }];
+    if (m.graceOrigin) return [{ ...m, ...m.graceOrigin, noteLabel: false, lift: 0 }, m];
+    if (m.trill) return [m, { ...m, ...m.trill, noteLabel: false, trill: undefined, lift: 0, pressed: m.trill.down,
+      opacity: m.trill.down ? 1 : 0.55 }];
+    const extra = m.hammerSupport || m.hammerTarget;
+    if (extra && moving) return [{ ...m, ...extra, noteLabel: false, lift: 0 }, m];
+    return [m];
+  });
+  return marks;
+}
+
+function paintHeldHandContacts(ctx, s, scale, X, Y, at) {
+  if (at.gripMarks) for (const mark of at.marks) {
+    if (mark.shapeHeld || mark.releasing) continue;
+    const contact = at.gripMarks.find(contact => contact.string === mark.string);
+    if (!contact) continue;
+    const x = X(contact.x), y = Y(stringOffsetAt(contact.string, Math.max(0, contact.x), s));
+    const radius = markRadius(contact.x, scale, s) * 1.2;
+    ctx.save(); ctx.globalAlpha *= .85;
+    ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = PAINT.paper; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+  }
+}
+
+function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, offered = 0, strung = null, tunePx = 11, lastFret = s.frets }) {
+  const last = fretDistance(lastFret, s.scale);
+  const nutHalf = boardHalfWidthAt(0, s), endHalf = boardHalfWidthAt(last, s);
+
+  // The slab: parallel behind the nut, tapered to the last fret, parallel again
+  // over the overhang.
+  ctx.fillStyle = PAINT.chrome;
+  ctx.beginPath();
+  ctx.moveTo(X(-s.nutDepth), Y(-nutHalf));
+  ctx.lineTo(X(0), Y(-nutHalf));
+  ctx.lineTo(X(last), Y(-endHalf));
+  ctx.lineTo(X(last + s.overhang), Y(-endHalf));
+  ctx.lineTo(X(last + s.overhang), Y(endHalf));
+  ctx.lineTo(X(last), Y(endHalf));
+  ctx.lineTo(X(0), Y(nutHalf));
+  ctx.lineTo(X(-s.nutDepth), Y(nutHalf));
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = PAINT.line; ctx.lineWidth = 1; ctx.stroke();
+
+  paintNeckInlays(ctx, s, scale, X, Y, lastFret);
+  paintHandPositionBand(ctx, s, X, Y, { lane, now, seat, offered });
   // Frets: nickel, and the brightest thing after the nut because they are what
   // the eye measures the board by.
   ctx.fillStyle = hexA(PAINT.label, 0.6);
@@ -862,114 +1132,11 @@ function paintFretboardNeck(ctx, s, scale, X, Y, { lane, now = null, seat = 0, o
 
   // Hand-driven waves are intentional technique cues. Ordinary picks only
   // brighten the string, including sustain beyond the authored note's end.
-  for (let i = 0; i < s.strings; i++) {
-    const held = stringContactAt(now, i);
-    const contact = held?.trill?.down ? { ...held, ...held.trill, lift: 0 } : held;
-    const end = last + s.overhang, nut = -s.nutDepth;
-    const start = contact?.fret > 0 ? contact.x : s.capo ? capoLine(s) : 0;
-    const y0 = Y(stringOffsetAt(i + (contact?.lift || 0), Math.max(0, start), s));
-    const nutY = Y(stringOffsetAt(i, 0, s)), bridgeY = Y(stringOffsetAt(i, s.scale, s));
-    const spacing = Math.abs(stringOffsetAt(1, end, s) - stringOffsetAt(0, end, s)) * scale;
-    const preparing = now?.preparations?.find((f) => f.string === i);
-    const pull = preparing ? popPreparation(preparing.note, now.t) : 0;
-    const moving = now?.moving && contact && !contact.shapeHeld && ((contact.pressed ?? now.at?.pressed) || contact.ringing || contact.releasing);
-    const n = contact?.note;
-    const kind = !moving ? null : n?.slap === "slap" ? "slap"
-      : n?.slap === "tap" ? "tap" : contact.hammerMotion === "hammer" ? "hammer" : null;
-    const excitation = kind === "tap" || kind === "hammer" ? contact.start
-      : contact ? strikeTime(contact, now?.t) : null;
-    const age = excitation == null ? -1 : now.t - excitation;
-    const waving = kind === "slap" && age >= 0 && age < 0.24;
-    const baseY = (mm) => mm < start
-      ? nutY + (y0 - nutY) * (mm - nut) / Math.max(0.001, start - nut)
-      : y0 + (bridgeY - y0) * (mm - start) / Math.max(0.001, s.scale - start);
-    const popAnchor = preparing ? fretCentre(preparing.fret, s) : start;
-    const popX = Math.min(end - 2, Math.max(end - 12, popAnchor + 4));
-    const popHeight = (mm) => popLiftAt(mm / s.scale, popX / s.scale, pull, Math.max(0, popAnchor) / s.scale);
-    // A projected lift plus a detached shadow makes the depth visible from above.
-    const yAt = (mm) => baseY(mm) - spacing * 0.65 * popHeight(mm) + (waving ? spacing * fingerWaveAt(
-      (mm - nut) / (end - nut), (start - nut) / (end - nut), age, kind) : 0);
-    const trace = (from) => {
-      ctx.beginPath(); ctx.moveTo(X(from), yAt(from));
-      if (waving || Math.abs(pull) > 0.001) {
-        const steps = Math.max(24, Math.min(120, Math.ceil((X(end) - X(from)) / 7)));
-        for (let k = 1; k <= steps; k++) {
-          const mm = from + (end - from) * k / steps; ctx.lineTo(X(mm), yAt(mm));
-        }
-      } else {
-        if (start > from && start < end) ctx.lineTo(X(start), yAt(start));
-        ctx.lineTo(X(end), yAt(end));
-      }
-    };
-    const width = Math.max(1, s.gauges[i] * scale);
-    ctx.save(); ctx.lineCap = "round";
-    ctx.strokeStyle = hexA(PAINT.label, 0.65); ctx.lineWidth = width;
-    if (Math.abs(pull) > 0.001) {
-      ctx.save();
-      ctx.beginPath(); ctx.moveTo(X(Math.max(0, popAnchor)), baseY(Math.max(0, popAnchor)));
-      ctx.lineTo(X(end), baseY(end));
-      ctx.strokeStyle = hexA(PAINT.ink, 0.4 * Math.max(0, pull));
-      ctx.lineWidth = width + 3 * Math.max(0, pull); ctx.stroke();
-      ctx.restore();
-      ctx.lineCap = "butt";
-      const steps = Math.max(24, Math.min(160, Math.ceil((X(end) - X(nut)) / 5)));
-      for (let k = 0; k < steps; k++) {
-        const a = nut + (end - nut) * k / steps, b = nut + (end - nut) * (k + 1) / steps;
-        const depth = popThicknessAt(Math.max(0, (a + b) / 2) / s.scale, popX / s.scale, pull, Math.max(0, popAnchor) / s.scale) - 1;
-        // A little perspective thickening reinforces the projected depth.
-        ctx.lineWidth = Math.max(width * 0.45, width + depth * Math.max(width, 2));
-        ctx.beginPath(); ctx.moveTo(X(a), yAt(a)); ctx.lineTo(X(b), yAt(b)); ctx.stroke();
-      }
-    } else { trace(nut); ctx.stroke(); }
-    const fingerLight = kind === "hammer" || kind === "tap";
-    // Only an open string is struck on the board; a fretted pick pulses its fingertip (drawHand).
-    const open = !(contact?.fret > 0);
-    const glow = moving && open ? stringGlow(contact, now.t) * (fingerLight ? 0.3 : 1) : 0;
-    const pulse = moving && open && !fingerLight ? stringAttackPulse(contact, now.t) : 0;
-    if (glow > 0.001 || pulse > 0.001) {
-      ctx.lineCap = "round"; trace(start);
-      ctx.strokeStyle = hexA(lane.color || PAINT.accent, Math.min(1, glow * 0.3 + pulse * 0.45));
-      ctx.lineWidth = width + 3 + pulse * 3; ctx.stroke();
-      ctx.strokeStyle = hexA(PAINT.paper, Math.max(glow, pulse));
-      ctx.lineWidth = Math.max(1.4, width) + pulse * 1.8; ctx.stroke();
-    }
-    if ((kind === "hammer" || kind === "tap") && age >= 0 && age < 0.24) {
-      ctx.lineCap = "butt";
-      const steps = Math.max(32, Math.min(160, Math.ceil((X(end) - X(nut)) / 5)));
-      for (let k = 0; k < steps; k++) {
-        const a = nut + (end - nut) * k / steps, b = nut + (end - nut) * (k + 1) / steps;
-        const light = fingerLightAt(((a + b) / 2 - nut) / (end - nut),
-          (start - nut) / (end - nut), age, kind);
-        if (light < 0.002 || (kind === "hammer" && b <= start)) continue;
-        ctx.beginPath(); ctx.moveTo(X(kind === "hammer" ? Math.max(start, a) : a), baseY(kind === "hammer" ? Math.max(start, a) : a));
-        ctx.lineTo(X(b), baseY(b));
-        ctx.strokeStyle = hexA(lane.color || PAINT.accent, light * 0.65);
-        ctx.lineWidth = width + 5; ctx.stroke();
-        ctx.strokeStyle = hexA(PAINT.paper, light);
-        ctx.lineWidth = width + 1.5; ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
+  for (let i = 0; i < s.strings; i++) paintFretboardString(ctx, s, scale, X, Y, i, { lane, now, last });
 
   paintBoardCapo(ctx, s, scale, X, Y);
 
-  // Fret numbers below the board, on the dotted frets only — a number under
-  // every fret is 22 numbers nobody reads. Mono, because a fret number is a
-  // value you compare (rule 6). With a capo they count from it, like the tab, unless
-  // the player asked for the nut's numbers (Settings → Editor → Fret numbers).
-  ctx.fillStyle = PAINT.label;
-  ctx.font = stageMono(11);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  const fromCapo = s.capo && $("fretNumbering")?.value !== "nut" ? s.capo : 0;
-  // One level line under the board's widest end, shared with the hand-position row.
-  const numberTop = Math.max(Y(endHalf), Y(-endHalf)) + 5;
-  for (const n of s.dots.filter(n => n <= lastFret)) {
-    if (n <= fromCapo) continue;
-    ctx.fillText(String(n - fromCapo), X(dotCentre(n, s)), numberTop);
-  }
-
+  paintFretNumbers(ctx, s, X, Y, { endHalf, lastFret });
   // The tuning, at the nut, where a player looks for it — it is the one thing the
   // drawn instrument cannot state, and without it fret 5 on the top string names no
   // pitch at all. Right-aligned against the nut, and mono because a pitch is a
@@ -1129,23 +1296,7 @@ export function drawFretboard() {
   const lane = currentLane();
   const comparing = !!comparisonPreview && comparisonPreview.lane === lane && (!comparisonPreview.note || lane?.notes.includes(comparisonPreview.note));
   const missingPreview = comparing && !comparisonPreview.note;
-  const warning = $("fretboardWarning");
-  const warningTime = comparing && comparisonPreview.note ? comparisonPreview.note.start + 1e-6 : frozenAt(lane) ?? boardTime();
-  const here = lane && !missingPreview ? chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
-    .find(({ t0, notes }) => warningTime >= t0 - 1e-5 && warningTime < Math.max(...notes.map(n => n.end))) : null;
-  // Stretched shapes are visible immediately; invalid shapes require opt-in.
-  const invalidKey = here?.kind === "impossible" ? `${lane.id}:${here.t0}` : null;
-  const impossible = !!invalidKey && !shapeRevealed(lane, invalidKey);
-  const selectionError = !comparing && editing && !transportPlaying() ? selectedPositions(lane).error : null;
-  const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
-  warning.hidden = !selectionError && !here;
-  const [shapeTitle, shapeHelp] = SHAPE_WARNINGS[here?.kind] || SHAPE_WARNINGS.impossible;
-  warning.textContent = selectionError || (here ? `${here.kind === "stretch" ? "ⓘ" : "⚠"} ${shapeTitle}` : "");
-  warning.title = selectionError || shapeHelp;
-  warning.toggleAttribute("data-error", here?.kind === "impossible" && !selectionError);
-  fretboardShowAnyway.hidden = !impossible || !!selectionError;
-  fretboardShowAnyway.dataset.key = invalidKey || "";
-  fretboardPanel.toggleAttribute("data-unplayable", impossible);
+  const { impossible, blocked } = syncFretboardWarning(lane, comparing, missingPreview);
   if (fretboardPanel.hasAttribute("data-edit-blocked") !== blocked) {
     fretboardPanel.toggleAttribute("data-edit-blocked", blocked);
     layoutFretboard(); return;
@@ -1169,36 +1320,10 @@ export function drawFretboard() {
   if (!projection) return;
   const { scale, X, Y, strung, tunePx } = projection;
   if (comparing) {
-    board = null; spots = null; activeAlternative = null;
-    if (alts) alts.boxes = [];
-    const now = missingPreview ? null : handNow(lane, s, comparisonPreview.note.start + 1e-6);
-    const index = now ? gripIndex(now.found.columns, now.t) : -1;
-    const seat = index >= 0 ? now.found.columns[index].seat : 0;
-    paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, offered: 0, strung, tunePx });
-    if (now) drawHand(ctx, s, scale, X, Y, lane, now, null, { onion: false });
-    fretboardName.textContent = `${comparisonPreview.label} · ${missingPreview ? 'Missing note' : noteName(comparisonPreview.note.pitch)}`;
-    fretboardBusy.hidden = missingPreview || !!now;
-    if (!now && !missingPreview) fretboardBusyLabel.textContent = 'Loading comparison fingering';
+    paintComparisonBoard(ctx, s, scale, X, Y, { lane, missingPreview, strung, tunePx });
     return;
   }
-  // Resolve the selected preview before painting its hand-position band.
-  const at = editing ? focusGrip(lane, s) : null;
-  board = editing && lane && laneFretTuning(lane).length === s.strings
-    ? { lane, s, scale, X, Y, marks: (at?.marks || []).filter((m) => m.note && !m.releasing) } : null;
-  const chord = (at?.marks.length || 0) > 1;
-  spots = null; if (alts) alts.boxes = [];
-  // And the working views stand down with it. They are offers about one column, so a
-  // column arriving sixty times a second makes them noise — and the boxes would ask the
-  // worker for a fresh set on every one of them.
-  const offering = editing && altsOn && !shaping && !transportPlaying() && !impossible && !blocked && !suggestionVisible();
-  activeAlternative = null; alternativeCount = 0;
-  const chordOffer = offering && chord ? drawAlternatives(ctx, s, scale, X, Y, lane, at) : null;
-  const noteOffer = offering && at && !chord ? drawNotePlaces(ctx, s, scale, X, Y, lane, at) : null;
-  const hovered = previewAlternative ? chordOffer : null;
-  const spot = previewAlternative ? noteOffer : null;
-  activeAlternative = (hovered?.hand ? hovered : null) || (spot?.hand ? spot : null);
-  fretboardPanel.dataset.alternativeCount = String(activeAlternative ? 1 : 0);
-  if (!gripsShown && offering) spots = null;   // hidden rings are not targets either
+  const { at, chord, offering, hovered, spot } = prepareBoardOffers(ctx, s, scale, X, Y, lane, impossible, blocked);
   const now = impossible || shaping ? null : handNow(lane, s);
   syncSuggestion(lane, s);
   drawHandPositions(s, X, Y, lane);
@@ -1230,29 +1355,7 @@ export function drawFretboard() {
   if (spot) drawNoteOffer(ctx, s, scale, X, Y, lane, spot);
   if (noteDrag?.to) drawDragTarget(ctx, s, scale, X, Y, lane);
   else if (boardHover && !noteDrag && spotHover < 0 && hoverAt < 0) drawBoardHover(ctx, s, scale, X, Y, lane);
-  // An empty board is two different answers and it has to say which. The wait that
-  // matters is the lane's fingering — a whole-song DP in a worker, tens of seconds on
-  // a big project, during which there is no hand and no readout at all; the column's
-  // alternatives are the same question a second later. Blank in either case reads as
-  // "there is nothing here", which is what an empty neck means when nothing is
-  // playing, so the two states cannot share a picture.
-  // Two waits, and they are not the same size, so they do not get the same sentence.
-  // The fingering is a whole-song DP in a worker that can run for tens of seconds on
-  // a big project with an empty neck the whole time; the alternatives are a few
-  // hundred milliseconds over one column, on a board that already has a hand on it.
-  // A spinner alone says "not yet" and leaves the user to guess which of those they
-  // are in — and the long one is the one worth naming, because it is the one where
-  // an unlabelled ring starts to read as stuck.
-  // The second wait belongs to the BOXES, and only a chord asks for them: a lone note's
-  // circles are arithmetic on this thread and land in the same frame. Without the
-  // `chord` here the panel announced a worker run that was never started.
-  const waiting = !impossible && lane?.notes?.length
-    ? !gripsFor(lane) ? "Working out the fingering"
-      : positionPreview?.pending && (previewAlternative || shaping?.preview) ? "Calculating position preview"
-        : offering && chord && !alts ? "Finding other positions" : ""
-    : "";
-  fretboardBusy.hidden = !editing || !waiting;
-  if (waiting && fretboardBusyLabel.textContent !== waiting) fretboardBusyLabel.textContent = waiting;
+  syncFretboardBusy(lane, impossible, offering, chord);
 }
 
 // The column under the hand, when it carries an override of any kind. Same focus the
@@ -1876,68 +1979,10 @@ function drawHand(ctx, s, scale, X, Y, lane, now, quiet, { onion = editing } = {
     return;
   }
 
-  // Technique pulses are tied to finger impacts, individually even inside barres.
-  if (moving) for (const m of at.marks) {
-    if (m.shapeHeld) continue;
-    const pulse = fingerPulseAt(m, t);
-    if (!pulse || !(m.fret > 0) || !(m.pressed ?? at.pressed)) continue;
-    const x = X(m.x), y = Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s));
-    const r = markRadius(m.x, scale, s);
-    ctx.save();
-    ctx.globalAlpha *= (m.opacity ?? 1) * (m.note?.fx?.ghost ? 0.4 : 1);
-    ctx.lineWidth = pulse.kind === "tap" ? 3 : 3.5;
-    for (let ring = 0; ring < pulse.rings; ring++) {
-      const radius = r * (pulse.radius + ring * 0.45);
-      ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA(hue, pulse.strength * (ring ? 0.65 : 0.9));
-      ctx.stroke();
-    }
-    // A bright, compact impact under the outgoing ripple.
-    ctx.beginPath(); ctx.arc(x, y, r * (1.12 + pulse.progress * 0.25), 0, Math.PI * 2);
-    ctx.fillStyle = hexA(PAINT.paper, pulse.strength * 0.35); ctx.fill();
-    ctx.restore();
-  }
-  // A picked fretted note: a soft disc of the layer's hue closes in on the fingertip.
-  // Filled and contracting, where a technique's rings above are outlined and spread.
-  if (moving) for (const m of at.marks) {
-    if (m.shapeHeld) continue;
-    if (!(m.fret > 0) || !(m.pressed ?? at.pressed) || fingerPulseAt(m, t)) continue;
-    const u = fretStrikeAt(m, t);
-    if (u == null) continue;
-    const x = X(m.x), y = Y(stringOffsetAt(m.string + (m.lift || 0), Math.max(0, m.x), s));
-    const r = markRadius(m.x, scale, s), fade = (1 - u) ** 2;
-    const fx = m.note?.fx || {};
-    ctx.save();
-    ctx.globalAlpha *= (m.opacity ?? 1) * (fx.ghost ? 0.4 : fx.accent ? 1 : 0.85);
-    ctx.beginPath(); ctx.arc(x, y, r * (2 - u), 0, Math.PI * 2);
-    ctx.fillStyle = hexA(hue, 0.45 * fade); ctx.fill();
-    ctx.beginPath(); ctx.arc(x, y, r * (1.35 - 0.35 * u), 0, Math.PI * 2);
-    ctx.fillStyle = hexA(PAINT.paper, 0.5 * fade); ctx.fill();
-    ctx.restore();
-  }
-  // The low finger stays planted. A second finger taps/releases the upper fret;
-  // its fill follows the same sixteenth-note phase as the audible trill.
-  const marks = at.marks.flatMap((m) => {
-    if (!moving && m.slideSpan) return slideEnds(m);
-    if (m.graceTarget) return [m, { ...m, ...m.graceTarget, noteLabel: false, lift: 0, pressed: false, opacity: 0.55 }];
-    if (m.graceOrigin) return [{ ...m, ...m.graceOrigin, noteLabel: false, lift: 0 }, m];
-    if (m.trill) return [m, { ...m, ...m.trill, noteLabel: false, trill: undefined, lift: 0, pressed: m.trill.down,
-      opacity: m.trill.down ? 1 : 0.55 }];
-    const extra = m.hammerSupport || m.hammerTarget;
-    if (extra && moving) return [{ ...m, ...extra, noteLabel: false, lift: 0 }, m];
-    return [m];
-  });
+  paintHandImpacts(ctx, s, scale, X, Y, { at, t, moving, hue });
+  const marks = handDisplayMarks(at, moving);
   drawGrip(ctx, s, scale, X, Y, at.gripMarks || marks, hue, at.pressed, { time: $("fretboardAnimations")?.checked === false ? null : t, liveStrings: moving });
-  if (at.gripMarks) for (const mark of at.marks) {
-    if (mark.shapeHeld || mark.releasing) continue;
-    const contact = at.gripMarks.find(contact => contact.string === mark.string);
-    if (!contact) continue;
-    const x = X(contact.x), y = Y(stringOffsetAt(contact.string, Math.max(0, contact.x), s));
-    const radius = markRadius(contact.x, scale, s) * 1.2;
-    ctx.save(); ctx.globalAlpha *= .85;
-    ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = PAINT.paper; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
-  }
+  paintHeldHandContacts(ctx, s, scale, X, Y, at);
   if (!moving) for (const m of at.marks) if (m.slideSpan) drawSlideArrow(ctx, s, scale, X, Y, m);
   if (!moving) drawHammerConnections(ctx, s, scale, X, Y, lane, at.marks,
     n => found.voiced.get(n), n => found.fingers?.get(n));

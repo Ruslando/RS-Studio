@@ -117,7 +117,7 @@ function stepCopy(delta) {
   review.copyKey = state.navigationCopies[index].ids[0];
   revealCurrent();
 }
-export function closeRepeats() {
+function closeRepeats() {
   if (!review && !worker) return false;
   hideRepeatHover(); closeRepeatPickers();
   worker?.terminate(); worker = null; scanLane = null; scanProject = null;

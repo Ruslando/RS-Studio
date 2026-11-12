@@ -29,9 +29,9 @@ export const songWidth = () => Math.max(1, Math.ceil((S.state.duration + lead())
 
 export const contentH = () => S.stageHeight * S.zoomY;   // full pitch-range height (== rowH * rowCount)
 
-export const rowCount = () => S.state.spec.midi_high - S.state.spec.midi_low + 1;
+const rowCount = () => S.state.spec.midi_high - S.state.spec.midi_low + 1;
 
-export const rowOf = (pitch) => S.state.spec.midi_high - pitch;
+const rowOf = (pitch) => S.state.spec.midi_high - pitch;
 
 export const yOf = (pitch) => rowOf(pitch) * S.state.rowH;
 
@@ -65,7 +65,7 @@ export function stageRoom() {
 // overlay bar takes none (measures 0) and floats over the same reserved strip.
 const H_BAR = 12;
 const hBarTaken = () => scroll.offsetHeight - scroll.clientHeight;
-export const hBarHeight = () => Math.max(H_BAR, hBarTaken());
+const hBarHeight = () => Math.max(H_BAR, hBarTaken());
 
 export function layout() {
   // A hidden spectrogram reports a zero-sized viewport while tablature is open.
@@ -134,12 +134,12 @@ export function layout() {
 // the scale, then re-scroll so that same world point stays under the cursor.
 export const zoomSlider = $("zoomSlider"), zoomValEl = $("zoomVal");
 
-export const zoomInBtn = $("zoomIn"), zoomOutBtn = $("zoomOut");
+const zoomInBtn = $("zoomIn"), zoomOutBtn = $("zoomOut");
 
 // Discrete zoom stops: powers of ZOOM_STEP anchored at 100%, clamped to the
 // min/max — so dragging the slider lands on the same values the +/- buttons
 // and wheel zoom produce, instead of an arbitrary continuous percentage.
-export const ZOOM_LEVELS = (() => {
+const ZOOM_LEVELS = (() => {
   const levels = [1];
   for (let z = ZOOM_STEP; z < ZOOM_MAX_X; z *= ZOOM_STEP) levels.push(z);
   levels.push(ZOOM_MAX_X);
@@ -148,7 +148,7 @@ export const ZOOM_LEVELS = (() => {
   return levels;
 })();
 
-export const zoomXToSlider = (zx) => {
+const zoomXToSlider = (zx) => {
   let best = 0, bestDiff = Infinity;
   for (let i = 0; i < ZOOM_LEVELS.length; i++) {
     const diff = Math.abs(ZOOM_LEVELS[i] - zx);
@@ -157,7 +157,7 @@ export const zoomXToSlider = (zx) => {
   return best;
 };
 
-export const sliderToZoomX = (v) => ZOOM_LEVELS[v];
+const sliderToZoomX = (v) => ZOOM_LEVELS[v];
 
 export function updateZoomLabels() {
   // Unified control: % follows the time axis; pitch rides along (clamped).

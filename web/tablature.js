@@ -50,7 +50,7 @@ const saveCustomTunings = () => fetch("/api/tunings", { method: "POST", headers:
   body: JSON.stringify(customTunings) }).catch(() => {});
 export let customTunings = [];
 
-export async function loadCustomTunings() {
+async function loadCustomTunings() {
   try {
     const res = await fetch("/api/tunings");
     customTunings = res.ok ? await res.json() : [];
@@ -79,7 +79,7 @@ export function tuningKeyFor(midis) {
 export const isValidTuningKey = (key) =>
   !!(key && (TUNINGS[key] || key === "custom" || customTunings.some((t) => t.id === key)));
 
-export let tabApi = null;            // alphaTab instance (created lazily)
+let tabApi = null;            // alphaTab instance (created lazily)
 
 // Tuning parsing lives in util.js so guitar-pro-edit.js can reach it without
 // pulling in this module's DOM and alphaTab surface (it had its own copy).
@@ -447,7 +447,7 @@ async function buildTabSpecAsync(signal) {
 
 // Load the alphaTab bundle on demand (the first time the tab view opens),
 // so its large script + music font stay off the initial page load.
-export let alphaTabLoading = null;
+let alphaTabLoading = null;
 
 export function loadAlphaTab() {
   if (window.alphaTab) return Promise.resolve();

@@ -547,7 +547,7 @@ function tiedEnd(note) {
   return { endTick, segments, chain };
 }
 
-export const GM_GUITARS = ["Nylon Guitar", "Steel Guitar", "Jazz Guitar", "Clean Guitar", "Muted Guitar",
+const GM_GUITARS = ["Nylon Guitar", "Steel Guitar", "Jazz Guitar", "Clean Guitar", "Muted Guitar",
   "Overdriven Guitar", "Distortion Guitar", "Guitar Harmonics", "Acoustic Bass", "Fingered Bass",
   "Picked Bass", "Fretless Bass", "Slap Bass 1", "Slap Bass 2", "Synth Bass 1", "Synth Bass 2"];
 // A tone switch for each instrument change in the file. Its key names no preset of

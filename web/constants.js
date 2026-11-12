@@ -14,6 +14,9 @@ export const MAX_TIE_CHAIN = 1024;
 export const MAX_RHYTHM_PIECES = 512;
 export const MAX_METRONOME_BEATS = 512;
 
+// Fallback range shared by slide limits and voicing when no instrument limit is supplied.
+export const MAX_FRET = 24;
+
 export const PX_PER_SEC = 120;      // base time scale at 100% zoom (px per second)
 export const STAGE_HEIGHT_DEFAULT = 520; // fallback viewport height while the shell is hidden
 export const STAGE_HEIGHT_MIN = 360;

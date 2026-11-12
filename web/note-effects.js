@@ -31,13 +31,13 @@ export const EFFECT_FIELDS = [
 // detection, so editing it looks like no edit at all and a source-preserving
 // export silently drops it. Add an effect to EFFECT_FIELDS and you must add it
 // here (or to LATE_SIGNATURE_FIELDS).
-export const SIGNATURE_EFFECT_FIELDS = [
+const SIGNATURE_EFFECT_FIELDS = [
   "slide", "bend", "bendPoints", "harmonic", "grace", "trill", "tremPick",
   "slap", "stroke", "whammy", "fx",
 ];
 // Fields added after projects already stored signatures. They join the signature
 // only when set, so a note without them hashes as it always did.
-export const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart", "vibratoEnd", "slideEnd", "slideFrets", "slideIn", "whammyPoints", "ornament"];
+const LATE_SIGNATURE_FIELDS = ["slideStart", "vibratoStart", "vibratoEnd", "slideEnd", "slideFrets", "slideIn", "whammyPoints", "ornament"];
 
 // `{ slide: …, bend: …, … }` with an explicit null for anything absent, so a
 // removed effect changes the signature as surely as an added one does. Three
@@ -100,11 +100,11 @@ export function noteMarks(n) {
   return m;
 }
 
-export const hasNoteEffects = (n) => !!(n.slide || n.slideIn || n.bend || n.whammy || n.harmonic || noteMarks(n).length);
+const hasNoteEffects = (n) => !!(n.slide || n.slideIn || n.bend || n.whammy || n.harmonic || noteMarks(n).length);
 
 export const cloneFx = (fx) => (fx ? { ...fx } : undefined);
 
-export const cloneArrangement = (arrangement) => {
+const cloneArrangement = (arrangement) => {
   if (!arrangement) return undefined;
   return {
     ...arrangement,

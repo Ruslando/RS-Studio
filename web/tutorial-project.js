@@ -70,7 +70,7 @@ export async function openTutorialProject() {
 }
 
 /** True when what is open is the tutorial song — the steps that edit check this. */
-export const inTutorialProject = () => S.state?.job === "tutorial";
+const inTutorialProject = () => S.state?.job === "tutorial";
 
   // The bass part, as the synthesiser wrote it (src/rs_studio/tutorial.py): a
 // lead-in, then one note a beat at 120 BPM, the same eight-note phrase four

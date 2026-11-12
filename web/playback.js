@@ -31,7 +31,7 @@ function updateRegionLoop() {
 
 export let scheduled = new Set();   // notes scheduled in the current play cycle
 
-export let scheduledBeats = new Set(); // metronome beat indices scheduled this cycle
+let scheduledBeats = new Set(); // metronome beat indices scheduled this cycle
 let scrollingSuspended = false;
 let scrollingResumeSince = null;
 window.addEventListener("cw-viewport-manual", () => {
@@ -181,7 +181,7 @@ function setSynthsMuted(muted) {
 // real spacing relative to the earliest one — so you preview the rhythm/melody,
 // not a blunt chord. clearPreview + releaseAll drop the prior pass so fast
 // vertical scrubbing restarts cleanly instead of piling up.
-export let previewTimers = [];
+let previewTimers = [];
 
 export let passagePreviewToken = 0;
 
@@ -426,16 +426,16 @@ export async function ensureTone() {
 // once (guitar + bass, no vocals…). Media elements — not buffer sources — so the
 // pitch-preserving Speed control keeps working; followers are nudged back onto the
 // master's time in tick() to fight decoder drift.
-export const stemNodes = new Map();      // stem.id -> { el, src, gain }  (master excluded)
+const stemNodes = new Map();      // stem.id -> { el, src, gain }  (master excluded)
 
 let masterChannel;
-export let masterGain = null;
+let masterGain = null;
 
 export const masterStem = () => (S.state && S.state.stems[0]) || null;
 
 export const isMasterStem = (stem) => { const m = masterStem(); return !!m && stem.id === m.id; };
 
-export const separatedStems = () => (S.state ? S.state.stems.filter((stem) => !isMasterStem(stem)) : []);
+const separatedStems = () => (S.state ? S.state.stems.filter((stem) => !isMasterStem(stem)) : []);
 
 export const masterStemAudible = () => {
   const m = masterStem();

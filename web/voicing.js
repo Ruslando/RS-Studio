@@ -31,7 +31,7 @@ export { analyzeChord, detectChord, PC_NAMES, pcName } from "./chords.js";
 // Live voicing state for one column: its current (sounding) shape, the ranked
 // playable shapes (easiest first), the current shape's rank, and whether it's
 // manually pinned. `voiced` is the whole-lane voicing the export would produce.
-export function columnVoicingState(colNotes, tuning, voiced) {
+function columnVoicingState(colNotes, tuning, voiced) {
   const cur = new Map();
   for (const n of colNotes) { const p = voiced.get(n); if (p) cur.set(n, p); }
   const curKey = shapeKey(cur);

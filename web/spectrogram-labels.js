@@ -10,7 +10,7 @@ export function spectrogramLabelOptions(root = document) {
   };
 }
 
-export const labelVisible = (setting, hovered) => setting === 'always' || setting === 'hover' && hovered;
+const labelVisible = (setting, hovered) => setting === 'always' || setting === 'hover' && hovered;
 
 export function migrateNoteAppearanceSettings(store = {}) {
   if (!store || typeof store !== 'object' || Array.isArray(store)) store = {};

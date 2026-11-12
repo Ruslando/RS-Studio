@@ -180,7 +180,7 @@ export async function modernGpResult(alphaTabRuntime, signal) {
   };
 }
 
-export async function projectedGpScore(alphaTabRuntime, signal) {
+async function projectedGpScore(alphaTabRuntime, signal) {
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) throw new Error(status.reason);
   return layersScore(alphaTabRuntime, enabledScoreLanes(), signal);

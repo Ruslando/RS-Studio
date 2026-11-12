@@ -15,7 +15,7 @@ import { S } from "./store.js";
 import { refreshTabIfOpen } from "./tablature.js";
 import { SONG, onLiveTiming, sectionsOnLiveTempo, withTiming } from "./timing.js";
 
-export function applyTempoMap(grid) {
+function applyTempoMap(grid) {
   const prev = snapshotEdit();
   withTiming(SONG, () => {
     const end = S.state.duration;

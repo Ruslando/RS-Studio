@@ -10,7 +10,7 @@ import { icon } from "./icons.js";
 import { S } from "./store.js";
 import { clamp, normLayerVolume } from "./util.js";
 
-export const BUSES = ["notes", "audio"];
+const BUSES = ["notes", "audio"];
 
 export function normMix(raw) {
   return Object.fromEntries(BUSES.map((kind) => [kind,

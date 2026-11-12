@@ -20,9 +20,9 @@ import { S, setSelection } from "./store.js";
 import { projectStart } from "./project-position-core.js";
 import { clamp, fmtTime, hexA } from "./util.js";
 
-export let spectSampleCanvas = document.createElement("canvas");
+let spectSampleCanvas = document.createElement("canvas");
 
-export let spectSampleCtx = spectSampleCanvas.getContext("2d", { willReadFrequently: true });
+let spectSampleCtx = spectSampleCanvas.getContext("2d", { willReadFrequently: true });
 
 export function prepareSpectSample() {
   if (!S.spectImg || !spectSampleCtx) return;

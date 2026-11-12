@@ -1,3 +1,4 @@
+export { toggleStemMute };
 import { configureEditHistory, snapshotEdit, commit, commitStructure, undo, redo, updateUndoButtons } from "./edit-history.js";
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { isTablatureLane } from "./layer-role.js";
@@ -21,13 +22,13 @@ import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addCommentAt } from "./comments.js";
 import { addMarkerAtTime } from "./markers.js";
-import { activeLane, applyLaneVolume, canEditLane, confirmRemoveLane, curStemObj, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, setLaneNotePitch, targetLane, toggleLaneMute } from "./lanes.js";
+import { activeLane, applyLaneVolume, canEditLane, confirmRemoveLane, editLanes, laneOf, refreshCounts, releaseLaneSynth, renderLanes, setLaneCapo, setLaneNotePitch, targetLane, toggleLaneMute } from "./lanes.js";
 import { FX_KEYS, FX_LABELS, copyEffects, fxOn, fxValue } from "./note-effects.js";
-import { applyStemGains, ensureTone, isMasterStem, masterStem, playbackTime, previewNotes, togglePlay } from "./playback.js";
+import { ensureTone, isMasterStem, playbackTime, previewNotes, togglePlay } from "./playback.js";
 import { toast } from "./notify.js";
 import { openNewProject } from "./new-project.js";
 import { confirmStemRemoval } from "./stem-settings.js";
-import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem } from "./project.js";
+import { openProject, refreshSaveState, renderStemTabs, saveProject, selectStem, toggleStemMute } from "./project.js";
 import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, occurrenceNotes, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { SHAPE_KINDS, markShape, remintShapes, shapeGroups, unmarkShape } from "./shapes.js";
@@ -187,7 +188,7 @@ export function doCopy() {
 
 // Modal choice when pasting notes copied wholesale from a reference. Resolves
 // "copy" | "reference" | null (cancel). Mirrors confirmDetectMerge.
-export function confirmPasteMode({ signal } = {}) {
+function confirmPasteMode({ signal } = {}) {
   if (signal?.aborted || !pasteBackdrop.hidden) return Promise.resolve(null);
   return new Promise((resolve) => {
     pasteBackdrop.hidden = false;
@@ -385,28 +386,6 @@ function muteActiveLane() {
   toast(`Layer “${lane.name}” ${lane.muted ? "muted" : "unmuted"}`);
 }
 
-// Mute a stem in the mixer. No argument (Shift+M) targets the viewed stem.
-export function toggleStemMute(stem) {
-  if (!S.state) return;
-  stem = stem || curStemObj();
-  if (!stem) return;
-  const isMaster = isMasterStem(stem);
-  if (!isMaster) {
-    const fullSong = masterStem();
-    if (fullSong) fullSong.muted = true;
-  }
-  stem.muted = !stem.muted;
-  if (isMaster && !stem.muted) {
-    for (const other of S.state.stems) {
-      if (!isMasterStem(other)) { other.muted = false; other.solo = false; }
-    }
-  }
-  applyStemGains();
-  renderStemTabs();
-  refreshSaveState();
-  toast(`${isMaster ? "Full song" : `“${stem.name}”`} ${stem.muted ? "muted" : "unmuted"}`);
-}
-
 // Set (kind) or clear (null) the slide on every selected edit note.
 function setSlideOnSelection(kind) {
   const notes = [...S.selection].filter((n) => laneOf(n));
@@ -441,7 +420,7 @@ function setSlideOnSelection(kind) {
 
 // Where a slide onto the next note leaves its fret, as a fraction of the note. The pick (0) is the default and is stored as no field at
 // all. For a slide into the note, where it lands; 0 puts back the default (bend.js).
-export function setSlideStart(n, fraction) {
+function setSlideStart(n, fraction) {
   if (SLIDE_IN.has(n.slide)) {
     if (fraction > 1e-3) n.slideEnd = Math.max(SLIDE_END_MIN, Math.min(SLIDE_START_MAX, fraction));
     else delete n.slideEnd;
@@ -459,11 +438,11 @@ export function setSlideFrets(n, frets, fret) {
 }
 
 // The same for where vibrato sets in.
-export function setVibratoStart(n, fraction) {
+function setVibratoStart(n, fraction) {
   const s = Math.max(0, Math.min(vibratoEndOf(n) - (1 - SLIDE_START_MAX), fraction));
   if (s > 1e-3) n.vibratoStart = s; else delete n.vibratoStart;
 }
-export function setVibratoEnd(n, fraction) {
+function setVibratoEnd(n, fraction) {
   const end = Math.max(vibratoStartOf(n) + (1 - SLIDE_START_MAX), Math.min(1, fraction));
   if (end < 1 - 1e-3) n.vibratoEnd = end; else delete n.vibratoEnd;
 }
@@ -660,7 +639,7 @@ export function markSelectionAsShape(kind) {
 }
 
 // `kind` (arpeggio / handshape) limits these to shapes of that kind; null takes any.
-export function selectEntireShape(kind = null) {
+function selectEntireShape(kind = null) {
   const member = [...S.selection].find(note => note.shapeId && laneOf(note) && (!kind || note.shapeKind === kind));
   const notes = member && shapeGroups(laneOf(member).notes).get(member.shapeId);
   if (!notes) return;
@@ -804,7 +783,7 @@ export function settleFingerDraft(original, keep) {
 
 // Forget the selection's positions, so the next solve places it again around
 // everything else, which stays put (keepVoicing). One undo step.
-export function revoiceSelection() {
+function revoiceSelection() {
   const lanes = [...new Set([...S.selection].map(laneOf))].filter((l) => l && canEditLane(l) && isTablatureLane(l));
   if (!lanes.length) return;
   const prev = snapshotEdit();
@@ -890,7 +869,7 @@ function dropChosenFingers(lane, notes) {
 // Written onto each note's position override, so it carries on like the position
 // does (guided), and the hand follows from it: a hand anchor on
 // these notes would contradict it and goes.
-export function setColumnFingers(lane, placed, fingers) {
+function setColumnFingers(lane, placed, fingers) {
   if (!canEditLane(lane) || !placed.length || placed.some(({ note }) => !lane.notes.includes(note))) return;
   const prev = snapshotEdit();
   const { follow } = overrideFlow(placed.map(({ note }) => note));
@@ -908,7 +887,7 @@ export function setColumnFingers(lane, placed, fingers) {
 
 // The fingering back to the engine's: a chosen finger is dropped, the position stays.
 // One undo step.
-export function clearColumnFingers(lane, notes) {
+function clearColumnFingers(lane, notes) {
   const chosen = (n) => n.pos && (n.pos.fingerOnly || "finger" in n.pos);
   if (!canEditLane(lane) || !notes.some(chosen)) return;
   const prev = snapshotEdit();
@@ -958,7 +937,7 @@ export function setColumnShape(colNotes, shape, limits = null, maxFret = undefin
 // with one set of reach switches. The others keep exactly the places they already
 // had, so the change on screen is the one note that moved.
 // The fretboard's capo drag: one undo step, like every other edit made on the neck.
-export function moveLaneCapo(lane, capo) {
+function moveLaneCapo(lane, capo) {
   if (!canEditLane(lane) || (Number(lane.capo) || 0) === capo) return;
   const prev = snapshotEdit();
   setLaneCapo(lane, capo);
@@ -1044,7 +1023,7 @@ export function addNoteOnBoard(lane, string, fret, start, end) {
 }
 
 // Resolve current positions before explicitly changing a note on the fretboard.
-export function handsBefore(lane) {
+function handsBefore(lane) {
   const found = voiceNotesFingered(lane.notes, laneFretTuning(lane), Infinity,
     { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
   const byId = new Map();
@@ -1157,7 +1136,7 @@ const EFFECT_MENU = [
 ];
 
 // ---- note context menu (right-click): note effects + delete ----
-export let noteMenuEl = null;
+let noteMenuEl = null;
 let walkthroughMenuAction = null;
 let menuOpenCount = 0;
 export const walkthroughMenuOpenCount = () => menuOpenCount;

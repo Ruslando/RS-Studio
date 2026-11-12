@@ -118,7 +118,7 @@ export function rocksmithEvents(lane) {
 }
 
 // The issues of one layer that sit on its notes, with those notes: what the stage frames.
-export function rocksmithIssueNotes(lane) {
+function rocksmithIssueNotes(lane) {
   const found = results.get(lane.id);
   if (!found?.issues?.length) return [];
   const out = [];

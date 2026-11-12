@@ -8,7 +8,7 @@
 import { detectChord } from "./chords.js";
 
 export const SHAPE_KINDS = { arpeggio: "Arpeggio", handshape: "Handshape" };
-export const isShapeKind = (kind) => Object.hasOwn(SHAPE_KINDS, kind);
+const isShapeKind = (kind) => Object.hasOwn(SHAPE_KINDS, kind);
 
 // Shapes with at least two notes. One left over after a delete or a move frames
 // nothing, so it is not a shape: not drawn, not exported, not offered in menus.
@@ -53,7 +53,7 @@ export function unmarkShape(all, id) {
   for (const note of all) if (note.shapeId === id) clearShape(note);
 }
 
-export function clearShape(note) {
+function clearShape(note) {
   delete note.shapeId; delete note.shapeKind; delete note.shapeName;
 }
 

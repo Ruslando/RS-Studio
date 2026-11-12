@@ -118,12 +118,12 @@ function markerAt(x, y) {
   return markerRects.find((rect) => x >= rect.x0 && x <= rect.x1 && y >= rect.y0 && y <= rect.y1) || null;
 }
 
-export function toneMarkerCursorAt(x, y) {
+function toneMarkerCursorAt(x, y) {
   if (!S.state || !inBand(y - scroll.scrollTop)) return null;
   return markerAt(x, y) ? "grab" : null;
 }
 
-export function toneMarkerMouseDown(event) {
+function toneMarkerMouseDown(event) {
   if (!S.state || event.button !== 0) return false;
   const [x, y] = toCanvas(event.clientX, event.clientY);
   if (!inBand(y - scroll.scrollTop)) return false;
@@ -182,7 +182,7 @@ export function drawToneMarkers() {
   sctx.restore();
 }
 
-export function drawMinimapToneMarkers(at, mmctx = minimapCtx) {
+function drawMinimapToneMarkers(at, mmctx = minimapCtx) {
   const lane = activeToneLane();
   if (!S.state || !lane) return;
   const presets = readAvailableSoundPresets();

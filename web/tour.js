@@ -1039,7 +1039,7 @@ function end({ preserveHistory = false } = {}) {
  * question has an answer.
  * @param {keyof TOURS} name
  */
-export async function startTour(name, continueProject = false, initialStep = 0, dir = 1) {
+async function startTour(name, continueProject = false, initialStep = 0, dir = 1) {
   const chapter = TOURS[name];
   if (!chapter) return;
   end({ preserveHistory: continueProject });

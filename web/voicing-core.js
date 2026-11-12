@@ -3,7 +3,7 @@
 // the model is importable headless — tests/web runs it under node.
 
 import { noteName } from "./util.js";
-import { OVERLAP_EPS } from "./constants.js";
+import { MAX_FRET, OVERLAP_EPS } from "./constants.js";
 import { NO_FINGER, THUMB, barreSpanSupported, fretboardFor } from "./fretboard-core.js";
 import { SLIDES_TO_NEXT as SLIDE_TO_NEXT, SLIDE_OUT, edgeSlideFrets, edgeSlideSpan, slideInOf, slideReach } from "./bend.js";
 
@@ -11,26 +11,25 @@ import { SLIDES_TO_NEXT as SLIDE_TO_NEXT, SLIDE_OUT, edgeSlideFrets, edgeSlideSp
 // (via buildTabSpec) the Guitar Pro export, so what you see is what you export.
 // Notes are grouped into onset columns. The register engine plans positions per
 // bar; a separate, small grip model assigns fingers and checks alternatives.
-export const MAX_FRET = 24;
 
 // Fretting fingers, index through little. The thumb is only a choice, and a barre
 // is one finger across strings — so this also bounds the number of DISTINCT
 // frets any playable shape can hold.
-export const MAX_FINGERS = 4;
+const MAX_FINGERS = 4;
 export { THUMB, NO_FINGER };
 
-export const HAND_SPAN = 8;      // generous search guard; physical finger-pair reach decides comfort/feasibility
+const HAND_SPAN = 8;      // generous search guard; physical finger-pair reach decides comfort/feasibility
 
-export const SHAPES_PER_COL = 6; // alternatives shown in the chord preview
-export const DP_SHAPES_PER_COL = 18; // final context-aware search set
-export const DP_CONTEXT_POOL = 48;   // broader pool inspected before neighbouring context prunes it
+const SHAPES_PER_COL = 6; // alternatives shown in the chord preview
+const DP_SHAPES_PER_COL = 18; // final context-aware search set
+const DP_CONTEXT_POOL = 48;   // broader pool inspected before neighbouring context prunes it
 
 // The register engine chooses strings/frets. This small, independent grip model
 // assigns fingers and filters alternatives; it does not plan a second passage.
-export const COMFORT_REACH = 3;
+const COMFORT_REACH = 3;
 
 // Movement weights retained by the public transition helpers and hand anchoring.
-export const COST_W = {
+const COST_W = {
   mfret: 1, mstring: 0.30, fingerMove: 0.48, fingerSide: 0.65,
   place: 0.12, pivot: 0.30, slide: 8, glide: 0.45, plan: 0.18,
 };
@@ -43,7 +42,7 @@ const STRETCH_REACH = 2.0;
 const SPREAD_COST = 1;   // per fret a finger pair spreads beyond one finger per fret
 const MAX_BARRE_SPAN_BY_FINGER = { 1: Infinity, 2: 3, 3: 3, 4: 3 };
 
-export const GUITAR_HAND_PROFILE = Object.freeze({
+const GUITAR_HAND_PROFILE = Object.freeze({
   id: "guitar6", stringCount: 6, scaleLengthMm: 648, stringSpacingMm: 7,
 });
 
@@ -99,7 +98,7 @@ const seatOffsetUnits = (fret, seat, profile) =>
 // the unit everything below plans over.
 // ============================================================================
 
-export const CHORD_GAP = 0.06;   // s; onset spread that still counts as one chord
+const CHORD_GAP = 0.06;   // s; onset spread that still counts as one chord
 
 
 // STACKED NOTES ARE ONE NOTE. Two notes of one pitch sounding over each other — a
@@ -346,7 +345,7 @@ function fingerGroups(shape) {
 // here is per-shape; nothing knows about neighbours yet.
 // ============================================================================
 
-export function stringStates(shape, fingering, profile = GUITAR_HAND_PROFILE) {
+function stringStates(shape, fingering, profile = GUITAR_HAND_PROFILE) {
   const entries = [...shape].map(([note, p]) => ({ note, ...p, finger: fingering?.fingers.get(note) ?? NO_FINGER }));
   const byString = new Map(entries.map((e) => [e.string, e]));
   const sounding = entries.filter((e) => !noteIsDead(e.note));
@@ -507,7 +506,7 @@ export function gripCostBreakdown(shape, profile = GUITAR_HAND_PROFILE) {
   return best ? { total: best.cost, parts: best.parts, fingering: best } : { total: Infinity, parts: {}, fingering: null };
 }
 
-export const hasPlayableFingering = (shape, profile = GUITAR_HAND_PROFILE) => fingeringOptions(shape, profile).length > 0;
+const hasPlayableFingering = (shape, profile = GUITAR_HAND_PROFILE) => fingeringOptions(shape, profile).length > 0;
 
 // A SLIDE-IN IS FINGERED WHERE IT STARTS. The finger goes down on the start fret
 // and the hand travels with it to the landing, so the finger is chosen for the
@@ -634,7 +633,7 @@ export function fingeringChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand =
   return out;
 }
 
-export function fingersAtSeat(shape, seat, profile = GUITAR_HAND_PROFILE, required = new Map()) {
+function fingersAtSeat(shape, seat, profile = GUITAR_HAND_PROFILE, required = new Map()) {
   return handForShape(shape, seat, profile, required).fingers;
 }
 
@@ -656,7 +655,7 @@ export function shapeCost(shape, profile = GUITAR_HAND_PROFILE) {
 // this test; a chord with only one fretted note retains single-note flexibility.
 // null for an all-open shape — the hand isn't involved and the DP carries its
 // previous position straight through (a transparent column).
-export function handRange(shape) {
+function handRange(shape) {
   const fretted = [...shape.values()].map((v) => v.fret).filter((f) => f > 0);
   if (!fretted.length) return null;
   const lo = Math.min(...fretted), hi = Math.max(...fretted);
@@ -675,7 +674,7 @@ function handAnchor(shape) {
 // The string the hand is centred on = the string carrying the anchor (lowest
 // fretted) note; the lowest string used if the shape is all open. Lets the move
 // cost count crossing the neck, not just sliding along it.
-export function handString(shape) {
+function handString(shape) {
   const vals = [...shape.values()];
   const fretted = vals.filter((v) => v.fret > 0);
   if (!fretted.length) return vals.length ? Math.min(...vals.map((v) => v.string)) : 0;
@@ -820,7 +819,7 @@ function transitionResult(prevShape, prevFingering, curShape, curFingering,
 // Explainable movement between two concrete fingerings. The arm/hand shift is
 // measured in physical neck distance; finger reshaping measures motion relative
 // to that moving hand, so a clean position shift is not charged twice.
-export function transitionCostBreakdown(prevShape, prevFingering, curShape, curFingering,
+function transitionCostBreakdown(prevShape, prevFingering, curShape, curFingering,
   profile = GUITAR_HAND_PROFILE, dt, refIoi) {
   return transitionResult(prevShape, prevFingering, curShape, curFingering, profile, dt, refIoi, true);
 }
@@ -1079,7 +1078,7 @@ const neckBucket = (shape) => {
 // string set before filling by contextual score; this prevents a numerically
 // dominant family of near-identical low-position shapes from erasing useful
 // bridge shapes elsewhere on the instrument.
-export function contextShapes(pool, previous = [], next = [], cap = DP_SHAPES_PER_COL, profile = GUITAR_HAND_PROFILE) {
+function contextShapes(pool, previous = [], next = [], cap = DP_SHAPES_PER_COL, profile = GUITAR_HAND_PROFILE) {
   if (!Number.isFinite(cap) || pool.length <= cap) return pool;
   const neighbourCost = (shape, neighbours, reverse = false) => {
     if (!neighbours.length) return 0;
@@ -1112,7 +1111,7 @@ export function contextShapes(pool, previous = [], next = [], cap = DP_SHAPES_PE
 
 // Build broad, diverse pools first, then let immediate musical context choose
 // the smaller state set consumed by the exact sequence DP.
-export function contextualCandidateSets(columns, tuning, cap = DP_SHAPES_PER_COL, influences = null) {
+function contextualCandidateSets(columns, tuning, cap = DP_SHAPES_PER_COL, influences = null) {
   const profile = handProfileForTuning(tuning);
   // Pins must participate in the neighbouring shortlist as well as the final
   // DP. Otherwise a good approach/exit shape could be pruned before the fixed
@@ -1417,7 +1416,7 @@ function medianIoi(times) {
 
 // A rolling reference follows tempo/grid changes and is not distorted by a
 // sparse intro or a dense passage elsewhere in the lane.
-export function localIois(times, radius = 3) {
+function localIois(times, radius = 3) {
   return times.map((_, i) => {
     const lo = Math.max(0, i - radius), hi = Math.min(times.length, i + radius + 1);
     return medianIoi(times.slice(lo, hi));
@@ -1433,7 +1432,7 @@ export function localIois(times, radius = 3) {
 // times the local pulse or it does not, and no rest is decided in the last digit.
 const BREAK_EPSILON = 1e-9;
 
-export function phraseBreaks(times, refs = localIois(times)) {
+function phraseBreaks(times, refs = localIois(times)) {
   return times.map((t, i) => {
     if (i === 0) return false;
     const limit = 4 * Math.max(refs[i], refs[i - 1]);
@@ -2068,8 +2067,8 @@ function carrySlideFingers(chosen, fingers, seats, profile) {
 // docs/voicing-engine.md for the numbers and what they mean.
 
 const SPAN = 4;          // the hand covers four frets. Corpus: 99.9% of chords fit three.
-export const MAX_REACH = 6;   // with a stretch: the pinky reaches two frets past the four
-export const handReach = (profile) => profile?.maxReach ?? MAX_REACH;
+const MAX_REACH = 6;   // with a stretch: the pinky reaches two frets past the four
+const handReach = (profile) => profile?.maxReach ?? MAX_REACH;
 
 // HOW MANY FRETS THERE ARE IS A FACT ABOUT THE INSTRUMENT, so the caller states
 // it and this is only the default for a caller that cannot. `web/fretboard-core.js`
@@ -2125,7 +2124,7 @@ const handCeiling = (maxFret) => maxFret - SPAN + 1;
  * Returns a string index per pitch, or null if the column will not fit.
  * `rules` is optional and parallel to `pitches`; see above.
  */
-export function fitColumn(tuning, pitches, hand, span = SPAN, rules = null, maxFret = DEFAULT_NECK_FRETS) {
+function fitColumn(tuning, pitches, hand, span = SPAN, rules = null, maxFret = DEFAULT_NECK_FRETS) {
   const used = new Array(tuning.length).fill(false);
   const out = [];
   for (let i = 0; i < pitches.length; i++) {
@@ -2290,7 +2289,7 @@ function priceAssignment(tuning, pitches, strings, T, prev, span, maxFret) {
  * the finger and the rest of the hand follows it. `rules` is as documented above
  * fitColumn.
  */
-export function fitAtRegister(tuning, pitches, T, o = {}) {
+function fitAtRegister(tuning, pitches, T, o = {}) {
   const span = o.span || SPAN, maxFret = o.maxFret || DEFAULT_NECK_FRETS;
   // A grip the player named is not searched for at all @@ see gripRun, which voiceRegister()
   // uses instead of this whenever a hold is in force. This function answers the free
@@ -2807,7 +2806,7 @@ function rememberAhead(tuning, columns, start, registers, memory, stand, directe
  *          seventh voice on six strings) — the caller decides whether to
  *          octave-shift it or drop it.
  */
-export function voiceRegister(tuning, columns, span = SPAN, seats = null, bars = null, maxFret = DEFAULT_NECK_FRETS, price = null) {
+function voiceRegister(tuning, columns, span = SPAN, seats = null, bars = null, maxFret = DEFAULT_NECK_FRETS, price = null) {
   const n = columns.length;
   if (!n) return [];
 

@@ -2,7 +2,7 @@
 // matching the Guitar Pro export's two-semitone dip/dive presets.
 import { bendAt, bendCurve } from "./bend.js";
 
-export const WHAMMY_CURVES = {
+const WHAMMY_CURVES = {
   dip: [[0, 0], [0.5, -2], [1, 0]],
   dive: [[0, 0], [1, -2]],
 };

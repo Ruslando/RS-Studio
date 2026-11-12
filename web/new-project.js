@@ -483,7 +483,7 @@ export async function openNewProject() {
 // Any draft job that never made it to Create is abandoned server-side. onClosed
 // then decides what to show instead — closing with nothing open falls back to
 // the launcher, which is project.js's call to make, not this module's.
-export function closeNewProject() {
+function closeNewProject() {
   modalBackdrop.hidden = true;
   disposeStemCards();
   if (draftJob) {

@@ -6,15 +6,7 @@ const EDGE = .06;
 const overlap = (a, b) => a.reduce((sum, value, i) => sum + Math.min(value, b[i]), 0);
 const normalize = values => { const sum = values.reduce((a, b) => a + b, 0); return values.map(v => sum ? v / sum : 0); };
 
-export function pulsePassages(notes, beatAt = t => t) {
-  const ns = notes.filter(n => !n.gripOnly).map(note => ({ note, b: beatAt(note.start), e: beatAt(note.end) }))
-    .sort((a, b) => a.b - b.b || a.note.pitch - b.note.pitch);
-  if (ns.length < 32) return null;
-  const sameOnset = ns.slice(1).filter((n, i) => Math.abs(n.b - ns[i].b) < 1e-4).length;
-  const pedals = ns.slice(1).filter((n, i) => PC(n.note.pitch) === PC(ns[i].note.pitch)).length;
-  // Apply the accompaniment model only with evidence of a single voice and
-  // recurring pedal tones. Other melodies retain the note-based discovery path.
-  if (sameOnset > ns.length * .1 || pedals < ns.length * .2) return null;
+function pulseOrigin(ns) {
   // Infer phase from sustained attacks, rather than assuming the first note is
   // a phrase start. Pickups and short fills should not move the accompaniment.
   const phases = new Map();
@@ -23,7 +15,10 @@ export function pulsePassages(notes, beatAt = t => t) {
     phases.set(phase, (phases.get(phase) || 0) + Math.min(2, n.e - n.b));
   }
   const phase = [...phases].sort((a, b) => b[1] - a[1])[0][0] / 8;
-  const origin = phase + Math.ceil((ns[0].b - phase - EDGE) / 8) * 8;
+  return phase + Math.ceil((ns[0].b - phase - EDGE) / 8) * 8;
+}
+
+function pulseFrames(ns, origin) {
   const frames = [];
   for (let start = origin; start <= ns.at(-1).b + EDGE; start += 8) {
     const attacks = ns.filter(n => n.b >= start - EDGE && n.b < start + 8 - EDGE);
@@ -41,43 +36,49 @@ export function pulsePassages(notes, beatAt = t => t) {
     const core = roots[0] === roots[1] && pedal.length >= 4 && pedal.length >= attacks.length * .5 ? pedal : null;
     frames.push({ start, attacks, hist: normalize(hist), roots, held, core });
   }
-  const similarity = (a, b) => {
-    // Match a repeated pedal's principal hits separately from its optional
-    // fills. Their durations can vary without changing the underlying groove.
-    const useCore = a.core && b.core && a.roots[0] === b.roots[0];
-    const aa = useCore ? a.core : a.attacks, bb = useCore ? b.core : b.attacks;
-    if (!aa.length || !bb.length) return overlap(a.hist, b.hist);
-    let matched = 0, timed = 0;
-    const used = new Set();
-    for (const n of aa) {
-      const distance = m => Math.abs(n.b - a.start - (m.b - b.start));
-      const other = bb.filter(m => !used.has(m) && distance(m) <= .13).sort((m, q) => distance(m) - distance(q))[0];
-      if (other) { used.add(other); timed++; if (PC(n.note.pitch) === PC(other.note.pitch)) matched++; }
-    }
-    const denom = Math.min(aa.length, bb.length);
-    const roots = a.roots.filter((r, i) => r != null && r === b.roots[i]).length / 2;
-    return .25 * roots + .4 * Math.min(1, matched / denom) + .2 * overlap(a.hist, b.hist) + .15 * Math.min(1, timed / denom);
-  };
+  return frames;
+}
+
+function pulseSimilarity(a, b) {
+  // Match a repeated pedal's principal hits separately from its optional
+  // fills. Their durations can vary without changing the underlying groove.
+  const useCore = a.core && b.core && a.roots[0] === b.roots[0];
+  const aa = useCore ? a.core : a.attacks, bb = useCore ? b.core : b.attacks;
+  if (!aa.length || !bb.length) return overlap(a.hist, b.hist);
+  let matched = 0, timed = 0;
+  const used = new Set();
+  for (const n of aa) {
+    const distance = m => Math.abs(n.b - a.start - (m.b - b.start));
+    const other = bb.filter(m => !used.has(m) && distance(m) <= .13).sort((m, q) => distance(m) - distance(q))[0];
+    if (other) { used.add(other); timed++; if (PC(n.note.pitch) === PC(other.note.pitch)) matched++; }
+  }
+  const denom = Math.min(aa.length, bb.length);
+  const roots = a.roots.filter((r, i) => r != null && r === b.roots[i]).length / 2;
+  return .25 * roots + .4 * Math.min(1, matched / denom) + .2 * overlap(a.hist, b.hist) + .15 * Math.min(1, timed / denom);
+}
+
+function comparePulseFrames(frames, i, j, length) {
+  let roots = 0, score = 0;
+  for (let k = 0; k < length; k++) {
+    const a = frames[i + k], b = frames[j + k];
+    roots += a.roots.filter((r, t) => r != null && r === b.roots[t]).length;
+    score += pulseSimilarity(a, b);
+  }
+  // Reject a sustained change of density locally, even when a long window's
+  // overall match would conceal a sparse replacement of half the phrase.
+  let na = 0, nb = 0;
+  for (let k = 0; k < length; k++) {
+    const a = frames[i + k], b = frames[j + k], core = a.core && b.core && a.roots[0] === b.roots[0];
+    const ca = (core ? a.core : a.attacks).length, cb = (core ? b.core : b.attacks).length;
+    if (!a.held && Math.min(ca, cb) < Math.max(ca, cb) * .5) return 0;
+    na += ca; nb += cb;
+  }
+  if (Math.min(na, nb) < Math.max(na, nb) * .65 || roots < length * 2 * .75) return 0;
+  return score / length;
+}
+
+function pulseCandidates(frames) {
   const count = (i, length) => frames.slice(i, i + length).reduce((sum, f) => sum + f.attacks.length, 0);
-  const compare = (i, j, length) => {
-    let roots = 0, score = 0;
-    for (let k = 0; k < length; k++) {
-      const a = frames[i + k], b = frames[j + k];
-      roots += a.roots.filter((r, t) => r != null && r === b.roots[t]).length;
-      score += similarity(a, b);
-    }
-    // Reject a sustained change of density locally, even when a long window's
-    // overall match would conceal a sparse replacement of half the phrase.
-    let na = 0, nb = 0;
-    for (let k = 0; k < length; k++) {
-      const a = frames[i + k], b = frames[j + k], core = a.core && b.core && a.roots[0] === b.roots[0];
-      const ca = (core ? a.core : a.attacks).length, cb = (core ? b.core : b.attacks).length;
-      if (!a.held && Math.min(ca, cb) < Math.max(ca, cb) * .5) return 0;
-      na += ca; nb += cb;
-    }
-    if (Math.min(na, nb) < Math.max(na, nb) * .65 || roots < length * 2 * .75) return 0;
-    return score / length;
-  };
   const candidates = [];
   for (const length of [1, 2, 4, 8]) for (let i = 0; i + length <= frames.length; i++) {
     const phrase = frames.slice(i, i + length);
@@ -87,12 +88,16 @@ export function pulsePassages(notes, beatAt = t => t) {
     const copies = [i]; let quality = 0;
     for (let j = i + length; j + length <= frames.length; j++) {
       if (frames.slice(j, j + length).some((f, k) => f.held !== frames[i + k].held)) continue;
-      const score = compare(i, j, length);
+      const score = comparePulseFrames(frames, i, j, length);
       if (score < .74) continue;
       copies.push(j); quality += score; j += length - 1;
     }
     if (copies.length > 1) candidates.push({ length, copies, quality: quality / (copies.length - 1) });
   }
+  return candidates;
+}
+
+function selectPulseCandidates(candidates) {
   const value = c => c.length * 8 * (c.copies.length + (c.copies.length - 1) * c.quality) - c.copies.length * 4;
   // Coverage rewards complete passages; reuse rewards repetition. Charging
   // each occurrence's boundaries prevents short matching hooks from winning
@@ -119,6 +124,10 @@ export function pulsePassages(notes, beatAt = t => t) {
     }
     beam = [...next.values()].sort((a, b) => b.score - a.score).slice(0, 8);
   }
+  return best;
+}
+
+function buildPulseGroups(frames, best) {
   const { used, selected } = best;
   if (selected.length < 2 || used.size < frames.length / 2) return null;
   const makeGroup = (starts, length, phraseLength = length * 8) => ({ phraseLength,
@@ -141,4 +150,19 @@ export function pulsePassages(notes, beatAt = t => t) {
   if (!used.has(frames.length - 1) && last.held && last.attacks.length === 1)
     groups.push(makeGroup([frames.length - 1], 1, last.attacks[0].e - last.start));
   return groups.sort((a, b) => a.copies[0].notes[0].note.start - b.copies[0].notes[0].note.start);
+}
+
+export function pulsePassages(notes, beatAt = t => t) {
+  const ns = notes.filter(n => !n.gripOnly).map(note => ({ note, b: beatAt(note.start), e: beatAt(note.end) }))
+    .sort((a, b) => a.b - b.b || a.note.pitch - b.note.pitch);
+  if (ns.length < 32) return null;
+  const sameOnset = ns.slice(1).filter((n, i) => Math.abs(n.b - ns[i].b) < 1e-4).length;
+  const pedals = ns.slice(1).filter((n, i) => PC(n.note.pitch) === PC(ns[i].note.pitch)).length;
+  // Apply the accompaniment model only with evidence of a single voice and
+  // recurring pedal tones. Other melodies retain the note-based discovery path.
+  if (sameOnset > ns.length * .1 || pedals < ns.length * .2) return null;
+  const origin = pulseOrigin(ns);
+  const frames = pulseFrames(ns, origin);
+  const candidates = pulseCandidates(frames);
+  return buildPulseGroups(frames, selectPulseCandidates(candidates));
 }

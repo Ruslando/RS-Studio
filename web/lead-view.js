@@ -15,7 +15,7 @@ const LS_SHOW = "cw.showLeadIn";
 let shown = false;
 try { shown = localStorage.getItem(LS_SHOW) === "1"; } catch { /* storage blocked: off */ }
 
-export function syncLeadView() {
+function syncLeadView() {
   const lead = shown && S.state ? rocksmithLeadIn() ?? rsLeadIn() : 0;
   if (lead === S.leadView) return;
   // Scrolled into the song, it stays where it was on screen; at the very start

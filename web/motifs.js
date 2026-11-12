@@ -1,6 +1,6 @@
 // Motifs only label authored notes. They impose no fingering, timing, pitch,
 // chord, or repeat constraints and remain meaningful with a single member.
-export const validMotifId = value => typeof value === "string" && /^motif_(?:legacy_|v2_)?\d+$/.test(value);
+const validMotifId = value => typeof value === "string" && /^motif_(?:legacy_|v2_)?\d+$/.test(value);
 export const motifLabel = id => `Motif #${id.split("_").at(-1)}`;
 // A motif's own name rides on its notes (motifName), so save, undo and deletion
 // need nothing extra; any member carrying one names the whole motif.

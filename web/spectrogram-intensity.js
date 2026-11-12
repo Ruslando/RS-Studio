@@ -34,7 +34,7 @@ export function colorIntensity(values, min, max) {
   return out;
 }
 function notify() { revision++; window.dispatchEvent(new Event('cw-intensity-status')); draw(); }
-export function clearIntensityCache() {
+function clearIntensityCache() {
   epoch++; cache.clear(); queue.length = 0;
 }
 window.addEventListener('cw-project-closed', clearIntensityCache);

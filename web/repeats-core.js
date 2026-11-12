@@ -5,8 +5,8 @@ import { passageStructure } from './passage-structure.js';
 import { pulsePassages } from './pulse-passages.js';
 import { alphabeticLabel, repeatVariations } from './repeat-variations.js';
 
-export const REPEAT_MIN_NOTES = 4;
-export const REPEAT_SIMILARITY = 0.8;
+const REPEAT_MIN_NOTES = 4;
+const REPEAT_SIMILARITY = 0.8;
 const BEAT_TOL = 0.125;
 const MIN_PHRASE_ONSETS = 4;
 const PHRASE_REST_BEATS = 8;
@@ -37,7 +37,7 @@ function attackEvidence(A, B) {
   return score;
 }
 
-export function matchPassages(A, B) {
+function matchPassages(A, B) {
   return matchByPitch(A, B, note => note.pitch);
 }
 

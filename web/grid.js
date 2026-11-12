@@ -54,7 +54,7 @@ export function setSubdivControls(select, custom, wrap, value) {
   syncSubdivControls(select, custom, wrap);
 }
 
-export const syncSubdivCustom = () => syncSubdivControls(subdivSel, subdivCustom, subdivCustomWrap);
+const syncSubdivCustom = () => syncSubdivControls(subdivSel, subdivCustom, subdivCustomWrap);
 
 export const setSubdiv = (value) => setSubdivControls(subdivSel, subdivCustom, subdivCustomWrap, value);
 
@@ -93,7 +93,7 @@ export function exportResolution() {
 // (the anchor at `offset`) for backward compatibility with old saves.
 // Convention matches the old code and the export: bpm = beats/min, a bar = tsNum
 // beats of 60/bpm; tsDen only affects how the beat is notated on export.
-export const extraMarkers = () => (S.state && S.state.tempoMap) || [];
+const extraMarkers = () => (S.state && S.state.tempoMap) || [];
 
 export const gridSegments = paintMemo(function gridSegments() {
   const seg0 = { t: gridOffset(), bpm: gridBpm(), tsNum: beatsPerBar(), tsDen: gridTsDen(), subdiv: gridSubdiv(), seg0: true };

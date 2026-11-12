@@ -13,9 +13,9 @@ export const GEAR = Object.fromEntries(TONE_CATALOG.Gear.map(gear => [gear.Key, 
   KnobValues: Object.fromEntries((gear.Knobs || []).map(knob => [knob.Key, knob.DefaultValue])),
 }]));
 export const gearName = key => GEAR_DATA[key]?.Name.trim() || key;
-export const knobDefinition = (key, deviceKey) => GEAR_DATA[deviceKey]?.Knobs?.find(knob => knob.Key === key);
-export const knobName = (key, deviceKey) => knobDefinition(key, deviceKey)?.Name || key;
-export function knobRange(key, deviceKey) {
+const knobDefinition = (key, deviceKey) => GEAR_DATA[deviceKey]?.Knobs?.find(knob => knob.Key === key);
+const knobName = (key, deviceKey) => knobDefinition(key, deviceKey)?.Name || key;
+function knobRange(key, deviceKey) {
   const knob = knobDefinition(key, deviceKey);
   return knob ? [knob.MinValue, knob.MaxValue, knob.ValueStep] : null;
 }
