@@ -73,5 +73,10 @@ try {
   playback.seekPlayback(4); audio.currentTime=4.01; seconds+=.01; scheduler();
   assert.equal(calls.length,4,'audio-backed seek resumes the chord again');
   assert.ok(calls.slice(-2).every(c=>c.event.start>=4 && c.event.duration<=2));
+  // play() unpauses before its "play" event: meanwhile the old anchor is stale.
+  playback.pauseTransport(); playback.seekPlayback(9); audio.currentTime=9; seconds+=5;
+  audio.paused=false;
+  assert.equal(playback.playbackTime(),9,'between play() and its event, the playhead reads the media time');
+  audio.paused=true;
 } finally {Object.assign(globalThis,saved);}
 console.log('Start, seek, pause/resume, speed and mid-note loops: OK');

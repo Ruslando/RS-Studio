@@ -782,6 +782,9 @@ export function init_playback() {
     tick();
   });
   audio.addEventListener("pause", () => {
+    // play() unpauses before its "play" event re-arms the clock; until then the
+    // playhead must read the media time, not the anchor of the last playback.
+    clockArmed = true; armSong = audio.currentTime;
     cancelPassagePreview();
     clearPreview();
     pauseFollowers();
