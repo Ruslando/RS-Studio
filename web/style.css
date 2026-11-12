@@ -1644,8 +1644,6 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .repeat-picker-row { display: flex; align-items: center; gap: 8px; }
 #repeatNavigator .repeat-picker-menu button { display: block; width: 100%; padding: 4px 8px; text-align: left; white-space: nowrap; }
 .repeat-picker-row button[aria-current="true"] { color: var(--accent); }
-.repeat-picker-row input { flex-shrink: 0; margin: 0 8px 0 0; cursor: pointer; }
-.repeat-picker-heading { padding: 8px 8px 4px; color: var(--hint); border-top: 1px solid var(--line); }
 
 /* Split view (split-view.js): the live editor and the second pane, side by side
    or stacked, each under its own header, and their fretboards side by side with a

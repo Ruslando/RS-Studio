@@ -24,7 +24,7 @@ function updateRegionLoop() {
   if (S.passagePreviewActive || S.drag?.mode === "region" || S.drag?.mode === "regionEdge") {
     regionLoop.reset(); return;
   }
-  const next = regionLoop.update(playbackTime(), S.detectRegion);
+  const next = regionLoop.update(playbackTime(), loopRange());
   if (next !== null) seekPlayback(next);
 }
 
@@ -139,14 +139,17 @@ const lookahead = () => (document.hidden ? 1.5 : LOOKAHEAD);
 const laneAudible = (lane) => !lane.muted && normLayerVolume(lane.volume) * busLevel("notes") > 0;
 
 // Who is heard. Null: the whole mix, as the sidebar sets it. The split view
-// (split-view.js) narrows it to its panes' audio and note layers, a layer
-// `offset` s ahead of the playhead when its pane is linked at another position.
-let focus = null;   // { stems: [id], lanes: [{ id, offset }] }
-let scheduledAhead = new Set();   // as `scheduled`, for an offset layer
+// (split-view.js) narrows it to its panes' audio layers and the live pane's
+// note layer.
+let focus = null;   // { stems: [id], lanes: [id] }
 export function setPlaybackFocus(next) { focus = next; applyStemGains(); }
-const audibleLanes = () => (focus
-  ? focus.lanes.map(({ id, offset }) => ({ lane: editLanes().find((l) => l.id === id), offset }))
-  : editLanes().map((lane) => ({ lane, offset: 0 }))).filter(({ lane }) => lane && laneAudible(lane));
+const audibleLanes = () => editLanes().filter((lane) => (!focus || focus.lanes.includes(lane.id)) && laneAudible(lane));
+
+// A range the playhead cannot leave (repeats.js: the instance under review).
+// Seeks are held inside it and playback loops it, as it does a loop range.
+let zone = null;   // () => { t0, t1 } | null
+export function setPlaybackZone(next) { zone = next; regionLoop.reset(); }
+const loopRange = () => S.detectRegion || zone?.() || null;
 
 function laneSynth(lane) {
   if (!window.Tone) return null;
@@ -294,7 +297,7 @@ function updateClock() {
 }
 
 function resetSchedule(current = hasAudioTransport() ? audio.currentTime : playbackTime()) {
-  scheduled.clear(); scheduledAhead.clear();
+  scheduled.clear();
   scheduledBeats.clear();
   notesFrom = metroFrom = current;
   notesResumeAt = current;
@@ -322,7 +325,7 @@ function scheduleMetro() {
   if (clockArmed) return; // no valid clock to schedule against yet
   // Tight grace: a late click is worse than a missed one — it lands off the grid.
   const [from, planned] = schedWindow(metroFrom, playbackTime(), lookahead(), 0.05);
-  const horizon = Math.min(planned, regionLoop.end(S.detectRegion));
+  const horizon = Math.min(planned, regionLoop.end(loopRange()));
   metroFrom = horizon;   // advance even while the metronome is off, so enabling it mid-play can't backfire old beats
   if (!window.Tone || !S.state || !metroOn.checked) return;
   const segs = gridSegments();
@@ -390,27 +393,25 @@ function scheduleNotes() {
   if (!window.Tone || !S.state || clockArmed) return;
   const now = playbackTime();
   const [from, planned] = schedWindow(notesFrom, now, lookahead());
-  const loopEnd = regionLoop.end(S.detectRegion), horizon = Math.min(planned, loopEnd);
+  const loopEnd = regionLoop.end(loopRange()), horizon = Math.min(planned, loopEnd);
   const resumeAt = notesResumeAt; notesResumeAt = null;
   notesFrom = horizon;   // advance during passage previews too — their notes are meant to be skipped, not queued
   if (S.passagePreviewActive) return; // similar-passage previews audition the stem slice only
-  for (const { lane, offset } of audibleLanes()) {
+  for (const lane of audibleLanes()) {
     const synth = laneSynth(lane);
     if (!synth) continue;
     const onset = synthOnset(synth); // real output-path seconds (samples play at 1×), so not divided by rate
-    const done = offset ? scheduledAhead : scheduled;
     for (const event of lanePlaybackEvents(lane)) {
-      const at = event.start - offset;   // on the playhead's clock
-      const soundingAtRestart = resumeAt !== null && at <= resumeAt && at + event.duration > resumeAt;
-      if ((at >= from || soundingAtRestart) && at < horizon && !done.has(event)) {
+      const soundingAtRestart = resumeAt !== null && event.start <= resumeAt && event.start + event.duration > resumeAt;
+      if ((event.start >= from || soundingAtRestart) && event.start < horizon && !scheduled.has(event)) {
         // Resume old sustains from the current position. Ordinary attacks retain
         // the existing late-tick grace rather than losing short notes to jitter.
-        const start = soundingAtRestart && at < resumeAt ? Math.max(now, resumeAt) : at;
-        const remaining = playbackEventFrom(event, start + offset, loopEnd + offset);
+        const start = soundingAtRestart && event.start < resumeAt ? Math.max(now, resumeAt) : event.start;
+        const remaining = playbackEventFrom(event, start, loopEnd);
         if (!remaining) continue;
-        done.add(event);
+        scheduled.add(event);
         const r = rate();
-        const when = Math.max(S.anchorCtx + (remaining.start - offset - S.anchorSong) / r - onset, ctxNow());
+        const when = Math.max(S.anchorCtx + (remaining.start - S.anchorSong) / r - onset, ctxNow());
         try { playSampleEvent(synth, remaining, when, when + onset, r, concertRatio()); }
         catch { /* unavailable samples */ }
       }
@@ -628,6 +629,8 @@ export function playbackTime() {
 // and alphaTab. Updating the readout and scheduler here prevents a view-specific
 // cursor from moving while the actual playback clock remains somewhere else.
 export function seekPlayback(t) {
+  const held = zone?.();
+  if (held && Number.isFinite(t)) t = clamp(t, held.t0, Math.max(held.t0, held.t1 - 1e-3));
   regionLoop.reset();
   if (viewportFollowing("playback")) stopViewportMotion();
   const lower = -(S.leadView || 0);   // the shown silence, before the song
@@ -652,7 +655,7 @@ export function seekPlayback(t) {
   // Prime the new range before the scheduler runs. Even a very short loop must
   // cap its first lookahead window immediately after a seek / loop restart.
   if (!S.passagePreviewActive && !["region", "regionEdge"].includes(S.drag?.mode))
-    regionLoop.update(next, S.detectRegion);
+    regionLoop.update(next, loopRange());
   if (!hasAudioTransport()) {
     S.scoreTime = next; S.scoreAnchorSong = next; S.scoreAnchorClock = performance.now() / 1000;
     if (S.state?.duration) seek.value = Math.round((next / S.state.duration) * 1000);
@@ -768,7 +771,7 @@ export function init_playback() {
   audio.addEventListener("play", () => { regionLoop.reset(); updateRegionLoop(); });
   audio.addEventListener("ended", () => {
     if (S.passagePreviewActive) return;
-    const next = regionLoop.update(audio.currentTime, S.detectRegion);
+    const next = regionLoop.update(audio.currentTime, loopRange());
     if (next !== null) { seekPlayback(next); audio.play().catch(() => {}); }
   });
   playBtn.addEventListener("click", async () => { await ensureTone(); togglePlay(); });

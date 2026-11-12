@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mockImport } from './mock-import.mjs';
 import { findRepeats } from '../../web/repeats-core.js';
+import { noteName } from '../../web/util.js';
 class Element extends EventTarget {
   style = {}; dataset = {};
   classList = { add() {} };
@@ -15,7 +16,7 @@ class Element extends EventTarget {
   click() { if (!this.disabled) this.dispatchEvent(new Event('click')); }
 }
 const ids = ['repeatNavigator', 'repeatGroup', 'repeatGroupPrevious', 'repeatGroupNext', 'repeatPosition', 'repeatPrevious', 'repeatNext',
-  'repeatVariation', 'repeatVariationNavigation', 'repeatInstance', 'repeatDrag',
+  'repeatInstance', 'repeatDrag',
   'repeatChangeNavigation', 'repeatChangePrevious', 'repeatChangeNext', 'repeatChangePosition', 'repeatHover', 'repeatHoverRows', 'repeatHoverTitle',
   'repeatNoteNavigation', 'repeatNoteFirst', 'repeatNoteCurrent', 'repeatNoteVersion', 'repeatNoteJump', 'repeatHoverClose', 'repeatClose'];
 const controls = Object.fromEntries(ids.map(id => [id, new Element()]));
@@ -26,12 +27,13 @@ lane.notes[10].pos = { string: 4, fret: 10 };
 const selection = new Set([lane.notes[10]]);
 const S = { state: { editLanes: [lane], rowH: 10 }, selection, voicingRevision: 0 };
 const stageScroll = { scrollLeft: 0, clientWidth: 500, clientHeight: 300, scrollWidth: 10000, scrollHeight: 1000, scrollTop: 0 };
-let playhead = 0, playing = false, seekRounding = 0;
+let playhead = 0, playing = false, seekRounding = 0, zone = null;
 const seeks = [];
 let active = lane, commits = 0, movements = 0, fretboardOpens = 0, worker;
 const rectangles = [], badges = [], previews = [], anchors = [];
 let generatedFingers = new Map(), noteUid = 0, lockedNoteId = null, modalIsOpen = false;
-const ctx = { save() {}, restore() {}, setLineDash(dash) { this.dash = dash; }, strokeText() {}, fillText(text) { badges.push(text); }, fillRect() {},
+const glows = [];
+const ctx = { beginPath() {}, rect(x, y, w, h) { this.path = { x, y, w, h }; }, save() {}, restore() {}, setLineDash(dash) { this.dash = dash; }, strokeText() {}, fillText(text) { badges.push(text); }, fillRect() {},
   bezierCurveTo() { this.curvePainted = true; },
   measureText: text => ({ width: text.length * 5 }), beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
   strokeRect(...rect) { rectangles.push({ rect, color: this.strokeStyle, dash: this.dash }); } };
@@ -56,7 +58,7 @@ try {
   const commit = () => { commits++; S.voicingRevision++; };
   const module = await mockImport(new original.URL('../../web/repeats.js', import.meta.url), {
     './store.js': { S },
-    './playback.js': { transportPlaying: () => playing, playbackTime: () => playhead, seekPlayback(time) { seeks.push(time); playhead = time - seekRounding; return playhead; } },
+    './playback.js': { setPlaybackZone(fn) { zone = fn; }, transportPlaying: () => playing, playbackTime: () => playhead, seekPlayback(time) { seeks.push(time); playhead = time - seekRounding; return playhead; } },
     './repeat-dock.js': { initRepeatDock() {} },
     './edit-history.js': { snapshotEdit: () => ({}), commitStructure: commit, commit },
 
@@ -75,7 +77,7 @@ try {
     './tracing.js': { clearMatches() {} },
     './floating-position.js': { placeFloatingAvoiding: (...args) => anchors.push(args) }, './tooltip.js': { hideTooltip() {} },
     './ids.js': { nid: () => `new${++noteUid}` },
-    './note-render.js': { noteRibbon: () => null }, './constants.js': { stageUi: () => '11px sans-serif' },
+    './note-render.js': { noteRibbon: () => null }, './canvas-components.js': { paintNoteGlow(context, level) { glows.push({ ...context.path, level }); } }, './constants.js': { stageUi: () => '11px sans-serif' },
     './stage-paint.js': { PAINT: { trace: 'blue', warn: 'orange', error: 'pink', accent: 'cyan', ok: 'green' }, halo: () => 'black' },
   }, { './repeat-picker.js': true, './repeats-core.js': true, './util.js': true, './repeat-change-details.js': true, './whammy.js': true, './note-effects.js': true });
   module.init_repeats({ ...{ setHandAnchor(lane, t, fret) { lane.handHolds = (lane.handHolds || []).filter(h => h.t !== t); if (fret != null) lane.handHolds.push({t, fret}); commit(); } }, ...{ previewFretboardNote: (...args) => previews.push(args), setFretboardVisible: on => { assert.equal(on, true); fretboardOpens++; } } });
@@ -101,7 +103,8 @@ try {
   lane.notes.push(...third.filter(note => note !== missingThird));
   lane.repeatGroups[0].copies.push(third.map(note => note.id)); S.voicingRevision++;
   module.renderRepeatNavigator(); module.drawRepeats();
-  assert.ok(badges.includes('Group A · instance 1'), 'the first occurrence has no special comparison label');
+  assert.ok(badges.includes('Group A · instance 1'), 'a frame names its group and instance');
+  assert.ok(badges.includes('Group A · instance 3'));
   assert.ok(rectangles.some(r => r.color === 'orange'), 'the first occurrence is also marked when another differs');
   const inspectNote = note => {
     playhead = -1; module.syncRepeatPlayhead();
@@ -423,42 +426,27 @@ try {
   lane.repeatGroups = []; S.voicingRevision++; module.renderRepeatNavigator();
   assert.equal(controls.repeatNavigator.hidden, true);
 
-  // Comparison suggestions and previews stay inside the chosen variation.
+  // Every instance of a group is in one list.
   const originalNotes = lane.notes;
   const versions = [60.3, 70.3, 80.3, 90.3].map(start => make(start));
   versions[0][0].fx = versions[3][0].fx = { vibrato: true };
   lane.notes = versions.flat(); S.voicingRevision++;
   module.runFindRepeats(lane); worker.finish();
-  const group = lane.repeatGroups[0];
-  group.variations = [{ id: 'variation_1', name: 'Variation A', copies: [versions[0][0].id, versions[3][0].id] },
-    { id: 'variation_2', name: 'Variation B', copies: [versions[1][0].id, versions[2][0].id] }];
-  S.voicingRevision++;
-  controls.repeatVariation.value = 'variation_1'; controls.repeatVariation.dispatchEvent(new Event('change'));
   module.renderRepeatNavigator(); module.drawRepeats();
-  assert.equal(controls.repeatPosition.textContent, '1 / 2 · #1');
-  assert.equal(inspectNote(versions[0][0]), false, 'identical notes within a variation do not open a preview');
-  const chooseVariation = value => {
-    controls.repeatVariation.value = value; controls.repeatVariation.dispatchEvent(new Event('change')); module.renderRepeatNavigator();
-  };
-  chooseVariation('all'); module.drawRepeats(); inspectNote(versions[0][0]);
+  assert.equal(controls.repeatPosition.textContent, '1 / 4', 'one list of every instance');
+  assert.deepEqual(controls.repeatInstance.children[1].children.map(row => row.children[0].textContent),
+    ['Instance 1', 'Instance 2', 'Instance 3', 'Instance 4']);
+  assert.equal(controls.repeatInstance.children[1].children.some(row => row.dataset?.focusKey?.startsWith('move:')
+    || row.children.some(el => el.dataset?.focusKey?.startsWith('move:') || el.type === 'checkbox')), false,
+    'no variations to move to, nothing to include or exclude');
+  inspectNote(versions[0][0]);
   assert.equal(controls.repeatNoteVersion.textContent, '1 / 4');
-  assert.ok(action('fx.vibrato'), 'whole-group comparison can inspect differences between variations');
-  chooseVariation('variation_1');
-  controls.repeatNext.click(); module.renderRepeatNavigator();
-  assert.equal(controls.repeatPosition.textContent, '2 / 2 · #4');
+  assert.ok(action('fx.vibrato'), 'the comparison covers every instance of the group');
   const chooseInstance = value => {
     controls.repeatInstance.value = value; controls.repeatInstance.dispatchEvent(new Event('change')); module.renderRepeatNavigator();
   };
   const beforeMove = commits;
-  chooseInstance('move:variation_2');
-  assert.equal(commits, beforeMove + 1, 'manual assignment is one undoable annotation edit');
-  assert.equal(lane.repeatGroups[0].variationMode, 'manual');
-  assert.deepEqual(lane.repeatGroups[0].variations.map(v => v.copies.length), [1, 3]);
-  assert.equal(controls.repeatPosition.textContent, '3 / 3 · #4');
-  lane.locked = true; chooseInstance('move:new');
-  assert.equal(commits, beforeMove + 1, 'locked layers cannot receive manual assignments');
-  lane.locked = false;
-  chooseVariation('all');
+  chooseInstance(versions[3][0].id);
   delete versions[0][0].fx; delete versions[3][0].fx;
   versions[2][2].pitch++; versions[3][2].pitch++;
   S.voicingRevision++; module.renderRepeatNavigator();
@@ -473,23 +461,52 @@ try {
   assert.equal(playhead, versions[3][2].start, 'the change dropdown seeks to the selected note');
   controls.repeatChangeNext.click(); module.renderRepeatNavigator();
   assert.equal(controls.repeatPosition.textContent, '4 / 4', 'change navigation stays on the active instance');
-  assert.equal(controls.repeatInstance.children[1].children.some(option => option.dataset.focusKey === 'move:new'), true);
-  assert.equal(controls.repeatVariation.children[1].children.some(option => option.dataset.focusKey?.startsWith('move:')), false);
-  const visibilityCheckbox = controls.repeatInstance.children[1].children[0].children[1];
-  assert.equal(visibilityCheckbox.type, 'checkbox');
-  visibilityCheckbox.checked = false; visibilityCheckbox.dispatchEvent(new Event('change')); module.renderRepeatNavigator();
-  assert.equal(controls.repeatChangeNavigation.hidden, false, 'the remaining seen counterpart still differs');
-  chooseInstance(`toggle:${versions[1][0].id}`);
-  assert.equal(controls.repeatChangeNavigation.hidden, true, 'unseen instances do not contribute differences');
-  chooseInstance(versions[0][0].id);
-  assert.equal(controls.repeatPosition.textContent, '1 / 4', 'unseen instances remain available in the instance dropdown');
-  assert.equal(playhead, versions[0][0].start, 'the instance dropdown seeks to the chosen instance');
-  assert.equal(controls.repeatChangeNavigation.hidden, true, 'an unseen active instance is inspectable without comparison suggestions');
-  chooseVariation('toggle:variation_1');
-  assert.equal(controls.repeatChangeNavigation.hidden, false, 'a partially seen variation can include all of its instances');
-  chooseVariation('toggle:variation_1');
-  assert.equal(controls.repeatChangeNavigation.hidden, true, 'a whole variation can be excluded');
-  assert.equal(commits, beforeMove + 1, 'comparison visibility does not edit the project');
+  assert.equal(commits, beforeMove, 'choosing instances does not edit the project');
+  // Beside the split view, the two shown instances are compared with each other alone.
+  const host = { revealed: [], isOpen: () => true, open() {}, reviewing() {}, reveal(at, how) { this.revealed.push({ ...at, ...how }); } };
+  module.connectRepeatSplit(host);
+  chooseInstance(versions[3][0].id);
+  const beforePair = commits;
+  module.pairRepeats(true); await Promise.resolve();
+  assert.equal(host.revealed.length, 1, 'pairing shows another instance in the other pane');
+  assert.deepEqual(zone(), { t0: versions[3][0].start, t1: versions[3].at(-1).end }, 'the playhead is held inside the shown instance');
+  // As the split view swaps them: the pane's selection and its own playhead.
+  let otherPlayhead = playhead;
+  const otherPane = fn => {
+    module.swapRepeatPane(); const mine = playhead; playhead = otherPlayhead;
+    try { fn(); } finally { otherPlayhead = playhead; playhead = mine; module.swapRepeatPane(); }
+  };
+  otherPane(() => chooseInstance(versions[2][0].id));
+  module.renderRepeatNavigator();
+  assert.equal(controls.repeatPosition.textContent, '4 / 4', 'the live pane keeps its own instance');
+  assert.equal(controls.repeatChangeNavigation.hidden, true, 'two instances that match show no differences');
+  otherPane(() => chooseInstance(versions[1][0].id));
+  module.renderRepeatNavigator();
+  assert.equal(controls.repeatChangeNavigation.hidden, false, 'a different partner brings its differences');
+  const pairChanges = changePosition();
+  // Choosing an instance: a linked other pane goes to the start of its own.
+  const revealedBefore = host.revealed.length;
+  chooseInstance(versions[0][0].id); chooseInstance(versions[3][0].id);
+  assert.deepEqual(host.revealed.slice(revealedBefore).map(r => [r.t0, r.linked]), [[versions[1][0].start, true], [versions[1][0].start, true]],
+    'the other pane is asked to its instance start, if linked');
+  // The note compared on this side lights up on the other.
+  const selectionBefore = S.selection;
+  S.selection = new Set([versions[3][5]]); glows.length = 0;
+  const scrolled = stageScroll.scrollLeft;
+  otherPane(() => { stageScroll.scrollLeft = 700; module.drawRepeats(); stageScroll.scrollLeft = scrolled; });   // the other pane's own view
+  assert.deepEqual(glows.map(g => g.x), [versions[1][5].start * 10], 'the counterpart lights up in the other pane');
+  glows.length = 0; module.drawRepeats();
+  assert.equal(glows.length, 0, 'not in the pane where it is selected');
+  S.selection = selectionBefore;
+  otherPane(() => module.renderRepeatNavigator());
+  assert.equal(controls.repeatPosition.textContent, '2 / 4', 'the other pane has its own instance');
+  assert.equal(changePosition(), pairChanges, 'and sees the same differences from its side');
+  module.renderRepeatNavigator();
+  module.pairRepeats(false); module.renderRepeatNavigator();
+  assert.equal(zone, null, 'unpaired, the playhead is free again');
+  assert.equal(controls.repeatPosition.textContent, '4 / 4');
+  module.connectRepeatSplit(null);
+  assert.equal(commits, beforePair, 'pairing panes does not edit the project');
   controls.repeatClose.click();
   // Difference buttons visit every entry once and wrap, including overlapping
   // sustains and missing notes. Browser media clocks may round seek positions.
@@ -525,6 +542,21 @@ try {
   assert.equal(controls.repeatHover.hidden, false, 'a missing note still opens the preview');
   playhead = navigationCopies[0][4].start + .01; module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, true, 'moving to an unchanged note closes the preview');
+  controls.repeatClose.click();
+  // Back to back, one note ends as the next begins. A seek to the second lands a
+  // microsecond early (Chromium reports media time in whole microseconds); the
+  // playhead is on the second note all the same.
+  const legato = [make(.3), make(10.3)].map(copy => copy.map(note => ({ ...note, end: note.start + .5 })));
+  legato[1][2].pitch++;   // the third note differs, the fourth does not
+  lane.notes = legato.flat(); lane.repeatGroups = []; S.voicingRevision++;
+  module.runFindRepeats(lane);
+  worker.onmessage({ data: [{ phraseLength: 4, copies: legato.map(notes => notes.map(n => n.id)) }] });
+  module.renderRepeatNavigator();
+  playhead = legato[0][2].start - 1e-6; module.renderRepeatNavigator();
+  assert.equal(controls.repeatHover.hidden, false, 'a seek just short of the differing note opens it');
+  assert.equal(controls.repeatHoverTitle.textContent.split(' · ')[0], noteName(legato[0][2].pitch));
+  playhead = legato[0][3].start - 1e-6; module.renderRepeatNavigator();
+  assert.equal(controls.repeatHover.hidden, true, 'and one just short of the next note leaves it');
   controls.repeatClose.click();
   lane.notes = originalNotes; lane.repeatGroups = []; S.voicingRevision++;
 

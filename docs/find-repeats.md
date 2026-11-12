@@ -1,19 +1,35 @@
 # Find Repeats
 
-Find Repeats compares the active instance with the other included instances of
-the selected group or variation. Highlights describe differences, rather than
-proving that a note is wrong. Excluded instances do not contribute differences.
+Find Repeats opens the split view with one instance in each pane. The first pane
+shows the instance under review; the second starts on the next instance. Every
+instance of a group is in one list. Each pane chooses its own instance with the
+repeat toolbar, which sits on the active pane; a click in the other pane makes
+it active and acts there at once. The group is shared by both panes.
+
+The two shown instances are compared with each other alone. Highlights describe
+differences, rather than proving that a note is wrong. With the split view
+closed, the instance is compared with every instance of the group.
+
+Playheads are independent or linked during a review; synced is unavailable,
+since both panes would then show one position. With linked playheads, both are
+the same distance into their own instance: 3 s into one is 3 s into the other.
+Choosing an instance puts both at the start of theirs, and a shorter instance's
+playhead waits at its end while the longer one plays on. The playhead stays
+inside the active pane's instance: seeks stop at its edges and playback loops
+it. Notes are heard from the active pane only.
 
 | Appearance | Meaning |
 | --- | --- |
-| Amber solid outline | This note has differences in another included instance, including fingering or being absent there. |
-| Amber dashed outline | A note is missing here but present in another included instance. The box projects its position and duration into this instance. |
-| Bright magenta passage frame, solid and thicker | The active instance. |
-| Fainter magenta passage frame, dashed and thinner | Another included instance of the passage. |
+| Amber solid outline | This note differs in the compared instance, including fingering or being absent there. |
+| Amber dashed outline | A note is missing here but present in the compared instance. The box projects its position and duration into this instance. |
+| Bright magenta passage frame, solid and thicker | The instance this pane shows. |
+| Fainter magenta passage frame, dashed and thinner | The compared instance, where it is in view. |
+
+A frame's label names its group and its instance number.
 
 Colors above describe the spectrogram palette. Notes without a difference have
 no additional outline. A single differing note is counted once even when it
-differs from several instances. Whammy type alone does not add an amber outline;
+differs in several ways. Whammy type alone does not add an amber outline;
 whammy curve differences can.
 
 In the note preview, amber bold values flag a difference from the opened note

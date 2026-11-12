@@ -432,12 +432,9 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 <select id="repeatGroup" aria-label="Repeat group"></select>
                 <button type="button" id="repeatGroupNext" aria-label="Next group" title="Next group (Shift+→)">›</button>
               </div>
-              <div id="repeatVariationNavigation" class="repeat-nav-group" role="group" aria-label="Variations" hidden>
-                <details id="repeatVariation" class="repeat-picker" aria-label="Variation and comparison visibility"></details>
-              </div>
               <div class="repeat-nav-group" role="group" aria-label="Instances">
                 <button type="button" id="repeatPrevious" aria-label="Previous instance" title="Previous instance (Alt+←)">‹</button>
-                <details id="repeatInstance" class="repeat-picker" aria-label="Instance and comparison visibility"></details>
+                <details id="repeatInstance" class="repeat-picker" aria-label="Instance"></details>
                 <output id="repeatPosition" aria-live="polite">0 / 0</output>
                 <button type="button" id="repeatNext" aria-label="Next instance" title="Next instance (Alt+→)">›</button>
               </div>

@@ -15,9 +15,9 @@ const audio = Object.assign(new Target(), { paused: true, currentTime: 0, playba
   pause() { this.paused = true; this.dispatchEvent(new Event('pause')); },
 });
 const lane = (id, notes) => ({ id, volume: 1, notes, _synth: { volume: { value: 0 }, onsetSec: 0 } });
-// Live layer a at the playhead; layer b holds 71 at the playhead and 70 five seconds on.
+// Two layers with a note each at the playhead.
 const a = lane('a', [{ pitch: 64, start: 2, end: 2.03 }]);
-const b = lane('b', [{ pitch: 71, start: 2, end: 2.03 }, { pitch: 70, start: 7, end: 7.03 }]);
+const b = lane('b', [{ pitch: 71, start: 2, end: 2.03 }]);
 const S = { state: { duration: 10, stems: [], lanes: [a, b] }, voicingRevision: 0,
   scoreTime: 2, scorePlaying: false, detectRegion: null, toneReady: true };
 const windowTarget = new Target();
@@ -53,8 +53,16 @@ try {
     return [...calls].sort();
   };
   assert.deepEqual(await heard(null), [64, 71], 'no split view: every audible layer at the playhead');
-  assert.deepEqual(await heard({ stems: [], lanes: [{ id: 'a', offset: 0 }] }), [64], 'only the focused layer is heard');
-  assert.deepEqual(await heard({ stems: [], lanes: [{ id: 'a', offset: 0 }, { id: 'b', offset: 5 }] }), [64, 70],
-    'a linked layer is heard at its own position');
+  assert.deepEqual(await heard({ stems: [], lanes: ['a'] }), [64], 'only the live pane\'s layer is heard');
+  // The instance under review holds the playhead: seeks stay inside it.
+  playback.pauseTransport(); playback.setPlaybackFocus(null);
+  playback.setPlaybackZone(() => ({ t0: 2, t1: 4 }));
+  playback.seekPlayback(7);
+  assert.ok(playback.playbackTime() >= 2 && playback.playbackTime() < 4, 'a seek past the instance stops at its end');
+  playback.seekPlayback(0);
+  assert.equal(playback.playbackTime(), 2, 'a seek before it stops at its start');
+  playback.setPlaybackZone(null);
+  playback.seekPlayback(7);
+  assert.equal(playback.playbackTime(), 7, 'without one, seeks go anywhere');
 } finally { Object.assign(globalThis, saved); }
 console.log('Playback focus passed');

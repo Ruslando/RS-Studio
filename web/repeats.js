@@ -24,12 +24,12 @@ import { placeFloatingAvoiding } from './floating-position.js';
 import { hideTooltip } from './tooltip.js';
 import { pitchCurve } from './whammy.js';
 import { noteRibbon } from './note-render.js';
+import { paintNoteGlow } from './canvas-components.js';
 import { modalOpen } from './modal-focus.js';
 import { nid } from './ids.js';
 import { renderRepeatPicker } from './repeat-picker.js';
-import { playbackTime, seekPlayback, transportPlaying } from './playback.js';
+import { playbackTime, seekPlayback, setPlaybackZone, transportPlaying } from './playback.js';
 import { initRepeatDock } from './repeat-dock.js';
-import { alphabeticLabel } from './repeat-variations.js';
 
 const $ = id => document.getElementById(id);
 let worker = null, scanLane = null, scanProject = null, scanSignature = null;
@@ -70,19 +70,84 @@ function current() {
   const parent = groups.find(g => g.id === review.group) || groups[0];
   if (!parent) return null;
   review.group = parent.id;
-  const variations = parent.variations;
-  const variation = review.variation === 'all' ? null : variations.find(v => v.id === review.variation)
-    || variations.find(v => v.copies.includes(review.copyKey)) || variations[0];
-  review.variation = variation?.id || 'all';
-  const group = { ...parent, copies: variation ? parent.copies.filter(c => variation.copies.includes(c.ids[0])) : parent.copies };
+  // One list of every instance in the group; variations are not shown for now.
+  const group = { ...parent, copies: parent.copies };
   const navigationCopies = group.copies;
   const navigationIndex = Math.max(0, group.copies.findIndex(c => review.copyKey ? c.ids[0] === review.copyKey : c.notes[0].note.id === review.first));
   const copy = navigationCopies[navigationIndex];
-  const excluded = review.excluded || new Set();
-  group.copies = excluded.has(copy.ids[0]) ? [copy] : navigationCopies.filter(c => !excluded.has(c.ids[0]));
+  // Beside the split view's other pane, this instance is compared with the one
+  // shown there alone; on its own, with every instance of the group.
+  const partner = review.other && partnerCopy(parent, copy);
+  group.copies = partner ? parent.copies.filter(c => c === copy || c === partner) : navigationCopies;
   const index = group.copies.indexOf(copy);
   review.first = copy.notes[0].note.id; review.copyKey = copy.ids[0];
-  return { lane, groups, parent, variations, variation, group, copy, index, navigationCopies, navigationIndex, model: group.copies[0] };
+  return { lane, groups, parent, group, copy, index, navigationCopies, navigationIndex, model: group.copies[0] };
+}
+// The other pane's instance: the one it chose, while it is in this group, or
+// else the next one after this pane's.
+function partnerCopy(parent, copy) {
+  const other = review.other;
+  if (!parent.copies.some(c => c.ids[0] === other.copyKey)) {
+    const next = parent.copies[(parent.copies.indexOf(copy) + 1) % parent.copies.length];
+    Object.assign(other, { copyKey: next.ids[0], first: next.notes[0].note.id,
+      changeKey: null, changeAnchor: null, playheadMarker: null, manualSeekTime: null });
+    queueMicrotask(revealOther);   // it now shows another instance
+  }
+  return parent.copies.find(c => c.ids[0] === other.copyKey);
+}
+
+// ---- the split view's other pane (split-view.js connects itself) ----
+// Each pane has its own instance. The live pane's is review's
+// own; the other pane's wait in review.other and change places on a swap.
+let splitHost = null;
+export function connectRepeatSplit(host) { splitHost = host; }
+const PANE = ['copyKey', 'first', 'changeKey', 'changeAnchor', 'playheadMarker', 'manualSeekTime'];
+function swapPane() {
+  const theirs = review.other;
+  review.other = Object.fromEntries(PANE.map(key => [key, review[key]]));
+  for (const key of PANE) review[key] = theirs[key];
+}
+export function swapRepeatPane() {
+  if (!review?.other) return;
+  hideRepeatHover(); swapPane(); navKey = null; stopCache = null;
+}
+// The pane's own playhead is back on the transport: that is where the pane left
+// it, not a seek to follow into another instance.
+export function holdRepeatPlayhead() { if (review?.other) review.manualSeekTime = playbackTime(); }
+export function withRepeatPane(fn) {
+  if (!review?.other) return fn();
+  swapPane();
+  try { return fn(); } finally { swapPane(); }
+}
+// The split view opened or closed under a running review.
+// Paired, the playhead stays inside the instance its pane shows.
+export function pairRepeats(on) {
+  if (!review) return;
+  if (!on) review.other = null;
+  else if (!review.other) { review.other = {}; current(); }
+  setPlaybackZone(review.other ? instanceZone : null);
+  navKey = null; stopCache = null; draw();
+}
+function instanceZone() {
+  const state = current();
+  if (!state) return null;
+  const { t0, t1 } = repeatCopyBounds(state, state.copy);
+  return { t0, t1 };
+}
+// `linked`: only a linked pane follows, to the start of its own instance.
+function revealOther({ linked = false } = {}) {
+  if (!review?.other || !splitHost?.isOpen()) return;
+  const target = withRepeatPane(() => {
+    const state = current();
+    if (!state) return null;
+    const b = repeatCopyBounds(state, state.copy);
+    return { t0: b.t0, pitch: (b.pLo + b.pHi) / 2 };
+  });
+  if (target) splitHost.reveal(target, { linked });
+}
+// Each pane's instance, as the range its playhead may move in.
+export function repeatZones() {
+  return review?.other ? { live: instanceZone(), other: withRepeatPane(instanceZone) } : null;
 }
 const originalIndex = (state, copy) => state.parent.copies.findIndex(c => c.ids[0] === copy.ids[0]) + 1;
 const instancePosition = (state, index) => `${index + 1} / ${state.group.copies.length}` +
@@ -111,7 +176,7 @@ function revealCurrent({ seek = true } = {}) {
   const state = current();
   if (!state) { draw(); return; }
   const b = repeatCopyBounds(state, state.copy);
-  if (seek) { review.playheadMarker = null; seekRepeatPosition(b.t0); }
+  if (seek) { review.playheadMarker = null; seekRepeatPosition(b.t0); revealOther({ linked: true }); }
   syncRepeatPlayhead();
   moveViewportTo(xOf(b.t0) - scroll.clientWidth * 0.2, yOf((b.pLo + b.pHi) / 2) - scroll.clientHeight / 2);
   draw();
@@ -129,6 +194,7 @@ function closeRepeats() {
   hideRepeatHover(); closeRepeatPickers();
   worker?.terminate(); worker = null; scanLane = null; scanProject = null;
   review = null; navKey = null; handRequest = null; handResult = null; handSeats = null; stopCache = null; groupsCache = null;
+  setPlaybackZone(null); splitHost?.reviewing(false);
   renderRepeatNavigator(); draw();
   return true;
 }
@@ -144,6 +210,7 @@ export function runFindRepeats(lane = activeLane()) {
   if (!canEditLane(lane)) { toast(`Layer “${lane.name}” is ${lane.locked ? 'locked' : 'hidden'}`); return; }
   hideRepeatHover();
   worker?.terminate();
+  setPlaybackZone(null);   // the last review's instance no longer holds the playhead
   scanLane = lane; scanProject = S.state; scanSignature = signature(lane);
   const beatAt = laneClock(lane).beatAt;
   clearMatches();
@@ -172,6 +239,7 @@ export function runFindRepeats(lane = activeLane()) {
     navKey = null;
     toast(`${groups.length} repeat group${groups.length === 1 ? '' : 's'} in “${lane.name}”`);
     revealCurrent();
+    if (review) splitHost?.open(lane.id);   // the comparison opens split: one instance in each pane
   };
   worker.onerror = () => {
     if (worker !== pending) return;
@@ -192,7 +260,7 @@ export function renderRepeatNavigator() {
   if (hover && (hover.lane !== lane || hover.group !== state?.group.id || hover.instance !== state?.copy.ids[0]
     || hover.revision !== S.voicingRevision || S.drag)) hideRepeatHover();
   const key = [S.state, lane, lane?.notes, lane?.repeatGroups, S.voicingRevision,
-    review?.group, review?.variation, review?.excluded, review?.first, review?.changeKey, scanning, !!lane?.locked, !!lane?.visible, S.fingerRevision, handResult];
+    review?.group, review?.other?.copyKey, review?.first, review?.changeKey, scanning, !!lane?.locked, !!lane?.visible, S.fingerRevision, handResult];
   if (navKey && key.every((v, i) => v === navKey[i])) return;
   navKey = key;
   const groups = state?.groups || [];
@@ -210,20 +278,9 @@ export function renderRepeatNavigator() {
   select.value = state?.group.id || '';
   select.disabled = scanning || !state;
   nav.setAttribute('aria-busy', String(scanning));
-  const variationSelect = $('repeatVariation');
-  $('repeatVariationNavigation').hidden = scanning || !state || state.variations.length < 2;
-  const variationChoices = (state?.variations || []).map(v => {
-    const count = v.copies.filter(key => !review.excluded?.has(key)).length;
-    return { value: v.id, label: `${v.name} (${v.copies.length})`, toggleValue: `toggle:${v.id}`,
-      checked: count === v.copies.length, indeterminate: count > 0 && count < v.copies.length };
-  });
-  if (state?.variations.length > 1) variationChoices.push({ value: 'all', label: `All variations (${state.parent.copies.length})` });
-  renderRepeatPicker(variationSelect, variationChoices, review?.variation, { disabled: scanning || !state });
   const instanceChoices = (state?.navigationCopies || []).map(copy => ({ value: copy.ids[0],
-    label: `Instance ${originalIndex(state, copy)}`, toggleValue: `toggle:${copy.ids[0]}`, checked: !review.excluded?.has(copy.ids[0]) }));
-  const moves = state && canEditLane(state.lane) ? [...state.variations.map(v => ({ value: `move:${v.id}`, label: v.name })),
-    { value: 'move:new', label: 'New variation' }] : [];
-  renderRepeatPicker($('repeatInstance'), instanceChoices, state?.copy.ids[0], { disabled: scanning || !state, actions: moves });
+    label: `Instance ${originalIndex(state, copy)}` }));
+  renderRepeatPicker($('repeatInstance'), instanceChoices, state?.copy.ids[0], { disabled: scanning || !state });
   $('repeatPosition').textContent = state ? `${state.navigationIndex + 1} / ${state.navigationCopies.length}` +
     (state.parent.copies.length !== state.navigationCopies.length ? ` · #${originalIndex(state, state.copy)}` : '') : 'Scanning…';
   $('repeatPrevious').disabled = $('repeatNext').disabled = scanning || !state || state.navigationCopies.length < 2;
@@ -258,7 +315,7 @@ function comparisonDetails(state) {
     marker.kind = 'changed';
   };
   const origin = copyOrigin(state.copy, clock.beatAt);
-  for (const other of review.excluded?.has(state.copy.ids[0]) ? [] : state.group.copies) {
+  for (const other of state.group.copies) {
     if (other === state.copy) continue;
     const comparison = compareCopy(state.copy, other, clock.beatAt, fingers);
     for (const change of comparison.changes) {
@@ -288,56 +345,16 @@ function stepGroup(delta) {
   const state = current();
   if (!state) return;
   const index = (state.groups.findIndex(group => group.id === state.group.id) + delta + state.groups.length) % state.groups.length;
-  review.group = state.groups[index].id; review.variation = null; review.first = null; review.copyKey = null;
+  review.group = state.groups[index].id; review.first = null; review.copyKey = null;
   revealCurrent();
-}
-function toggleCompared(keys) {
-  const excluded = new Set(review.excluded);
-  const include = keys.some(key => excluded.has(key));
-  for (const key of keys) { if (include) excluded.delete(key); else excluded.add(key); }
-  review.excluded = excluded; navKey = null; stopCache = null;
-  revealCurrent({ seek: false });
 }
 function selectInstance(value) {
   const state = current();
-  if (!state) return;
-  if (value.startsWith('move:')) { selectVariation(value); return; }
-  if (value.startsWith('toggle:')) { toggleCompared([value.slice(7)]); return; }
-  if (!state.navigationCopies.some(copy => copy.ids[0] === value)) return;
+  if (!state || !state.navigationCopies.some(copy => copy.ids[0] === value)) return;
   review.copyKey = value; revealCurrent();
 }
-function selectVariation(value) {
-  const state = current();
-  if (!state) return;
-  if (value.startsWith('toggle:')) {
-    const variation = state.variations.find(v => v.id === value.slice(7));
-    if (variation) toggleCompared(variation.copies);
-    return;
-  }
-  if (value.startsWith('move:')) {
-    if (!canEditLane(state.lane)) return;
-    const variants = state.variations.length ? state.variations.map(v => ({ ...v, copies: [...v.copies] }))
-      : [{ id: 'variation_other', name: 'Other variations', copies: state.parent.copies.map(c => c.ids[0]) }];
-    let id = value.slice(5);
-    if (id === 'new') {
-      const serial = Math.max(0, ...variants.map(v => Number(v.id.match(/(\d+)$/)?.[1]) || 0)) + 1;
-      id = `variation_${serial}`;
-      variants.push({ id, name: `Variation ${alphabeticLabel(serial - 1)}`, copies: [] });
-    }
-    if (!variants.some(v => v.id === id)) return;
-    for (const v of variants) v.copies = v.copies.filter(key => key !== state.copy.ids[0]);
-    variants.find(v => v.id === id).copies.push(state.copy.ids[0]);
-    editGroups(state.lane, () => {
-      const saved = state.lane.repeatGroups.find(g => g.id === state.parent.id);
-      saved.variations = variants.filter(v => v.copies.length); saved.variationMode = 'manual';
-    });
-    review.variation = id;
-  } else review.variation = value;
-  navKey = null; stopCache = null;
-  revealCurrent();
-}
 function changeStops(state) {
-  const key = [S.state, state.lane, state.lane.notes, state.lane.repeatGroups, state.group.id, review.variation, state.copy.ids[0], review.excluded, S.voicingRevision, S.fingerRevision, handResult];
+  const key = [S.state, state.lane, state.lane.notes, state.lane.repeatGroups, state.group.id, state.copy.ids[0], state.group.copies.map(c => c.ids[0]).join(), S.voicingRevision, S.fingerRevision, handResult];
   if (stopCache && key.every((value, i) => value === stopCache.key[i])) return stopCache.stops;
   const stops = comparisonDetails(state).markers.map(marker =>
     ({ key: markerKey(state.copy, marker), copy: state.copy, marker }));
@@ -620,6 +637,10 @@ export function hideRepeatHover() {
 // The transport is the only source of automatic comparison-card selection.
 // Keep manual preview choices and explicit dismissal until the playhead reaches
 // another note, rather than reopening the card on every repaint.
+// A seek lands a hair before its target: Chromium reports media time in whole
+// microseconds. Where one note ends as the next begins, that hair must not
+// leave the playhead on the earlier note (the fretboard allows the same 1 ms).
+const SEEK_SLACK = 1e-3;
 export function syncRepeatPlayhead() {
   let state = current();
   if (!state || worker || S.drag) {
@@ -633,15 +654,13 @@ export function syncRepeatPlayhead() {
     const from = copy.phraseLength > 0 ? clock.timeAt(copyOrigin(copy, clock.beatAt)) : copy.notes[0].note.start;
     const to = copy.phraseLength > 0 ? clock.timeAt(copyOrigin(copy, clock.beatAt) + copy.phraseLength)
       : Math.max(...copy.notes.map(entry => entry.note.end));
-    return time >= from - 1e-7 && time < to - 1e-7;
+    return time >= from - SEEK_SLACK && time < to - SEEK_SLACK;
   };
   const parent = manual || contains(state.copy) ? state.parent : [state.parent, ...state.groups.filter(g => g !== state.parent)]
     .find(group => group.copies.some(contains));
   const copy = parent && (parent === state.parent && (manual || contains(state.copy)) ? state.copy : parent.copies.find(contains));
   if (!copy) { review.playheadMarker = null; hideRepeatHover(); return; }
   if (parent.id !== state.parent.id || copy.ids[0] !== state.copy.ids[0]) {
-    if (parent.id !== state.parent.id) review.variation = null;
-    else if (state.variation && !state.variation.copies.includes(copy.ids[0])) review.variation = null;
     review.group = parent.id; review.copyKey = copy.ids[0]; review.first = copy.notes[0].note.id;
     review.changeKey = null; review.changeAnchor = null;
     navKey = null; state = current();
@@ -650,13 +669,13 @@ export function syncRepeatPlayhead() {
     review.playheadMarker = null;
     hideRepeatHover(); return;
   }
-  const atPlayhead = marker => time >= marker.note.start - 1e-7 && time < marker.note.end - 1e-7;
+  const atPlayhead = marker => time >= marker.note.start - SEEK_SLACK && time < marker.note.end - SEEK_SLACK;
   const stops = changeStops(state);
   const changed = stops.filter(stop => atPlayhead(stop.marker));
   const marker = (manual && stops.find(stop => stop.key === review.changeKey)
     || changed.find(stop => stop.key === review.changeKey) || changed[0])?.marker;
   const identity = [state.parent.id, state.copy.ids[0], marker && markerKey(state.copy, marker),
-    S.voicingRevision, S.fingerRevision, handResult, review.excluded, review.variation];
+    S.voicingRevision, S.fingerRevision, handResult, state.group.copies.map(c => c.ids[0]).join()];
   if (review.playheadMarker && identity.every((value, i) => value === review.playheadMarker[i])) return;
   review.playheadMarker = identity;
   if (hover && marker && hover.instance === state.copy.ids[0] && hover.group === state.group.id
@@ -696,6 +715,23 @@ function drawDifference(marker, left, right) {
   sctx.strokeRect(x - pad, y - pad, Math.max(2, end - x) + pad * 2, S.state.rowH + pad * 2);
   sctx.setLineDash([]);
 }
+// The note being compared on the other side: what is selected there (the arrow
+// keys select as they go), or what its comparison card shows. Its counterpart in
+// this pane's instance lights up.
+let glowCache = null;
+function comparedHere(state) {
+  const elsewhere = state.group.copies.find(c => c !== state.copy);
+  if (!elsewhere) return [];
+  const mine = new Set(elsewhere.notes.map(entry => entry.note));
+  const asked = [...S.selection, hover?.marker.current].filter(note => note && mine.has(note));
+  if (!asked.length) return [];
+  const key = [state.copy, elsewhere, S.selection, hover?.marker.current, S.voicingRevision, S.fingerRevision, handResult];
+  if (glowCache && key.every((v, i) => v === glowCache.key[i])) return glowCache.notes;
+  const result = compareCopy(elsewhere, state.copy, laneClock(state.lane).beatAt, displayedFingers(state.lane));
+  const across = new Map([...result.pairs, ...result.changes.map(change => [change.from, change.to])]);
+  glowCache = { key, notes: asked.map(note => across.get(note)).filter(Boolean) };
+  return glowCache.notes;
+}
 export function drawRepeats() {
   const state = current();
   if (!state || !state.lane.visible) return;
@@ -711,11 +747,18 @@ export function drawRepeats() {
     sctx.globalAlpha = active ? 1 : 0.5;
     sctx.strokeStyle = PAINT.trace; sctx.lineWidth = active ? 2 : 1; sctx.setLineDash(active ? [] : [5, 3]);
     sctx.strokeRect(x0, y0, Math.max(1, x1 - x0), y1 - y0); sctx.setLineDash([]);
-    const label = `${group.name} · instance ${originalIndex(state, copy)}`, labelX = Math.max(left + 3, x0 + 3);
+    // Only the shown instance keeps its label in view; another's scrolls off with its frame.
+    const label = `${group.name} · instance ${originalIndex(state, copy)}`, labelX = active ? Math.max(left + 3, x0 + 3) : x0 + 3;
     sctx.strokeStyle = halo(); sctx.lineWidth = 3; sctx.strokeText(label, labelX, y0 - 2);
     sctx.fillStyle = PAINT.trace; sctx.fillText(label, labelX, y0 - 2);
   });
   sctx.globalAlpha = 1;
+  for (const note of comparedHere(state)) {
+    const x = xOf(note.start);
+    if (x > right || xOf(note.end) < left) continue;
+    sctx.beginPath(); sctx.rect(x, yOf(note.pitch), Math.max(2, xOf(note.end) - x), S.state.rowH);
+    paintNoteGlow(sctx, 1);
+  }
   {
     const details = comparisonDetails(state);
     for (const marker of details.markers) {
@@ -727,7 +770,7 @@ export function drawRepeats() {
 }
 function closeRepeatPickers(except = null) {
   let closed = false;
-  for (const id of ['repeatInstance', 'repeatVariation']) {
+  for (const id of ['repeatInstance']) {
     const picker = $(id);
     if (picker !== except && picker.open) {
       picker.open = false; closed = true;
@@ -739,11 +782,11 @@ function closeRepeatPickers(except = null) {
 export function init_repeats(dependencies) {
   actions = dependencies;
   initRepeatDock($('repeatNavigator'), $('repeatDrag'));
-  for (const id of ['repeatInstance', 'repeatVariation']) $(id).addEventListener('toggle', () => {
+  for (const id of ['repeatInstance']) $(id).addEventListener('toggle', () => {
     if ($(id).open) closeRepeatPickers($(id));
   });
   window.addEventListener('pointerdown', event => {
-    for (const id of ['repeatInstance', 'repeatVariation']) if (!$(id).contains(event.target)) $(id).open = false;
+    for (const id of ['repeatInstance']) if (!$(id).contains(event.target)) $(id).open = false;
   });
   document.body.append($('repeatHover'));
   $('repeatNoteFirst').addEventListener('click', () => showNoteVersion(-1));
@@ -754,11 +797,10 @@ export function init_repeats(dependencies) {
   registerEscapeLayer(ESC_DEPTH.popover, () => closeRepeatPickers() || hideRepeatHover());
   $('repeatGroup').addEventListener('change', () => {
     if (!review) return;
-    review.group = $('repeatGroup').value; review.variation = null; review.first = null; review.copyKey = null;
+    review.group = $('repeatGroup').value; review.first = null; review.copyKey = null;
     revealCurrent();
   });
   $('repeatInstance').addEventListener('change', () => selectInstance($('repeatInstance').value));
-  $('repeatVariation').addEventListener('change', () => selectVariation($('repeatVariation').value));
   $('repeatPrevious').addEventListener('click', () => stepCopy(-1));
   $('repeatNext').addEventListener('click', () => stepCopy(1));
   $('repeatGroupPrevious').addEventListener('click', () => stepGroup(-1));
