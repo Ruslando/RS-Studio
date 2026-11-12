@@ -1,3 +1,4 @@
+import { laneClock, boxMinIn } from "./reference-clock.js";
 // Linked repeated-note groups ("references"): creating a reference from a selection
 // and the per-occurrence operations (move, resize, or edit a single instance).
 
@@ -8,7 +9,7 @@ import { draw } from "./repaint.js";
 import { stageIcon } from "./icons.js";
 import { commit, commitStructure, snapshotEdit } from "./edit-history.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
-import { gridAt, minDur, segStep, snap } from "./grid.js";
+import { snap } from "./grid-read.js";
 import { nid } from "./ids.js";
 import { editLanes, laneOf, refreshCounts } from "./lanes.js";
 import { EFFECT_FIELDS, copyEffects } from "./note-effects.js";
@@ -16,9 +17,7 @@ import { referenceHands, referenceHandSig, mirrorReferenceHands } from './refere
 import { toast } from "./notify.js";
 import { beatShape, effectSig, inRefBox, occurrenceBox, shiftOf, spanAt } from "./reference-core.js";
 export { occurrenceBox, shiftOf, spanAt } from "./reference-core.js";
-import { beatClock } from "./bars.js";
-import { timingSegments } from "./grid.js";
-import { timingData, timingIdOf } from "./timing.js";
+
 import { PAINT, WASH, halo } from "./stage-paint.js";
 import { S } from "./store.js";
 import { projectStart } from "./project-position-core.js";
@@ -72,7 +71,6 @@ function boxRect(group, i, clock) {
 }
 
 // The beat clock of a layer's own timing (the song's, or its own tempo map).
-export const laneClock = (lane) => beatClock(timingSegments(timingData(timingIdOf(lane))));
 
 // Set a group's shape in beats, and its seconds at the first box for older readers.
 export function setBeatShape(group, r0, r1, clock) {
@@ -115,7 +113,7 @@ export function dropFingering(note) { delete note.pos; delete note.arrangement; 
 // span — a note merely grazing the edge has to be pushed a cell deep to join.
 // The cell is the one in force where the box starts: under a faster tempo the
 // notes are shorter, and the base tempo's cell would leave them all outside.
-export const boxMinIn = (t) => Math.min(minDur(), segStep(gridAt(t)) || minDur());
+
 export function notesInBox(box, arr) {
   const minIn = boxMinIn(box.t0);
   return arr.filter((n) => inRefBox(n, box, minIn));

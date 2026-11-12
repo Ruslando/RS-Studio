@@ -1,3 +1,4 @@
+import { $ } from "./dom.js";
 // One menu controller for the app bar, project actions and panel options.
 import { placeFloating } from './floating-position.js';
 let viewportListeners = false;
@@ -62,3 +63,5 @@ export function wireMenuAnchors(root, onOpen = () => {}) {
     list.addEventListener('click', closeMenus, true);
   }
 }
+
+export const wireMenu = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };

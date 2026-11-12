@@ -1,7 +1,7 @@
 import { $, scroll, stage } from './dom.js';
 import { S } from './store.js';
 import { projectShiftPlan, projectStart } from './project-position-core.js';
-import { restoreGridState } from './grid.js';
+import { restoreGridState } from "./grid-controls.js";
 import { SONG, timingData } from './timing.js';
 import { commitStructure, snapshotEdit, undo, redo, STATE_RESTORED } from "./edit-history.js";
 import { draw, drawNow } from './repaint.js';
@@ -13,7 +13,6 @@ import { closePhraseMarkerPop } from './phrase-markers.js';
 import { closeCrowdEventPop } from './crowd-events.js';
 import { clearMatches } from './tracing.js';
 import { refreshTabIfOpen } from './tablature.js';
-import { updateAutoScroll } from './interaction.js';
 
 const handle = $('projectStartHandle');
 const readout = handle.querySelector('output');
@@ -86,7 +85,7 @@ function closeEditors() {
   closeToneMarkerPop(); closePhraseMarkerPop(); closeCrowdEventPop(); clearMatches();
 }
 
-export function init_project_position() {
+export function init_project_position({ updateAutoScroll }) {
   const point = event => {
     const box = handle.getBoundingClientRect();
     const at = Math.max(14, Math.min(box.height - 14, event.clientY - box.top));

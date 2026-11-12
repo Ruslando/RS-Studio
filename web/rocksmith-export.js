@@ -1,7 +1,7 @@
 import { LS_LEAD_IN, leadIn } from "./rocksmith-preferences.js";
 import { renderCoverPreview } from "./cover-preview.js";
 import { rowsFor } from './rocksmith-check.js';
-import { ignoredCategories, setIssueIgnored, setCategoriesIgnored, issueIgnored, exportIssueIgnores } from './issue-state.js';
+import { ignoredCategories, setIssueIgnored, setCategoriesIgnored, exportIssueIgnores } from './issue-state.js';
 import { issueTone } from "./issue-tone.js";
 // Rocksmith CDLC export UI: the arrangement picker, the metadata form and the
 // POST that builds the .psarc. The File-menu entry is wired in ui.js with the
@@ -24,7 +24,9 @@ import { togglePlay, transportPlaying } from "./playback.js";
 import { rememberPref } from "./util.js";
 import { rocksmithIssueKinds } from "./rocksmith-check.js";
 import { initCollapsibleSections } from "./collapsible-sections.js";
-import { TUNINGS, buildSpecForLanesAsync, customTunings, laneTuning, parseTuning, tuningToNames } from "./tablature.js";
+import { TUNINGS, customTunings, laneTuning } from "./lane-tuning.js";
+import { buildSpecForLanesAsync } from "./tablature.js";
+import { parseTuning, tuningToNames } from "./util.js";
 
 function rsStringCountForKind(kind) {
   return kind.includes("bass") ? 4 : 6;

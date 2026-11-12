@@ -1,3 +1,4 @@
+import { checkResults, replaceCheckResults } from "./rocksmith-results.js";
 import { issueIgnored, showIgnoredIssues, setShowIgnoredIssues, openIssueMenu, restoreIssues } from './issue-state.js';
 import { issueInstanceKey } from './issue-identity.js';
 // Live Rocksmith check: what the export would report, while the chart is edited.
@@ -13,8 +14,9 @@ import { issueTone, toneRank } from './issue-tone.js';
 import { issueId } from './issue-identity.js';
 import { $, scroll } from './dom.js';
 import { S } from './store.js';
-import { openDiagnosticMenu } from './edit.js';
-import { buildSpecForLanesAsync, laneFretCount, laneFretTuning, laneTuning } from './tablature.js';
+import { openDiagnosticMenu } from './editor-menu.js';
+import { buildSpecForLanesAsync } from "./tablature.js";
+import { laneFretCount, laneFretTuning, laneTuning } from "./lane-tuning.js";
 import { laneIssues } from './note-issues.js';
 import { RS_KIND_OPTIONS, isTablatureLane } from './layer-role.js';
 import { rsLeadIn } from './rocksmith-preferences.js';
@@ -33,7 +35,6 @@ const KINDS = new Set(RS_KIND_OPTIONS.map(([kind]) => kind));
 const chevron = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const clock = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, '0')}`;
 
-let results = new Map();          // lane id -> { issues, warnings, error }
 let lastKey = null, timer = 0, inFlight = null;
 const expandedIssues = new Set();
 const lists = new Map();         // 'error' | 'warning' | 'note' -> { list, count, head, body, shown }
@@ -73,12 +74,12 @@ async function runCheck() {
       found = await res.json();
     }
     if (controller !== inFlight) return;
-    results = new Map(found.map(entry => [lanes[entry.track]?.id, entry]));
+    replaceCheckResults(new Map(found.map(entry => [lanes[entry.track]?.id, entry])));
     draw();
   } catch (error) {
     if (controller.signal.aborted) return;
     // A check that cannot run says nothing rather than something stale.
-    results = new Map(); draw();
+    replaceCheckResults(new Map()); draw();
     console.warn('Rocksmith check failed:', error);
   }
   window.dispatchEvent(new Event('cw-rocksmith-checked'));
@@ -86,7 +87,6 @@ async function runCheck() {
 
 // Called on every paint pass: starts a check once the chart has stopped changing.
 // The latest check's answer; a new Map whenever one arrives.
-export const checkResults = () => results;
 
 export function scheduleCheck() {
   if (!S.state) return;
@@ -97,29 +97,9 @@ export function scheduleCheck() {
   timer = setTimeout(runCheck, SETTLE_MS);
 }
 
-// The silence the export will put in front, which it raises past the setting
-// for an early first note; null until a check has measured it.
-export function rocksmithLeadIn() {
-  const lead = [...results.values()][0]?.leadIn;
-  return Number.isFinite(lead) ? lead : null;
-}
-
-// What the export adds in front of a layer, in editor time: the COUNT phrase's
-// start and the count-in events (B0 / B1 ticks). The active layer's when it has
-// been checked, else the first checked one; null before any check.
-export function rocksmithCountIn(lane) {
-  const found = results.get(lane?.id) || [...results.values()][0];
-  return found && Array.isArray(found.events) ? { count: found.count, events: found.events } : null;
-}
-
-// The events the export writes for one layer, in editor time: [{ t, code }].
-export function rocksmithEvents(lane) {
-  return results.get(lane?.id)?.events || [];
-}
-
 // The issues of one layer that sit on its notes, with those notes: what the stage frames.
 function rocksmithIssueNotes(lane) {
-  const found = results.get(lane.id);
+  const found = checkResults().get(lane.id);
   if (!found?.issues?.length) return [];
   const out = [];
   for (const issue of rowsFor(lane).filter(row => row.code && (showIgnoredIssues || !issueIgnored(lane, row)))) {
@@ -136,7 +116,7 @@ function rocksmithIssueNotes(lane) {
 // the note inside it, so an issue belongs to the shape whose stretch holds it.
 export function rocksmithShapeProblems(lane) {
   const out = new Map();
-  const found = results.get(lane?.id);
+  const found = checkResults().get(lane?.id);
   if (!found?.issues?.length) return out;
   const stretches = [...shapeGroups(lane.notes)].map(([id, notes]) => ({ id,
     t0: Math.min(...notes.map((n) => n.start)), t1: Math.max(...notes.map((n) => n.start)) }));
@@ -160,7 +140,7 @@ export function rocksmithShapeProblems(lane) {
 // (note-issues.js) and its flags'. `key` is the problem's kind, what the export
 // window ignores: a stable ID independent of the message text.
 export function rowsFor(lane) {
-  const found = results.get(lane?.id);
+  const found = checkResults().get(lane?.id);
   const rows = [];
   if (found?.error) rows.push({ id: found.errorId || 'export.compile-failed', key: found.errorId || 'export.compile-failed', title: 'Rocksmith: Export failed', help: found.error, tone: 'error', time: null });
   if (found?.warningIssues) for (const issue of found.warningIssues) rows.push({ ...issue, key: issue.id });
@@ -340,7 +320,7 @@ export function initRocksmithIssues() {
     ...issueSection('error', 'Errors'), ...issueSection('warning', 'Warnings'), ...issueSection('note', 'Notes'));
   const reset = () => {
     inFlight?.abort(); clearTimeout(timer);
-    results = new Map(); lastKey = null; expandedIssues.clear();
+    replaceCheckResults(new Map()); lastKey = null; expandedIssues.clear();
     for (const section of lists.values()) section.shown = null;
   };
   window.addEventListener('cw-project-opened', reset);

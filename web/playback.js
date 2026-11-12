@@ -5,7 +5,7 @@ import { channelRoute } from './audio-channel.js';
 import { LOOKAHEAD, MAX_METRONOME_BEATS, toneOf } from "./constants.js";
 import { $, audio, editorEl, metroOn, playBtn, scroll, seek, speedSel, timeEl } from "./dom.js";
 import { draw, drawNow } from "./repaint.js";
-import { gridAt, gridSegments, segBeatSec } from "./grid.js";
+import { gridAt, gridSegments, segBeatSec } from "./grid-read.js";
 import { applyLaneVolume, disposeLaneSynth, editLanes, releaseLaneSynth, targetLane } from "./lanes.js";
 import { S } from "./store.js";
 import { xOf } from "./geometry.js";

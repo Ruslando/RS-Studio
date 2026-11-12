@@ -2,21 +2,22 @@
 // applying positions is a separate, explicit edit.
 import { compareCopy, copyOrigin, groupsFromRepeats, resolveRepeatGroups } from './repeats-core.js';
 import { commit, commitStructure, snapshotEdit } from "./edit-history.js";
-import { setHandAnchor } from "./edit.js";
 import { scroll, sctx, stage } from './dom.js';
 import { xOf, yOf } from './geometry.js';
 import { activeLane, canEditLane, refreshCounts } from './lanes.js';
 import { toast } from './notify.js';
-import { boxOfNote, laneClock, noteBounds } from './references.js';
+import { boxOfNote, noteBounds } from "./references.js";
+import { laneClock } from "./reference-clock.js";
 import { draw } from './repaint.js';
 import { PAINT, halo } from './stage-paint.js';
 import { S } from './store.js';
-import { laneFingering, refreshTabIfOpen } from './tablature.js';
+import { laneFingering } from "./lane-fingering.js";
+import { refreshTabIfOpen } from "./tablature.js";
 import { stageUi } from './constants.js';
 import { manualViewportNavigation, moveViewportTo } from './viewport-motion.js';
 import { registerEscapeLayer, ESC_DEPTH } from './escape-stack.js';
 import { clearMatches } from './tracing.js';
-import { previewFretboardNote, setFretboardVisible } from './fretboard.js';
+let actions;
 import { noteName } from './util.js';
 import { applyNoteCounterpart, applyPresenceCounterpart, curveGraph, noteChangeRows, noteInstanceRows } from './repeat-change-details.js';
 import { placeFloatingAvoiding } from './floating-position.js';
@@ -142,7 +143,7 @@ export function runFindRepeats(lane = activeLane()) {
   clearMatches();
   review = { lane: lane.id, group: lane.repeatGroups?.[0]?.id };
   navKey = null;
-  setFretboardVisible(true);
+  actions.setFretboardVisible(true);
   worker = new Worker(new URL('./repeats-worker.js', import.meta.url), { type: 'module' });
   const pending = worker;
   worker.onmessage = ({ data }) => {
@@ -455,7 +456,7 @@ function applyCommonValue(key, sourceIndex = null, targetIndex = null) {
   let result = null, changed = false, alreadyCommitted = false;
   if (key === 'handAnchor' && target) {
     const revision = S.voicingRevision;
-    setHandAnchor(state.lane, target.start, instances[row.commonIndex].handAnchor || null);
+    actions.setHandAnchor(state.lane, target.start, instances[row.commonIndex].handAnchor || null);
     changed = S.voicingRevision !== revision; alreadyCommitted = true;
   } else if (key === 'presence') {
     result = applyPresenceCounterpart(state.lane, source, target, options); changed = result.changed;
@@ -599,7 +600,7 @@ function updateHoverPreview() {
   const state = current();
   $('repeatNoteVersion').textContent = state ? instancePosition(state, hover.selected) : '1 / 1';
   $('repeatNoteFirst').disabled = $('repeatNoteCurrent').disabled = (current()?.group.copies.length || 0) < 2;
-  previewFretboardNote(hover.lane, hover.marker.first, `Instance ${state ? originalIndex(state, state.group.copies[hover.selected]) : hover.selected + 1}`);
+  actions.previewFretboardNote(hover.lane, hover.marker.first, `Instance ${state ? originalIndex(state, state.group.copies[hover.selected]) : hover.selected + 1}`);
   placeFloatingAvoiding($('repeatHover'), hoverAvoidance);
   draw();
 }
@@ -608,7 +609,7 @@ export function hideRepeatHover() {
   hover = null;
   if ($('repeatHover')) $('repeatHover').hidden = true;
   if ($('repeatNoteNavigation')) $('repeatNoteNavigation').hidden = true;
-  if (wasOpen) { previewFretboardNote(); draw(); }
+  if (wasOpen) { actions.previewFretboardNote(); draw(); }
   return wasOpen;
 }
 // The transport is the only source of automatic comparison-card selection.
@@ -730,7 +731,8 @@ function closeRepeatPickers(except = null) {
   }
   return closed;
 }
-export function init_repeats() {
+export function init_repeats(dependencies) {
+  actions = dependencies;
   initRepeatDock($('repeatNavigator'), $('repeatDrag'));
   for (const id of ['repeatInstance', 'repeatVariation']) $(id).addEventListener('toggle', () => {
     if ($(id).open) closeRepeatPickers($(id));

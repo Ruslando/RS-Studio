@@ -26,16 +26,19 @@ const subdivision = { value: '8' };
 const oldWindow = globalThis.window;
 try {
   globalThis.window = win;
-  const grid = await mockImport(new URL('../../web/grid.js', import.meta.url), {
+  const gridDependencies = {
     './store.js': { S }, './dom.js': {
       bpmInput: { value: '120' }, offsetInput: { value: '0' }, tsNumInput: { value: '4' },
       tsDenInput: { value: '4' }, subdivSel: subdivision, subdivCustom: { value: '8' },
     },
-  }, { './bars.js': true, './constants.js': true, './project-position-core.js': true, './auto-grid.js': true });
+  };
+  const gridReal = { './bars.js': true, './constants.js': true, './project-position-core.js': true, './auto-grid.js': true };
+  const controls = await mockImport(new URL('../../web/grid-controls.js', import.meta.url), gridDependencies, gridReal);
+  const grid = await mockImport(new URL('../../web/grid-read.js', import.meta.url), { ...gridDependencies, './grid-controls.js': controls }, gridReal);
   const dependencies = {
     './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
     './store.js': { S, setSelection: value => { S.selection = value; } },
-    './dom.js': { stage, scroll }, './repaint.js': { draw: noop }, './grid.js': grid,
+    './dom.js': { stage, scroll }, './repaint.js': { draw: noop }, './grid-read.js': grid, './grid-controls.js': controls,
     './lanes.js': { activeLane: () => lane, targetLane: () => lane, laneOf: () => lane, canEditLane: value => !!value?.visible, refreshCounts: noop,
       setLaneNotePitch: (lane, note, pitch) => {note.pitch = pitch;} },
     './geometry.js': { timeAt: x => x / 100, xOf: t => t * 100, pitchAt: () => 64, pitchAtExact: () => 64, yOf: () => 100 },

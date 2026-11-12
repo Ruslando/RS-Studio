@@ -1,3 +1,4 @@
+import { TEMPO_MARKER_HEIGHT as MARK_H } from "./constants.js";
 import { paintMarkerFlag } from "./canvas-components.js";
 import { placeFloating } from "./floating-position.js";
 // Tempo/meter markers ("FMOD-style" flags pinned to the top of the spectrogram).
@@ -6,10 +7,12 @@ import { placeFloating } from "./floating-position.js";
 // A marker starts a new bar at its own tempo/meter, tiling forward to the next.
 
 import { MM_HEAD, stageMono, stageUi } from "./constants.js";
-import { bpmInput, inTourCard, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx as minimapCtx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
+import { bpmInput, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx as minimapCtx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js";
-import { addMarker, currentGridState, gridOffset, gridSegments, snap, removeMarker, retimeTempoSpan, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid.js";
+import { addMarker, removeMarker, retimeTempoSpan } from "./grid.js";
+import { currentGridState, gridOffset, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid-controls.js";
+import { gridSegments, snap } from "./grid-read.js";
 import { toast } from "./notify.js";
 import { refreshTabIfOpen } from "./tablature.js";
 import { timeAt, xOf } from "./geometry.js";
@@ -20,10 +23,10 @@ import { isMarkerSelected, railScale, railsHidden, timedLaneMarkers } from "./ma
 import { editLanes } from "./lanes.js";
 import { onLiveTiming, sectionsOnLiveTempo, SONG, withTiming } from "./timing.js";
 import { sectionMarkersChanged } from "./section-markers.js";
-import { gridDivLabelFor } from "./ui.js";
+import { gridDivLabelFor } from "./grid-controls.js";
 import { refreshSaveState } from "./save-state.js";
 
-export const MARK_H = 24;   // marker-flag band height (px), pinned to the viewport top
+
 
 let markerRects = [];       // {seg, x0,x1,y0,y1} in world px, rebuilt each draw() for hit-testing
 let editSeg = null;         // the segment currently open in the popover

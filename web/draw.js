@@ -14,13 +14,13 @@ import { beginNoteMotionFrame, beginNotePlaybackFrame, noteMotion, noteMotionGho
 // Canvas rendering: the main spectrogram + notes draw loop, the overview minimap
 // (whole-song strip with a viewport window), and the hover highlight / cursor line.
 
-import { bendCurve, bendPeak } from "./bend.js";
+import { bendPeak } from "./bend.js";
 import { BEND_HANDLE_R, RULER_W, STAGE_ANCHORED, STAGE_HEIGHT_MIN, stageMono, stageUi } from "./constants.js";
 import { pitchCurve } from "./whammy.js";
-import { bendHandles, curveHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, legatoTargets, noteRibbon, slideFretsHandle, regionEdgeAt } from "./note-render.js";
+import { curveHandles, effectStartHandles, collectStacks, stackedBendPoints, drawDetectRegion, drawGrid, drawNoteFx, drawRuler, drawStackBadges, laneSlides, legatoTargets, noteRibbon, slideFretsHandle, regionEdgeAt } from "./note-render.js";
 import { editorEl, minimap, overviewRuler, ruler, rulerRight, scroll, sctx, stage, viewer } from "./dom.js";
 import { draw, drawNow, setPainter } from "./repaint.js";
-import { hideNoteMenu } from "./edit.js";
+import { hideNoteMenu } from "./editor-menu.js";
 import { drawFretboard, fretboardEditTargets } from "./fretboard.js";
 import { drawMarkers, markerCursorAt } from "./markers.js";
 import { commentCursorAt, drawComments } from "./comments.js";
@@ -37,13 +37,13 @@ import { shapeGroups, shapeLabel, shapeLabelAt } from "./shapes.js";
 import { laneChords } from "./chord-names.js";
 import { PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
-import { laneFretCount, laneFretTuning } from "./tablature.js";
+import { laneFretCount, laneFretTuning } from "./lane-tuning.js";
 import { drawRepeats, renderRepeatNavigator, repeatPreviewHiddenNote, repeatPreviewNote } from "./repeats.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
-import { displayGridStep, gridSegments, segBarSec } from "./grid.js";
+import { displayGridStep, gridSegments, segBarSec } from "./grid-read.js";
 import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
 
 const omittedArrangementCache = new WeakMap();

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mockImport } from './mock-import.mjs';
+import { mockImport, mockEditor } from './mock-import.mjs';
 import { EFFECT_FIELDS, copyEffects } from '../../web/note-effects.js';
 import { effectSig, inRefBox, occurrenceBox, shiftOf } from '../../web/reference-core.js';
 import { referenceHands, referenceHandSig, mirrorReferenceHands } from '../../web/reference-hands.js';
@@ -34,11 +34,12 @@ const refs = new Function('deps', `const { EFFECT_FIELDS, copyEffects, effectSig
 const saved = { window: globalThis.window, CustomEvent: globalThis.CustomEvent };
 try {
   globalThis.window = new EventTarget(); globalThis.CustomEvent = class extends Event {};
-  const edit = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+  const edit = await mockEditor({
     './store.js': { S, setSelection: set => { S.selection = set; } }, './dom.js': { undoMI: null, redoMI: null },
     './note-effects.js': { FX_KEYS: [] }, './lanes.js': { activeLane: () => lane, editLanes: () => [lane],
       laneOf: n => lane.notes.includes(n) ? lane : null, canEditLane: l => !!l, refreshCounts: noop, renderLanes: noop, applyLaneVolume: noop },
-    './grid.js': { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop, snapStrayNotes: noop },
+    "./grid-controls.js": { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop },
+    "./grid-read.js": { snapStrayNotes: noop },
     './timing.js': { timingSnapshot: () => ({}), restoreTimingSnapshot: noop, eachTiming: (lanes, cb) => cb(lanes) },
     './references.js': refs, './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop },
     './voicing.js': { chordColumns, slideFingerGroup }, './tracing.js': { clearMatches: noop },

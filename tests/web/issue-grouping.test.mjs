@@ -31,7 +31,7 @@ lane.active = true;
 let actions, commits = 0, jumpedTo;
 const snapshots = [];
 const noop = () => {};
-const env = vm.createContext({S, issueId, issueInstanceKey, migrateIgnoredIssues, laneIssues, issueTone, toneRank,
+const env = vm.createContext({checkResults: () => env.results || new Map(), S, issueId, issueInstanceKey, migrateIgnoredIssues, laneIssues, issueTone, toneRank,
   document: {createElement: () => new Element()},
   window: {addEventListener: noop, dispatchEvent: noop}, Event: class {},
   $: id => id === 'artifactsContent' ? content : new Element(),

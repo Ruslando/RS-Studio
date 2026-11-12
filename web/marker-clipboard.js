@@ -7,7 +7,8 @@
 
 import { draw } from "./repaint.js";
 import { commitStructure, snapshotEdit } from "./edit-history.js";
-import { gridOffset, restoreGridState, currentGridState, snap } from "./grid.js";
+import { gridOffset, restoreGridState, currentGridState } from "./grid-controls.js";
+import { snap } from "./grid-read.js";
 import { markerKey, markerRails, markerSelection, setMarkerSelection } from "./marker-rails.js";
 import { tempoFlags } from "./markers.js";
 import { sectionMarkersChanged } from "./section-markers.js";

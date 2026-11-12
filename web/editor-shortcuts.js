@@ -3,8 +3,7 @@ import { KEY_COMMANDS, matchKey } from './keymap.js';
 import { $, scroll, stage } from './dom.js';
 import { S } from './store.js';
 import { activeLane, activateLane, canEditLane, editLanes, laneOf } from './lanes.js';
-import { playbackTime, seekPlayback } from './playback.js';
-import { openSettingsModal } from './ui.js';
+import { seekPlayback } from './playback.js';
 import { draw } from './repaint.js';
 import { openDetectPanel, updateDetectStatus } from './detect.js';
 import { refMenuEntry, detachSelection } from './references.js';
@@ -38,7 +37,7 @@ function withSelection(action) {
   if (notes.length && notes.every(note => canEditLane(laneOf(note)))) action(notes);
 }
 
-export function createEditorShortcutRunner({ markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection }) {
+export function createEditorShortcutRunner({ openSettingsModal, markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection }) {
   const handlers = {
     sidebar: () => click('sidebarToggle'), artifacts: () => click('artifactsToggle'),
     zoomIn: () => click('zoomIn'), zoomOut: () => click('zoomOut'),

@@ -23,6 +23,23 @@ export async function mockImport(url, overrides = {}, real = {}) {
     },
   ).replace(/export\s*(?:\{[^}]+\}|\*)\s*from\s*["']([^"']+)["']/g,
     (statement, specifier) => statement.replace(specifier, new URL(specifier, url).href));
-  try { return await import('data:text/javascript,' + encodeURIComponent(source + `\n//# sourceURL=${url.href}`)); }
+  // Preserve relative worker/asset URLs when evaluating a module through a data URL.
+  const resolvedSource = source.replace(/\bimport\.meta\.url\b/g, JSON.stringify(url.href));
+  try { return await import('data:text/javascript,' + encodeURIComponent(resolvedSource + `\n//# sourceURL=${url.href}`)); }
   finally { delete globalThis[key]; }
+}
+
+// Exercise editor commands together with their shared clipboard/column helpers.
+// The same browser doubles cross those boundaries; no helper behavior is stubbed.
+export async function mockEditor(overrides = {}, real = {}) {
+  const shared = {
+    ...overrides,
+    './lane-state.js': overrides['./lanes.js'],
+    './voicing-core.js': overrides['./voicing-core.js'] || overrides['./voicing.js'],
+  };
+  const clipboard = await mockImport(new URL('../../web/note-clipboard.js', import.meta.url), shared, real);
+  const column = await mockImport(new URL('../../web/column-context.js', import.meta.url), shared, real);
+  return mockImport(new URL('../../web/edit.js', import.meta.url), {
+    './note-clipboard.js': clipboard, './column-context.js': column, ...overrides,
+  }, real);
 }

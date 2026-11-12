@@ -23,10 +23,10 @@ try {
   }, { './constants.js': true, './spectrogram-labels.js': true });
   const { drawNoteFx } = await mockImport(new URL('../../web/note-render.js', import.meta.url), {
     './store.js': { S }, './dom.js': { scroll: { scrollLeft: 0, clientWidth: 500 }, sctx: ctx },
-    './tablature.js': { laneFingeringKey: () => 'one', laneFingering: async () => ({ notes: [note], voiced: new Map([[note, { string: 1, fret: 5 }]]) }) },
+    "./lane-fingering.js": { laneFingeringKey: () => 'one', laneFingering: async () => ({ notes: [note], voiced: new Map([[note, { string: 1, fret: 5 }]]) }) },
     './repaint.js': { draw: noop }, './articulations.js': { hammerDirections: () => new Map() },
     './bend.js': { slideTargets: () => new Map(), slideRibbon: () => ribbon, bendCurve: () => curve, SLIDES_TO_NEXT: new Set(), SLIDE_IN: new Set(), SLIDE_OUT: new Set() },
-    './geometry.js': { xOf: time => time * 100, yOf: () => 0 }, './grid.js': { gridAt: () => ({ bpm: 120 }), gridSegments: () => [{t: 0, bpm: 120, tsDen: 4, subdiv: 8}] },
+    './geometry.js': { xOf: time => time * 100, yOf: () => 0 }, "./grid-read.js": { gridAt: () => ({ bpm: 120 }), gridSegments: () => [{t: 0, bpm: 120, tsDen: 4, subdiv: 8}] },
     './grace.js': { graceBefore: () => grace }, './whammy.js': { pitchCurve: () => curve }, './canvas-components.js': { paintNoteBar: (...args) => graceBars.push(args) }, './note-effects.js': { noteMarks: () => ['PM'], FX_GLYPHS: {}, HARMONIC_TAG: {} },
     './note-label-paint.js': painter,
   }, { './spectrogram-labels.js': true, './note-length.js': true, './util.js': true });

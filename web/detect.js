@@ -12,7 +12,8 @@ import { confirmAppendBtn, confirmBackdrop, confirmCancelBtn, confirmMsgEl, conf
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { draw } from "./repaint.js";
 import { commit, snapshotEdit } from "./edit-history.js";
-import { currentGridState, FINE_SUBDIV, gridAt, quantizeFine, segBeatSec, segStep, setSubdiv, snapNote } from "./grid.js";
+import { currentGridState, setSubdiv } from "./grid-controls.js";
+import { FINE_SUBDIV, gridAt, quantizeFine, segBeatSec, segStep, snapNote } from "./grid-read.js";
 import { confirmChoice } from "./dialog.js";
 import { nid } from "./ids.js";
 import { S, setSelection } from "./store.js";

@@ -1,7 +1,7 @@
 import { S } from './store.js';
 import { issueId, issueInstanceKey, migrateIgnoredIssues } from './issue-identity.js';
 import { snapshotEdit, commitDiagnostics } from "./edit-history.js";
-import { openDiagnosticMenu } from "./edit.js";
+import { openDiagnosticMenu } from "./editor-menu.js";
 import { draw } from './repaint.js';
 
 export let showIgnoredIssues = false;

@@ -9,7 +9,7 @@ import { isTablatureLane } from "./layer-role.js";
 import { assignSectionsToBars } from "./section-marker-core.js";
 import { S } from "./store.js";
 import { onLiveTiming, timingIdOf } from "./timing.js";
-import { laneFingering } from "./tablature.js";
+import { laneFingering } from "./lane-fingering.js";
 
 // Visibility and playback are independent from score membership. Apply this
 // explicit role before alphaTab construction or automatic fingering begins.

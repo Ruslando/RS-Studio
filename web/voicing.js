@@ -12,15 +12,15 @@
 
 import { scroll } from "./dom.js";
 import { draw } from "./repaint.js";
-import { columnOf } from "./edit.js";
+import { columnOf } from "./column-context.js";
 import { xOf, yOf } from "./geometry.js";
-import { gridAt, segBarSec } from "./grid.js";
+import { gridAt, segBarSec } from "./grid-read.js";
 import { songBarStarts } from "./song-bars.js";
 import { editLanes } from "./lanes.js";
 import { selectedTablatureLane } from "./layer-role.js";
 import { playbackTime, ensureTone, previewNotes } from "./playback.js";
 import { S, setSelection } from "./store.js";
-import { setPlaybackCursor } from "./tracing.js";
+import { seekPlayback as setPlaybackCursor } from "./playback.js";
 import { clamp } from "./util.js";
 import { chordColumns, columnShapeChoices, lockedShape, overrideFlow, shapeKey } from "./voicing-core.js";
 import { adjacentColumn } from './column-navigation.js';

@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
-import { mockImport } from './mock-import.mjs';
+import { mockImport, mockEditor } from './mock-import.mjs';
 
 // A bend only goes up; a whammy goes anywhere; a note's curve comes from the menu (edit.js).
 const noop = () => {};
 const lane = { id: 'edit', visible: true, notes: [] };
 const S = { state: { duration: 10, stems: [], editLanes: [lane], lanes: [lane] },
   selection: new Set(), undoStack: [], redoStack: [], voicingRevision: 0 };
-const { setBendCurve, addBendPoint } = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+const { setBendCurve, addBendPoint } = await mockEditor({
   './store.js': { S }, './dom.js': { undoMI: null, redoMI: null },
   './lanes.js': { activeLane: () => lane, editLanes: () => [lane], laneOf: () => lane,
     canEditLane: () => true, refreshCounts: noop },
-  './grid.js': { currentGridState: () => ({}), gridOffset: () => 0 },
+  "./grid-controls.js": { currentGridState: () => ({}), gridOffset: () => 0 },
   './timing.js': { timingSnapshot: () => ({}), eachTiming: noop },
   './references.js': { lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop },
   './note-motion.js': { animateNoteChanges: noop }, './tracing.js': { clearMatches: noop },

@@ -17,7 +17,9 @@ import { renderLayerSettings } from "./lanes.js";
 import { refreshSaveState } from "./save-state.js";
 import { draw } from "./repaint.js";
 import { S } from "./store.js";
-import { TUNINGS, customTunings, laneTuning, newTuningId, parseTuning, refreshTabIfOpen, replaceCustomTunings, tuningKeyFor, tuningToNames } from "./tablature.js";
+import { TUNINGS, customTunings, laneTuning, newTuningId, replaceCustomTunings, tuningKeyFor } from "./lane-tuning.js";
+import { parseTuning, tuningToNames } from "./util.js";
+import { refreshTabIfOpen } from "./tablature.js";
 import { noteName, notesLowToHigh } from "./util.js";
 
 // C0..E6: low enough for a 5/6-string bass (B0 = 23), high enough for any guitar.

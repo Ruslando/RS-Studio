@@ -1,6 +1,6 @@
 # Fallow refactor coverage
 
-This report covers the continued cleanup following the effect-conversion refactor (`339b48c`). The project Fallow configuration and warning thresholds were kept intact.
+This report covers the continued cleanup following the effect-conversion refactor (`339b48c`). The latest dependency pass starts from `c3568cb`. The project Fallow configuration and warning thresholds were kept intact.
 
 ## Changes
 
@@ -18,16 +18,30 @@ This report covers the continued cleanup following the effect-conversion refacto
 - Separated remembered placement validation from beam search, and walkthrough scoped-control admission from stage-spot admission. Search ordering and event policy are unchanged.
 - Added a Guitar Pro voice regression covering mixed rhythms, authored 6:4 tuplets, grace notes, tied-part effects and inserting a note into a rest without changing unaffected bars or original sounding times. It passes against both the committed baseline and the refactor.
 
+## Dependency cleanup after c3568cb
+
+Fallow reports **zero circular dependencies**, down from 21 at the start of this pass. There are also zero unresolved imports. The module graph was changed; no cycle suppressions or ignore patterns were added.
+
+- Split live grid input access (`grid-controls.js`) from queries/quantization (`grid-read.js`) and edit transactions (`grid.js`). Timing switching no longer imports the grid editor.
+- Split tuning registration (`lane-tuning.js`) and shared fingering jobs/cache/reference alignment (`lane-fingering.js`) from the tablature window. Score generation, stage labels, clipboard capture and fretboard rendering use the same service directly.
+- Extracted read-only lane selectors, reference clocks, clipboard capture/placement and onset-column lookup. Tracing and voicing no longer import the editor command controller for those operations.
+- Extracted completed Rocksmith results so marker rails and lead-in rendering do not import the checker and artifact list.
+- Extracted the layer dialog and shared input staging. Its renderer and tuning navigation are supplied during startup, preserving live edits, Apply/Cancel and Escape behavior.
+- Extracted the shared context-menu surface. Diagnostic actions no longer import note-editing commands; menu state, outside-click dismissal, keyboard routing and walkthrough restrictions still share one surface.
+- The entry point supplies menu commands, layer refresh, repeat/fretboard actions and project-start auto-scroll callbacks while retaining initialization order.
+- Migrated repository consumers and browser-test imports to the owning modules, removed obsolete forwarding exports and made unused UI handles private. No implementation was deleted to silence a warning.
+- Added worker regression coverage for shared requests, per-caller cancellation, stale revisions, drag deferral, failures and retries. Existing command tests exercise the real extracted clipboard/column helpers with the same doubles.
+
 ## Fallow comparison
 
-| Finding | Before this continued pass | After |
+| Finding | Before continued cleanup | Latest |
 |---|---:|---:|
-| Non-complexity findings | 236 | 113 |
-| Unused-export flags | 215 | 92 |
+| Non-complexity findings | 236 | 76 |
+| Unused-export flags | 215 | 76 |
 | Duplicate-export groups | 1 | 0 |
-| Reported cycles | 20 | 21 |
+| Reported cycles | 20 | 0 |
 
-Fallow now reports 21 cycle paths. Direct project/playback, Rocksmith-check/export and editor/interaction reciprocal imports were removed, but other paths remain; the reported cycle count did not improve. This is not an acyclic module graph.
+The latest pass reduced unused-export flags from 92 to 76 and reported cycles from 21 to zero. Fallow still fails its dead-code and health quality gates; zero cycles does not mean zero findings.
 
 | Cognitive complexity | Before | After |
 |---|---:|---:|
@@ -50,11 +64,13 @@ Splitting responsibilities increases the number of functions that receive indivi
 
 ## Verification
 
-- Full JavaScript suite: **109 of 110 test files pass**. The independently established `string-techniques.test.mjs` failure remains.
-- **All 1,083 Guitar Pro feature-matrix rows match exactly**, including notation and MIDI differences, rerun after the latest optimizer change.
+- Full JavaScript suite: **110 of 111 test files pass**. The independently established `string-techniques.test.mjs` failure remains.
+- **All 1,083 Guitar Pro feature-matrix rows match exactly**, including notation and MIDI differences, rerun after the complete dependency cleanup.
 - **92 optimizer comparisons** match the preceding implementation exactly for string/fret placement, fingers and hand seats. Both showcase fixtures and seeded chord/note sequences cover pins, holds, capo and technique flags; neither version mutates its inputs. This is a regression corpus, not a comprehensive performance benchmark.
 - **24,000 event-policy comparisons** match the preceding walkthrough guard, including modifier keys, scoped selectors, menus, spot boundaries and transition releases. The walkthrough browser test cannot start because the product deliberately disables its launch button in `index.html`; it timed out before reaching any changed guard code.
-- **All nine latest browser checks pass**: save/undo, mixer, comments, chart reopening, grid selection/resize, slide/vibrato handles, project-start cancellation and the Rocksmith export dialog.
+- **Latest browser run: 26 of 28 checks pass**. Coverage includes save/undo, grid and marker timing, reference rhythm, keyboard binding, diagnostic menus, layer/capo/tuning forms, chord previews and export paths. Two global-settings tests fail with `notes is not iterable`; both fail identically with committed `c3568cb` code served in the same browser harness. The four layer/capo/tuning/timing tests added to this run pass.
+- **The worker lifecycle regression passes** alongside the existing fingering-cache and displayed-clipboard-fingering checks. The mock-import helper now preserves source `import.meta.url` for worker/asset resolution.
+
 - **12,288 chord inputs** match the committed implementation exactly, including pitch-class combinations, inversions and octave duplicates.
 - **163 passage inputs** match exactly; 108 produce passage groups. Inputs include the checked-in bass fixture and deterministic tempo/offset variants.
 - **Eleven stage and fretboard canvas scenes match exactly** after asynchronous fingering settles: plain notes, selection, effects, marquee, slicing, tracing, scrolling, slides, grace notes, labels disabled and capo/fret numbering. An initial scrolled mismatch was a pending fingering calculation; the comparison harness was corrected to wait when no drag is active, without changing production behavior.
@@ -68,6 +84,6 @@ These are targeted tests and comparisons, not an exhaustive browser or performan
 
 ## Remaining findings and stopping point
 
-The majority of the initial unused-export flags and all initially reported hotspots above cognitive complexity 75 have been addressed. Fallow still fails its quality gates: **92 unused exports, 21 cycle paths and 1,081 health findings** remain. Many health findings use static coverage estimates; they are not measured test failures. Retained exports include test/integration APIs and compatibility forwarding; other flags need individual consumer decisions. Remaining complexity includes solver/search code, source import planning, lifecycle controllers and detailed rendering. Those require separate performance or corpus-based work rather than further mechanical splitting. No warning categories were suppressed to reduce counts.
+The majority of the initial unused-export flags and all initially reported hotspots above cognitive complexity 75 have been addressed. Fallow still fails its quality gates: **76 unused exports and 1,081 health findings** remain. Many health findings use static coverage estimates; they are not measured test failures. The latest cycle count is zero. Retained exports include test/integration APIs and compatibility forwarding; other flags need individual consumer decisions. Remaining complexity includes solver/search code, source import planning, lifecycle controllers and detailed rendering. The remaining warning list needs individual API/consumer decisions and measured coverage, rather than mechanical splitting. Several retained exports are accessed dynamically by Python browser tests or the Guitar Pro audit harness, which Fallow does not fully resolve. No warning categories were suppressed to reduce counts.
 
-Detailed JSON reports, test logs, export-cleanup inventory, matrix comparisons and canvas hashes remain under `.local-tools/fallow/` (ignored local artifacts). The latest artifacts are `continued-final.json`, `continued-tests-verified.txt`, `continued-browser-final.txt`, `continued-memory-comparison.json`, `continued-tour-comparison.json` and `continued-matrix.json`. Earlier artifacts are `bulk-final.json`, `bulk-tests-final.txt`, `bulk-interaction-browser.txt`, `bulk-pointer-baseline.txt`, `bulk-pixels-baseline.json`, `bulk-pixels-after.json`, `bulk-matrix-after.json`, `chord-comparison.json`, `pulse-comparison.json` and `export-cleanup-plan.json`.
+Detailed JSON reports, test logs, export-cleanup inventory, matrix comparisons and canvas hashes remain under `.local-tools/fallow/` (ignored local artifacts). The latest artifacts are `cycles-final.json`, `cycles-tests-verified.txt`, `cycles-final-browser.txt`, `cycles-settings-baseline.txt` and `cycles-matrix.json`. Prior optimizer/event comparisons are `continued-memory-comparison.json` and `continued-tour-comparison.json`. Earlier artifacts are `bulk-final.json`, `bulk-tests-final.txt`, `bulk-interaction-browser.txt`, `bulk-pointer-baseline.txt`, `bulk-pixels-baseline.json`, `bulk-pixels-after.json`, `bulk-matrix-after.json`, `chord-comparison.json`, `pulse-comparison.json` and `export-cleanup-plan.json`.

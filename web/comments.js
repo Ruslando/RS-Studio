@@ -6,7 +6,7 @@ import { stageUi } from './constants.js';
 import { $, scroll, sctx, stage } from './dom.js';
 import { commit, snapshotEdit, STATE_RESTORED } from "./edit-history.js";
 import { pitchAt, timeAt, xOf, yOf } from './geometry.js';
-import { snap } from './grid.js';
+import { snap } from "./grid-read.js";
 import { placeFloating } from './floating-position.js';
 import { registerEscapeLayer, ESC_DEPTH } from './escape-stack.js';
 import { refreshSaveState } from "./save-state.js";

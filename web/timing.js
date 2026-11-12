@@ -14,7 +14,7 @@
 // Code that touches every layer at once (snapping, export, the voicer) asks each
 // layer's timing through timingIdOf / withTiming / timingData.
 
-import { currentGridState, restoreGridState } from "./grid.js";
+import { currentGridState, restoreGridState } from "./grid-controls.js";
 import { S } from "./store.js";
 import { withEndSection } from './section-marker-core.js';
 

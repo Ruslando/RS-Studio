@@ -8,7 +8,7 @@ import { stageUi } from "./constants.js";
 import { mmctx as minimapCtx, scroll, sctx } from "./dom.js";
 import { xOf } from "./geometry.js";
 import { inRailBand, railBand, registerMarkerRail } from "./marker-rails.js";
-import { rocksmithCountIn } from "./rocksmith-check.js";
+import { rocksmithCountIn } from "./rocksmith-results.js";
 import { PAINT } from "./stage-paint.js";
 import { RS_EVENT_NAMES, isCrowdEvent } from "./section-marker-core.js";
 import { S } from "./store.js";

@@ -10,13 +10,13 @@ import { crowdEventCode, crowdEventDelete, crowdEventPop, crowdEventPopClose, cr
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js";
 import { timeAt, xOf } from "./geometry.js";
-import { snap } from "./grid.js";
+import { snap } from "./grid-read.js";
 import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
 import { refreshSaveState } from "./save-state.js";
 import { CROWD_EVENTS, normalizeCrowdEvents } from "./section-marker-core.js";
 import { PAINT } from "./stage-paint.js";
 import { S } from "./store.js";
-import { rocksmithEvents } from "./rocksmith-check.js";
+import { rocksmithEvents } from "./rocksmith-results.js";
 import { timingIdOf, withTiming } from "./timing.js";
 
 const RAIL_H = 22;

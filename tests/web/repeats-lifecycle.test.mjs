@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mockImport } from './mock-import.mjs';
+import { mockImport, mockEditor } from './mock-import.mjs';
 import { applyNoteCounterpart } from '../../web/repeat-change-details.js';
 const noop = () => {};
 const lane = { id: 'edit', name: 'Bass', kind: 'edit', visible: true, notes: [
@@ -12,11 +12,11 @@ const globals = { window: globalThis.window, CustomEvent: globalThis.CustomEvent
 try {
   globalThis.window = new EventTarget();
   globalThis.CustomEvent = class extends Event { constructor(type) { super(type); } };
-  const edit = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+  const edit = await mockEditor({
     './store.js': { S }, './dom.js': { undoMI: null, redoMI: null },
     './note-effects.js': { FX_KEYS: [] },
     './lanes.js': { activeLane: () => lane, editLanes: () => [lane], refreshCounts: noop, renderLanes: noop, applyLaneVolume: noop },
-    './grid.js': { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop },
+    "./grid-controls.js": { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop },
     './timing.js': { timingSnapshot: () => ({}), restoreTimingSnapshot: noop },
     './references.js': { lockedReferenceSnapshot: () => [{ lane: lane.id }], lockedReferenceFault: () => null, reconcileReferences: noop },
     './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop },
@@ -73,7 +73,7 @@ try {
     './comment-core.js': { normalizeComments: () => [] },
     './save-state.js': { configureSaveState: noop },
     './volume.js': { normMix: () => ({}) },
-    './tablature.js': { isValidTuningKey: () => true },
+    "./lane-tuning.js": { isValidTuningKey: () => true },
     './layer-role.js': { inferTablatureEnabled: () => true },
     './tone-marker-core.js': { withStartTone: () => [] },
   }, { './util.js': true, './motifs.js': true, './repeats-core.js': true });

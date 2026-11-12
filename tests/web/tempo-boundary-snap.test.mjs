@@ -6,9 +6,12 @@ const inputs = {
   bpmInput: { value: '120' }, offsetInput: { value: '0' }, tsNumInput: { value: '4' },
   tsDenInput: { value: '4' }, subdivSel: { value: '8' }, subdivCustom: { value: '8' },
 };
-const grid = await mockImport(new URL('../../web/grid.js', import.meta.url), {
+const gridDependencies = {
   './store.js': { S }, './dom.js': inputs,
-}, { './bars.js': true, './constants.js': true, './project-position-core.js': true, './auto-grid.js': true });
+};
+const gridReal = { './bars.js': true, './constants.js': true, './project-position-core.js': true, './auto-grid.js': true };
+const controls = await mockImport(new URL('../../web/grid-controls.js', import.meta.url), gridDependencies, gridReal);
+const grid = await mockImport(new URL('../../web/grid-read.js', import.meta.url), { ...gridDependencies, './grid-controls.js': controls }, gridReal);
 const close = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-9, `${message}: ${actual} != ${expected}`);
 
 S.state.tempoMap = [{ t: 1.23, bpm: 60, tsNum: 4, tsDen: 4, subdiv: 8 }];

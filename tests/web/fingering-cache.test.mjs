@@ -4,17 +4,17 @@ import { chordColumns, isChosenFinger } from '../../web/voicing-core.js';
 
 let liveBars = [0, 4], ownBars = [0, 3], solves = 0;
 const S = { voicingRevision: 1 };
-const { laneFingering, laneFingeringNow, laneFingeringKey } = await mockImport(new URL('../../web/tablature.js', import.meta.url), {
+const { laneFingering, laneFingeringNow, laneFingeringKey } = await mockImport(new URL('../../web/lane-fingering.js', import.meta.url), {
   './store.js': { S },
   './song-bars.js': { songBarStarts: timing => timing ? timing.bars : liveBars },
   './timing.js': { onLiveTiming: lane => !lane.timing, timingIdOf: lane => lane.timing,
     timingData: () => ({ bars: ownBars }) },
-  './voicing.js': { arrangedNotes: notes => notes, chordColumns, isChosenFinger, voiceNotesFingered: (notes, tuning, limit, options) => {
+  './voicing-core.js': { arrangedNotes: notes => notes, chordColumns, isChosenFinger, voiceNotesFingered: (notes, tuning, limit, options) => {
     solves++;
     return { voiced: new Map(notes.map((note, string) => [note, { string, fret: note.testFret ?? options.bars[1] }])),
       fingers: new Map(notes.map(note => [note, 3])), seats: new Map(notes.map(note => [note, 2])) };
   } },
-}, { './fretboard-cache.js': true, './tunings.js': true, './constants.js': true });
+}, { './fretboard-cache.js': true, './tunings.js': true, './lane-tuning.js': true, './constants.js': true });
 
 const lane = { id: 'separate-timing', tuning: 'guitar6', timing: 'own', notes: [{ start: 0, end: 1, pitch: 64 }] };
 const firstKey = laneFingeringKey(lane);

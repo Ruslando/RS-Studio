@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mockImport } from './mock-import.mjs';
+import { mockImport, mockEditor } from './mock-import.mjs';
 import { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered } from '../../web/voicing-core.js';
 const noop = () => {};
 const source = { id: 'source', instrument: 'bass', tuning: 'bass4', visible: true, notes: [49, 51, 49, 44].map((pitch, i) => ({
@@ -16,25 +16,26 @@ let solves = 0, id = 0;
 const saved = { window: globalThis.window, CustomEvent: globalThis.CustomEvent };
 try {
   globalThis.window = new EventTarget(); globalThis.CustomEvent = class extends Event {};
-  const tab = await mockImport(new URL('../../web/tablature.js', import.meta.url), {
+  const tab = await mockImport(new URL('../../web/lane-fingering.js', import.meta.url), {
     './store.js': { S }, './song-bars.js': { songBarStarts: () => [0, 4, 8, 12, 16] },
     './timing.js': { onLiveTiming: () => true }, './save-state.js': { withoutDirtying: write => write(noop) },
-    './voicing.js': { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered: (...args) => {
+    './voicing-core.js': { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered: (...args) => {
       solves++; return voiceNotesFingered(...args);
     } },
-  }, { './constants.js': true, './tunings.js': true, './util.js': true, './fretboard-cache.js': true });
+  }, { './lane-tuning.js': true, './constants.js': true, './tunings.js': true, './util.js': true, './fretboard-cache.js': true });
   const shown = await tab.laneFingering(source), count = solves, before = structuredClone(source);
   assert.ok(source.notes.every(n => n.finger == null));
   assert.equal(source.handHolds, undefined, 'the visible hand is generated, not authored');
-  const edit = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+  const edit = await mockEditor({
     './store.js': { S, setSelection: set => { S.selection = set; } }, './dom.js': { undoMI: null, redoMI: null },
-    './tablature.js': { ...tab, refreshTabIfOpen: noop },
+    './lane-fingering.js': tab, './tablature.js': { refreshTabIfOpen: noop },
     './lanes.js': { editLanes: () => lanes, activeLane: () => target, targetLane: () => target,
       laneOf: n => lanes.find(l => l.notes.includes(n)), renderLanes: noop, refreshCounts: noop, applyLaneVolume: noop },
-    './grid.js': { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop, snap: t => t, snapStrayNotes: noop },
+    "./grid-controls.js": { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop },
+    "./grid-read.js": { snap: t => t, snapStrayNotes: noop },
     './timing.js': { timingSnapshot: () => ({}), restoreTimingSnapshot: noop, eachTiming: (lanes, cb) => cb(lanes) },
-    './references.js': { wholeBoxOf: () => null, laneClock: () => clock, lockedReferenceSnapshot: () => [],
-      lockedReferenceFault: () => null, reconcileReferences: noop },
+    "./references.js": { wholeBoxOf: () => null, lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop },
+    "./reference-clock.js": { laneClock: () => clock },
     './marker-clipboard.js': { hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: noop, clearMarkerSelection: noop },
     './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop }, './tracing.js': { clearMatches: noop },
     './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop }, './ids.js': { nid: () => `new${++id}` },

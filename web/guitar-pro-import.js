@@ -4,7 +4,7 @@
 import { bpmInput, gpImportBackdrop, gpImportClose, gpImportConfirm, gpImportFile, gpImportStatus, gpImportSummary, gpImportTracks, importGpBtn, offsetInput, tsDenInput, tsNumInput, welcomeGpBtn } from "./dom.js";
 import { draw } from "./repaint.js";
 import { convertGpScore, gpProjectionSignature, inspectGpScore, packLaneSource, textComments } from "./guitar-pro-core.js";
-import { currentGridState, setSubdiv } from "./grid.js";
+import { currentGridState, setSubdiv } from "./grid-controls.js";
 import { rebuildLanes, refreshCounts, renderLanes } from "./lanes.js";
 import { loadWithScreen } from "./project-loading.js";
 import { applyProject, mapLane, saveToServer } from "./project.js";

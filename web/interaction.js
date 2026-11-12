@@ -16,7 +16,7 @@ import { draw } from "./repaint.js";
 import { commit, snapshotEdit } from "./edit-history.js";
 import { addBendPoint, curveOf, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts } from "./edit.js";
 import { cursorTimeAt, pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
-import { displayGridStep, gridAt, gridSegments, minDur, snap, snapFine, snapNote } from "./grid.js";
+import { displayGridStep, gridAt, gridSegments, minDur, snap, snapFine, snapNote } from "./grid-read.js";
 import { noteLength, hasFreeNoteLength } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
 import { commentAt, commentCursorAt, commentMouseDown, openCommentPop } from "./comments.js";

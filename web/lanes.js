@@ -1,3 +1,5 @@
+import { editLanes, activeLane, targetLane, canEditLane, curStemObj, laneOf } from "./lane-state.js";
+export { editLanes, activeLane, targetLane, canEditLane, curStemObj, laneOf };
 // Edit-lane and stem-view helpers (the global edit lanes shared across stems),
 // the lane list panel, and the Settings > Layer pane (instrument/tuning/output role).
 
@@ -10,8 +12,11 @@ import { commitStructure, snapshotEdit, updateUndoButtons } from "./edit-history
 import { emptyLaneFields } from "./marker-rails.js";
 import { refreshSaveState } from "./save-state.js";
 import { S, setSelection } from "./store.js";
-import { TUNINGS, customTunings, isValidTuningKey, laneTuning, parseTuning, refreshTabIfOpen, tuningToNames } from "./tablature.js";
-import { closeLayerSettings, layerArrangement, layerCapo, layerOwnSections, layerOwnTempo, layerScrollSpeed, layerBassPicked, layerColor, layerDeleteBtn, layerInstr, layerName, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./ui.js";
+import { TUNINGS, customTunings, isValidTuningKey, laneTuning } from "./lane-tuning.js";
+import { parseTuning, tuningToNames } from "./util.js";
+// No tablature is mounted until startup supplies its refresh callback.
+let refreshTabIfOpen = () => {};
+import { closeLayerSettings, layerArrangement, layerCapo, layerOwnSections, layerOwnTempo, layerScrollSpeed, layerBassPicked, layerColor, layerDeleteBtn, layerInstr, layerName, layerTun, layerVolume, layerVolumeValue, openLayerSettings, openTuningManager, spLayerName } from "./layer-dialog.js";
 import { layerVolumePercent, normLayerVolume, notesLowToHigh, volumeToDb } from "./util.js";
 import { busLevel, mountBus, volumeControl } from "./volume.js";
 import { withStartTone } from "./tone-marker-core.js";
@@ -23,15 +28,8 @@ import { ownsSections, ownsTempo, setOwnTiming, syncTiming } from "./timing.js";
 // Edit lanes are the only lanes and are GLOBAL (shared across every stem view).
 // `state.lanes` mirrors them — kept as a separate array so the rest of the editor
 // can iterate one "shown" set — and is rebuilt whenever the lane set changes.
-export const editLanes = () => S.state.editLanes;
-
-export const activeLane = () => S.state.lanes.find((l) => l.active);
 let newLaneDraft = null;
 const settingsLane = () => newLaneDraft || activeLane();
-
-export function targetLane() {
-  return activeLane() || editLanes()[0] || null;
-}
 
 // A pitch edit leaves the note's old position behind; it no longer sounds the pitch,
 // so it lapses (lockedShape / pinnedPositions) and the note is fingered like any other.
@@ -47,15 +45,9 @@ export function setLaneCapo(lane, capo) {
   if (moveCapo(lane, capo)) S.voicingRevision++;
 }
 
-
-
 // A lane is editable only when it's shown and not locked. Editing is further
 // scoped to the *active* lane (see pickNote / mousedown), so other visible lanes
 // act as read-only reference until you switch to them.
-export const canEditLane = (l) => !!(l && l.visible && !l.locked);
-
-export const curStemObj = () => S.state.stems.find((s) => s.id === S.state.curStem) || S.state.stems[0];
-
 export function rebuildLanes() {
   S.state.lanes = [...S.state.editLanes];
   if (!S.state.lanes.some((l) => l.active) && S.state.editLanes[0]) {
@@ -237,7 +229,6 @@ export function renderLanes() {
     // Clicking the row (anywhere but a control) makes it the active edit target.
     row.addEventListener("click", () => activateLane(lane));
 
-
     const dot = document.createElement("span");
     dot.className = "lane-dot"; dot.style.background = lane.color;
 
@@ -371,7 +362,6 @@ function setLaneArrangement(lane, arrangement) {
 // Which edit layer owns a note. Lives here rather than in interaction.js — it
 // answers a question about layers, and four modules were importing the whole
 // mouse-handling module to ask it.
-export const laneOf = (note) => editLanes().find((l) => l.notes.includes(note)) || null;
 
 export function applyLaneVolume(lane) {
   if (!lane?._synth?.volume) return;
@@ -493,7 +483,8 @@ export async function confirmRemoveLane(lane, still = () => editLanes().includes
   return true;
 }
 
-export function init_lanes() {
+export function init_lanes({ refreshTabIfOpen: refreshTab }) {
+  refreshTabIfOpen = refreshTab;
   // A destructive action inside an editor opens a confirmation; it never fires
   // from the editor. The two buttons are one mis-aimed click apart in the footer
   // and only one of them is reversible.

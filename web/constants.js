@@ -141,3 +141,6 @@ export function instrKey(k) {
   return INSTRUMENTS[k] ? k : LEGACY[k] || DEFAULT_INSTRUMENT;
 }
 export const toneOf = (lane) => TONES[INSTRUMENTS[instrKey(lane?.instrument)].tone];
+
+// Tempo flag rail height; section rails begin below it.
+export const TEMPO_MARKER_HEIGHT = 24;

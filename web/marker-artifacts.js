@@ -3,7 +3,7 @@
 import { $, scroll } from './dom.js';
 import { S } from './store.js';
 import { ownsSections, ownsTempo, timingData, timingIdOf } from './timing.js';
-import { timingSegments } from './grid.js';
+import { timingSegments } from "./grid-read.js";
 import { activateLane, canEditLane, renderLanes } from './lanes.js';
 import { openMarkerPop, closeMarkerPop } from './markers.js';
 import { openSectionMarkerPop, closeSectionMarkerPop } from './section-markers.js';

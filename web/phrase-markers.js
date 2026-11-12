@@ -5,11 +5,11 @@ import { placeFloating } from "./floating-position.js";
 // no equivalent and intentionally ignores them.
 
 import { stageUi } from "./constants.js";
-import { inTourCard, mmctx as minimapCtx, phraseMarkerDelete, phraseMarkerName, phraseMarkerPop, phraseMarkerPopClose, phraseMarkerSolo, phraseMarkerTime, scroll, sctx, stage } from "./dom.js";
+import { mmctx as minimapCtx, phraseMarkerDelete, phraseMarkerName, phraseMarkerPop, phraseMarkerPopClose, phraseMarkerSolo, phraseMarkerTime, scroll, sctx, stage } from "./dom.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js";
 import { timeAt, xOf } from "./geometry.js";
-import { snap } from "./grid.js";
+import { snap } from "./grid-read.js";
 import { inRailBand, isMarkerSelected, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";
 import { refreshSaveState } from "./save-state.js";
 import { normalizePhraseBoundaries, phraseName } from "./section-marker-core.js";

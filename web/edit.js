@@ -1,3 +1,8 @@
+import { noteMenuEl, hideNoteMenu, ensureCtxMenu, placeCtxMenu, labelItem, buildMenu, markWalkthroughMenu, recordMenuOpen } from "./editor-menu.js";
+import { clipOf, placeClip } from "./note-clipboard.js";
+export { clipOf, placeClip };
+import { columnOf } from "./column-context.js";
+export { columnOf };
 export { toggleStemMute };
 import { configureEditHistory, snapshotEdit, commit, commitStructure, undo, redo, updateUndoButtons } from "./edit-history.js";
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
@@ -6,17 +11,17 @@ import { isTablatureLane } from "./layer-role.js";
 // the per-note effects (bend / harmonic / articulations / slide), the fingering
 // override, and the right-click note context menu.
 
-import { wireContextSubmenu } from "./context-submenu.js";
 import { hoveredStageNote } from "./stage-hit-test.js";
 import { whammyCurve, whammyKind } from "./whammy.js";
 import { MAX_POINTS, SLIDE_END_MIN, SLIDE_IN, SLIDE_OUT, SLIDES_TO_NEXT, SLIDE_START_MAX, bendAt, slideReach, bendCurve, normalizeCurve, slideInOf, vibratoStartOf, vibratoEndOf } from "./bend.js";
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
-import { icon } from "./icons.js";
-import { $, inTourCard, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopyBtn, redoMI, scroll, stage, undoMI } from "./dom.js";
+
+import { $, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopyBtn, redoMI, scroll, stage, undoMI } from "./dom.js";
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
-import { currentGridState, gridOffset, minDur, restoreGridState, snap, snapStrayNotes } from "./grid.js";
+import { currentGridState, gridOffset, restoreGridState } from "./grid-controls.js";
+import { minDur, snapStrayNotes } from "./grid-read.js";
 import { nid, motifId, shapeId } from "./ids.js";
 import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
@@ -30,7 +35,8 @@ import { openNewProject } from "./new-project.js";
 import { confirmStemRemoval } from "./stem-settings.js";
 import { openProject, saveProject, selectStem, toggleStemMute } from "./project.js";
 import { refreshSaveState } from "./save-state.js";
-import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, occurrenceNotes, reconcileReferences, dropFingering, laneClock, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
+import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, occurrenceNotes, reconcileReferences, dropFingering, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
+import { laneClock } from "./reference-clock.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
 import { SHAPE_KINDS, markShape, remintShapes, shapeGroups, unmarkShape } from "./shapes.js";
 import { beginArtifactRename } from "./artifact-names.js";
@@ -40,10 +46,12 @@ import { splitNote } from "./slice.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
 import { S, setSelection } from "./store.js";
-import { laneFingeringNow, laneFretCount, laneFretTuning, refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
+
+import { laneFretCount, laneFretTuning } from "./lane-tuning.js";
+import { refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
 import { runFindRepeats } from "./repeats.js";
 import { hammerPositionGroup, hammerPositionPlan } from './hammer-positions.js';
-import { noteHandAnchors, pasteHandAnchors } from './clipboard-fingering.js';
+import { pasteHandAnchors } from './clipboard-fingering.js';
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { modalOpen } from "./modal-focus.js";
@@ -127,54 +135,6 @@ export function sliceNoteCuts(cuts) {
 }
 
 // ---- clipboard / delete ----
-// A clipboard entry remembers where its note sits in beats on its own layer's
-// grid, so a paste under another tempo keeps the rhythm, not the seconds.
-export function clipOf(notes) {
-  const clocks = new Map(), hands = new Map(), fingerings = new Map();
-  return notes.map((n) => {
-    const lane = laneOf(n);
-    if (lane && !clocks.has(lane)) clocks.set(lane, laneClock(lane));
-    if (lane && !hands.has(lane)) hands.set(lane, noteHandAnchors(lane.notes, lane.handHolds));
-    if (lane && !fingerings.has(lane)) {
-      const found = laneFingeringNow(lane);
-      fingerings.set(lane, { found, byId: new Map(found.notes.map(note => [note.id, note])) });
-    }
-    const clock = lane && clocks.get(lane);
-    const fingering = fingerings.get(lane), played = fingering?.byId.get(n.id) || n;
-    const finger = n.finger ?? fingering?.found.fingers.get(played);
-    const anchor = fingering?.found.seats.get(played) ?? hands.get(lane)?.get(n);
-    const copied = copyEffects(n, {
-      start: n.start, end: n.end, pitch: n.pitch,
-      ...(Number.isInteger(finger) && finger >= 0 ? { finger } : {}),
-      ...(Number.isFinite(anchor) && anchor > 0 ? { handAnchor: anchor } : {}),
-      ...(clock ? { beat0: clock.beatAt(n.start), beat1: clock.beatAt(n.end) } : {}),
-      ...(n.motifId ? { motifId: n.motifId } : {}),
-      ...(n.shapeId ? { shapeId: n.shapeId, shapeKind: n.shapeKind, ...(n.shapeName ? { shapeName: n.shapeName } : {}) } : {}),
-    });
-    const position = fingering?.found.voiced.get(played);
-    if (position) copied.pos = { ...copied.pos, ...position };
-    return copied;
-  });
-}
-
-// Where a clip lands when its first note goes to time `at` on `lane`: each note
-// at its beat distance from the first, on that layer's grid. Only the landing
-// point snaps; the notes keep their rhythm exactly. Snapping each note to the
-// visible grid moved notes off it whenever the view was zoomed out past the
-// copy's finest note. One still off the grid is pulled on at commit (snapStrayNotes).
-export function placeClip(clip, lane, at) {
-  const clock = laneClock(lane);
-  const beats = clip.every((c) => Number.isFinite(c.beat0));
-  const first = beats ? Math.min(...clip.map((c) => c.beat0)) : Math.min(...clip.map((c) => c.start));
-  const target = snap(Math.max(0, at));
-  const b = clock.beatAt(target);
-  return clip.map((c) => {
-    const start = beats ? clock.timeAt(b + c.beat0 - first) : target + c.start - first;
-    const end = beats ? clock.timeAt(b + c.beat1 - first) : target + c.end - first;
-    return { start, end };
-  });
-}
-
 export function doCopy() {
   if (hasMarkerSelection()) { copyMarkers(); return; }
   if (!S.selection.size) return;
@@ -538,7 +498,7 @@ function setHarmonicOnSelection(kind) {
   if (cleared) toast("Cleared conflicting effects");
 }
 
-export { EFFECT_FIELDS, FX_GLYPHS, FX_KEYS, FX_LABELS, HARMONIC_TAG, SLAP_TAG, cloneFx, copyEffects, noteMarks } from "./note-effects.js";
+
 
 // ---- effect conflicts (mutual exclusion across fx flags + own-field effects) ----
 // Switching one technique on strips the ones it physically fights (see effects.js),
@@ -664,15 +624,6 @@ export function unmarkSelectedShapes(kind = null) {
 // playable). Rather than free placement, you cycle the column through its ranked
 // playable shapes, pinning the chosen one on each note's `pos`. Single notes are
 // just a column of one; whole chords move as a shape (no two notes per string).
-
-// The onset-column (same grouping the engine + export use) that `note` sits in,
-// with its edit lane and tuning. null for notes not in an edit lane.
-export function columnOf(note) {
-  const lane = laneOf(note);
-  if (!lane) return null;
-  const col = chordColumns(lane.notes).find((c) => c.notes.includes(note));
-  return col ? { lane, tuning: laneFretTuning(lane), col } : null;
-}
 
 // A multi-selection is one local grip edit, validated in full before one undo
 // snapshot is committed. Existing reach/adaptation flags are intentionally reset.
@@ -1137,63 +1088,6 @@ const EFFECT_MENU = [
 ];
 
 // ---- note context menu (right-click): note effects + delete ----
-let noteMenuEl = null;
-let walkthroughMenuAction = null;
-let menuOpenCount = 0;
-export const walkthroughMenuOpenCount = () => menuOpenCount;
-
-export function restrictContextMenuTo(action = null) {
-  walkthroughMenuAction = action;
-  hideNoteMenu();
-}
-
-export function hideNoteMenu({ scroll = false } = {}) {
-  if (scroll && noteMenuEl?.dataset.origin === "artifact") return;
-  if (noteMenuEl) noteMenuEl.hidden = true;
-}
-
-// Lazily create the shared context-menu element (reused by the note menu and the
-// empty-canvas menu) and wire its outside-click dismissal once.
-function ensureCtxMenu() {
-  if (!noteMenuEl) {
-    noteMenuEl = document.createElement("div");
-    noteMenuEl.className = "ctxmenu";
-    document.body.appendChild(noteMenuEl);
-    document.addEventListener("mousedown", (ev) => {
-      if (inTourCard(ev.target)) return;
-      if (noteMenuEl && !noteMenuEl.hidden && !noteMenuEl.contains(ev.target)) hideNoteMenu();
-    });
-    // ↑ ↓ walk the items of the menu (or submenu) holding focus; from outside it
-    // they enter the root menu. → ← open and close submenus (context-submenu.js).
-    // Capture, so the editor's own arrow keys never see these.
-    window.addEventListener("keydown", (ev) => {
-      if (noteMenuEl.hidden || !["ArrowDown", "ArrowUp", "Home", "End"].includes(ev.key)) return;
-      const t = document.activeElement, inMenu = noteMenuEl.contains(t);
-      if (t?.tagName === "INPUT" && (ev.key === "Home" || ev.key === "End")) return;
-      if (t?.classList.contains("ctxmenu-search") && !noteMenuEl.querySelector(".ctxmenu-results").hidden) return;   // the search walks its results
-      if (!inMenu && ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
-      const menu = inMenu ? t.closest(".ctxmenu") : noteMenuEl;
-      const items = [...menu.querySelectorAll("button.ctxmenu-item")]
-        .filter((b) => b.closest(".ctxmenu") === menu && !b.disabled && !b.closest("[hidden]"));
-      if (!items.length) return;
-      const i = items.indexOf(t), n = items.length;
-      const next = ev.key === "Home" ? 0 : ev.key === "End" ? n - 1
-        : ev.key === "ArrowDown" ? (i + 1) % n : i < 0 ? n - 1 : (i - 1 + n) % n;
-      ev.preventDefault(); ev.stopPropagation();
-      items[next].focus();
-    }, true);
-  }
-  noteMenuEl.dataset.origin = "editor";
-  return noteMenuEl;
-}
-
-function placeCtxMenu(m, clientX, clientY) {
-  m.hidden = false;
-  // Open submenus to the left when the menu sits in the right half of the view.
-  m.classList.toggle("ctxmenu-left", clientX > window.innerWidth / 2);
-  placeFloating(m, clientX, clientY, 0);
-}
-
 // Keyboard invocation has no pointer location. Anchor its menu beside the
 // selected notes instead, flipping to their left when the right edge is full.
 function placeNoteMenuBySelection(m, fallbackX, fallbackY) {
@@ -1230,7 +1124,7 @@ export function openCanvasMenu(clientX, clientY, atTime) {
   ];
   buildMenu(m, entries);
   markWalkthroughMenu(m);
-  menuOpenCount++;
+  recordMenuOpen();
   placeCtxMenu(m, clientX, clientY);
 }
 
@@ -1277,7 +1171,7 @@ export function openRefMenu(clientX, clientY, occ, { origin = "editor" } = {}) {
     ...remove,
   ]);
   markWalkthroughMenu(m);
-  menuOpenCount++;
+  recordMenuOpen();
   placeCtxMenu(m, clientX, clientY);
 }
 
@@ -1294,7 +1188,7 @@ export function openMotifMenu(clientX, clientY, id, lane) {
     {label: "Delete marked notes", fn: doDelete},
     {label: "Unmark motif (keep notes)", fn: unmarkSelectedMotifs},
   ]);
-  menuOpenCount++;
+  recordMenuOpen();
   placeCtxMenu(menu, clientX, clientY);
 }
 
@@ -1570,7 +1464,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   buildMenu(browse, [...appliedSection, ...tree]);
   m.append(search, browse, results);
   markWalkthroughMenu(m);
-  menuOpenCount++;
+  recordMenuOpen();
 
   // Search finds every action in the menu; only the applied strip is browse-only.
   const flat = flattenActions(tree);
@@ -1638,64 +1532,6 @@ function flattenActions(entries, crumb = "", crumbKw = "", crumbNote = undefined
     }
   }
   return out;
-}
-
-// An entry whose label starts with "✓ " is on: the row shows the label and the
-// check as the menu's own mark on the right, not as a character in the text. A
-// `note` (how Rocksmith takes the effect) follows the label in small grey type.
-function labelItem(button, label, note) {
-  const on = label.startsWith("✓ ");
-  button.textContent = on ? label.slice(2) : label;
-  if (note) button.insertAdjacentHTML("beforeend", `<span class="ctxmenu-note">${note}</span>`);
-  if (on) button.insertAdjacentHTML("beforeend", `<span class="chkmark">${icon("check", 14)}</span>`);
-}
-
-// Render menu entries into `parent`, recursing for hover submenus.
-function buildMenu(parent, entries) {
-  for (const e of entries) {
-    if (e.sep) {
-      const d = document.createElement("div"); d.className = "ctxmenu-sep"; parent.append(d);
-    } else if (e.header) {
-      const d = document.createElement("div"); d.className = "ctxmenu-label"; d.textContent = e.label; parent.append(d);
-    } else if (e.children) {
-      const wrap = document.createElement("div"); wrap.className = "ctxmenu-sub";
-      if (e.family) wrap.classList.add("ctxmenu-family");
-      const row = document.createElement("button"); row.type = "button"; row.className = "ctxmenu-item ctxmenu-parent"; labelItem(row, e.label, e.note);
-      if (e.tip) row.dataset.tip = e.tip;
-      const child = document.createElement("div"); child.className = "ctxmenu ctxmenu-child";
-      buildMenu(child, e.children);
-      wrap.append(row, child); parent.append(wrap);
-      wireContextSubmenu(wrap, row, child);
-    } else {
-      const b = document.createElement("button"); b.className = "ctxmenu-item"; b.disabled = !!e.disabled; labelItem(b, e.label, e.note);
-      if (e.tip) b.dataset.tip = e.tip;
-      b.onclick = () => { e.fn(); if (!e.keepOpen) hideNoteMenu(); };
-      parent.append(b);
-    }
-  }
-}
-
-// A menu item is `label`, or the submenu row that leads to it.
-export function menuItemLeadsTo(item, label) {
-  if (!item) return false;
-  const inside = item.classList.contains("ctxmenu-parent") ? [...item.nextElementSibling.querySelectorAll(".ctxmenu-item")] : [];
-  return [item, ...inside].some((b) => b.textContent.replace(/^[✓✕]\s*/, "").startsWith(label));
-}
-
-function markWalkthroughMenu(menu) {
-  const action = walkthroughMenuAction;
-  if (!action) return;
-  for (const button of menu.querySelectorAll("button.ctxmenu-item")) {
-    const wanted = action === "noteEffects"
-      ? !!button.closest(".ctxmenu-family, .ctxmenu-results") || button.textContent.startsWith("✕ ")
-      : menuItemLeadsTo(button, action);
-    button.disabled = !wanted;
-    button.classList.toggle("tour-menu-target", wanted);
-  }
-  for (const row of menu.querySelectorAll(".ctxmenu-family > .ctxmenu-parent"))
-    row.classList.toggle("tour-menu-target", action === "noteEffects");
-  const search = menu.querySelector(".ctxmenu-search");
-  if (search) search.disabled = action !== "noteEffects";
 }
 
 // Keyboard routing keeps project commands, focus rules and note navigation
@@ -1788,8 +1624,8 @@ function handleEditShortcut(e, mod) {
   else if (matchKey(e, "markerLanes")) { e.preventDefault(); $("menuMarkerLanes").click(); }
 }
 
-export function init_edit() {
-  const runEditorShortcut = createEditorShortcutRunner({ markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection });
+export function init_edit({ openSettingsModal }) {
+  const runEditorShortcut = createEditorShortcutRunner({ openSettingsModal, markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection });
   registerEscapeLayer(ESC_DEPTH.popover, () => {
     if (!noteMenuEl || noteMenuEl.hidden) return false;
     hideNoteMenu(); return true;
@@ -1846,10 +1682,4 @@ export function init_edit() {
     if (handleNoteNavigation(e, mod)) return;
     handleEditShortcut(e, mod);
   });
-}
-import { placeFloating } from "./floating-position.js";
-
-export function openDiagnosticMenu(x, y, entries) {
-  const menu = ensureCtxMenu(); menu.innerHTML = '';
-  buildMenu(menu, entries); placeCtxMenu(menu, x, y);
 }

@@ -59,16 +59,18 @@ try {
     './playback.js': { playbackTime: () => playhead, seekPlayback(time) { seeks.push(time); playhead = time; return time; } },
     './repeat-dock.js': { initRepeatDock() {} },
     './edit-history.js': { snapshotEdit: () => ({}), commitStructure: commit, commit },
-    './edit.js': { setHandAnchor(lane, t, fret) { lane.handHolds = (lane.handHolds || []).filter(h => h.t !== t); if (fret != null) lane.handHolds.push({t, fret}); commit(); } },
+
     './dom.js': { scroll: stageScroll, sctx: ctx, stage: { getBoundingClientRect: () => ({ left: 20, top: 30 }) } },
     './geometry.js': { xOf: t => t * 10, yOf: pitch => 100 - pitch },
     './lanes.js': { activeLane: () => active, canEditLane: lane => !!lane?.visible && !lane.locked, refreshCounts() {} },
-    './references.js': { boxOfNote: note => note?.id === lockedNoteId ? { group: { locked: true } } : null, laneClock: () => ({ beatAt: t => t, timeAt: b => b }), noteBounds: notes => ({ t0: Math.min(...notes.map(n => n.start)), t1: Math.max(...notes.map(n => n.end)), pLo: Math.min(...notes.map(n => n.pitch)), pHi: Math.max(...notes.map(n => n.pitch)) }) },
+    "./references.js": { boxOfNote: note => note?.id === lockedNoteId ? { group: { locked: true } } : null, noteBounds: notes => ({ t0: Math.min(...notes.map(n => n.start)), t1: Math.max(...notes.map(n => n.end)), pLo: Math.min(...notes.map(n => n.pitch)), pHi: Math.max(...notes.map(n => n.pitch)) }) },
+    "./reference-clock.js": { laneClock: () => ({ beatAt: t => t, timeAt: b => b }) },
     './repaint.js': { draw() {} }, './notify.js': { toast() {} },
     './modal-focus.js': { modalOpen: () => modalIsOpen },
     './viewport-motion.js': { manualViewportNavigation() {}, moveViewportTo(x, y) { movements++; stageScroll.scrollLeft = Math.max(0, x); stageScroll.scrollTop = Math.max(0, y); } },
-    './tablature.js': { refreshTabIfOpen() {}, laneFingering: async () => ({ fingers: new Map(generatedFingers) }) },
-    './fretboard.js': { previewFretboardNote: (...args) => previews.push(args), setFretboardVisible: on => { assert.equal(on, true); fretboardOpens++; } },
+    "./tablature.js": { refreshTabIfOpen() {} },
+    "./lane-fingering.js": { laneFingering: async () => ({ fingers: new Map(generatedFingers) }) },
+
     './escape-stack.js': { ESC_DEPTH: { transient: 20, popover: 100 }, registerEscapeLayer() {} },
     './tracing.js': { clearMatches() {} },
     './floating-position.js': { placeFloatingAvoiding: (...args) => anchors.push(args) }, './tooltip.js': { hideTooltip() {} },
@@ -76,7 +78,7 @@ try {
     './note-render.js': { noteRibbon: () => null }, './constants.js': { stageUi: () => '11px sans-serif' },
     './stage-paint.js': { PAINT: { trace: 'blue', warn: 'orange', error: 'pink', accent: 'cyan', ok: 'green' }, halo: () => 'black' },
   }, { './repeat-picker.js': true, './repeats-core.js': true, './util.js': true, './repeat-change-details.js': true, './whammy.js': true, './note-effects.js': true });
-  module.init_repeats();
+  module.init_repeats({ ...{ setHandAnchor(lane, t, fret) { lane.handHolds = (lane.handHolds || []).filter(h => h.t !== t); if (fret != null) lane.handHolds.push({t, fret}); commit(); } }, ...{ previewFretboardNote: (...args) => previews.push(args), setFretboardVisible: on => { assert.equal(on, true); fretboardOpens++; } } });
   const changePosition = () => controls.repeatChangePosition.children.find(option => option.value === controls.repeatChangePosition.value)?.textContent.split(' · ')[0];
   const before = structuredClone(lane.notes);
   module.runFindRepeats(lane);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mockImport } from './mock-import.mjs';
+import { mockImport, mockEditor } from './mock-import.mjs';
 import { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, voiceNotes, voiceNotesFingered } from '../../web/voicing-core.js';
 const noop = () => {};
 const lane = { id: 'bass', instrument: 'bass', visible: true, notes: [
@@ -14,18 +14,19 @@ const saved = { window: globalThis.window, CustomEvent: globalThis.CustomEvent }
 try {
   globalThis.window = new EventTarget();
   globalThis.CustomEvent = class extends Event {};
-  const edit = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+  const edit = await mockEditor({
     './store.js': { S, setSelection: selection => { S.selection = selection; } },
     './dom.js': { undoMI: null, redoMI: null }, './note-effects.js': { FX_KEYS: [] },
     './lanes.js': { activeLane: () => lane, editLanes: () => [lane], laneOf: note => lane.notes.includes(note) ? lane : null,
       canEditLane: l => !!l && !l.locked, refreshCounts: noop, renderLanes: noop, applyLaneVolume: noop },
-    './grid.js': { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop },
+    "./grid-controls.js": { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop },
     './timing.js': { timingSnapshot: () => ({}), restoreTimingSnapshot: noop },
     './references.js': { lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop,
       boxOfNote: n => n?.id === locked ? { group: { locked: true } } : null },
     './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop },
     './tracing.js': { clearMatches: noop }, './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop },
-    './tablature.js': { laneFretTuning: () => [43, 38, 33, 28], laneFretCount: () => 24, refreshTabIfOpen: noop },
+    "./lane-tuning.js": { laneFretTuning: () => [43, 38, 33, 28], laneFretCount: () => 24 },
+    "./tablature.js": { refreshTabIfOpen: noop },
     './voicing.js': { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, voiceNotes, voiceNotesFingered },
     './song-bars.js': { songBarStarts: () => [0, 4, 8] },
   }, { './util.js': true, './hammer-positions.js': true, './position-selection.js': true });

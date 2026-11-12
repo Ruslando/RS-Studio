@@ -4,13 +4,13 @@ import { placeFloating } from "./floating-position.js";
 // retimes the grid or notes: it is an audio-time annotation that snaps to the
 // current note grid.
 
-import { inTourCard, mmctx as minimapCtx, scroll, sctx, sectionMarkerDelete, sectionMarkerHelpIcon, sectionMarkerKind, sectionMarkerName, sectionMarkerNameWrap, sectionMarkerPop, sectionMarkerPopClose, sectionMarkerTime, sectionMarkerType, sectionMarkerTypeWrap, stage } from "./dom.js";
+import { mmctx as minimapCtx, scroll, sctx, sectionMarkerDelete, sectionMarkerHelpIcon, sectionMarkerKind, sectionMarkerName, sectionMarkerNameWrap, sectionMarkerPop, sectionMarkerPopClose, sectionMarkerTime, sectionMarkerType, sectionMarkerTypeWrap, stage } from "./dom.js";
 import { stageUi } from "./constants.js";
 import { draw } from "./repaint.js";
 import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js";
 import { timeAt, xOf } from "./geometry.js";
-import { snap } from "./grid.js";
-import { MARK_H } from "./markers.js";
+import { snap } from "./grid-read.js";
+import { TEMPO_MARKER_HEIGHT as MARK_H } from "./constants.js";
 import { inRailBand, isMarkerSelected, railBand, registerMarkerRail, setRailOrigin } from "./marker-rails.js";
 import { refreshSaveState } from "./save-state.js";
 import {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mockImport } from './mock-import.mjs';
+import { mockImport, mockEditor } from './mock-import.mjs';
 
 const noop = () => {};
 const first = { id: 1, pitch: 64, start: 1, end: 2 };
@@ -8,13 +8,13 @@ const lane = { id: 'edit', visible: true, notes: [first, second] };
 const S = { state: { duration: 10, stems: [], editLanes: [lane], lanes: [lane] },
   selection: new Set(), undoStack: [], redoStack: [], voicingRevision: 0, hoverNote: first };
 let hover = second, tab = false;
-const { doDelete } = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+const { doDelete } = await mockEditor({
     './marker-clipboard.js': { deleteMarkers: () => false, cutMarkers: () => false, hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: () => {}, clearMarkerSelection: () => false, markerSelectClick: () => false },
   './stage-hit-test.js': { hoveredStageNote: () => hover },
   './store.js': { S }, './dom.js': { undoMI: null, redoMI: null },
   './lanes.js': { activeLane: () => lane, editLanes: () => [lane],
     canEditLane: lane => lane.visible && !lane.locked, refreshCounts: noop },
-  './grid.js': { currentGridState: () => ({}), gridOffset: () => 0 },
+  "./grid-controls.js": { currentGridState: () => ({}), gridOffset: () => 0 },
   './timing.js': { timingSnapshot: () => ({}), eachTiming: noop },
   './references.js': { lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop },
   './note-motion.js': { animateNoteChanges: noop }, './tracing.js': { clearMatches: noop },

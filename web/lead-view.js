@@ -7,7 +7,7 @@ import { layout } from "./geometry.js";
 import { playbackTime, seekPlayback } from "./playback.js";
 import { draw } from "./repaint.js";
 import { rsLeadIn } from "./rocksmith-preferences.js";
-import { rocksmithLeadIn } from "./rocksmith-check.js";
+import { rocksmithLeadIn } from "./rocksmith-results.js";
 import { S } from "./store.js";
 import { rememberPref } from "./util.js";
 

@@ -33,7 +33,7 @@ try {
     './panel-motion.js': { panelMotion: () => ({ duration: 0 }) },
     './repaint.js': { draw: noop }, './splitters.js': { splitter: noop },
     './canvas-controls.js': { panelControls: () => [], syncPanelControls: noop },
-    './ui.js': { wireMenu: noop }, './escape-stack.js': { ESC_DEPTH: {}, registerEscapeLayer: noop },
+    './menus.js': { wireMenu: noop }, './escape-stack.js': { ESC_DEPTH: {}, registerEscapeLayer: noop },
     './layer-role.js': { selectedTablatureLane: () => null }, './lanes.js': { canEditLane: () => false },
   });
   board.init_fretboard();

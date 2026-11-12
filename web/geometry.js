@@ -132,7 +132,7 @@ export function layout() {
 // ---- zoom ----
 // Each axis anchors on a screen point: convert it to a world coordinate, change
 // the scale, then re-scroll so that same world point stays under the cursor.
-export const zoomSlider = $("zoomSlider"), zoomValEl = $("zoomVal");
+const zoomSlider = $("zoomSlider"), zoomValEl = $("zoomVal");
 
 const zoomInBtn = $("zoomIn"), zoomOutBtn = $("zoomOut");
 

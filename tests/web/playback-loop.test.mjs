@@ -37,7 +37,7 @@ try {
   const playback = await mockImport(new URL('../../web/playback.js', import.meta.url), {
     './dom.js': { ...dom, audio, $: () => null },
     './store.js': { S }, './repaint.js': { draw: noop, drawNow: noop },
-    './grid.js': { gridSegments: () => [], gridAt: () => ({ bpm: 120 }) },
+    "./grid-read.js": { gridSegments: () => [], gridAt: () => ({ bpm: 120 }) },
     './lanes.js': { editLanes: () => [lane], releaseLaneSynth: noop, applyLaneVolume: noop },
     './volume.js': { busLevel: () => 1 },
     './viewport-motion.js': { viewportFollowing: () => false, stopViewportMotion: noop },

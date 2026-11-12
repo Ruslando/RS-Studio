@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mockImport } from './mock-import.mjs';
+import { mockImport, mockEditor } from './mock-import.mjs';
 import { noteHandAnchors } from '../../web/clipboard-fingering.js';
 const noop = () => {};
 const source = { id: 'source', visible: true, notes: [
@@ -16,19 +16,20 @@ let id = 0;
 const saved = { window: globalThis.window, CustomEvent: globalThis.CustomEvent };
 try {
   globalThis.window = new EventTarget(); globalThis.CustomEvent = class extends Event {};
-  const edit = await mockImport(new URL('../../web/edit.js', import.meta.url), {
+  const edit = await mockEditor({
     './store.js': { S, setSelection: set => { S.selection = set; } }, './dom.js': { undoMI: null, redoMI: null },
     './lanes.js': { editLanes: () => lanes, activeLane: () => target, targetLane: () => target, canEditLane: () => true,
       laneOf: n => lanes.find(l => l.notes.includes(n)), renderLanes: noop, refreshCounts: noop, applyLaneVolume: noop },
-    './grid.js': { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop, snap: t => t, snapStrayNotes: noop },
+    "./grid-controls.js": { currentGridState: () => ({}), gridOffset: () => 0, restoreGridState: noop },
+    "./grid-read.js": { snap: t => t, snapStrayNotes: noop },
     './timing.js': { timingSnapshot: () => ({}), restoreTimingSnapshot: noop, eachTiming: (lanes, cb) => cb(lanes) },
-    './references.js': { wholeBoxOf: () => null, laneClock: lane => lane === source ? sourceClock : targetClock,
-      lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop,
-      dropFingering: n => { delete n.pos; delete n.arrangement; delete n.finger; } },
+    "./references.js": { wholeBoxOf: () => null, lockedReferenceSnapshot: () => [], lockedReferenceFault: () => null, reconcileReferences: noop, dropFingering: n => { delete n.pos; delete n.arrangement; delete n.finger; } },
+    "./reference-clock.js": { laneClock: lane => lane === source ? sourceClock : targetClock },
     './marker-clipboard.js': { hasMarkerSelection: () => false, hasMarkerClip: () => false, forgetMarkerClip: noop, clearMarkerSelection: noop },
     './note-motion.js': { animateNoteChanges: noop, clearNoteMotion: noop }, './tracing.js': { clearMatches: noop },
     './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop },
-    './tablature.js': { refreshTabIfOpen: noop, laneFingeringNow: lane => ({ notes: lane.notes,
+    "./tablature.js": { refreshTabIfOpen: noop },
+    "./lane-fingering.js": { laneFingeringNow: lane => ({ notes: lane.notes,
       voiced: new Map(lane.notes.filter(n => n.pos).map(n => [n, n.pos])),
       fingers: new Map(lane.notes.map(n => [n, n.finger])), seats: noteHandAnchors(lane.notes, lane.handHolds) }) },
     './notify.js': { toast: noop },

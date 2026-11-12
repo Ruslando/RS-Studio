@@ -3,7 +3,7 @@ import { hammerPositionGroup, hammerPositionPlan, hammerPositionPreview } from '
 import { fretboardShapeFrames, shapeHandAt } from './fretboard-shapes.js';
 import { boxOfNote, previewPositionReferences } from "./references.js";
 import { positionPreviewHand, positionPreviewLane } from "./position-preview.js";
-import { positionEditTargets, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
+import { positionEditTargets, positionSelection, sharedPositionPlan } from "./position-selection.js";
 import { fretboardHandKey } from "./fretboard-cache.js";
 import { suggestionLane, suggestionDiffers } from './fretboard-suggestion.js';
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
@@ -35,7 +35,8 @@ import { canEditLane, editLanes } from "./lanes.js";
 import { chordLabel, laneChords } from "./chord-names.js";
 import { renameChord } from "./chord-rename.js";
 import { songBarStarts } from "./song-bars.js";
-import { gridAt, gridBpm, gridSegments, minDur, segBeatSec, snap, snapNote } from "./grid.js";
+import { gridAt, gridSegments, minDur, segBeatSec, snap, snapNote } from "./grid-read.js";
+import { gridBpm } from "./grid-controls.js";
 import { noteLength } from "./note-length.js";
 import { playbackTime, transportPlaying } from "./playback.js";
 import { selectedTablatureLane } from "./layer-role.js";
@@ -44,11 +45,12 @@ import { fingerLightAt, fingerPulseAt, fingerWaveAt, popLiftAt, popPreparation, 
 import { fretStrikeAt, stringAttackPulse, stringGlow } from "./string-glow.js";
 import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulations.js";
 import { FX_GLYPHS } from "./note-effects.js";
-import { laneFingering, laneFretCount, laneFretTuning, laneTuning } from "./tablature.js";
-import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, overrideFlow, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
+import { laneFingering } from "./lane-fingering.js";
+import { laneFretCount, laneFretTuning, laneTuning } from "./lane-tuning.js";
+import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
 import { columnAlternatives, stepVoiceFocus } from "./voicing.js";
 import { applyColumnAlternative, clearOverrideAt, columnOf, setColumnShape, setHandAnchor, draftNoteFinger, settleFingerDraft, setNotePosition, addNoteOnBoard, moveNoteOnBoard } from "./edit.js";
-import { wireMenu } from "./ui.js";
+import { wireMenu } from "./menus.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { toast } from "./notify.js";
 

@@ -6,7 +6,7 @@ import { noteRibbon } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { withMemo } from "./paint-memo.js";
 import { timeAt, pitchAt, pitchAtExact } from "./geometry.js";
-import { gridAt } from "./grid.js";
+import { gridAt } from "./grid-read.js";
 import { activeLane } from "./lanes.js";
 import { boxOfNote } from "./references.js";
 import { railsBottom } from "./marker-rails.js";

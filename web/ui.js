@@ -1,6 +1,7 @@
+import { initLayerDialog } from "./layer-dialog.js";
+import { snapshotInputs, revertInputs, inputsDirty } from "./settings-inputs.js";
 import { renderCoverPreview } from "./cover-preview.js";
-import { closeMenus, wireMenuAnchors } from "./menus.js";
-export { wireMenuAnchors } from "./menus.js";
+import { closeMenus, wireMenuAnchors, wireMenu } from "./menus.js";
 import { panelControls, syncPanelControls } from "./canvas-controls.js";
 import { icon } from "./icons.js";
 // Top-level chrome: the File/Edit/View menu bar, toolbar view switch, and the
@@ -14,10 +15,8 @@ import { refreshEditorPreviews } from "./editor-previews.js";
 import { initCollapsibleSections } from './collapsible-sections.js';
 import { setTimelineScrollPreviewVisible } from "./timeline-scroll-preview.js";
 import { redo, undo, updateUndoButtons } from "./edit-history.js";
-import { doCopy, doCut, doDelete, doPaste } from "./edit.js";
 import { resetZoom, zoomCenter } from "./geometry.js";
 import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey, shortcutTitle } from "./keymap.js";
-import { renderLayerSettings } from "./lanes.js";
 import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen, tuningDraftDirty } from "./tuning-editor.js";
 import { beginSoundDraft, dropSoundDraft, saveSoundDraft, selectToneSound, soundDraftDirty } from "./sound-designer.js";
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
@@ -45,8 +44,6 @@ function setTool(tool) {
 // ---- menu bar (File / Edit / View) ----
 const menubarEl = $("menubar");
 
-export const wireMenu = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };
-
 // (The top-level Stem menu was removed — stem solo/mute live on the per-stem
 // S/M buttons in the sidebar; Add stem is the "+ Add stem" button there.)
 
@@ -54,51 +51,7 @@ export const wireMenu = (id, fn) => { const el = $(id); if (el) el.addEventListe
 // 1. Layer modal (#settingsPanel): centered overlay. Opened by a layer's edit button.
 // 2. Settings modal (#settingsModal): centered window from the menu-bar Settings
 //    dropdown (Trace for now; more sections will swap into its body later).
-export const layerSettingsBackdrop = $("layerSettingsBackdrop"), settingsClose = $("settingsClose");
-export const settingsModalBackdrop = $("settingsModalBackdrop"), settingsModalClose = $("settingsModalClose");
-
-export const layerName = $("layerName"), layerColor = $("layerColor");
-
-export const layerInstr = $("layerInstr"), layerTun = $("layerTun"), layerCapo = $("layerCapo"), layerArrangement = $("layerArrangement"), layerOwnTempo = $("layerOwnTempo"), layerOwnSections = $("layerOwnSections"), layerScrollSpeed = $("layerScrollSpeed"), layerBassPicked = $("layerBassPicked");
-export const spLayerName = $("spLayerName");
-
-export const layerVolume = $("layerVolume"), layerVolumeValue = $("layerVolumeValue");
-
-export const layerDeleteBtn = $("layerDelete");
-
-// Staged the same way the settings modal is: the layer's fields repaint the
-// stage as you touch them, so Cancel walks them back rather than deferring them.
-let layerSnapshot = null;
-let layerActions = null;
-export function openLayerSettings(actions = null) {
-  layerActions = actions;
-  $("layerSave").textContent = actions ? "Create" : "Apply";
-  $("settingsPanel").setAttribute("aria-label", actions ? "Add note layer" : "Edit note layer");
-  renderLayerSettings();
-  layerSettingsBackdrop.hidden = false;
-  layerSnapshot = snapshotInputs($("settingsPanel"));
-  syncLayerActions();
-}
-const inputsDirty = snapshot => (snapshot || []).some(({ el, v }) =>
-  (["checkbox", "radio"].includes(el.type) ? el.checked : el.value) !== v);
-function syncLayerActions() { $("layerSave").hidden = !layerActions && !inputsDirty(layerSnapshot); }
-
-export function closeLayerSettings() {
-  const actions = layerActions;
-  layerActions = null; layerSnapshot = null; layerSettingsBackdrop.hidden = true;
-  actions?.save();
-}
-function cancelLayerSettings() {
-  revertInputs(layerSnapshot); layerSnapshot = null;
-  layerSettingsBackdrop.hidden = true;
-  const actions = layerActions;
-  layerActions = null;
-  actions?.cancel();
-}
-
-// Tunings live in Settings. A layer's "Manage tunings…" opens that page with the
-// layer's tuning selected.
-export function openTuningManager(selectKey) { openSettingsModal("tunings", selectKey); }
+const settingsModalBackdrop = $("settingsModalBackdrop"), settingsModalClose = $("settingsModalClose");
 
 // One modal, panes swapped by `section` ("trace" | "project" | "keys" | "appearance" | "models").
 const SP_TITLES = { trace: "Editor options", project: "Project details", keys: "Keyboard shortcuts", appearance: "Appearance", models: "Models", tunings: "Tunings" };
@@ -111,21 +64,6 @@ let spSection = "trace";
 // open and a revert on Cancel, not a deferred write. Escape, Cancel, the close
 // and a backdrop click are all the same key, and all four take this path.
 // The Tunings page keeps its own draft (tuning-editor.js), so it stays out of this.
-const snapshotInputs = (root) => [...root.querySelectorAll("input, select")]
-  .filter((el) => !el.closest("[hidden]") && !el.closest("#spTunings, #spSounds, #soundGearDialog, #soundFileActions, #spModels"))
-  .map((el) => ({ el, v: ["checkbox", "radio"].includes(el.type) ? el.checked : el.value }));
-
-// Put each value back and re-fire the event that applied it, so persistence and
-// live preview walk backwards together — no second code path to keep in sync.
-function revertInputs(snap) {
-  for (const { el, v } of snap || []) {
-    const checked = ["checkbox", "radio"].includes(el.type);
-    if ((checked ? el.checked : el.value) === v) continue;
-    if (checked) el.checked = v; else el.value = v;
-    for (const type of ["input", "change"]) el.dispatchEvent(new Event(type, { bubbles: true }));
-  }
-}
-
 let spSnapshot = null;
 function snapshotSettings() {
   const elements = new Set([...(spSnapshot?.inputs || []).map(({ el }) => el),
@@ -479,15 +417,8 @@ function revealRails(from) {
   step();
 }
 
-// Label of the current grid subdivision (e.g. "1/8", "1/16T", "5/beat").
-export function gridDivLabelFor(value) {
-  const v = String(value);
-  const labels = { "1": "1/4", "2": "1/8", "3": "1/8T", "4": "1/16", "6": "1/16T", "8": "1/32" };
-  return labels[v] || `${parseInt(v, 10) || 1}/beat`;
-}
-
 // Keep the toolbar's read-only tempo/meter/grid readout in sync with grid state.
-export function init_ui() {
+export function init_ui({ doCopy, doCut, doDelete, doPaste, renderLayerSettings }) {
   // Live editors keep playback usable: blank space releases field focus, and
   // the large field labels must not activate an input through their default click.
   const liveEditorControl = 'input, select, textarea, button, a, [contenteditable], [role="button"], [role="checkbox"], [role="radio"]';
@@ -566,10 +497,7 @@ export function init_ui() {
     if (settingsModalBackdrop.hidden) return false;
     cancelSettingsModal(); return true;   // rule 17: Escape and Cancel are the same key
   });
-  registerEscapeLayer(ESC_DEPTH.modal, () => {
-    if (layerSettingsBackdrop.hidden) return false;
-    cancelLayerSettings(); return true;
-  });
+  initLayerDialog({ renderLayerSettings, openTunings: key => openSettingsModal("tunings", key) });
   setTool("pan");
   wireMenuAnchors(menubarEl, updateUndoButtons);
   $("settingsMenuBtn").addEventListener("click", () => openSettingsModal("trace"));
@@ -596,16 +524,10 @@ export function init_ui() {
   wireMenu("menuZoomReset", resetZoom);
   wireMenu("menuMarkerLanes", () => setMarkerLanes(!railsHidden()));
   for (const button of panelControls("markers")) button.addEventListener("click", () => setMarkerLanes(!railsHidden()));
-  settingsClose.addEventListener("click", cancelLayerSettings);
-  $("layerSave").addEventListener("click", () => {
-    if (layerActions) { closeLayerSettings(); return; }
-    layerSnapshot = snapshotInputs($("settingsPanel")); syncLayerActions();
-  });
   settingsModalClose.addEventListener("click", cancelSettingsModal);
   $("settingsApply").addEventListener("click", applySettingsModal);
   for (const type of ["input", "change", "click"]) {
     $("settingsModal").addEventListener(type, () => queueMicrotask(syncSettingsActions));
-    $("settingsPanel").addEventListener(type, () => queueMicrotask(syncLayerActions));
   }
   window.addEventListener("settings-draft-changed", syncSettingsActions);
   wireMenu("menuTraceSettings", () => openSettingsModal("trace"));

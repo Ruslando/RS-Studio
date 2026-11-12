@@ -9,10 +9,9 @@ const { drawGrid } = await mockImport(new URL('../../web/note-render.js', import
   './store.js': { S },
   './dom.js': { scroll: { scrollLeft: 0, clientWidth: 600 }, sctx: {} },
   './geometry.js': { contentH: () => 300, timeAt: x => x / S.pxPerSec, xOf: t => t * S.pxPerSec },
-  './grid.js': { gridAt: () => segment, gridSegments: () => [segment],
-    displayGridStep: seg => autoGridStep(seg, S.pxPerSec) },
+  "./grid-read.js": { gridAt: () => segment, gridSegments: () => [segment], displayGridStep: seg => autoGridStep(seg, S.pxPerSec) },
   './timeline-paint.js': { paintTimeGridLine: (...args) => lines.push(args) },
-  './rocksmith-check.js': { rocksmithCountIn: () => null },
+  './rocksmith-results.js': { rocksmithCountIn: () => null },
 }, { './auto-grid.js': true });
 drawGrid();
 assert.ok(lines.length > 1, 'grid rendering completes');

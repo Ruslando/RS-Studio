@@ -491,7 +491,7 @@ class EndToEndTests(unittest.TestCase):
         }""")
         state = """async () => {
             const { S } = await import('/store.js');
-            const tab = await import('/tablature.js');
+            const tab = await import('/lane-fingering.js');
             const lane = S.state.editLanes[0], f = await tab.laneFingering(lane);
             const n = lane.notes[0];
             return { typed: n.finger ?? null, played: f.fingers.get(f.notes[0]) ?? null, pos: [n.pos.string, n.pos.fret] };
@@ -536,7 +536,7 @@ class EndToEndTests(unittest.TestCase):
                 const lane = S.state.editLanes[0];
                 lane.capo = capo;
                 const spec = await tab.buildSpecForLanesAsync([lane]);
-                const fingering = await tab.laneFingering(lane);
+                const fingering = await (await import('/lane-fingering.js')).laneFingering(lane);
                 return { spec, shown: fingering.notes.map(n => fingering.seats.get(n) ?? null),
                          fingers: fingering.notes.map(n => (fingering.voiced.get(n)?.fret > 0 ? fingering.fingers.get(n) : null) ?? null),
                          duration: S.state.duration };
@@ -1020,7 +1020,7 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.type('Check the bend here')
         comment = page.evaluate("async () => (await import('/store.js')).S.state.comments[0]")
         self.assertEqual(comment['text'], 'Check the bend here')
-        snapped = page.evaluate("async t => (await import('/grid.js')).snap(t)", comment['t'])
+        snapped = page.evaluate("async t => (await import('/grid-read.js')).snap(t)", comment['t'])
         self.assertAlmostEqual(comment['t'], snapped, places=6)
         self.assertEqual(comment['pitch'], round(comment['pitch']))
         page.keyboard.press('Escape')
@@ -1995,7 +1995,8 @@ class EndToEndTests(unittest.TestCase):
         result = self.page.evaluate("""async () => {
             const { S } = await import('/store.js');
             const { bpmInput, offsetInput, tsDenInput, traceSnapInput } = await import('/dom.js');
-            const { setSubdiv, gridStep } = await import('/grid.js');
+            const { setSubdiv } = await import('/grid-controls.js');
+            const { gridStep } = await import('/grid-read.js');
             const { syncRowHeight, xOf, yOf } = await import('/geometry.js');
             const { notesFromTrace, prepareSpectSample } = await import('/tracing.js');
             bpmInput.value = '173'; offsetInput.value = '0'; tsDenInput.value = '4';
@@ -2058,7 +2059,7 @@ class EndToEndTests(unittest.TestCase):
             (await import('/store.js')).setSelection(new Set());
             (await import('/playback.js')).seekPlayback(t);
             (await import('/fretboard.js')).setFretboardVisible(true);
-            await (await import('/tablature.js')).laneFingering((await import('/store.js')).S.state.editLanes[0]);
+            await (await import('/lane-fingering.js')).laneFingering((await import('/store.js')).S.state.editLanes[0]);
             await new Promise(requestAnimationFrame);
         }""", time)
         expect(page.locator('#fretboardBusy')).to_be_hidden()
@@ -2075,7 +2076,7 @@ class EndToEndTests(unittest.TestCase):
             const digit = labels.find(l => /^[1-4]$/.test(l.text) && l.baseline === 'middle');
             const tuning = labels.find(l => l.text === 'E2'), high = labels.find(l => l.text === 'E4');
             const { S } = await import('/store.js');
-            const { laneFingering } = await import('/tablature.js');
+            const { laneFingering } = await import('/lane-fingering.js');
             const { fretboardFor, fretCentre, boardHalfWidthAt } = await import('/fretboard-core.js');
             const lane = S.state.editLanes[0], hand = await laneFingering(lane), spec = fretboardFor(lane.instrument);
             const current = hand.notes.find(n => n.start <= (S.scoreTime || 0) && n.end > (S.scoreTime || 0));
@@ -2157,7 +2158,8 @@ class EndToEndTests(unittest.TestCase):
         page = self.page
         result = page.evaluate("""async () => {
             const { S } = await import('/store.js');
-            const { snap, addMarker } = await import('/grid.js');
+            const { snap } = await import('/grid-read.js');
+            const { addMarker } = await import('/grid.js');
             const { railMenuItems } = await import('/marker-rails.js');
             const { closeSectionMarkerPop } = await import('/section-markers.js');
             const time = 3.31, expected = snap(time);
@@ -2225,7 +2227,7 @@ class EndToEndTests(unittest.TestCase):
         points = page.evaluate("""async () => {
             const { S, setSelection } = await import('/store.js');
             const { xOf, yOf } = await import('/geometry.js');
-            const { snap } = await import('/grid.js');
+            const { snap } = await import('/grid-read.js');
             const { snapPhraseTime } = await import('/phrase-markers.js');
             const lane = S.state.editLanes[0];
             lane.notes = [{id:'left',start:2,end:3,pitch:60}, {id:'right',start:3,end:4,pitch:60}];
@@ -2506,7 +2508,7 @@ class EndToEndTests(unittest.TestCase):
             expect(page.locator('#fretboardBusy')).to_be_hidden()
             actual = page.evaluate("""async start => {
                 const { S } = await import('/store.js');
-                const found = await (await import('/tablature.js')).laneFingering(S.state.editLanes[0]);
+                const found = await (await import('/lane-fingering.js')).laneFingering(S.state.editLanes[0]);
                 const notes = found.notes.filter(n => n.start === start);
                 const ctx = document.querySelector('#fretboard').getContext('2d');
                 const original = ctx.fillText, clear = ctx.clearRect, digits = [];
@@ -2536,7 +2538,7 @@ class EndToEndTests(unittest.TestCase):
         result = page.evaluate("""async () => {
             const { S } = await import('/store.js');
             const { drawFretboard, setFretboardEdit } = await import('/fretboard.js');
-            const { laneFingering } = await import('/tablature.js');
+            const { laneFingering } = await import('/lane-fingering.js');
             const { hexA } = await import('/util.js');
             const { WASH } = await import('/stage-paint.js');
             const lane = S.state.editLanes[0];
@@ -2738,7 +2740,7 @@ class EndToEndTests(unittest.TestCase):
             const original = new Map();
             edit.draftNoteFinger(original, notes[2], 4);
             const fromEnd = values();
-            const { laneFingering } = await import('/tablature.js');
+            const { laneFingering } = await import('/lane-fingering.js');
             const found = await laneFingering(lane);
             const displayed = notes.map(n => found.fingers.get(n));
             edit.settleFingerDraft(original, false);
@@ -3996,11 +3998,12 @@ class EndToEndTests(unittest.TestCase):
             const { S, setSelection } = await import('/store.js');
             const { snapshotEdit, commit, doDelete } = await import('/edit.js');
             const refs = await import('/references.js');
+            const { laneClock } = await import('/reference-clock.js');
             const lane = () => S.state.editLanes[0];
             const group = () => lane().refBoxes[1];
             const signature = () => JSON.stringify({ notes: lane().notes, group: group() });
             const before = signature(), undo = S.undoStack.length;
-            const protectedNotes = () => refs.notesInBox(refs.occurrenceBox(group(), 0, refs.laneClock(lane())), lane().notes);
+            const protectedNotes = () => refs.notesInBox(refs.occurrenceBox(group(), 0, laneClock(lane())), lane().notes);
             const results = [];
             setSelection(new Set(protectedNotes())); doDelete(); results.push(signature() === before);
             let prev = snapshotEdit();
@@ -4149,7 +4152,8 @@ class EndToEndTests(unittest.TestCase):
         # The box on the stage is half as long there too.
         widths = page.evaluate("""async () => {
             const { S } = await import('/store.js');
-            const { laneClock, occurrenceBox } = await import('/references.js');
+            const { laneClock } = await import('/reference-clock.js');
+            const { occurrenceBox } = await import('/reference-core.js');
             const lane = S.state.editLanes[0], group = lane.refBoxes[1], clock = laneClock(lane);
             return group.anchors.map((a, i) => [a, occurrenceBox(group, i, clock)]).sort((p, q) => p[0] - q[0]).map(([, b]) => b.t1 - b.t0);
         }""")
@@ -4655,7 +4659,7 @@ class EndToEndTests(unittest.TestCase):
             const lane = S.state.editLanes[0];
             const rails = await import('/marker-rails.js');
             const markers = (await import('/marker-artifacts.js')).markerArtifacts();
-            const found = await (await import('/tablature.js')).laneFingering(lane);
+            const found = await (await import('/lane-fingering.js')).laneFingering(lane);
             return {holds:lane.handHolds, seats:found.notes.filter(n => n.start === 2).map(n => found.seats.get(n)),
                 rails:rails.overviewMarkerRails().map(r => r.id),
                 menu:rails.railMenuItems(2, 0, 0).map(item => item.label), kinds:markers.map(m => m.kind)};
@@ -4721,7 +4725,7 @@ class EndToEndTests(unittest.TestCase):
     def tempo_flag(self, t):
         """Time of the tempo flag nearest t, the start flag included: addMarker snaps
         a new marker to the song's detected note grid, so it is rarely at t itself."""
-        flags = self.page.evaluate("""async () => { const { S } = await import('./store.js'), { gridOffset } = await import('./grid.js');
+        flags = self.page.evaluate("""async () => { const { S } = await import('./store.js'), { gridOffset } = await import('./grid-controls.js');
             return [gridOffset(), ...S.state.tempoMap.map((m) => m.t)]; }""")
         return min(flags, key=lambda flag: abs(flag - t))
 
@@ -4907,7 +4911,7 @@ class EndToEndTests(unittest.TestCase):
         # A new note is a quarter long, whatever the grid division.
         quarter, length = page.evaluate("""async () => {
             const { S } = await import("./store.js");
-            const { gridAt } = await import("./grid.js");
+            const { gridAt } = await import("./grid-read.js");
             const n = S.state.editLanes.flatMap((l) => l.notes)[0];
             return [60 / gridAt(n.start).bpm, n.end - n.start];
         }""")
@@ -4976,7 +4980,7 @@ class EndToEndTests(unittest.TestCase):
         def assert_start_alignment():
             positions = page.evaluate("""async () => {
                 const {S}=await import('./store.js'); const {xOf}=await import('./geometry.js');
-                const {gridOffset}=await import('./grid.js'); const {firstMarkerViewportRect}=await import('./markers.js');
+                const {gridOffset}=await import('./grid-controls.js'); const {firstMarkerViewportRect}=await import('./markers.js');
                 const {drawNow}=await import('./repaint.js'); drawNow();
                 const stage=document.querySelector('#stage').getBoundingClientRect();
                 const line=document.querySelector('#projectStartHandle').getBoundingClientRect();
@@ -5057,7 +5061,7 @@ class EndToEndTests(unittest.TestCase):
         page.mouse.click(p['x'],p['y'],button='right')
         self.assertEqual(page.evaluate(lane_state),before)
         self.assertEqual(page.locator('.ctxmenu:visible').count(),0)
-        self.assertGreaterEqual(page.evaluate("async ()=>(await import('./grid.js')).snap(-10)"),.5)
+        self.assertGreaterEqual(page.evaluate("async ()=>(await import('./grid-read.js')).snap(-10)"),.5)
         self.assertGreaterEqual(page.evaluate("async ()=>(await import('./tone-markers.js')).snapToneTime(-1)"),.5)
         box=handle.bounding_box()
         page.mouse.move(box['x']+box['width']/2,box['y']+170)
@@ -5070,7 +5074,7 @@ class EndToEndTests(unittest.TestCase):
         self.new_audio_project()
         page=self.page
         original=page.evaluate("""async () => {
-            const {S}=await import('./store.js'); const {restoreGridState}=await import('./grid.js');
+            const {S}=await import('./store.js'); const {restoreGridState}=await import('./grid-controls.js');
             restoreGridState({bpm:120,offset:0,tsNum:4,tsDen:4,subdiv:2});
             const lane=S.state.editLanes[0];
             lane.notes=[{id:'tail',start:S.state.duration-1,end:S.state.duration-.25,pitch:45}];
@@ -5122,7 +5126,8 @@ class EndToEndTests(unittest.TestCase):
         # after the first span, and a tone marker inside it.
         page.evaluate("""async () => {
             const { S } = await import("./store.js");
-            const { addMarker, snap } = await import("./grid.js");
+            const { addMarker } = await import("./grid.js");
+            const { snap } = await import("./grid-read.js");
             const { drawNow } = await import("./repaint.js");   // now: the flags' hit areas are built by the paint
             addMarker(2); addMarker(4);
             S.state.sectionMarkers = [1, 3, 5].map((t) => ({ id: "s" + t, t, type: "verse", name: "" }));
@@ -5196,7 +5201,7 @@ class EndToEndTests(unittest.TestCase):
         page.mouse.up()
         start, cells = page.evaluate("""async () => {
             const { S } = await import("./store.js");
-            const { gridAt, segStep } = await import("./grid.js");
+            const { gridAt, segStep } = await import("./grid-read.js");
             const n = S.state.editLanes[0].notes[0], seg = gridAt(n.start);
             return [n.start, (n.start - seg.t) / segStep(seg)];
         }""")
