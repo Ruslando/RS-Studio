@@ -27,7 +27,7 @@ const passage = notes => ({ notes: notes.map(note => ({ note, beat: note.start -
   assert.equal(compareCopy(resolved[0].copies[0], resolved[0].copies[1]).missing.length, 0);
   assert.deepEqual(lane.repeatGroups, saved, 'resolving legacy groups is read-only');
   const rescanned = groupsFromRepeats(found, lane.repeatGroups);
-  assert.equal(rescanned[0].name, 'Group 2');
+  assert.equal(rescanned[0].name, 'Group A');
   assert.ok(rescanned[0].copies.every(copy => trailing.every(note => !copy.includes(note.id))), 'rescans persist only the shared passage');
 }
 // One common opening and ending across ALL copies, with a genuine gap inside.

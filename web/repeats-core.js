@@ -3,7 +3,7 @@
 import { effectiveTechniqueFields } from './repeat-change-details.js';
 import { passageStructure } from './passage-structure.js';
 import { pulsePassages } from './pulse-passages.js';
-import { repeatVariations } from './repeat-variations.js';
+import { alphabeticLabel, repeatVariations } from './repeat-variations.js';
 
 export const REPEAT_MIN_NOTES = 4;
 export const REPEAT_SIMILARITY = 0.8;
@@ -458,8 +458,11 @@ export function resolveRepeatGroups(lane, beatAt = t => t) {
   }
   for (const group of groups) for (const copy of group.copies)
     copy.notes.sort((a, b) => a.note.start - b.note.start || a.note.pitch - b.note.pitch);
-  for (const group of groups) group.variations = repeatVariations(group, beatAt);
-  return groups;
+  for (const [index, group] of groups.entries()) {
+    if (/^Group \d+$/.test(group.name)) group.name = `Group ${alphabeticLabel(index)}`;
+    group.variations = repeatVariations(group, beatAt);
+  }
+  return groups.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function normalizeRepeatGroups(value, notes) {
@@ -491,7 +494,7 @@ export function normalizeRepeatGroups(value, notes) {
 export function groupsFromRepeats(repeats, previous = [], beatAt = t => t) {
   let serial = Math.max(0, ...previous.map(g => Number(g.id.match(/^repeat_(\d+)$/)?.[1]) || 0));
   const available = new Set(previous);
-  return repeats.map(repeat => {
+  return repeats.map((repeat, index) => {
     const copies = repeat.copies.map(c => c.notes.map(({ note }) => note.id));
     const layout = repeat.phraseLength > 0 ? { phraseLength: repeat.phraseLength, offsets: repeat.copies.map(c => c.notes[0].beat) } : {};
     const members = new Set(copies.flat());
@@ -502,9 +505,9 @@ export function groupsFromRepeats(repeats, previous = [], beatAt = t => t) {
     const variations = repeatVariations({ ...repeat, ...(manual ? { variations: old.g.variations } : {}) }, beatAt);
     const variationLayout = variations.length > 1 || manual ? { variations, ...(manual ? { variationMode: 'manual' } : {}) } : {};
     if (preserve) {
-      available.delete(old.g); return { id: old.g.id, name: old.g.name, copies, ...layout, ...variationLayout };
+      available.delete(old.g); return { id: old.g.id, name: /^Group \d+$/.test(old.g.name) ? `Group ${alphabeticLabel(index)}` : old.g.name, copies, ...layout, ...variationLayout };
     }
     const n = ++serial;
-    return { id: `repeat_${n}`, name: `Group ${n}`, copies, ...layout, ...variationLayout };
+    return { id: `repeat_${n}`, name: `Group ${alphabeticLabel(index)}`, copies, ...layout, ...variationLayout };
   });
 }

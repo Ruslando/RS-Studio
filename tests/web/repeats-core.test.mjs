@@ -86,7 +86,7 @@ assert.deepEqual(findRepeats(at(0, [40, 40, 40])), [], 'too few notes');
 // Project/undo representation: stable ids resolve new note objects after restore.
 {
   const saved = groupsFromRepeats(repeats);
-  assert.equal(saved[0].name, 'Group 1');
+  assert.equal(saved[0].name, 'Group A');
   saved[0].name = 'Verse riff';
   assert.deepEqual(groupsFromRepeats(repeats, saved), saved, 'rescan preserves names and ids');
   const lane = { notes: structuredClone(notes), repeatGroups: JSON.parse(JSON.stringify(saved)) };
@@ -148,4 +148,14 @@ console.log('repeats-core: ok');
   delete target[2].finger;
   target[3].finger = -1;
   assert.equal(compareCopy(a, b).fingerDifferences.length, 0, 'absent and no-finger values mean the same thing');
+}
+
+// Navigation follows names rather than the persisted/discovery order.
+{
+  const copies = at(0), later = at(10);
+  const lane = { notes: [...copies, ...later], repeatGroups: [
+    { id: 'z', name: 'Group Z', copies: [copies.map(n => n.id)] },
+    { id: 'a', name: 'Group A', copies: [later.map(n => n.id)] },
+  ] };
+  assert.deepEqual(resolveRepeatGroups(lane).map(g => g.name), ['Group A', 'Group Z']);
 }

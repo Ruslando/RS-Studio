@@ -22,9 +22,19 @@ test('variation detection ignores techniques and fingering, and leaves isolated 
       finger: i, pos: { string: i, fret: k }, fx: { vibrato: i % 2 === 0 }, handAnchor: i },
   })) });
   const copies = [copy(0), copy(1), copy(2), copy(3)];
-  assert.equal(repeatVariations({ copies }).length, 1);
+  assert.equal(repeatVariations({ copies }).length, 0);
   copies[3].notes[2].note.pitch++;
-  assert.equal(repeatVariations({ copies }).length, 1, 'a lone wrong note is a difference, not a recurring variation');
+  assert.equal(repeatVariations({ copies }).length, 0, 'a lone wrong note is a difference, not a recurring variation');
   copies[2] = copy(2, .9); copies[3] = copy(3, .9);
   assert.deepEqual(repeatVariations({ copies }).map(v => v.copies), [['copy0', 'copy1'], ['copy2', 'copy3']], 'repeated length changes define a different pattern');
+});
+
+test('unique patterns need no subgroups; recurring patterns collect singletons as other variations', () => {
+  const copy = (id, pitch) => ({ ids: [id], notes: [{ beat: 0, note: { id, start: 0, end: 1, pitch } }] });
+  const a = copy('a', 40), b = copy('b', 41), c = copy('c', 42);
+  assert.deepEqual(repeatVariations({ copies: [a, b, c] }), []);
+  assert.deepEqual(repeatVariations({ copies: [a, copy('a2', 40), b, c] }), [
+    { id: 'variation_1', name: 'Variation A', copies: ['a', 'a2'] },
+    { id: 'variation_other', name: 'Other variations', copies: ['b', 'c'] },
+  ]);
 });

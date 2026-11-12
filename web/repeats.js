@@ -24,10 +24,14 @@ import { pitchCurve } from './whammy.js';
 import { noteRibbon } from './note-render.js';
 import { modalOpen } from './modal-focus.js';
 import { nid } from './ids.js';
+import { renderRepeatPicker } from './repeat-picker.js';
+import { playbackTime, seekPlayback } from './playback.js';
+import { initRepeatDock } from './repeat-dock.js';
+import { alphabeticLabel } from './repeat-variations.js';
 
 const $ = id => document.getElementById(id);
 let worker = null, scanLane = null, scanProject = null, scanSignature = null;
-let hover = null, hoverTargets = [], hideHoverTimer = 0;
+let hover = null;
 let stopCache = null;
 let groupsCache = null;
 let handSeats = null;
@@ -57,11 +61,6 @@ const groupsOf = lane => {
     groupsCache = { key, groups: resolveRepeatGroups(lane, laneClock(lane).beatAt) };
   return groupsCache.groups;
 };
-const timeLabel = copy => {
-  const b = noteBounds(copy.notes.map(n => n.note));
-  const fmt = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
-  return `${fmt(b.t0)}–${fmt(b.t1)}`;
-};
 function current() {
   const lane = S.state ? activeLane() : null;
   if (!review || !lane || review.lane !== lane.id) return null;
@@ -74,10 +73,14 @@ function current() {
     || variations.find(v => v.copies.includes(review.copyKey)) || variations[0];
   review.variation = variation?.id || 'all';
   const group = { ...parent, copies: variation ? parent.copies.filter(c => variation.copies.includes(c.ids[0])) : parent.copies };
-  const index = Math.max(0, group.copies.findIndex(c => review.copyKey ? c.ids[0] === review.copyKey : c.notes[0].note.id === review.first));
-  const copy = group.copies[index];
+  const navigationCopies = group.copies;
+  const navigationIndex = Math.max(0, group.copies.findIndex(c => review.copyKey ? c.ids[0] === review.copyKey : c.notes[0].note.id === review.first));
+  const copy = navigationCopies[navigationIndex];
+  const excluded = review.excluded || new Set();
+  group.copies = excluded.has(copy.ids[0]) ? [copy] : navigationCopies.filter(c => !excluded.has(c.ids[0]));
+  const index = group.copies.indexOf(copy);
   review.first = copy.notes[0].note.id; review.copyKey = copy.ids[0];
-  return { lane, groups, parent, variations, variation, group, copy, index, model: group.copies[0] };
+  return { lane, groups, parent, variations, variation, group, copy, index, navigationCopies, navigationIndex, model: group.copies[0] };
 }
 const originalIndex = (state, copy) => state.parent.copies.findIndex(c => c.ids[0] === copy.ids[0]) + 1;
 const instancePosition = (state, index) => `${index + 1} / ${state.group.copies.length}` +
@@ -94,26 +97,28 @@ function repeatCopyBounds(state, copy) {
   return copy.phraseLength > 0 ? { ...bounds, t0: Math.min(clock.timeAt(origin), copy.notes[0].note.start),
     t1: clock.timeAt(origin + copy.phraseLength) } : bounds;
 }
-function revealCurrent() {
+function revealCurrent({ seek = true } = {}) {
   hideRepeatHover();
   if (review) { review.changeKey = null; review.changeAnchor = null; }
   const state = current();
   if (!state) { draw(); return; }
   const b = repeatCopyBounds(state, state.copy);
+  if (seek) { review.playheadMarker = null; seekPlayback(b.t0); }
+  syncRepeatPlayhead();
   moveViewportTo(xOf(b.t0) - scroll.clientWidth * 0.2, yOf((b.pLo + b.pHi) / 2) - scroll.clientHeight / 2);
   draw();
 }
 function stepCopy(delta) {
   const state = current();
   if (!state) return;
-  const index = (state.index + delta + state.group.copies.length) % state.group.copies.length;
-  review.first = state.group.copies[index].notes[0].note.id;
-  review.copyKey = state.group.copies[index].ids[0];
+  const index = (state.navigationIndex + delta + state.navigationCopies.length) % state.navigationCopies.length;
+  review.first = state.navigationCopies[index].notes[0].note.id;
+  review.copyKey = state.navigationCopies[index].ids[0];
   revealCurrent();
 }
 export function closeRepeats() {
   if (!review && !worker) return false;
-  hideRepeatHover();
+  hideRepeatHover(); closeRepeatPickers();
   worker?.terminate(); worker = null; scanLane = null; scanProject = null;
   review = null; navKey = null; handRequest = null; handResult = null; handSeats = null; stopCache = null; groupsCache = null;
   renderRepeatNavigator(); draw();
@@ -172,13 +177,14 @@ export function runFindRepeats(lane = activeLane()) {
 export function renderRepeatNavigator() {
   const nav = $('repeatNavigator');
   if (!nav) return;
+  syncRepeatPlayhead();
   const lane = S.state ? activeLane() : null, state = current(), scanning = !!worker && scanLane === lane;
   nav.hidden = !scanning && !state;
   if (nav.hidden) { hideRepeatHover(); return; }
   if (hover && (hover.lane !== lane || hover.group !== state?.group.id || hover.instance !== state?.copy.ids[0]
     || hover.revision !== S.voicingRevision || S.drag)) hideRepeatHover();
   const key = [S.state, lane, lane?.notes, lane?.repeatGroups, S.voicingRevision,
-    review?.group, review?.variation, review?.first, review?.changeKey, scanning, !!lane?.locked, !!lane?.visible, S.fingerRevision, handResult];
+    review?.group, review?.variation, review?.excluded, review?.first, review?.changeKey, scanning, !!lane?.locked, !!lane?.visible, S.fingerRevision, handResult];
   if (navKey && key.every((v, i) => v === navKey[i])) return;
   navKey = key;
   const groups = state?.groups || [];
@@ -197,37 +203,34 @@ export function renderRepeatNavigator() {
   select.disabled = scanning || !state;
   nav.setAttribute('aria-busy', String(scanning));
   const variationSelect = $('repeatVariation');
-  $('repeatVariationNavigation').hidden = scanning || !state || state.parent.copies.length < 2;
-  variationSelect.replaceChildren();
-  if (state) {
-    const choices = document.createElement('optgroup'); choices.setAttribute('label', 'Compare');
-    for (const v of state.variations) {
-      const option = document.createElement('option'); option.value = v.id;
-      option.textContent = `${v.name} (${v.copies.length})`; choices.append(option);
-    }
-    if (state.variations.length > 1) {
-      const option = document.createElement('option'); option.value = 'all'; option.textContent = `All variations (${state.parent.copies.length})`; choices.append(option);
-    }
-    variationSelect.append(choices);
-    if (canEditLane(state.lane)) {
-      const moves = document.createElement('optgroup'); moves.setAttribute('label', `Move instance ${originalIndex(state, state.copy)} to`);
-      for (const v of state.variations) {
-        const option = document.createElement('option'); option.value = `move:${v.id}`; option.textContent = v.name; moves.append(option);
-      }
-      const option = document.createElement('option'); option.value = 'move:new'; option.textContent = 'New variation'; moves.append(option);
-      variationSelect.append(moves);
-    }
-    variationSelect.value = review.variation;
-  }
-  variationSelect.disabled = scanning || !state;
-  $('repeatPosition').textContent = state ? instancePosition(state, state.index) : 'Scanning…';
-  $('repeatPosition').title = state ? timeLabel(state.copy) : 'Finding repeated passages';
-  $('repeatPrevious').disabled = $('repeatNext').disabled = scanning || !state || state.group.copies.length < 2;
+  $('repeatVariationNavigation').hidden = scanning || !state || state.variations.length < 2;
+  const variationChoices = (state?.variations || []).map(v => {
+    const count = v.copies.filter(key => !review.excluded?.has(key)).length;
+    return { value: v.id, label: `${v.name} (${v.copies.length})`, toggleValue: `toggle:${v.id}`,
+      checked: count === v.copies.length, indeterminate: count > 0 && count < v.copies.length };
+  });
+  if (state?.variations.length > 1) variationChoices.push({ value: 'all', label: `All variations (${state.parent.copies.length})` });
+  renderRepeatPicker(variationSelect, variationChoices, review?.variation, { disabled: scanning || !state });
+  const instanceChoices = (state?.navigationCopies || []).map(copy => ({ value: copy.ids[0],
+    label: `Instance ${originalIndex(state, copy)}`, toggleValue: `toggle:${copy.ids[0]}`, checked: !review.excluded?.has(copy.ids[0]) }));
+  const moves = state && canEditLane(state.lane) ? [...state.variations.map(v => ({ value: `move:${v.id}`, label: v.name })),
+    { value: 'move:new', label: 'New variation' }] : [];
+  renderRepeatPicker($('repeatInstance'), instanceChoices, state?.copy.ids[0], { disabled: scanning || !state, actions: moves });
+  $('repeatPosition').textContent = state ? `${state.navigationIndex + 1} / ${state.navigationCopies.length}` +
+    (state.parent.copies.length !== state.navigationCopies.length ? ` · #${originalIndex(state, state.copy)}` : '') : 'Scanning…';
+  $('repeatPrevious').disabled = $('repeatNext').disabled = scanning || !state || state.navigationCopies.length < 2;
   $('repeatGroupPrevious').disabled = $('repeatGroupNext').disabled = scanning || groups.length < 2;
   const stops = state ? changeStops(state) : [];
   const changeIndex = stops.findIndex(stop => stop.key === review?.changeKey);
   $('repeatChangeNavigation').hidden = scanning || !stops.length;
-  $('repeatChangePosition').textContent = stops.length ? `${changeIndex < 0 ? '–' : changeIndex + 1} / ${stops.length}` : '– / 0';
+  const changes = $('repeatChangePosition'); changes.replaceChildren();
+  const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = `– / ${stops.length}`; placeholder.disabled = true; changes.append(placeholder);
+  for (const [index, stop] of stops.entries()) {
+    const option = document.createElement('option'); option.value = stop.key;
+    option.textContent = `${index + 1} / ${stops.length} · ${noteName(stop.marker.note.pitch)}`; changes.append(option);
+  }
+  changes.value = changeIndex < 0 ? '' : stops[changeIndex].key;
+  changes.disabled = scanning || !stops.length;
   $('repeatChangePrevious').disabled = $('repeatChangeNext').disabled = scanning || !state || !stops.length;
   if (hover && state) fillHoverRows(state);
 
@@ -248,7 +251,7 @@ function comparisonDetails(state) {
     if (!marker.kind || kind === 'played') Object.assign(marker, { kind, color });
   };
   const origin = copyOrigin(state.copy, clock.beatAt);
-  for (const other of state.group.copies) {
+  for (const other of review.excluded?.has(state.copy.ids[0]) ? [] : state.group.copies) {
     if (other === state.copy) continue;
     const comparison = compareCopy(state.copy, other, clock.beatAt, fingers);
     for (const change of comparison.changes) {
@@ -281,17 +284,38 @@ function stepGroup(delta) {
   review.group = state.groups[index].id; review.variation = null; review.first = null; review.copyKey = null;
   revealCurrent();
 }
+function toggleCompared(keys) {
+  const excluded = new Set(review.excluded);
+  const include = keys.some(key => excluded.has(key));
+  for (const key of keys) { if (include) excluded.delete(key); else excluded.add(key); }
+  review.excluded = excluded; navKey = null; stopCache = null;
+  revealCurrent({ seek: false });
+}
+function selectInstance(value) {
+  const state = current();
+  if (!state) return;
+  if (value.startsWith('move:')) { selectVariation(value); return; }
+  if (value.startsWith('toggle:')) { toggleCompared([value.slice(7)]); return; }
+  if (!state.navigationCopies.some(copy => copy.ids[0] === value)) return;
+  review.copyKey = value; revealCurrent();
+}
 function selectVariation(value) {
   const state = current();
   if (!state) return;
+  if (value.startsWith('toggle:')) {
+    const variation = state.variations.find(v => v.id === value.slice(7));
+    if (variation) toggleCompared(variation.copies);
+    return;
+  }
   if (value.startsWith('move:')) {
     if (!canEditLane(state.lane)) return;
-    const variants = state.variations.map(v => ({ ...v, copies: [...v.copies] }));
+    const variants = state.variations.length ? state.variations.map(v => ({ ...v, copies: [...v.copies] }))
+      : [{ id: 'variation_other', name: 'Other variations', copies: state.parent.copies.map(c => c.ids[0]) }];
     let id = value.slice(5);
     if (id === 'new') {
       const serial = Math.max(0, ...variants.map(v => Number(v.id.match(/(\d+)$/)?.[1]) || 0)) + 1;
       id = `variation_${serial}`;
-      variants.push({ id, name: `Variation ${String.fromCharCode(64 + serial)}`, copies: [] });
+      variants.push({ id, name: `Variation ${alphabeticLabel(serial - 1)}`, copies: [] });
     }
     if (!variants.some(v => v.id === id)) return;
     for (const v of variants) v.copies = v.copies.filter(key => key !== state.copy.ids[0]);
@@ -306,10 +330,10 @@ function selectVariation(value) {
   revealCurrent();
 }
 function changeStops(state) {
-  const key = [S.state, state.lane, state.lane.notes, state.lane.repeatGroups, state.group.id, review.variation, S.voicingRevision, S.fingerRevision, handResult];
+  const key = [S.state, state.lane, state.lane.notes, state.lane.repeatGroups, state.group.id, review.variation, state.copy.ids[0], review.excluded, S.voicingRevision, S.fingerRevision, handResult];
   if (stopCache && key.every((value, i) => value === stopCache.key[i])) return stopCache.stops;
-  const stops = state.group.copies.flatMap((copy, index) => comparisonDetails({ ...state, copy, index }).markers.map(marker =>
-    ({ key: markerKey(copy, marker), copy, marker })));
+  const stops = comparisonDetails(state).markers.map(marker =>
+    ({ key: markerKey(state.copy, marker), copy: state.copy, marker }));
   stops.sort((a, b) => a.marker.note.start - b.marker.note.start || a.marker.note.pitch - b.marker.note.pitch);
   stopCache = { key, stops };
   return stops;
@@ -343,7 +367,9 @@ function focusRepeatMarker(state, marker) {
   const clamp = (n, max) => Math.max(0, Math.min(Math.max(0, max), n));
   scroll.scrollLeft = clamp(xOf(marker.note.start) - scroll.clientWidth * .2, scroll.scrollWidth - scroll.clientWidth);
   scroll.scrollTop = clamp(yOf(marker.note.pitch) - scroll.clientHeight / 2, scroll.scrollHeight - scroll.clientHeight);
-  openRepeatMarker(state, marker, true);
+  review.changeKey = markerKey(state.copy, marker); review.playheadMarker = null;
+  seekPlayback(marker.note.start);
+  syncRepeatPlayhead();
   draw();
 }
 function jumpToNoteInstance() {
@@ -368,6 +394,7 @@ export function handleRepeatNavigationKey(event) {
     || $('repeatNavigator').hidden || $('repeatNavigator').closest?.('[hidden], [inert]')
     || modalOpen('[aria-modal="true"]:not([data-editor-keys])')) return false;
   const target = event.target;
+  if (target === $('repeatDrag') || target?.closest?.('.repeat-picker')) return false;
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(target?.tagName) || target?.isContentEditable
     || target?.closest?.('[contenteditable="true"], [role="listbox"], [role="menu"]')) return false;
   const delta = event.key === 'ArrowRight' ? 1 : -1;
@@ -448,7 +475,7 @@ function applyCommonValue(key, sourceIndex = null, targetIndex = null) {
   if (!hover.marker.anchor) { hideRepeatHover(); navKey = null; draw(); return; }
   if (!byId.has(anchorId) && source) hover.anchorKey = sourceCopy.ids[0];
   if (hover.marker.current) hover.marker.note = hover.marker.current;
-  hover.revision = S.voicingRevision; hover.pinned = true;
+  hover.revision = S.voicingRevision;
   handRequest = null; handResult = null; handSeats = null; stopCache = null; navKey = null;
   refreshCounts(); refreshTabIfOpen();
   const next = current();
@@ -522,8 +549,6 @@ function counterpart(state, anchorCopy, anchor, targetCopy) {
 function showNoteVersion(delta) {
   const state = current();
   if (!hover || !state) return;
-  clearTimeout(hideHoverTimer); hideHoverTimer = 0;
-  hover.pinned = true;
   hover.selected = (hover.selected + delta + state.group.copies.length) % state.group.copies.length;
   const copy = state.group.copies[hover.selected], anchorCopy = state.group.copies.find(c => c.ids[0] === hover.anchorKey);
   hover.marker.first = anchorCopy ? counterpart(state, anchorCopy, hover.marker.anchor, copy) : null;
@@ -578,38 +603,63 @@ function updateHoverPreview() {
   draw();
 }
 export function hideRepeatHover() {
-  clearTimeout(hideHoverTimer); hideHoverTimer = 0;
   const wasOpen = !!hover;
-  hover = null; hoverTargets = [];
+  hover = null;
   if ($('repeatHover')) $('repeatHover').hidden = true;
   if ($('repeatNoteNavigation')) $('repeatNoteNavigation').hidden = true;
   if (wasOpen) { previewFretboardNote(); draw(); }
   return wasOpen;
 }
-export function scheduleRepeatHoverHide() {
-  if (!hover || hover.pinned || hideHoverTimer || $('repeatHover').contains(document.activeElement) || $('repeatNoteNavigation').contains(document.activeElement)) return;
-  hideHoverTimer = setTimeout(hideRepeatHover, 250);
+// The transport is the only source of automatic comparison-card selection.
+// Keep manual preview choices and explicit dismissal until the playhead reaches
+// another note, rather than reopening the card on every repaint.
+export function syncRepeatPlayhead() {
+  let state = current();
+  if (!state || worker || S.drag) {
+    if (review) review.playheadMarker = null;
+    hideRepeatHover(); return;
+  }
+  const time = playbackTime(), clock = laneClock(state.lane);
+  const contains = copy => {
+    const from = copy.phraseLength > 0 ? clock.timeAt(copyOrigin(copy, clock.beatAt)) : copy.notes[0].note.start;
+    const to = copy.phraseLength > 0 ? clock.timeAt(copyOrigin(copy, clock.beatAt) + copy.phraseLength)
+      : Math.max(...copy.notes.map(entry => entry.note.end));
+    return time >= from - 1e-7 && time < to - 1e-7;
+  };
+  const parent = contains(state.copy) ? state.parent : [state.parent, ...state.groups.filter(g => g !== state.parent)]
+    .find(group => group.copies.some(contains));
+  const copy = parent && (parent === state.parent && contains(state.copy) ? state.copy : parent.copies.find(contains));
+  if (!copy) { review.playheadMarker = null; hideRepeatHover(); return; }
+  if (parent.id !== state.parent.id || copy.ids[0] !== state.copy.ids[0]) {
+    if (parent.id !== state.parent.id) review.variation = null;
+    else if (state.variation && !state.variation.copies.includes(copy.ids[0])) review.variation = null;
+    review.group = parent.id; review.copyKey = copy.ids[0]; review.first = copy.notes[0].note.id;
+    review.changeKey = null; review.changeAnchor = null;
+    navKey = null; state = current();
+  }
+  const atPlayhead = marker => time >= marker.note.start - 1e-7 && time < marker.note.end - 1e-7;
+  const changed = changeStops(state).filter(stop => atPlayhead(stop.marker));
+  let marker = (changed.find(stop => stop.key === review.changeKey) || changed[0])?.marker;
+  if (!marker) {
+    const note = state.copy.notes.find(entry => atPlayhead(entry))?.note;
+    if (note) marker = { note, current: note, first: note, anchor: note, anchorCopy: state.copy };
+  }
+  const identity = [state.parent.id, state.copy.ids[0], marker && markerKey(state.copy, marker),
+    S.voicingRevision, S.fingerRevision, handResult, review.excluded, review.variation];
+  if (review.playheadMarker && identity.every((value, i) => value === review.playheadMarker[i])) return;
+  review.playheadMarker = identity;
+  if (hover && marker && hover.instance === state.copy.ids[0] && hover.group === state.group.id
+    && markerKey(state.copy, hover.marker) === markerKey(state.copy, marker) && hover.revision === S.voicingRevision) return;
+  hideRepeatHover();
+  if (marker) openRepeatMarker(state, marker);
 }
-// Called by the stage's existing pointer handler, before diagnostic tooltips.
-export function hoverRepeatDifference(x, y, clientX, clientY) {
-  const state = current();
-  if (!state || S.drag) { hideRepeatHover(); return false; }
-  const target = hoverTargets.filter(t => x >= t.x0 && x <= t.x1 && y >= t.y0 && y <= t.y1)
-    .sort((a, b) => Math.abs(y - yOf(a.marker.note.pitch)) - Math.abs(y - yOf(b.marker.note.pitch)))[0];
-  if (!target) { scheduleRepeatHoverHide(); return false; }
-  clearTimeout(hideHoverTimer); hideHoverTimer = 0;
-  const marker = target.marker;
-  if (hover?.marker.anchor === marker.anchor && hover?.revision === S.voicingRevision) return true;
-  openRepeatMarker(state, marker);
-  return true;
-}
-function openRepeatMarker(state, marker, pinned = false) {
+function openRepeatMarker(state, marker) {
   const clock = laneClock(state.lane);
   review.changeKey = markerKey(state.copy, marker); review.changeAnchor = { start: marker.note.start, pitch: marker.note.pitch };
   navKey = null;
   const anchorCopy = marker.anchorCopy || state.copy;
   marker.anchor ||= marker.current || marker.first; marker.first = marker.current;
-  hover = { lane: state.lane, group: state.group.id, instance: state.copy.ids[0], marker, pinned, revision: S.voicingRevision,
+  hover = { lane: state.lane, group: state.group.id, instance: state.copy.ids[0], marker, revision: S.voicingRevision,
     selected: state.index, index: state.index, anchorKey: anchorCopy.ids[0],
     origins: { first: copyOrigin(state.copy, clock.beatAt), current: copyOrigin(state.copy, clock.beatAt) } };
   hideTooltip();
@@ -620,19 +670,6 @@ function openRepeatMarker(state, marker, pinned = false) {
   placeFloatingAvoiding($('repeatHover'), hoverAvoidance, { reset: true });
   $('repeatNoteNavigation').hidden = false;
   updateHoverPreview();
-}
-// The regular note renderer paints the projected note; this only adds its
-// hit target so hovering the preview keeps the card open.
-function drawFirstPreview(state) {
-  if (!hover || !hover.showFirst || !hover.marker.first) return;
-  const preview = projectedFirstNote(state), x = xOf(preview.start), y = yOf(preview.pitch);
-  const source = hover.marker.first, ribbon = noteRibbon(state.lane, source);
-  const curve = pitchCurve(source) || ribbon?.points;
-  const offsets = curve ? curve.map(([, value]) => value * S.state.rowH) : [0];
-  const ratio = source.end > source.start ? (preview.end - preview.start) / (source.end - source.start) : 1;
-  const end = ribbon?.end ? preview.start + (ribbon.end - source.start) * ratio : preview.end;
-  hoverTargets.push({ marker: hover.marker, x0: x - 5, x1: xOf(end) + 5,
-    y0: y - Math.max(0, ...offsets) - 5, y1: y + S.state.rowH - Math.min(0, ...offsets) + 5 });
 }
 export function repeatPreviewNote() {
   const state = current();
@@ -651,13 +688,8 @@ function drawDifference(marker, left, right) {
     sctx.beginPath(); sctx.moveTo(x, y); sctx.lineTo(Math.max(x + 2, end), y + S.state.rowH);
     sctx.moveTo(x, y + S.state.rowH); sctx.lineTo(Math.max(x + 2, end), y); sctx.stroke();
   }
-  const curve = pitchCurve(note);
-  const offsets = curve ? curve.map(([, v]) => v * S.state.rowH) : [0];
-  hoverTargets.push({ marker, x0: x - pad - 3, x1: Math.max(x + 2, end) + pad + 3,
-    y0: y - pad - Math.max(0, ...offsets), y1: y + S.state.rowH + pad - Math.min(0, ...offsets) });
 }
 export function drawRepeats() {
-  hoverTargets = [];
   const state = current();
   if (!state || !state.lane.visible) return;
   const { group, copy: focused } = state;
@@ -683,46 +715,51 @@ export function drawRepeats() {
       if (hover?.showFirst && marker.anchor === hover.marker.anchor) continue;
       drawDifference(marker, left, right);
     }
-    for (const marker of details.targets) {
-      if (marker.kind === 'missing') continue;
-      const n = marker.note, x = xOf(n.start), end = xOf(n.end), y = yOf(n.pitch);
-      if (x <= right && end >= left) hoverTargets.push({ marker, x0: x - 2, x1: Math.max(x + 2, end) + 2, y0: y - 2, y1: y + S.state.rowH + 2 });
-    }
-    if (hover) {
-      const n = hover.marker.note, x = xOf(n.start), y = yOf(n.pitch);
-      hoverTargets.push({ marker: hover.marker, x0: x - 5, x1: xOf(n.end) + 5, y0: y - 5, y1: y + S.state.rowH + 5 });
-    }
-    drawFirstPreview(state);
   }
   sctx.restore();
 }
-export function init_repeats() {
-  const card = $('repeatHover'), arrows = $('repeatNoteNavigation'); document.body.append(card);
-  for (const panel of [card]) {
-    panel.addEventListener('mouseenter', () => { clearTimeout(hideHoverTimer); hideHoverTimer = 0; });
-    panel.addEventListener('mouseleave', scheduleRepeatHoverHide);
-    panel.addEventListener('focusout', event => { if (!card.contains(event.relatedTarget) && !arrows.contains(event.relatedTarget)) scheduleRepeatHoverHide(); });
+function closeRepeatPickers(except = null) {
+  let closed = false;
+  for (const id of ['repeatInstance', 'repeatVariation']) {
+    const picker = $(id);
+    if (picker !== except && picker.open) {
+      picker.open = false; closed = true;
+      if (picker.contains(document.activeElement)) picker.children[0]?.focus();
+    }
   }
+  return closed;
+}
+export function init_repeats() {
+  initRepeatDock($('repeatNavigator'), $('repeatDrag'));
+  for (const id of ['repeatInstance', 'repeatVariation']) $(id).addEventListener('toggle', () => {
+    if ($(id).open) closeRepeatPickers($(id));
+  });
+  window.addEventListener('pointerdown', event => {
+    for (const id of ['repeatInstance', 'repeatVariation']) if (!$(id).contains(event.target)) $(id).open = false;
+  });
+  document.body.append($('repeatHover'));
   $('repeatNoteFirst').addEventListener('click', () => showNoteVersion(-1));
   $('repeatNoteCurrent').addEventListener('click', () => showNoteVersion(1));
   $('repeatNoteJump').addEventListener('click', jumpToNoteInstance);
   $('repeatHoverClose').addEventListener('click', hideRepeatHover);
   $('repeatClose').addEventListener('click', closeRepeats);
-  for (const type of ['wheel', 'mousedown']) window.addEventListener(type, event => {
-    if (!card.contains(event.target) && !arrows.contains(event.target)) hideRepeatHover();
-  }, true);
-  window.addEventListener('blur', hideRepeatHover);
-  registerEscapeLayer(ESC_DEPTH.popover, hideRepeatHover);
+  registerEscapeLayer(ESC_DEPTH.popover, () => closeRepeatPickers() || hideRepeatHover());
   $('repeatGroup').addEventListener('change', () => {
     if (!review) return;
     review.group = $('repeatGroup').value; review.variation = null; review.first = null; review.copyKey = null;
     revealCurrent();
   });
+  $('repeatInstance').addEventListener('change', () => selectInstance($('repeatInstance').value));
   $('repeatVariation').addEventListener('change', () => selectVariation($('repeatVariation').value));
   $('repeatPrevious').addEventListener('click', () => stepCopy(-1));
   $('repeatNext').addEventListener('click', () => stepCopy(1));
   $('repeatGroupPrevious').addEventListener('click', () => stepGroup(-1));
   $('repeatGroupNext').addEventListener('click', () => stepGroup(1));
+  $('repeatChangePosition').addEventListener('change', () => {
+    const state = current();
+    const stop = state && changeStops(state).find(stop => stop.key === $('repeatChangePosition').value);
+    if (stop) focusRepeatMarker(state, stop.marker);
+  });
   $('repeatChangePrevious').addEventListener('click', () => stepChange(-1));
   $('repeatChangeNext').addEventListener('click', () => stepChange(1));
   window.addEventListener('keydown', handleRepeatNavigationKey, true);

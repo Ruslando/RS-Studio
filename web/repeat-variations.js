@@ -1,5 +1,10 @@
 // Variations describe recurring note patterns within an already established
 // passage family. Performance choices (fingers, positions, FX) are excluded.
+export function alphabeticLabel(index) {
+  let label = '';
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) label = String.fromCharCode(65 + (n - 1) % 26) + label;
+  return label;
+}
 const keyOf = copy => copy.ids?.[0] || copy.notes[0].note.id;
 export function variationSimilarity(a, b, beatAt = t => t) {
   const used = new Set();
@@ -26,11 +31,11 @@ export function repeatVariations(group, beatAt = t => t) {
     let serial = Math.max(0, ...saved.map(v => Number(v.id.match(/(\d+)$/)?.[1]) || 0));
     for (const key of keys) if (!used.has(key)) {
       const index = ++serial;
-      saved.push({ id: `variation_${index}`, name: `Variation ${index}`, copies: [key] });
+      saved.push({ id: `variation_${index}`, name: `Variation ${alphabeticLabel(index - 1)}`, copies: [key] });
     }
     return saved;
   }
-  if (copies.some(c => !c.notes)) return [{ id: 'variation_1', name: 'Variation A', copies: keys }];
+  if (copies.some(c => !c.notes)) return [];
   const scores = copies.map((a, i) => copies.map((b, j) => i === j ? 1 : variationSimilarity(a, b, beatAt)));
   let clusters = copies.map((_, i) => [i]);
   while (clusters.length > 1) {
@@ -42,10 +47,14 @@ export function repeatVariations(group, beatAt = t => t) {
     if (!best) break;
     clusters[best[0]].push(...clusters[best[1]]); clusters.splice(best[1], 1);
   }
-  // One unusual/missing note should remain a highlighted difference. Require
-  // two recurring patterns before inventing automatic variation subgroups.
-  if (clusters.filter(c => c.length >= 2).length < 2) clusters = [copies.map((_, i) => i)];
-  clusters.sort((a, b) => Math.min(...a) - Math.min(...b));
-  return clusters.map((cluster, i) => ({ id: `variation_${i + 1}`, name: `Variation ${String.fromCharCode(65 + i)}`,
+  // Only recurring patterns merit a subgroup. Collect unmatched patterns
+  // together instead of giving every unique instance its own variation.
+  const recurring = clusters.filter(c => c.length >= 2);
+  const others = clusters.filter(c => c.length === 1).flat();
+  if (!recurring.length || (recurring.length === 1 && !others.length)) return [];
+  recurring.sort((a, b) => Math.min(...a) - Math.min(...b));
+  const variations = recurring.map((cluster, i) => ({ id: `variation_${i + 1}`, name: `Variation ${alphabeticLabel(i)}`,
     copies: cluster.sort((a, b) => a - b).map(i => keys[i]) }));
+  if (others.length) variations.push({ id: 'variation_other', name: 'Other variations', copies: others.sort((a, b) => a - b).map(i => keys[i]) });
+  return variations;
 }

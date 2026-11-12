@@ -36,7 +36,7 @@ import { laneChords } from "./chord-names.js";
 import { PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./tablature.js";
-import { drawRepeats, hoverRepeatDifference, renderRepeatNavigator, repeatPreviewHiddenNote, repeatPreviewNote, scheduleRepeatHoverHide } from "./repeats.js";
+import { drawRepeats, renderRepeatNavigator, repeatPreviewHiddenNote, repeatPreviewNote } from "./repeats.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
@@ -912,7 +912,7 @@ export function init_draw() {
       ...tip, actionKey: issueInstanceKey(tip.diagnostic.lane, tip.diagnostic.issue),
       actions: issueIgnoreActions(tip.diagnostic.lane, tip.diagnostic.issue),
     } : tip);
-    if (!hoverRepeatDifference(x, y, e.clientX, e.clientY)) showTooltip(blocks, e.clientX, e.clientY);
+    showTooltip(blocks, e.clientX, e.clientY);
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
     S.refLockHover = refLockAt(x, y);
     S.mouseX = x;
@@ -924,7 +924,6 @@ export function init_draw() {
     S.pitchHoverClientY = null;
     stage.style.cursor = "default";
     scheduleTooltipHide();
-    scheduleRepeatHoverHide();
     cancelHoverPreview();
     S.mouseX = null; S.mouseY = null; S.hoverNote = null; S.matchHover = -1; S.refEdgeHover = null; S.refLockHover = null; draw();
   });
