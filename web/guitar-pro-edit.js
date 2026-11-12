@@ -325,22 +325,8 @@ function setTremoloPicking(alphaTab, beat, preset) {
   beat.tremoloPicking = effect;
 }
 
-// `from`/`to` say which part of the editor note this written note is (fractions):
-// a long note goes out as tied parts, and each part gets what happens during it.
-// `part` is the file's own tied part this note is (gp.tieSegments, with what the file
-// marked on it), when the parts still fall where the file had them: an effect the
-// editor has not changed is then written on it as the file had it. Otherwise, and for
-// notes the editor made, the parts get what most files do (counted over real files,
-// tools/gp-audit): a dead note, palm mute, let ring and harmonic on every part, a
-// ghost note, staccato and accent on the first.
-function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, force = false, from = 0, to = 1, part = null) {
-  if (!force && !sourceProjection.gp?.editorEffects) return;
-  const current = effectsOf(sourceProjection), original = sourceProjection.gp?.editorEffects || {};
-  const changed = (key) => force || !same(current[key], original[key]);
-  const edited = (key) => !same(current[key], original[key]);
-  const fx = current.fx || {}, oldFx = original.fx || {};
-  const first = from < 1e-6, last = to > 1 - 1e-6;
-  const asFile = (keys) => part && !keys.some(edited);
+function applyNoteFlags(alphaTab, targetNote, context) {
+  const { current, fx, oldFx, first, gp, part, force, changed, asFile } = context;
   const flag = (key, property, everyPart, on = true, off = false) => {
     if (!force && !!fx[key] === !!oldFx[key]) return;
     const value = part && !!fx[key] === !!oldFx[key] ? !!part[key] : !!fx[key] && (everyPart || first);
@@ -354,9 +340,12 @@ function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, 
   // The editor knows a richer effect by a plainer name (a heavy accent is an accent, a
   // tapped harmonic a note, a trill a half or whole step): while the editor has not
   // changed it, the note gets the file's own.
-  const gp = sourceProjection.gp || {};
   if (targetNote.accentuated && !!fx.accent === !!oldFx.accent && (part?.accent || gp.accentuated))
     targetNote.accentuated = part?.accent || gp.accentuated;
+}
+
+function applyVibratoEffect(alphaTab, targetNote, context) {
+  const { sourceProjection, current, fx, oldFx, part, from, to, force, changed, asFile } = context;
   // Late vibrato is on the parts from where it starts, and stops where a late
   // slide-out does: the part that slides out is held still (as Guitar Pro writes it).
   // (The part that slides starts before the slide does: it moves in that part's last quarter, GP_SLIDE_AT.)
@@ -368,6 +357,10 @@ function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, 
       // As wide as the file had it, while the editor's vibrato is the file's.
       ? (!!fx.vibrato === !!oldFx.vibrato && (part?.vibrato || sourceProjection.gp?.vibrato)) || alphaTab.model.VibratoType.Slight
       : alphaTab.model.VibratoType.None;
+}
+
+function applyHammerEffect(targetNote, context) {
+  const { fx, oldFx, last, force } = context;
   // The editor flags where a hammer-on lands (true, "dest", "both"); Guitar Pro the
   // note it starts from. An origin role is this note's; a landing marks the note
   // before it (linkHammerOrigins), once the score is linked.
@@ -376,6 +369,10 @@ function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, 
       targetNote.hammerPullOrigin.isHammerPullOrigin = false;
     targetNote.isHammerPullOrigin = last && (fx.hammer === "origin" || fx.hammer === "both");
   }
+}
+
+function applySlideEffects(alphaTab, targetNote, context) {
+  const { current, first, last, gp, part, changed, edited, asFile } = context;
   if (changed("slide") || changed("slideIn")) {
     const into = first ? slideInOf(current) : null, on = last && !SLIDE_IN.has(current.slide) ? current.slide : null;
     targetNote.slideInType = asFile(["slide", "slideIn"]) ? part.slideInType || alphaTab.model.SlideInType.None
@@ -386,6 +383,10 @@ function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, 
       : { shift: alphaTab.model.SlideOutType.Shift, legato: alphaTab.model.SlideOutType.Legato,
         outUp: alphaTab.model.SlideOutType.OutUp, outDown: alphaTab.model.SlideOutType.OutDown, pickDown: alphaTab.model.SlideOutType.PickSlideDown, pickUp: alphaTab.model.SlideOutType.PickSlideUp }[on] ?? alphaTab.model.SlideOutType.None;
   }
+}
+
+function applyBendAndHarmonic(alphaTab, targetNote, context) {
+  const { sourceProjection, current, gp, part, from, to, changed, edited, asFile } = context;
   // A long editor note may be represented as tied score segments, and its bend is
   // one gesture across them: each part gets its stretch of the curve. A part that
   // only holds where the bend got to gets none, as Guitar Pro writes it (alphaTab
@@ -401,6 +402,10 @@ function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, 
     // Where along the string a harmonic is touched: the file's, while the editor's harmonic is the file's.
     if (!edited("harmonic") && sourceProjection.gp?.harmonicValue) targetNote.harmonicValue = sourceProjection.gp.harmonicValue;
   }
+}
+
+function applyOrnamentAndTrill(alphaTab, targetNote, context) {
+  const { current, first, gp, part, changed, edited, asFile } = context;
   if (changed("ornament")) targetNote.ornament = asFile(["ornament"])
     ? part.noteExtras?.ornament || 0
     : first ? ({ invertedTurn: 1, turn: 2, upperMordent: 3, lowerMordent: 4 }[current.ornament] || 0) : 0;
@@ -410,6 +415,10 @@ function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, 
     targetNote.trillValue = asFiled ? file.trillValue ?? -1 : current.trill ? targetNote.fret + (current.trill === "whole" ? 2 : 1) : -1;
     if (targetNote.trillValue >= 0) targetNote.trillSpeed = asFiled ? file.trillSpeed ?? 32 : alphaTab.model.Duration.Sixteenth;
   }
+}
+
+function applyBeatEffects(alphaTab, targetNote, targetBeat, context) {
+  const { sourceProjection, current, original, fx, oldFx, first, gp, part, from, to, changed, edited } = context;
   if (changed("tremPick")) setTremoloPicking(alphaTab, targetBeat, current.tremPick);
   // A strum, slap or tap is the pick: on the first part only.
   if (changed("slap") && !first) { targetBeat.tap = false; targetBeat.slap = false; targetBeat.pop = false; }
@@ -437,6 +446,33 @@ function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, 
     else targetBeat.pickStroke = dir;
   }
   if (changed("whammy") || changed("whammyPoints")) setWhammy(alphaTab, targetBeat, current, from, to);
+}
+
+// `from`/`to` say which part of the editor note this written note is (fractions):
+// a long note goes out as tied parts, and each part gets what happens during it.
+// `part` is the file's own tied part this note is (gp.tieSegments, with what the file
+// marked on it), when the parts still fall where the file had them: an effect the
+// editor has not changed is then written on it as the file had it. Otherwise, and for
+// notes the editor made, the parts get what most files do (counted over real files,
+// tools/gp-audit): a dead note, palm mute, let ring and harmonic on every part, a
+// ghost note, staccato and accent on the first.
+function applyEditorEffects(alphaTab, sourceProjection, targetNote, targetBeat, force = false, from = 0, to = 1, part = null) {
+  if (!force && !sourceProjection.gp?.editorEffects) return;
+  const current = effectsOf(sourceProjection), original = sourceProjection.gp?.editorEffects || {};
+  const changed = (key) => force || !same(current[key], original[key]);
+  const edited = (key) => !same(current[key], original[key]);
+  const fx = current.fx || {}, oldFx = original.fx || {};
+  const first = from < 1e-6, last = to > 1 - 1e-6;
+  const asFile = (keys) => part && !keys.some(edited);
+  const gp = sourceProjection.gp || {};
+  const context = { sourceProjection, current, original, fx, oldFx, first, last, gp, part, from, to, force, changed, edited, asFile };
+  applyNoteFlags(alphaTab, targetNote, context);
+  applyVibratoEffect(alphaTab, targetNote, context);
+  applyHammerEffect(targetNote, context);
+  applySlideEffects(alphaTab, targetNote, context);
+  applyBendAndHarmonic(alphaTab, targetNote, context);
+  applyOrnamentAndTrill(alphaTab, targetNote, context);
+  applyBeatEffects(alphaTab, targetNote, targetBeat, context);
 }
 
 function addGraceBeat(alphaTab, voice, projected, tuning) {

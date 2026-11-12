@@ -284,7 +284,7 @@
 {"kind":"note","field":"slideouttype","value":6,"from":"alphaTab enum","place":"tied part","status":"kept"},
 {"kind":"note","field":"vibrato","value":1,"from":"alphaTab enum","place":"single note","status":"kept"},
 {"kind":"note","field":"vibrato","value":1,"from":"alphaTab enum","place":"chord note","status":"kept"},
-{"kind":"note","field":"vibrato","value":1,"from":"alphaTab enum","place":"tie origin","status":"hidden data only"},
+{"kind":"note","field":"vibrato","value":1,"from":"alphaTab enum","place":"tie origin","status":"kept"},
 {"kind":"note","field":"vibrato","value":1,"from":"alphaTab enum","place":"tied part","status":"kept"},
 {"kind":"note","field":"vibrato","value":2,"from":"alphaTab enum","place":"single note","status":"hidden data only"},
 {"kind":"note","field":"vibrato","value":2,"from":"alphaTab enum","place":"chord note","status":"hidden data only"},
