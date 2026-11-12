@@ -1,4 +1,5 @@
-import { dockBounds, dockPosition, nearestDock } from './edge-dock.js';
+import { wireDockControls } from './dock-controls.js';
+import { dockBounds, dockPosition } from './edge-dock.js';
 import { closeMenus } from './menus.js';
 import { icon, DRAG_HANDLE_ICON } from './icons.js';
 
@@ -56,27 +57,10 @@ export function initSpectrogramDock(panel) {
     if (!state.collapsed && state.tab === tab) { state.collapsed = true; collapse(); save(); return false; }
     select(tab); return true;
   };
-  let drag = null;
-  handle.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
-    event.preventDefault(); closeMenus();
-    drag = { x: event.clientX, y: event.clientY, left: panel.offsetLeft, top: panel.offsetTop };
-    handle.setPointerCapture(event.pointerId); panel.classList.add('docking');
+  wireDockControls(panel, handle, {
+    bounds, position, save, beforeMove: closeMenus,
+    move: dock => Object.assign(state, dock),
+    setEdge: edge => { state.edge = edge; },
   });
-  handle.addEventListener('pointermove', event => {
-    if (!drag) return;
-    Object.assign(state, nearestDock(bounds(), drag.left + event.clientX - drag.x, drag.top + event.clientY - drag.y));
-    position();
-  });
-  const finish = () => { if (drag) save(); drag = null; panel.classList.remove('docking'); };
-  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(event, finish);
-  handle.addEventListener('keydown', event => {
-    const edge = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'top', ArrowDown: 'bottom' }[event.key];
-    if (!edge) return;
-    event.preventDefault(); event.stopPropagation(); closeMenus(); state.edge = edge; position(); save();
-  });
-  new ResizeObserver(position).observe(panel.parentElement);
-  new ResizeObserver(position).observe(panel);
-  new MutationObserver(position).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
   collapse();
 }

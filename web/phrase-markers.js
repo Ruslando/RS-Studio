@@ -7,7 +7,7 @@ import { placeFloating } from "./floating-position.js";
 import { stageUi } from "./constants.js";
 import { inTourCard, mmctx as minimapCtx, phraseMarkerDelete, phraseMarkerName, phraseMarkerPop, phraseMarkerPopClose, phraseMarkerSolo, phraseMarkerTime, scroll, sctx, stage } from "./dom.js";
 import { draw } from "./repaint.js";
-import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
+import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js";
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { inRailBand, isMarkerSelected, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";

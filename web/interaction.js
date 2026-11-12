@@ -14,7 +14,8 @@ import { curveHandles, effectStartHandles, noteRibbon, slideFretOf, slideFretsHa
 import { scroll, stage } from "./dom.js";
 import { draw } from "./repaint.js";
 import { withMemo } from "./paint-memo.js";
-import { addBendPoint, commit, curveOf, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts, snapshotEdit } from "./edit.js";
+import { commit, snapshotEdit } from "./edit-history.js";
+import { addBendPoint, curveOf, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts } from "./edit.js";
 import { cursorTimeAt, pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { displayGridStep, gridAt, gridSegments, minDur, snap, snapFine, snapNote } from "./grid.js";
 import { noteLength, hasFreeNoteLength } from './note-length.js';

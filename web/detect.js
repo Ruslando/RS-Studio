@@ -11,7 +11,7 @@ import { placeFloating } from "./floating-position.js";
 import { confirmAppendBtn, confirmBackdrop, confirmCancelBtn, confirmMsgEl, confirmReplaceBtn, detectBtn, detectClose, detectModelSel, detectPanel, detectStatus, detectStemNameEl, detectTargetLayer } from "./dom.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { draw } from "./repaint.js";
-import { commit, snapshotEdit } from "./edit.js";
+import { commit, snapshotEdit } from "./edit-history.js";
 import { currentGridState, FINE_SUBDIV, gridAt, quantizeFine, segBeatSec, segStep, setSubdiv, snapNote } from "./grid.js";
 import { confirmChoice } from "./dialog.js";
 import { nid } from "./ids.js";

@@ -1,9 +1,10 @@
-import { dockBounds, dockPosition, nearestDock } from './edge-dock.js';
+import { wireDockControls } from './dock-controls.js';
+import { dockBounds, dockPosition } from './edge-dock.js';
 import { DRAG_HANDLE_ICON } from './icons.js';
 
 export function initRepeatDock(panel, handle) {
   const key = 'rs-repeat-controls';
-  let state = { edge: 'top', fraction: .5 }, drag = null;
+  let state = { edge: 'top', fraction: .5 };
   try {
     const saved = JSON.parse(localStorage.getItem(key));
     if (saved && ['top', 'right', 'bottom', 'left'].includes(saved.edge) && Number.isFinite(saved.fraction))
@@ -18,25 +19,10 @@ export function initRepeatDock(panel, handle) {
     panel.dataset.menuAbove = String(y > panel.parentElement.clientHeight / 2);
   };
   const save = () => { try { localStorage.setItem(key, JSON.stringify(state)); } catch { /* optional preference */ } };
-  handle.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    drag = { x: event.clientX, y: event.clientY, left: panel.offsetLeft, top: panel.offsetTop };
-    handle.setPointerCapture(event.pointerId); panel.classList.add('docking');
+  wireDockControls(panel, handle, {
+    bounds, position, save,
+    move: dock => { state = dock; },
+    setEdge: edge => { state.edge = edge; },
   });
-  handle.addEventListener('pointermove', event => {
-    if (!drag) return;
-    state = nearestDock(bounds(), drag.left + event.clientX - drag.x, drag.top + event.clientY - drag.y); position();
-  });
-  const finish = () => { if (drag) save(); drag = null; panel.classList.remove('docking'); };
-  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(event, finish);
-  handle.addEventListener('keydown', event => {
-    const edge = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'top', ArrowDown: 'bottom' }[event.key];
-    if (!edge) return;
-    event.preventDefault(); event.stopPropagation(); state.edge = edge; position(); save();
-  });
-  new ResizeObserver(position).observe(panel.parentElement);
-  new ResizeObserver(position).observe(panel);
-  new MutationObserver(position).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
   position();
 }

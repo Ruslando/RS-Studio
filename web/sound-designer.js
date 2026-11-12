@@ -11,7 +11,7 @@ import { dial, fader, eqGraph, segmented } from "./sound-controls.js";
 import { MAX_PRESET_FILE_BYTES, parsePresetJSON, presetJSON, presetFingerprint, loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets-core.js";
 import { projectSoundPresets, projectSoundDirty, prepareProjectSoundEdits } from './project-sound-presets.js';
 import { S } from './store.js';
-import { snapshotEdit, commitStructure } from './edit.js';
+import { snapshotEdit, commitStructure } from "./edit-history.js";
 import { initCollapsibleSections, setSection } from './collapsible-sections.js';
 
 let library = null, selected = "clean", sound = null, activeSlot = "Amp";

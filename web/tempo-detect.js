@@ -3,7 +3,7 @@
 // edit. Notes ride along like they do when a marker's tempo is edited: each
 // keeps its place between the beats (bars.js beatWarp).
 import { beatLines, beatWarp, warpTimes } from "./bars.js";
-import { commitStructure, snapshotEdit } from "./edit.js";
+import { commitStructure, snapshotEdit } from "./edit-history.js";
 import { currentGridState, gridSegments, gridSubdiv, minDur, restoreGridState } from "./grid.js";
 import { editLanes } from "./lanes.js";
 import { projectStart } from "./project-position-core.js";

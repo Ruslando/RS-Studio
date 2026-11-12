@@ -5,7 +5,8 @@ import { MIN_DUR, stageMono, SIMILAR_MAX_MATCHES, SIMILAR_PITCH_MARGIN, SIMILAR_
 import { similarScores } from "./similar-core.js";
 import { audio, scroll, sctx, traceRangeSel, traceSnapInput, traceThresholdInput } from "./dom.js";
 import { draw } from "./repaint.js";
-import { clipOf, commit, copyEffects, placeClip, snapshotEdit } from "./edit.js";
+import { commit, snapshotEdit } from "./edit-history.js";
+import { clipOf, copyEffects, placeClip } from "./edit.js";
 import { laneClock, wholeBoxOf } from "./references.js";
 import { normalizeTraceRange } from './drawing-options.js';
 import { contentH, pitchAt, songWidth, timeAt, xOf, yOf } from "./geometry.js";

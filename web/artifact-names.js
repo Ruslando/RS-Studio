@@ -1,6 +1,6 @@
 // Renaming a reference, motif or grip shape, from its artifact row or its label on the stage.
 // One undoable step; an empty name returns to the numbered default.
-import { commit, snapshotEdit } from "./edit.js";
+import { commit, snapshotEdit } from "./edit-history.js";
 import { motifLabel, motifName, renameMotif } from "./motifs.js";
 import { renameShape, shapeChord, shapeDefaultName, shapeGroups } from "./shapes.js";
 import { refreshSaveState } from "./project.js";

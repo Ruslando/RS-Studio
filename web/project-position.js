@@ -3,7 +3,7 @@ import { S } from './store.js';
 import { projectShiftPlan, projectStart } from './project-position-core.js';
 import { restoreGridState } from './grid.js';
 import { SONG, timingData } from './timing.js';
-import { commitStructure, snapshotEdit, undo, redo, STATE_RESTORED } from './edit.js';
+import { commitStructure, snapshotEdit, undo, redo, STATE_RESTORED } from "./edit-history.js";
 import { draw, drawNow } from './repaint.js';
 import { layout, timeAt, xOf } from './geometry.js';
 import { closeMarkerPop } from './markers.js';

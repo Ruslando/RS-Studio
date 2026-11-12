@@ -4,7 +4,7 @@
 import { paintMarkerFlag } from './canvas-components.js';
 import { stageUi } from './constants.js';
 import { $, scroll, sctx, stage } from './dom.js';
-import { commit, snapshotEdit, STATE_RESTORED } from './edit.js';
+import { commit, snapshotEdit, STATE_RESTORED } from "./edit-history.js";
 import { pitchAt, timeAt, xOf, yOf } from './geometry.js';
 import { snap } from './grid.js';
 import { placeFloating } from './floating-position.js';

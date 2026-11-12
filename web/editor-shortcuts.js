@@ -8,7 +8,6 @@ import { openSettingsModal } from './ui.js';
 import { draw } from './repaint.js';
 import { openDetectPanel, updateDetectStatus } from './detect.js';
 import { refMenuEntry, detachSelection } from './references.js';
-import { markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection } from './edit.js';
 import { fxOn } from './note-effects.js';
 import { runFindSimilar } from './tracing.js';
 import { xOf } from './geometry.js';
@@ -39,45 +38,47 @@ function withSelection(action) {
   if (notes.length && notes.every(note => canEditLane(laneOf(note)))) action(notes);
 }
 
-export const EDITOR_COMMAND_HANDLERS = {
-  sidebar: () => click('sidebarToggle'), artifacts: () => click('artifactsToggle'),
-  zoomIn: () => click('zoomIn'), zoomOut: () => click('zoomOut'),
-  drawingSnap: toggleDrawingSnap, drawingSettings: toggleDrawingSettings,
-  slower: () => speed(-1), faster: () => speed(1),
-  normalSpeed: () => { $('speed').value = '1'; $('speed').dispatchEvent(new Event('change', { bubbles: true })); },
-  metronome: () => click('metro'),
-  songStart: () => goTo(0), songEnd: () => goTo(songEnd(S.state)),
-  rangeStart: () => goTo(S.detectRegion?.t0),
-  clearRange: () => { S.detectRegion = null; updateDetectStatus(); draw(); },
-  detectNotes: () => { const rect = stage.getBoundingClientRect(); openDetectPanel(rect.left + 40, rect.top + 40); },
-  findSimilar: () => S.selection.size ? withSelection(runFindSimilar) : runFindSimilar(),
-  groupReference: () => withSelection(notes => refMenuEntry(notes)?.fn()),
-  detachReference: () => withSelection(detachSelection),
-  markMotif: () => withSelection(markSelectionAsMotif), selectMotif: () => withSelection(selectEntireMotif),
-  unmarkMotif: () => withSelection(unmarkSelectedMotifs),
-  markArpeggio: () => withSelection(() => markSelectionAsShape('arpeggio')),
-  markHandshape: () => withSelection(() => markSelectionAsShape('handshape')),
-  unmarkShape: () => withSelection(() => unmarkSelectedShapes()),
-  fretboardShape: () => click('fretboardShape'), applyFretboardShape: () => click('fretboardApply'),
-  autoFretboard: () => click('fretboardAuto'),
-  ...Object.fromEntries(['palmMute', 'hammer', 'vibrato', 'dead', 'accent', 'letRing'].map(key =>
-    [key, () => withSelection(notes => setFxOnSelection(key, !notes.every(note => fxOn(note, key))))])),
-  previousLayer: () => stepLayer(-1), nextLayer: () => stepLayer(1), addLayer: () => click('addLane'),
-  layerSettings: () => layerControl('.edit-btn'), layerVisible: () => layerControl('.vis-btn'),
-  layerLock: () => layerControl('.lock-btn'),
-  tablature: () => click('menuPreviewTab'), editorSettings: () => openSettingsModal('trace'),
-  projectDetails: () => openSettingsModal('project'), tunings: () => openSettingsModal('tunings'),
-  toneDesigner: () => openSettingsModal('sounds'), keyboardSettings: () => openSettingsModal('keys'),
-  projectLibrary: () => click('openProjMenu'), closeProject: () => click('closeProj'),
-  importGuitarPro: () => click('importGp'), attachAudio: () => click('attachAudio'),
-  exportGuitarPro: () => click('menuExportModernGp'), exportLegacyGuitarPro: () => click('menuExportTab'),
-  exportRocksmith: () => click('menuExportRocksmith'),
-};
+export function createEditorShortcutRunner({ markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection }) {
+  const handlers = {
+    sidebar: () => click('sidebarToggle'), artifacts: () => click('artifactsToggle'),
+    zoomIn: () => click('zoomIn'), zoomOut: () => click('zoomOut'),
+    drawingSnap: toggleDrawingSnap, drawingSettings: toggleDrawingSettings,
+    slower: () => speed(-1), faster: () => speed(1),
+    normalSpeed: () => { $('speed').value = '1'; $('speed').dispatchEvent(new Event('change', { bubbles: true })); },
+    metronome: () => click('metro'),
+    songStart: () => goTo(0), songEnd: () => goTo(songEnd(S.state)),
+    rangeStart: () => goTo(S.detectRegion?.t0),
+    clearRange: () => { S.detectRegion = null; updateDetectStatus(); draw(); },
+    detectNotes: () => { const rect = stage.getBoundingClientRect(); openDetectPanel(rect.left + 40, rect.top + 40); },
+    findSimilar: () => S.selection.size ? withSelection(runFindSimilar) : runFindSimilar(),
+    groupReference: () => withSelection(notes => refMenuEntry(notes)?.fn()),
+    detachReference: () => withSelection(detachSelection),
+    markMotif: () => withSelection(markSelectionAsMotif), selectMotif: () => withSelection(selectEntireMotif),
+    unmarkMotif: () => withSelection(unmarkSelectedMotifs),
+    markArpeggio: () => withSelection(() => markSelectionAsShape('arpeggio')),
+    markHandshape: () => withSelection(() => markSelectionAsShape('handshape')),
+    unmarkShape: () => withSelection(() => unmarkSelectedShapes()),
+    fretboardShape: () => click('fretboardShape'), applyFretboardShape: () => click('fretboardApply'),
+    autoFretboard: () => click('fretboardAuto'),
+    ...Object.fromEntries(['palmMute', 'hammer', 'vibrato', 'dead', 'accent', 'letRing'].map(key =>
+      [key, () => withSelection(notes => setFxOnSelection(key, !notes.every(note => fxOn(note, key))))])),
+    previousLayer: () => stepLayer(-1), nextLayer: () => stepLayer(1), addLayer: () => click('addLane'),
+    layerSettings: () => layerControl('.edit-btn'), layerVisible: () => layerControl('.vis-btn'),
+    layerLock: () => layerControl('.lock-btn'),
+    tablature: () => click('menuPreviewTab'), editorSettings: () => openSettingsModal('trace'),
+    projectDetails: () => openSettingsModal('project'), tunings: () => openSettingsModal('tunings'),
+    toneDesigner: () => openSettingsModal('sounds'), keyboardSettings: () => openSettingsModal('keys'),
+    projectLibrary: () => click('openProjMenu'), closeProject: () => click('closeProj'),
+    importGuitarPro: () => click('importGp'), attachAudio: () => click('attachAudio'),
+    exportGuitarPro: () => click('menuExportModernGp'), exportLegacyGuitarPro: () => click('menuExportTab'),
+    exportRocksmith: () => click('menuExportRocksmith'),
+  };
 
-export function runEditorShortcut(event) {
-  if (!S.state || S.drag) return false;
-  const command = KEY_COMMANDS.find(command => EDITOR_COMMAND_HANDLERS[command.id] && matchKey(event, command.id));
-  if (!command) return false;
-  EDITOR_COMMAND_HANDLERS[command.id]();
-  return true;
+  return function runEditorShortcut(event) {
+    if (!S.state || S.drag) return false;
+    const command = KEY_COMMANDS.find(command => handlers[command.id] && matchKey(event, command.id));
+    if (!command) return false;
+    handlers[command.id]();
+    return true;
+  };
 }

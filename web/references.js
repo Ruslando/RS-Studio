@@ -6,7 +6,7 @@ import { scroll, sctx } from "./dom.js";
 import { confirmChoice } from "./dialog.js";
 import { draw } from "./repaint.js";
 import { stageIcon } from "./icons.js";
-import { commit, commitStructure, snapshotEdit } from "./edit.js";
+import { commit, commitStructure, snapshotEdit } from "./edit-history.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
 import { gridAt, minDur, segStep, snap } from "./grid.js";
 import { nid } from "./ids.js";

@@ -1,3 +1,4 @@
+import { renderCoverPreview } from "./cover-preview.js";
 import { closeMenus, wireMenuAnchors } from "./menus.js";
 export { wireMenuAnchors } from "./menus.js";
 import { panelControls, syncPanelControls } from "./canvas-controls.js";
@@ -12,7 +13,8 @@ import { draw } from "./repaint.js";
 import { refreshEditorPreviews } from "./editor-previews.js";
 import { initCollapsibleSections } from './collapsible-sections.js';
 import { setTimelineScrollPreviewVisible } from "./timeline-scroll-preview.js";
-import { doCopy, doCut, doDelete, doPaste, redo, undo, updateUndoButtons } from "./edit.js";
+import { redo, undo, updateUndoButtons } from "./edit-history.js";
+import { doCopy, doCut, doDelete, doPaste } from "./edit.js";
 import { resetZoom, zoomCenter } from "./geometry.js";
 import { FIXED_SHORTCUTS, KEY_COMMANDS, conflictOf, eventKey, keyOf, keySnapshot, resetKeys, restoreKeys, setKey, shortcutTitle } from "./keymap.js";
 import { renderLayerSettings } from "./lanes.js";
@@ -253,16 +255,10 @@ function setProjectMetaStatus(msg, error = false) {
 }
 
 function renderProjectCover(meta) {
-  const thumb = $("projCoverThumb"), title = $("projCoverTitle"), sub = $("projCoverSub"), clear = $("projCoverClear");
-  const has = !!meta.coverArtUrl;
-  thumb.classList.toggle("has-cover", has);
-  thumb.replaceChildren();
-  // .src takes a URL, so an image whose name or address contains quotes or
-  // angle brackets can't close the attribute and inject markup.
-  if (has) { const img = document.createElement("img"); img.src = meta.coverArtUrl; img.alt = ""; thumb.append(img); }
-  title.textContent = has ? (meta.coverArtName || "Cover art") : "Choose image";
-  sub.textContent = "";   // rule 24: optional is silent; the title carries the name
-  clear.hidden = !has;
+  renderCoverPreview(meta, {
+    thumb: $("projCoverThumb"), title: $("projCoverTitle"),
+    sub: $("projCoverSub"), clear: $("projCoverClear"),
+  });
 }
 
 // Concert pitch: cents from A440 <-> the A4 frequency the field shows.

@@ -8,7 +8,7 @@ import { placeFloating } from "./floating-position.js";
 import { stageUi } from "./constants.js";
 import { crowdEventCode, crowdEventDelete, crowdEventPop, crowdEventPopClose, crowdEventTime, mmctx as minimapCtx, scroll, sctx, stage } from "./dom.js";
 import { draw } from "./repaint.js";
-import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
+import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js";
 import { timeAt, xOf } from "./geometry.js";
 import { snap } from "./grid.js";
 import { inRailBand, railBand, registerLaneField, registerMarkerRail } from "./marker-rails.js";

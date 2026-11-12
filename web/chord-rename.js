@@ -2,7 +2,7 @@
 // menu. The field offers the engine's readings (a native datalist) and takes any
 // text. One undoable step; an empty name returns to the engine's.
 import { setChordName } from "./chord-names.js";
-import { commit, snapshotEdit } from "./edit.js";
+import { commit, snapshotEdit } from "./edit-history.js";
 import { refreshSaveState } from "./project.js";
 import { draw } from "./repaint.js";
 

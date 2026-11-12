@@ -1,0 +1,16 @@
+{
+  "entry": [
+    "web/index.html",
+    "web/main.js",
+    "tests/web/**/*.mjs",
+    "tools/gp-audit/*.mjs"
+  ],
+  "ignorePatterns": [
+    ".local-tools/**",
+    ".venv/**",
+    ".webview/**",
+    "web/vendor/**",
+    "dist/**",
+    "build/**"
+  ]
+}

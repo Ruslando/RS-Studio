@@ -30,7 +30,6 @@ export const MIN_DUR = 0.05;
 export const MIN_REGION = 0.05;     // s; an Alt-drag narrower than this just clears the detect frame
 export const REGION_GRAB = 6;       // px; how close to a frame edge counts as grabbing its resize handle
 export const REGION_HANDLE_H = 44;  // px; visible drag-handle height centered on each frame edge
-export const DRAG_THRESH = 4;
 export const LOOKAHEAD = 0.12;      // s of note scheduling lookahead
 export const TRACE_POINT_GAP = 3;   // px between stored guide points while tracing
 export const TRACE_FALLBACK_STEP = 0.25;
@@ -72,8 +71,8 @@ export const DEFAULT_LAYER_VOLUME = 1;   // per-layer synth playback gain, norma
 // note set covers the whole range. Every factory returns an instrument already
 // wired to the destination and exposing the Tone voice API (triggerAttackRelease
 // / releaseAll / dispose), so the scheduler is untouched.
-export const SAMPLE_BASE = "vendor/samples/";
-export const _SAMPLES = {
+const SAMPLE_BASE = "vendor/samples/";
+const _SAMPLES = {
   "guitar-electric": ["Ds3","Ds4","Ds5","E2","Fs2","Fs3","Fs4","Fs5","A2","A3","A4","A5","C3","C4","C5","C6","Cs2"],
   "guitar-acoustic": ["F4","Fs2","Fs3","Fs4","G2","G3","G4","Gs2","Gs3","Gs4","A2","A3","A4","As2","As3","As4","B2","B3","B4","C3","C4","C5","Cs3","Cs4","Cs5","D2","D3","D4","D5","Ds2","Ds3","E2","E3","E4","F2","F3"],
   "bass-electric":   ["As1","As2","As3","As4","Cs1","Cs2","Cs3","Cs4","E1","E2","E3","E4","G1","G2","G3","G4"],
@@ -126,7 +125,7 @@ export const DEFAULT_INSTRUMENT = "electric";
 // The tone is everything about the sound: the in-editor playback voice (make) and
 // the exported Guitar Pro program (gm = General MIDI).
 // ponytail: no instrument names distortion for now; it stays here for when one does.
-export const TONES = {
+const TONES = {
   electric:   { label: "Electric",   make: () => makeSampler("guitar-electric"), gm: 27 },
   distortion: { label: "Distortion", make: makeDistortionGuitar,                 gm: 30 },
   acoustic:   { label: "Acoustic",   make: () => makeSampler("guitar-acoustic"), gm: 25 },

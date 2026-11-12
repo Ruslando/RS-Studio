@@ -33,7 +33,7 @@ export function beatClock(segs) {
 // Every bar start in the song, ascending. Each segment tiles its own bars forward
 // until the next segment begins, which is the tempo map's own rule: a marker starts
 // a new bar at its own tempo and meter.
-export function barStartsFrom(segments, duration) {
+function barStartsFrom(segments, duration) {
   const segs = (segments || []).filter((seg) => Number.isFinite(+seg?.t));
   const end = Math.max(0, Number(duration) || 0);
   const starts = [];

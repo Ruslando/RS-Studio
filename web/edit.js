@@ -1,3 +1,4 @@
+import { configureEditHistory, snapshotEdit, commit, commitStructure, undo, redo, updateUndoButtons } from "./edit-history.js";
 import { applySharedPositionPlan, mapPositionShape, positionSelection, resetSharedPositions, sharedPositionPlan } from "./position-selection.js";
 import { isTablatureLane } from "./layer-role.js";
 // Note editing: undo/redo across all edit lanes, clipboard (incl. paste-as-reference),
@@ -45,52 +46,47 @@ import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previe
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { modalOpen } from "./modal-focus.js";
 import { matchKey } from "./keymap.js";
-import { runEditorShortcut } from "./editor-shortcuts.js";
+import { createEditorShortcutRunner } from "./editor-shortcuts.js";
 import { navigateMarker } from "./marker-artifacts.js";
 import { clearMarkerSelection, copyMarkers, cutMarkers, deleteMarkers, forgetMarkerClip, hasMarkerClip, hasMarkerSelection, pasteMarkers } from "./marker-clipboard.js";
 import { normLayerVolume } from "./util.js";
 import { slideFingerGroup, chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
 
-// ---- undo / redo (all edit lanes) ----
-export const MAX_UNDO = 200;
+// Preserve the editor API for existing integrations. Features use edit-history directly.
+export { MAX_UNDO, STATE_RESTORED, snapshotEdit, commit, commitStructure, commitDiagnostics, restoreEditSnapshot, undo, redo, updateUndoButtons } from "./edit-history.js";
 
-// The song's structure — tempo/meter markers, section markers, the bar list —
-// travels in every snapshot alongside the notes. It has to: bar insert and
-// removal retime notes, so restoring notes without restoring the bars they were
-// timed against silently desyncs the two, and that would be true of *every*
-// undo, not just an undo of a structure edit.
-//
-// `duration` is in here because a bar change rewrites it for score-only
-// projects (score-structure.js), which is also why it is restored conditionally
-// below — an audio project's duration comes from the file and must not move.
-const cloneJson = (value) => (value == null ? value : JSON.parse(JSON.stringify(value)));
+configureEditHistory({
+  get S() { return S; },
+  activeLane: (...args) => activeLane(...args),
+  editLanes: (...args) => editLanes(...args),
+  currentGridState: (...args) => currentGridState(...args),
+  gridOffset: (...args) => gridOffset(...args),
+  timingSnapshot: (...args) => timingSnapshot(...args),
+  lockedReferenceSnapshot: (...args) => lockedReferenceSnapshot(...args),
+  normLayerVolume: (...args) => normLayerVolume(...args),
+  lockedReferenceFault: (...args) => lockedReferenceFault(...args),
+  reconcileReferences: (...args) => reconcileReferences(...args),
+  animateNoteChanges: (...args) => animateNoteChanges(...args),
+  eachTiming: (...args) => eachTiming(...args),
+  snapStrayNotes: (...args) => snapStrayNotes(...args),
+  refreshSaveState: (...args) => refreshSaveState(...args),
+  draw: (...args) => draw(...args),
+  toast: (...args) => toast(...args),
+  clearNoteMotion: (...args) => clearNoteMotion(...args),
+  restoreTimingSnapshot: (...args) => restoreTimingSnapshot(...args),
+  restoreGridState: (...args) => restoreGridState(...args),
+  get offsetInput() { return offsetInput; },
+  selectStem: (...args) => selectStem(...args),
+  applyLaneVolume: (...args) => applyLaneVolume(...args),
+  releaseLaneSynth: (...args) => releaseLaneSynth(...args),
+  refreshCounts: (...args) => refreshCounts(...args),
+  renderLanes: (...args) => renderLanes(...args),
+  refreshTabIfOpen: (...args) => refreshTabIfOpen(...args),
+  clearMatches: (...args) => clearMatches(...args),
+  get undoMI() { return undoMI; },
+  get redoMI() { return redoMI; },
+});
 
-function structureSnapshot() {
-  if (!S.state) return null;
-  return {
-    tempoMap: cloneJson(S.state.tempoMap),
-    scoreBars: cloneJson(S.state.scoreBars),
-    sectionMarkers: cloneJson(S.state.sectionMarkers),
-    comments: cloneJson(S.state.comments || []),
-    scoreDuration: S.state.scoreDuration,
-    duration: S.state.duration,
-    projectStart: S.state.projectStart,
-  };
-}
-
-// Undo replaced the objects the marker popovers and the score-structure rows
-// are holding references into, so they have to let go and re-read. A window
-// event rather than direct calls: those three modules already import from here
-// for their undo brackets, and calling back into them would close the loop.
-export const STATE_RESTORED = "cw-state-restored";
-
-// Snapshot both the notes and the reference boxes of every edit lane, so a mirror
-// (or a box resize) undoes atomically with the edit that triggered it. The stack
-// is global (one edit can span lanes — e.g. moving a selection that straddles two
-// lanes), so a snapshot also captures the editor CONTEXT (which lane is active,
-// each lane's show/hide, mute, and tablature role, plus the stem backdrop). Restoring that context is
-// what keeps undo from appearing to apply another lane's change to the lane you're
-// currently looking at.
 // Ctrl+↑/↓: the selection jumps an octave, as a whole or not at all.
 function shiftSelectionOctave(delta) {
   const lane = activeLane();
@@ -103,182 +99,6 @@ function shiftSelectionOctave(delta) {
   commit(prev);
   previewNotes(notes, lane);
   draw();
-}
-
-export function snapshotEdit() {
-  const a = activeLane();
-  const snap = {
-    ignoredDiagnostics: cloneJson(S.state?.metadata?.rocksmith || {}),
-    lockedReferences: lockedReferenceSnapshot(),
-    lanes: {}, boxes: {}, repeats: {}, ui: {}, holds: {}, capo: {}, marks: {},
-    active: a ? a.id : null,
-    stem: S.state ? S.state.curStem : null,
-    grid: currentGridState(),
-    offset: gridOffset(),   // so undoing an offset-driven note shift also rolls the offset back (no-op for every other edit)
-    structure: structureSnapshot(),
-    timing: S.state ? timingSnapshot() : null,   // which layer follows which timing, and the timings not live
-  };
-  for (const l of editLanes()) {
-    snap.lanes[l.id] = snap.lockedReferences.some(r => r.lane === l.id)
-      ? cloneJson(l.notes) : l.notes.map((n) => ({ ...n }));
-    snap.boxes[l.id] = l.refBoxes ? JSON.parse(JSON.stringify(l.refBoxes)) : {};
-    snap.repeats[l.id] = cloneJson(l.repeatGroups || []);
-    // Where the hand was put. Not a note field, so nothing above captures it, and a
-    // hold that undo cannot reach is an edit with no way back.
-    snap.holds[l.id] = (l.handHolds || []).map((h) => ({ ...h }));
-    // The capo too: moving it rewrites every fret, and those frets are undone above.
-    snap.capo[l.id] = Number(l.capo) || 0;
-    // Tone and phrase markers: a tempo change re-times them along with the notes.
-    snap.marks[l.id] = { tone: cloneJson(l.toneMarkers), phrase: cloneJson(l.phraseBoundaries), crowd: cloneJson(l.crowdEvents || []) };
-    snap.ui[l.id] = { visible: l.visible, muted: l.muted, locked: l.locked,
-      tablatureEnabled: l.tablatureEnabled !== false, volume: normLayerVolume(l.volume) };
-  }
-  return snap;
-}
-
-// `mirrorSource` is optional and is NOT a flag despite reading like one: it is
-// `{ ref, i }` naming the reference box the user actually dragged, so
-// reconcileReferences mirrors from that one instead of guessing which box
-// changed. Only the refBox drag passes it (interaction.js).
-export function commit(prev, mirrorSource, cuts = null, { preserveTiming = false } = {}) {
-  if (rejectLockedEdit(prev)) return false;
-  reconcileReferences(prev, mirrorSource);
-  animateNoteChanges(prev, S.state, cuts);
-  recordUndo(prev, null, preserveTiming);
-}
-
-// For edits that retime everything at once — inserting or removing a bar, moving
-// a tempo marker. reconcileReferences works by finding the one reference box
-// whose contents changed and mirroring it onto the others; when *every* box
-// changes it picks the first arbitrarily and overwrites the rest with it. A
-// structure edit never changes what is inside a reference, only when it happens,
-// so it records undo and skips that pass.
-export function commitStructure(prev, { translation = null, preserveTiming = false } = {}) {
-  recordUndo(prev, translation, preserveTiming);
-}
-
-function rejectLockedEdit(prev, translation = 0) {
-  const ref = lockedReferenceFault(prev.lockedReferences, translation);
-  if (ref == null) return false;
-  restore(prev);
-  toast(`Reference #${ref} is locked. Unlock it before editing.`, 2500);
-  return true;
-}
-
-export function commitDiagnostics(prev) {
-  recordUndo(prev, null, true, false);
-}
-
-function recordUndo(prev, translation = null, preserveTiming = false, invalidateVoicing = true) {
-  if (rejectLockedEdit(prev, translation || 0)) return;
-  // A whole-project translation preserves imported/off-grid rhythm exactly.
-  // Its locked references may move, but their shapes and contents must match.
-  if (S.state && translation == null && !preserveTiming)
-    eachTiming(editLanes(), lanes => snapStrayNotes(lanes, prev.lanes));
-  if (rejectLockedEdit(prev, translation || 0)) return;
-  if (invalidateVoicing) S.voicingRevision++;
-  S.undoStack.push(prev);
-  if (S.undoStack.length > MAX_UNDO) S.undoStack.shift();
-  S.redoStack = [];
-  updateUndoButtons();
-  refreshSaveState();   // an edit landed — reflect unsaved state in the project tab
-  draw();              // editor and artifact references render the same committed state
-}
-
-function restore(snap) {
-  if (S.state && snap.ignoredDiagnostics) {
-    const rs = (S.state.metadata ||= {}).rocksmith ||= {};
-    for (const key of ['ignoredIssues', 'ignoredInstances', 'restoredInstances']) {
-      if (snap.ignoredDiagnostics[key]) rs[key] = [...snap.ignoredDiagnostics[key]];
-      else delete rs[key];
-    }
-  }
-  clearNoteMotion();
-  // Structure first: the grid readout and every note position below are drawn
-  // against it, so putting the bars back after the notes would paint one frame
-  // of the two disagreeing.
-  if (S.state) restoreTimingSnapshot(snap.timing);   // first: the fields below are its live timing
-  if (snap.structure && S.state) {
-    S.state.tempoMap = cloneJson(snap.structure.tempoMap);
-    S.state.scoreBars = cloneJson(snap.structure.scoreBars);
-    S.state.sectionMarkers = cloneJson(snap.structure.sectionMarkers);
-    if (snap.structure.comments) S.state.comments = cloneJson(snap.structure.comments);
-    S.state.scoreDuration = snap.structure.scoreDuration;
-    S.state.projectStart = snap.structure.projectStart;
-    if (snap.structure.duration != null) S.state.duration = snap.structure.duration;
-  }
-  // The grid before the stem: switching stems rebuilds the lanes, which may swap
-  // timings, and that must not catch the live timing half restored.
-  if (snap.grid) restoreGridState(snap.grid);
-  else if (snap.offset != null) {
-    offsetInput.value = (+snap.offset).toFixed(3);
-    S.appliedOffset = +snap.offset;
-    S.appliedGrid = currentGridState();
-  }
-  // Bring back the stem the edit was made under so the backdrop matches what you
-  // edited (edit lanes show across every stem, so this is just the spectrogram).
-  if (snap.stem && S.state.curStem !== snap.stem && S.state.stems.some((s) => s.id === snap.stem))
-    selectStem(snap.stem);
-  for (const l of editLanes()) {
-    if (snap.lanes && snap.lanes[l.id]) l.notes = snap.lanes[l.id].map((n) => ({ ...n }));
-    if (snap.boxes) l.refBoxes = JSON.parse(JSON.stringify(snap.boxes[l.id] || {}));
-    if (snap.repeats) l.repeatGroups = cloneJson(snap.repeats[l.id] || []);
-    if (snap.holds) l.handHolds = (snap.holds[l.id] || []).map((h) => ({ ...h }));
-    if (snap.capo && snap.capo[l.id] != null) l.capo = snap.capo[l.id];
-    if (snap.marks && snap.marks[l.id]) {
-      l.toneMarkers = cloneJson(snap.marks[l.id].tone);
-      l.phraseBoundaries = cloneJson(snap.marks[l.id].phrase);
-      l.crowdEvents = cloneJson(snap.marks[l.id].crowd || []);
-    }
-    const ui = snap.ui && snap.ui[l.id];
-    if (ui) {
-      l.visible = ui.visible; l.muted = ui.muted;
-      if (ui.locked != null) l.locked = ui.locked;
-      if (ui.tablatureEnabled != null) l.tablatureEnabled = ui.tablatureEnabled;
-      if (ui.volume != null) { l.volume = normLayerVolume(ui.volume); applyLaneVolume(l); }
-      if (l.muted) releaseLaneSynth(l);
-    }
-  }
-  // Re-focus the lane the edit happened on, so the reverted change is shown where
-  // it landed rather than silently mutating a lane you've since switched away from.
-  if (snap.active && S.state.lanes.some((l) => l.id === snap.active))
-    S.state.lanes.forEach((l) => (l.active = l.id === snap.active));
-  S.selection = new Set();
-  S.voicingRevision++;
-  window.dispatchEvent(new CustomEvent(STATE_RESTORED));   // and so were the markers' — see above
-  refreshCounts(); renderLanes(); draw(); refreshTabIfOpen();
-}
-
-// Walkthrough Back restores a specific step boundary, rather than consuming the
-// most recent undo entry (which may belong to another step).
-export function restoreEditSnapshot(snap) {
-  clearMatches();
-  restore(snap);
-  updateUndoButtons();
-  refreshSaveState();
-}
-
-export function undo() {
-  if (!S.undoStack.length) return;
-  clearMatches();
-  S.redoStack.push(snapshotEdit());
-  restore(S.undoStack.pop());
-  updateUndoButtons();
-  refreshSaveState();
-}
-
-export function redo() {
-  if (!S.redoStack.length) return;
-  clearMatches();
-  S.undoStack.push(snapshotEdit());
-  restore(S.redoStack.pop());
-  updateUndoButtons();
-  refreshSaveState();
-}
-
-export function updateUndoButtons() {
-  if (undoMI) undoMI.disabled = !S.undoStack.length;
-  if (redoMI) redoMI.disabled = !S.redoStack.length;
 }
 
 // Slice an arbitrary set of note/time intersections in one undoable change. A
@@ -1898,7 +1718,98 @@ function markWalkthroughMenu(menu) {
   if (search) search.disabled = action !== "noteEffects";
 }
 
+// Keyboard routing keeps project commands, focus rules and note navigation
+// in their existing priority order. Each handler owns one set of actions.
+function handleProjectShortcut(e, mod) {
+  if (mod && (e.key === "s" || e.key === "S")) {
+    e.preventDefault();
+    if (S.state) saveProject({ saveAs: e.shiftKey });
+    return true;
+  }
+  if (mod && (e.key === "n" || e.key === "N")) { e.preventDefault(); openNewProject(); return true; }
+  if (mod && (e.key === "o" || e.key === "O")) { e.preventDefault(); openProject(); return true; }
+  return false;
+}
+
+function handleNavigationShortcut(e, mod, runEditorShortcut) {
+  if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && !e.target.isContentEditable && !modalOpen()) {
+    if (mod && !e.altKey && !e.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault(); navigateMarker(e.key === 'ArrowLeft' ? -1 : 1); return true;
+    }
+    if (mod && !e.altKey && !e.shiftKey && ['ArrowUp', 'ArrowDown'].includes(e.key)) {
+      e.preventDefault(); shiftSelectionOctave(e.key === 'ArrowUp' ? 12 : -12); return true;
+    }
+    if (runEditorShortcut(e)) { e.preventDefault(); return true; }
+  }
+  return false;
+}
+
+function handleNoteNavigation(e, mod) {
+  if (e.key === "Escape" && S.matches.length) { e.preventDefault(); clearMatches(); draw(); return true; }
+  if (!mod && S.matches.length && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    e.preventDefault(); focusAdjacentMatch(e.key === "ArrowRight" ? 1 : -1, { preview: true }); return true;
+  }
+  // ← → walk the song a chord at a time, from the playhead, and ↑ ↓ pick between
+  // the columns sounding at once where a held note and a moving line are not one
+  // chord. Both used to belong to the tab preview, which made reading a piece a
+  // property of a window being open — they are the app's, and the fretboard and
+  // the spectrogram follow the selection they move. After the match arrows, which
+  // are a mode with its own reading of the same keys.
+  if (!mod && !e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    e.preventDefault(); stepColumnFocus(e.key === "ArrowRight" ? 1 : -1); return true;
+  }
+  if (!mod && !e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    e.preventDefault(); stepVoiceFocus(e.key === "ArrowUp" ? 1 : -1); return true;
+  }
+  if (!mod && !e.altKey && S.matches.length && (e.key === "p" || e.key === "P")) { e.preventDefault(); previewFocusedMatch(); return true; }
+  if (!mod && S.matches.length && e.key === "Enter") {
+    e.preventDefault();
+    acceptMatch(S.matchFocus >= 0 ? S.matchFocus : 0, e.shiftKey ? "reference" : "copy");
+    return true;
+  }
+  if (!mod && !e.altKey && (e.key === "a" || e.key === "A") && S.matches.length) { e.preventDefault(); acceptAllMatches(e.shiftKey ? "reference" : "copy"); return true; }
+  return false;
+}
+
+function handleEditShortcut(e, mod) {
+  if (mod && (e.key === "z" || e.key === "Z")) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
+  else if (mod && !e.altKey && !e.shiftKey && (e.key === "a" || e.key === "A")) {
+    e.preventDefault();
+    const lane = activeLane();
+    if (lane && canEditLane(lane)) { setSelection(new Set(lane.notes)); draw(); }
+  }
+  else if (mod && (e.key === "c" || e.key === "C")) { e.preventDefault(); doCopy(); }
+  else if (mod && (e.key === "x" || e.key === "X")) { e.preventDefault(); doCut(); }
+  else if (mod && (e.key === "v" || e.key === "V")) { e.preventDefault(); doPaste({ mode: e.shiftKey ? "reference" : undefined }); }
+  else if (matchKey(e, "delete")) {
+    e.preventDefault();
+    // Over a layer row it deletes that layer, through the same confirmation as its button.
+    const laneRow = document.querySelector("#lanes .lane-row:hover");
+    const stemRow = document.querySelector("#stemTabs .stem-row:hover");
+    const lane = laneRow && editLanes().find((l) => String(l.id) === laneRow.dataset.lane);
+    const stem = stemRow && S.state.stems.find((s) => String(s.id) === stemRow.dataset.stem);
+    if (lane) confirmRemoveLane(lane);
+    else if (stem) { if (!isMasterStem(stem)) confirmStemRemoval(stem); }
+    else doDelete({ hovered: true });
+  }
+  else if (e.key === "Escape" && clearMarkerSelection()) e.preventDefault();
+  else if (e.key === "Escape" && (S.selection.size || S.detectRegion)) {
+    if (S.selection.size) setSelection(new Set());            // clear the selection
+    if (S.detectRegion) { S.detectRegion = null; updateDetectStatus(); }
+    draw();
+  }
+  else if (matchKey(e, "muteLayer")) { e.preventDefault(); e.shiftKey ? toggleStemMute() : muteActiveLane(); }
+  // The two panels, through their own menu items rather than their modules: the
+  // View menu already owns the toggle, the check and the label, and pressing the
+  // item is the one path that cannot end up disagreeing with them. It also keeps
+  // the fretboard out of this file's imports, which it imports from already.
+  else if (matchKey(e, "fretboard")) { e.preventDefault(); $("menuFretboard").click(); }
+  else if (matchKey(e, "markerLanes")) { e.preventDefault(); $("menuMarkerLanes").click(); }
+}
+
 export function init_edit() {
+  const runEditorShortcut = createEditorShortcutRunner({ markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection });
   registerEscapeLayer(ESC_DEPTH.popover, () => {
     if (!noteMenuEl || noteMenuEl.hidden) return false;
     hideNoteMenu(); return true;
@@ -1934,24 +1845,10 @@ export function init_edit() {
     // No Tab walk through the editor's controls; Tab alone still opens the note menu below.
     // Popovers (role=dialog) keep Tab, so a typed value is applied when leaving its field.
     if (e.key === "Tab" && !modalOpen() && !e.target.closest?.('[role="dialog"]')) e.preventDefault();
-    if (mod && (e.key === "s" || e.key === "S")) {
-      e.preventDefault();
-      if (S.state) saveProject({ saveAs: e.shiftKey });
-      return;
-    }
-    if (mod && (e.key === "n" || e.key === "N")) { e.preventDefault(); openNewProject(); return; }
-    if (mod && (e.key === "o" || e.key === "O")) { e.preventDefault(); openProject(); return; }
+    if (handleProjectShortcut(e, mod)) return;
     // Overlays register themselves; see escape-stack.js for the depth order.
     if (e.key === "Escape" && closeTopmost()) { e.preventDefault(); return; }
-    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && !e.target.isContentEditable && !modalOpen()) {
-      if (mod && !e.altKey && !e.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
-        e.preventDefault(); navigateMarker(e.key === 'ArrowLeft' ? -1 : 1); return;
-      }
-      if (mod && !e.altKey && !e.shiftKey && ['ArrowUp', 'ArrowDown'].includes(e.key)) {
-        e.preventDefault(); shiftSelectionOctave(e.key === 'ArrowUp' ? 12 : -12); return;
-      }
-      if (runEditorShortcut(e)) { e.preventDefault(); return; }
-    }
+    if (handleNavigationShortcut(e, mod, runEditorShortcut)) return;
     // A button has no undo of its own, and one keeps the focus after every menu
     // command — so undo/redo reach the editor from there; text fields keep theirs.
     if (mod && !e.altKey && e.target.tagName === "BUTTON" && ["z", "y"].includes(e.key.toLowerCase())) {
@@ -1966,63 +1863,8 @@ export function init_edit() {
     }
     if (matchKey(e, "resetZoom")) { e.preventDefault(); resetZoom(); return; }
     // Similar-passage search: F finds; arrows jump+preview; Enter places focus.
-    if (e.key === "Escape" && S.matches.length) { e.preventDefault(); clearMatches(); draw(); return; }
-    if (!mod && S.matches.length && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-      e.preventDefault(); focusAdjacentMatch(e.key === "ArrowRight" ? 1 : -1, { preview: true }); return;
-    }
-    // ← → walk the song a chord at a time, from the playhead, and ↑ ↓ pick between
-    // the columns sounding at once where a held note and a moving line are not one
-    // chord. Both used to belong to the tab preview, which made reading a piece a
-    // property of a window being open — they are the app's, and the fretboard and
-    // the spectrogram follow the selection they move. After the match arrows, which
-    // are a mode with its own reading of the same keys.
-    if (!mod && !e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-      e.preventDefault(); stepColumnFocus(e.key === "ArrowRight" ? 1 : -1); return;
-    }
-    if (!mod && !e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-      e.preventDefault(); stepVoiceFocus(e.key === "ArrowUp" ? 1 : -1); return;
-    }
-    if (!mod && !e.altKey && S.matches.length && (e.key === "p" || e.key === "P")) { e.preventDefault(); previewFocusedMatch(); return; }
-    if (!mod && S.matches.length && e.key === "Enter") {
-      e.preventDefault();
-      acceptMatch(S.matchFocus >= 0 ? S.matchFocus : 0, e.shiftKey ? "reference" : "copy");
-      return;
-    }
-    if (!mod && !e.altKey && (e.key === "a" || e.key === "A") && S.matches.length) { e.preventDefault(); acceptAllMatches(e.shiftKey ? "reference" : "copy"); return; }
-    if (mod && (e.key === "z" || e.key === "Z")) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-    else if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
-    else if (mod && !e.altKey && !e.shiftKey && (e.key === "a" || e.key === "A")) {
-      e.preventDefault();
-      const lane = activeLane();
-      if (lane && canEditLane(lane)) { setSelection(new Set(lane.notes)); draw(); }
-    }
-    else if (mod && (e.key === "c" || e.key === "C")) { e.preventDefault(); doCopy(); }
-    else if (mod && (e.key === "x" || e.key === "X")) { e.preventDefault(); doCut(); }
-    else if (mod && (e.key === "v" || e.key === "V")) { e.preventDefault(); doPaste({ mode: e.shiftKey ? "reference" : undefined }); }
-    else if (matchKey(e, "delete")) {
-      e.preventDefault();
-      // Over a layer row it deletes that layer, through the same confirmation as its button.
-      const laneRow = document.querySelector("#lanes .lane-row:hover");
-      const stemRow = document.querySelector("#stemTabs .stem-row:hover");
-      const lane = laneRow && editLanes().find((l) => String(l.id) === laneRow.dataset.lane);
-      const stem = stemRow && S.state.stems.find((s) => String(s.id) === stemRow.dataset.stem);
-      if (lane) confirmRemoveLane(lane);
-      else if (stem) { if (!isMasterStem(stem)) confirmStemRemoval(stem); }
-      else doDelete({ hovered: true });
-    }
-    else if (e.key === "Escape" && clearMarkerSelection()) e.preventDefault();
-    else if (e.key === "Escape" && (S.selection.size || S.detectRegion)) {
-      if (S.selection.size) setSelection(new Set());            // clear the selection
-      if (S.detectRegion) { S.detectRegion = null; updateDetectStatus(); }
-      draw();
-    }
-    else if (matchKey(e, "muteLayer")) { e.preventDefault(); e.shiftKey ? toggleStemMute() : muteActiveLane(); }
-    // The two panels, through their own menu items rather than their modules: the
-    // View menu already owns the toggle, the check and the label, and pressing the
-    // item is the one path that cannot end up disagreeing with them. It also keeps
-    // the fretboard out of this file's imports, which it imports from already.
-    else if (matchKey(e, "fretboard")) { e.preventDefault(); $("menuFretboard").click(); }
-    else if (matchKey(e, "markerLanes")) { e.preventDefault(); $("menuMarkerLanes").click(); }
+    if (handleNoteNavigation(e, mod)) return;
+    handleEditShortcut(e, mod);
   });
 }
 import { placeFloating } from "./floating-position.js";

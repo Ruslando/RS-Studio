@@ -1,3 +1,4 @@
+import { configureEditHistory, commitDiagnostics } from '../../web/edit-history.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -128,14 +129,14 @@ list.renderRocksmithIssues();
 assert.equal(warningHeader.classList.contains('is-empty'), false, 'a new ignored occurrence must restore access to the header');
 
 // Acknowledgement must not run the note edit pipeline or invalidate voicing.
-const edit = readFileSync(new URL('../../web/edit.js', import.meta.url), 'utf8');
-const recordUndo = edit.match(/function recordUndo\([^]*?\n\}/)[0];
-const commitDiagnostics = edit.match(/export function commitDiagnostics\([^]*?\n\}/)[0].replace('export ', '');
 const undoState = {state: {}, voicingRevision: 7, undoStack: [], redoStack: [{}]};
 let snapping = 0;
-const commitMetadata = new Function('S', 'rejectLockedEdit', 'eachTiming', 'editLanes', 'snapStrayNotes', 'updateUndoButtons', 'refreshSaveState', 'draw', 'MAX_UNDO',
-  `${recordUndo}; ${commitDiagnostics}; return commitDiagnostics;`)(undoState, () => false, () => snapping++, noop, noop, noop, noop, noop, 100);
-commitMetadata({metadata: 'before'});
+configureEditHistory({
+  S: undoState, lockedReferenceFault: () => null,
+  eachTiming: () => snapping++, editLanes: noop, snapStrayNotes: noop,
+  refreshSaveState: noop, draw: noop, undoMI: null, redoMI: null,
+});
+commitDiagnostics({metadata: 'before'});
 assert.equal(undoState.voicingRevision, 7);
 assert.equal(snapping, 0);
 assert.equal(undoState.undoStack.length, 1);

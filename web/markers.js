@@ -8,7 +8,7 @@ import { placeFloating } from "./floating-position.js";
 import { MM_HEAD, stageMono, stageUi } from "./constants.js";
 import { bpmInput, inTourCard, markerBpm, markerDeleteBtn, markerPop, markerPopClose, markerPopTitle, markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, markerTime, markerTsDen, markerTsNum, mmctx as minimapCtx, offsetInput, scroll, sctx, stage, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
-import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit.js";
+import { STATE_RESTORED, commitStructure, snapshotEdit } from "./edit-history.js";
 import { addMarker, currentGridState, gridOffset, gridSegments, snap, removeMarker, retimeTempoSpan, setSubdiv, setSubdivControls, subdivValue, syncSubdivControls } from "./grid.js";
 import { toast } from "./notify.js";
 import { refreshTabIfOpen } from "./tablature.js";

@@ -6,7 +6,7 @@
 // Pasted tempo flags change the grid only; notes keep their times.
 
 import { draw } from "./repaint.js";
-import { commitStructure, snapshotEdit } from "./edit.js";
+import { commitStructure, snapshotEdit } from "./edit-history.js";
 import { gridOffset, restoreGridState, currentGridState, snap } from "./grid.js";
 import { markerKey, markerRails, markerSelection, setMarkerSelection } from "./marker-rails.js";
 import { tempoFlags } from "./markers.js";

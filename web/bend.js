@@ -4,7 +4,7 @@
 // tones (SNAP_SEMI), which Guitar Pro stores too. DOM-free so the math stays testable.
 
 export const SNAP_SEMI = 0.5;        // a quarter tone — the finest unit either format has
-export const MAX_SEMI = 6;           // BendPoint.MaxValue is 12 quarter-tones in GP and alphaTab
+const MAX_SEMI = 6;           // BendPoint.MaxValue is 12 quarter-tones in GP and alphaTab
 export const MAX_POINTS = 32;        // the tightest per-note cap any export target imposes
 
 // Preset id -> canonical curve. A preset is only a starting shape: the points are

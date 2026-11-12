@@ -45,7 +45,8 @@ try {
     './references.js': { boxOfNote: () => null, refLockAt: () => null, refBadgeAt: () => null, refBoxEdgeAt: () => null },
     './playback.js': { auditionNote: noop },
     './note-motion.js': { beginNoteGesture: noop, updateNoteGesture: noop, finishNoteGesture: noop },
-    './edit.js': { snapshotEdit: () => structuredClone(lane.notes), commit: (...args) => commits.push(args),
+    './edit-history.js': { snapshotEdit: () => structuredClone(lane.notes), commit: (...args) => commits.push(args) },
+    './edit.js': {
       curveOf: n => n.whammyPoints || [[0, 0], [0.5, -2], [1, 0]], setBendCurve: (n, pts) => { n.whammyPoints = pts; } },
   }, { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true, './whammy.js': true,
     './project-position-core.js': true });

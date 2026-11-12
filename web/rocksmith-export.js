@@ -1,3 +1,4 @@
+import { renderCoverPreview } from "./cover-preview.js";
 import { rowsFor } from './rocksmith-check.js';
 import { ignoredCategories, setIssueIgnored, setCategoriesIgnored, issueIgnored, exportIssueIgnores } from './issue-state.js';
 import { issueTone } from "./issue-tone.js";
@@ -117,16 +118,10 @@ function setRsStatus(msg, error = false) {
 }
 
 function renderRsCover(meta) {
-  const thumb = $("rsCoverThumb"), title = $("rsCoverTitle"), sub = $("rsCoverSub"), clear = $("rsCoverClear");
-  const has = !!meta.coverArtUrl;
-  thumb.classList.toggle("has-cover", has);
-  thumb.replaceChildren();
-  // .src takes a URL, so an image whose name or address contains quotes or
-  // angle brackets can't close the attribute and inject markup.
-  if (has) { const img = document.createElement("img"); img.src = meta.coverArtUrl; img.alt = ""; thumb.append(img); }
-  title.textContent = has ? (meta.coverArtName || "Cover art") : "Choose image";
-  sub.textContent = "";   // rule 24: optional is silent; the title carries the name
-  clear.hidden = !has;
+  renderCoverPreview(meta, {
+    thumb: $("rsCoverThumb"), title: $("rsCoverTitle"),
+    sub: $("rsCoverSub"), clear: $("rsCoverClear"),
+  });
 }
 
 // Rule 24: a warning is a triangle with its sentence in the tooltip, on a

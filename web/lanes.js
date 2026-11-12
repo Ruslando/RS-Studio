@@ -6,7 +6,7 @@ import { confirmAction } from "./dialog.js";
 import { clearArriving, lanesEl } from "./dom.js";
 import { draw } from "./repaint.js";
 import { icon } from "./icons.js";
-import { commitStructure, snapshotEdit, updateUndoButtons } from "./edit.js";
+import { commitStructure, snapshotEdit, updateUndoButtons } from "./edit-history.js";
 import { emptyLaneFields } from "./marker-rails.js";
 import { refreshSaveState } from "./project.js";
 import { S, setSelection } from "./store.js";

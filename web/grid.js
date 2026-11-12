@@ -6,7 +6,7 @@ import { MIN_DUR } from "./constants.js";
 import { bpmInput, markerBpm, offsetInput, subdivCustom, subdivCustomWrap, subdivSel, tapBtn, tapInfo, tsDenInput, tsNumInput } from "./dom.js";
 import { draw } from "./repaint.js";
 import { paintMemo } from "./paint-memo.js";
-import { commit, snapshotEdit } from "./edit.js";
+import { commit, snapshotEdit } from "./edit-history.js";
 import { editLanes, refreshCounts, renderLanes } from "./lanes.js";
 import { onLiveTiming, sectionsOnLiveTempo } from "./timing.js";
 
@@ -28,16 +28,16 @@ export const gridSubdiv = () => subdivValue(subdivSel, subdivCustom);
 
 export const beatsPerBar = () => parseInt(tsNumInput.value, 10) || 4;
 
-export const gridTsDen = () => parseInt(tsDenInput.value, 10) || 4;
+const gridTsDen = () => parseInt(tsDenInput.value, 10) || 4;
 
 export const gridOffset = () => parseFloat(offsetInput.value) || 0;
 
-export const segSubdiv = (seg) => Math.max(1, parseInt(seg && seg.subdiv, 10) || gridSubdiv() || 1);
+const segSubdiv = (seg) => Math.max(1, parseInt(seg && seg.subdiv, 10) || gridSubdiv() || 1);
 
 export const gridStep = () => segStep({ bpm: gridBpm(), tsDen: gridTsDen(), subdiv: gridSubdiv() });
 
 // Subdiv: a preset list of divisions-per-beat plus a "Custom..." free entry.
-export const SUBDIV_PRESETS = new Set(["1", "2", "3", "4", "6", "8"]);
+const SUBDIV_PRESETS = new Set(["1", "2", "3", "4", "6", "8"]);
 
 export function syncSubdivControls(select, custom, wrap) {
   wrap.hidden = select.value !== "custom";

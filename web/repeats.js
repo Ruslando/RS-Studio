@@ -1,7 +1,8 @@
 // Persistent, named repeat groups for the current layer. Scanning only annotates;
 // applying positions is a separate, explicit edit.
 import { compareCopy, copyOrigin, groupsFromRepeats, resolveRepeatGroups } from './repeats-core.js';
-import { commit, commitStructure, snapshotEdit, setHandAnchor } from './edit.js';
+import { commit, commitStructure, snapshotEdit } from "./edit-history.js";
+import { setHandAnchor } from "./edit.js";
 import { scroll, sctx, stage } from './dom.js';
 import { xOf, yOf } from './geometry.js';
 import { activeLane, canEditLane, refreshCounts } from './lanes.js';
