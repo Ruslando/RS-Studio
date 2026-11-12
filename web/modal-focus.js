@@ -98,9 +98,9 @@ export function initModalFocus() {
   // The editor page runs on shortcuts, not focus: a control there that gains focus
   // (a click, a closing menu or dialog handing it back) drops it again, so Space and
   // the arrows always reach the editor. Menus, the note menu, popovers and the tour
-  // keep focus for their own keys, as do the project start handle and hand-position row;
+  // keep focus for their own keys, as does the project start handle;
   // text fields keep it for typing.
-  const ownKeys = '.ctxmenu, .menu-list, .live-editor, .tour-card, [aria-modal="true"], #projectStartHandle, #fretboardHandPositions';
+  const ownKeys = '.ctxmenu, .menu-list, .live-editor, .tour-card, [aria-modal="true"], #projectStartHandle';
   const typing = 'input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, [contenteditable]';
   // Blurring a control during pointerdown cancels Chromium's pending native
   // drag, including a drag of an ancestor row. Keep focus until release, then

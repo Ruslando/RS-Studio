@@ -654,7 +654,6 @@ export function setFretboardVisible(on) {
   if (!visible) {
     fretboardBusy.hidden = true;
     $("fretboardHandPositions").hidden = true;
-    if ($("fretboardHandPositions").contains(document.activeElement)) document.activeElement.blur();
     hideSuggestion();
     fretboardPin.hidden = true;
     editing = false; pendingHandColumn = null;
@@ -1214,10 +1213,7 @@ function drawHandPositions(s, X, Y, lane) {
   const shown = editing && !shaping && !transportPlaying() && !!at && choices.size > 0
     && !fretboardPanel.hasAttribute("data-edit-blocked") && !selectedPositions(lane).multiple;
   row.hidden = !shown;
-  if (!shown) {
-    if (row.contains(document.activeElement)) document.activeElement.blur();
-    handPeek = null; return false;
-  }
+  if (!shown) { handPeek = null; return false; }
   if (handPeek != null && !at.choices.includes(handPeek)) handPeek = null;
   row.style.setProperty('--hand-hue', lane.color || PAINT.accent);
   row.setAttribute('aria-description', `Available hand positions: ${[...choices].join(', ')}`);
@@ -1245,7 +1241,7 @@ function drawHandPositions(s, X, Y, lane) {
     button.textContent = fret ? String(fret + (fromNut ? capo : 0)) : 'Auto';
     button.setAttribute('aria-label', fret ? `Hand position ${fret}${allowed ? '' : ', unavailable'}` : 'Automatic hand position');
     button.setAttribute('aria-checked', String(chosen));
-    button.tabIndex = chosen ? 0 : -1;
+    button.tabIndex = -1;   // pointer only: the editor's keys stay with the editor
     button.title = fret ? `Hand position ${fret}${allowed ? '' : ' cannot play these notes'}` : 'Use the automatic hand position';
     button.classList.toggle('is-allowed', !!fret && allowed);
     button.classList.toggle('is-current', fret === seat);
@@ -1265,7 +1261,7 @@ function initHandPositions() {
     const value = button.dataset.value === 'auto' ? null : Number(button.dataset.value) - at.shift;
     if (value !== null && !at.choices.includes(value)) return;
     // Changing only the hand keeps these legal positions valid while its worker
-    // refingers the lane. Retain the row and its keyboard focus during that wait.
+    // refingers the lane. Retain the row during that wait.
     pendingHandColumn = { lane, notes: lane.notes, focus: focusNote(lane),
       revision: S.voicingRevision + 1, at };
     handPeek = null;

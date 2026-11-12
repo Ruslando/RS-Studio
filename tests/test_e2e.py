@@ -3030,13 +3030,8 @@ class EndToEndTests(unittest.TestCase):
         expect(hand(7)).to_be_disabled()
         page.locator('#lanes .lock-btn').click()
         expect(hand(7)).to_be_enabled()
-        hand(7).focus()
-        page.keyboard.press('Home')
-        expect(hand('auto')).to_have_attribute('aria-checked', 'true')
-        page.keyboard.press('ArrowRight')
-        expect(hand(2)).to_have_attribute('aria-checked', 'true')
-        page.keyboard.press('End')
-        expect(hand(7)).to_have_attribute('aria-checked', 'true')
+        hand(7).click()
+        expect(hand(7)).not_to_be_focused()   # the editor keeps its keys
 
     def test_minimap_eases_while_pointer_keeps_moving(self):
         self.open_reference_project()

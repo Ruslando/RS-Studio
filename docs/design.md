@@ -936,7 +936,7 @@ the hand the fretboard shows (each note carries it as `hand` in the export spec;
   fret-number row is a level strip under the board, shown only on hover or focus;
   it tints all legal positions (`handChoices`) in the layer colour. Other positions
   are disabled. Clicking a number chooses it;
-  Auto removes the manual hand. Arrow keys traverse available positions.
+  Auto removes the manual hand. The row is for the pointer only; it takes no keys.
   A hand that no longer reaches its notes is ignored. Capo is edited in layer
   settings and only displayed on the fretboard.
 - Notes of a layer that is not being edited (or is locked) are gray and half

@@ -1540,14 +1540,13 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
   color: var(--stage-hint); font: 400 11px/20px var(--font-mono); font-variant-numeric: tabular-nums;
   opacity: 0; transition: opacity 120ms ease, background-color 120ms ease;
 }
-#fretboardHandPositions:is(:hover, :focus-within) > button { opacity: 1; }
+#fretboardHandPositions:hover > button { opacity: 1; }
 #fretboardHandPositions > button:disabled { cursor: default; color: color-mix(in srgb, var(--stage-hint) 55%, transparent); }
 #fretboardHandPositions > button.is-allowed { background: var(--hand-tint); color: var(--stage-label); }
 #fretboardHandPositions > button.is-current { color: var(--stage-text); font-weight: 600; }
 #fretboardHandPositions > button.is-suggested { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hand-hue) 45%, transparent); }
 #fretboardHandPositions > button:hover:not(:disabled) { background: color-mix(in srgb, var(--hand-hue) 24%, var(--stage)); color: var(--stage-text); }
 #fretboardHandPositions > button[aria-checked="true"] { background: color-mix(in srgb, var(--hand-hue) 32%, var(--stage)); color: var(--stage-text); font-weight: 600; }
-#fretboardHandPositions > button:focus-visible { outline: 1px solid var(--stage-text); outline-offset: -1px; }
 #fretboardHandPositions > button[data-value="auto"] { font: 400 10px/20px var(--font-ui); }
 #fretboardControls #fretboardPin {
   position: static; flex: 1 0 auto; min-width: max-content; max-width: none; flex-wrap: nowrap;
