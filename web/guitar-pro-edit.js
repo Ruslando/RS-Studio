@@ -573,19 +573,17 @@ function nameChord(alphaTab, staff, beat, onset) {
   beat.chordId = id;
 }
 
-function rebuildVoice(alphaTab, staff, barIndex, voiceIndex, allItems, tuning, sourceById) {
-  const bar = staff.bars[barIndex], voice = ensureVoice(alphaTab, bar, voiceIndex), master = bar.masterBar;
-  const barStart = master.start, barEnd = barStart + masterBarDuration(master);
-  const graces = allItems.filter((item) => item.grace);
-  const items = allItems.filter((item) => !item.grace).map((item) => item.heldTo || item.writtenFrom != null
-    ? { ...item, startTick: item.writtenFrom ?? item.startTick, endTick: item.heldTo ?? item.endTick, file: item } : item);
-  const oldBeats = [...voice.beats];
+function indexReusableBeats(oldBeats) {
   const reusable = new Map();
   for (const beat of oldBeats) {
     const key = `${beat.absolutePlaybackStart}:${beat.playbackDuration}`;
     if (!reusable.has(key)) reusable.set(key, []);
     reusable.get(key).push(beat);
   }
+  return reusable;
+}
+
+function voiceBoundaries(items, oldBeats, barStart, barEnd) {
   const boundaries = new Set([barStart, barEnd]);
   for (const item of items) {
     boundaries.add(Math.max(barStart, item.startTick)); boundaries.add(Math.min(barEnd, item.endTick));
@@ -610,63 +608,93 @@ function rebuildVoice(alphaTab, staff, barIndex, voiceIndex, allItems, tuning, s
   for (const beat of oldBeats) if (beat.isRest && !items.some((item) =>
     item.startTick < beat.absolutePlaybackStart && item.endTick > beat.absolutePlaybackStart)) boundaries.add(beat.absolutePlaybackStart);
   const ordered = [...boundaries].filter((tick) => tick >= barStart && tick <= barEnd).sort((a, b) => a - b);
+  return ordered;
+}
+
+function createRebuiltBeat(alphaTab, staff, context) {
+  const { cursor, figure, onset, active, reusable, sourceById } = context;
+  const key = `${cursor}:${figure.ticks}`;
+  const bucket = reusable.get(key);
+  const semanticSource = onset.map((item) => sourceById.get(item.projected.gp?.noteId)?.beat).find(Boolean);
+  const reused = bucket?.length ? bucket.shift() : null;
+  const beat = reused || copyBeatSemantics(alphaTab, semanticSource);
+  if (!semanticSource) {
+    nameChord(alphaTab, staff, beat, onset);
+    // The beat's details as the file had them: a note's that starts here, else a tied part's.
+    if (!reused) restoreFileExtras(beat, onset.map((item) => item.projected.gp?.beatExtras).find(Boolean)
+      ?? active.map((item) => item.projected.gp?.tieSegments?.find((s) => s.startTick === cursor)?.beatExtras).find(Boolean));
+  }
+  beat.notes = []; beat.noteStringLookup = new Map(); beat.noteValueLookup = new Map();
+  // A reused beat lasts these ticks already, written as the file writes them (a 6:4 stays 6:4).
+  if (!reused) {
+    beat.duration = figure.duration; beat.dots = figure.dots;
+    beat.tupletNumerator = figure.tuplet ? figure.tuplet[0] : -1; beat.tupletDenominator = figure.tuplet ? figure.tuplet[1] : -1;
+  }
+  beat.isEmpty = false;
+  return beat;
+}
+
+function appendRebuiltNote(alphaTab, beat, item, context) {
+  const { cursor, figure, tuning, sourceById } = context;
+  const segmentIds = item.projected.gp?.tieSegments || [];
+  const matching = segmentIds.find((segment) => segment.startTick === cursor);
+  const source = matching ? sourceById.get(matching.noteId)
+    : cursor === item.startTick && Number.isFinite(item.projected.gp?.noteId) ? sourceById.get(item.projected.gp.noteId) : null;
+  const note = source || copyNote(alphaTab, sourceById.get(item.projected.gp?.noteId));
+  if (!source) restoreFileExtras(note, matching && matching.startTick !== item.projected.gp?.startTick ? matching.noteExtras
+    : cursor === item.startTick ? item.projected.gp?.noteExtras : null);
+  resetRelationships(note);
+  note.string = tuning.length - item.string; note.fret = Math.round(item.projected.pos.fret);
+  note.isTieDestination = cursor !== item.startTick;
+  // Each tied part gets what happens during it: slide-in on the first, slide-out on the last.
+  // Measured on the note as it sounds (a note written on to a grace note's beat stops where it plays).
+  const sounding = item.file || item;
+  const [from, to] = partOf(item.points, sounding.startTick, sounding.endTick, cursor, cursor + figure.ticks);
+  const file = item.file || item, unmoved = file.startTick === item.projected.gp?.startTick && file.endTick === item.projected.gp?.endTick;
+  applyEditorEffects(alphaTab, item.projected, note, beat, !source, from, to, unmoved ? matching || null : null);
+  // A reused part keeps what the file had on it. A slide-out the file wrote on its
+  // last part stays on the last part, wherever the parts now fall.
+  const wasLast = !segmentIds.length || matching === segmentIds.at(-1) || (!matching && source);
+  if (to < 1 - 1e-6 && wasLast) note.slideOutType = alphaTab.model.SlideOutType.None;
+  if (from > 1e-6 && !matching) note.slideInType = alphaTab.model.SlideInType.None;   // a file's own tied part keeps its own
+  beat.addNote(note);
+}
+
+function appendVoiceInterval(alphaTab, staff, voice, interval) {
+  const { start, end, items, graces, ratios, reusable, tuning, sourceById } = interval;
+  let cursor = start;
+  const active = items.filter((item) => item.startTick <= cursor && item.endTick > cursor);
+  // The tuplet of the note starting here, else what the bar's notes use.
+  const own = active.filter((item) => item.startTick === cursor).map((item) => item.projected.gp?.tuplet).find(Boolean);
+  for (const figure of decompose(end - cursor, own ? [own] : ratios)) {
+    const onset = active.filter((item) => item.startTick === cursor);
+    addSourceGraces(alphaTab, voice, graces.filter((g) => g.attach === cursor), tuning, sourceById);
+    for (const item of onset) if (item.projected.grace) addGraceBeat(alphaTab, voice, item.projected, tuning);
+    const context = { cursor, figure, onset, active, reusable, tuning, sourceById };
+    const beat = createRebuiltBeat(alphaTab, staff, context);
+    for (const item of active) appendRebuiltNote(alphaTab, beat, item, context);
+    voice.addBeat(beat);
+    cursor += figure.ticks;
+  }
+}
+
+function rebuildVoice(alphaTab, staff, barIndex, voiceIndex, allItems, tuning, sourceById) {
+  const bar = staff.bars[barIndex], voice = ensureVoice(alphaTab, bar, voiceIndex), master = bar.masterBar;
+  const barStart = master.start, barEnd = barStart + masterBarDuration(master);
+  const graces = allItems.filter((item) => item.grace);
+  const items = allItems.filter((item) => !item.grace).map((item) => item.heldTo || item.writtenFrom != null
+    ? { ...item, startTick: item.writtenFrom ?? item.startTick, endTick: item.heldTo ?? item.endTick, file: item } : item);
+  const oldBeats = [...voice.beats];
+  const reusable = indexReusableBeats(oldBeats);
+  const ordered = voiceBoundaries(items, oldBeats, barStart, barEnd);
   const ratios = [...new Map(items.map((item) => item.projected.gp?.tuplet).filter((r) => r && !(r[0] === 3 && r[1] === 2))
     .map((r) => [r.join(":"), r])).values()];
+  const context = { items, graces, ratios, reusable, tuning, sourceById };
   voice.beats = [];
   for (let boundaryIndex = 0; boundaryIndex < ordered.length - 1; boundaryIndex++) {
-    let cursor = ordered[boundaryIndex], end = ordered[boundaryIndex + 1];
-    const active = items.filter((item) => item.startTick <= cursor && item.endTick > cursor);
-    // The tuplet of the note starting here, else what the bar's notes use.
-    const own = active.filter((item) => item.startTick === cursor).map((item) => item.projected.gp?.tuplet).find(Boolean);
-    for (const figure of decompose(end - cursor, own ? [own] : ratios)) {
-      const onset = active.filter((item) => item.startTick === cursor);
-      addSourceGraces(alphaTab, voice, graces.filter((g) => g.attach === cursor), tuning, sourceById);
-      for (const item of onset) if (item.projected.grace) addGraceBeat(alphaTab, voice, item.projected, tuning);
-      const key = `${cursor}:${figure.ticks}`;
-      const bucket = reusable.get(key);
-      const semanticSource = onset.map((item) => sourceById.get(item.projected.gp?.noteId)?.beat).find(Boolean);
-      const reused = bucket?.length ? bucket.shift() : null;
-      const beat = reused || copyBeatSemantics(alphaTab, semanticSource);
-      if (!semanticSource) {
-        nameChord(alphaTab, staff, beat, onset);
-        // The beat's details as the file had them: a note's that starts here, else a tied part's.
-        if (!reused) restoreFileExtras(beat, onset.map((item) => item.projected.gp?.beatExtras).find(Boolean)
-          ?? active.map((item) => item.projected.gp?.tieSegments?.find((s) => s.startTick === cursor)?.beatExtras).find(Boolean));
-      }
-      beat.notes = []; beat.noteStringLookup = new Map(); beat.noteValueLookup = new Map();
-      // A reused beat lasts these ticks already, written as the file writes them (a 6:4 stays 6:4).
-      if (!reused) {
-        beat.duration = figure.duration; beat.dots = figure.dots;
-        beat.tupletNumerator = figure.tuplet ? figure.tuplet[0] : -1; beat.tupletDenominator = figure.tuplet ? figure.tuplet[1] : -1;
-      }
-      beat.isEmpty = false;
-      for (const item of active) {
-        const segmentIds = item.projected.gp?.tieSegments || [];
-        const matching = segmentIds.find((segment) => segment.startTick === cursor);
-        const source = matching ? sourceById.get(matching.noteId)
-          : cursor === item.startTick && Number.isFinite(item.projected.gp?.noteId) ? sourceById.get(item.projected.gp.noteId) : null;
-        const note = source || copyNote(alphaTab, sourceById.get(item.projected.gp?.noteId));
-        if (!source) restoreFileExtras(note, matching && matching.startTick !== item.projected.gp?.startTick ? matching.noteExtras
-          : cursor === item.startTick ? item.projected.gp?.noteExtras : null);
-        resetRelationships(note);
-        note.string = tuning.length - item.string; note.fret = Math.round(item.projected.pos.fret);
-        note.isTieDestination = cursor !== item.startTick;
-        // Each tied part gets what happens during it: slide-in on the first, slide-out on the last.
-        // Measured on the note as it sounds (a note written on to a grace note's beat stops where it plays).
-        const sounding = item.file || item;
-        const [from, to] = partOf(item.points, sounding.startTick, sounding.endTick, cursor, cursor + figure.ticks);
-        const file = item.file || item, unmoved = file.startTick === item.projected.gp?.startTick && file.endTick === item.projected.gp?.endTick;
-        applyEditorEffects(alphaTab, item.projected, note, beat, !source, from, to, unmoved ? matching || null : null);
-        // A reused part keeps what the file had on it. A slide-out the file wrote on its
-        // last part stays on the last part, wherever the parts now fall.
-        const wasLast = !segmentIds.length || matching === segmentIds.at(-1) || (!matching && source);
-        if (to < 1 - 1e-6 && wasLast) note.slideOutType = alphaTab.model.SlideOutType.None;
-        if (from > 1e-6 && !matching) note.slideInType = alphaTab.model.SlideInType.None;   // a file's own tied part keeps its own
-        beat.addNote(note);
-      }
-      voice.addBeat(beat);
-      cursor += figure.ticks;
-    }
+    appendVoiceInterval(alphaTab, staff, voice, {
+      ...context, start: ordered[boundaryIndex], end: ordered[boundaryIndex + 1],
+    });
   }
 }
 
