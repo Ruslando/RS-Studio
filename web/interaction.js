@@ -1,4 +1,4 @@
-import { diagnosticMarksAt } from './draw.js';
+import { diagnosticMarksAt } from './diagnostic-marks.js';
 import { openIssueMenu } from './issue-state.js';
 import { makeResizeRoom } from "./note-merge.js";
 // Pointer interaction: hit testing, the mousedown/move/up gesture state machine

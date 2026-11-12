@@ -581,6 +581,43 @@ class EndToEndTests(unittest.TestCase):
             if example == "chord-showcase":
                 self.assertGreater(chords, 10)
 
+    def test_canvas_warning_menu_uses_current_frame_and_undo(self):
+        self.open_reference_project()
+        page = self.page
+        target = page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            const {rebuildLanes} = await import('/lanes.js');
+            const {yOf} = await import('/geometry.js');
+            const {drawNow} = await import('/repaint.js');
+            const {warningMarks} = await import('/diagnostic-marks.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [
+                {id:'warning-a',start:2,end:4,pitch:64},
+                {id:'warning-b',start:2,end:4,pitch:64},
+            ];
+            lane.refBoxes = {}; lane.repeatGroups = [];
+            S.state.editLanes = [lane]; S.state.metadata.rocksmith = {};
+            S.undoStack = []; S.redoStack = []; S.voicingRevision++;
+            setSelection(new Set()); rebuildLanes();
+            const scroll = document.getElementById('scroll');
+            scroll.scrollLeft = 0; scroll.scrollTop = Math.max(0,yOf(64)-150);
+            drawNow();
+            const mark = warningMarks.find(m => m.tip.diagnostic?.issue.kind === 'stack');
+            if (!mark) throw new Error('Expected a painted overlap warning');
+            const x = (mark.x0+mark.x1)/2, y = (mark.y0+mark.y1)/2;
+            const box = document.getElementById('stage').getBoundingClientRect();
+            return {x,y,clientX:box.left+x-scroll.scrollLeft,clientY:box.top+y-scroll.scrollTop};
+        }""")
+        page.mouse.click(target['clientX'], target['clientY'], button='right')
+        page.locator('.ctxmenu').get_by_role('button', name='Ignore occurrence', exact=True).click()
+        hits = """async ({x,y}) => {
+            (await import('/repaint.js')).drawNow();
+            return (await import('/diagnostic-marks.js')).diagnosticMarksAt(x,y).length;
+        }"""
+        self.assertEqual(page.evaluate(hits,target),0, 'hidden warnings must not leave stale context-menu targets')
+        page.keyboard.press('Control+z')
+        self.assertEqual(page.evaluate(hits,target),1, 'undo restores the painted warning and its action')
+
     def test_rocksmith_issues_follow_the_chart_while_it_is_edited(self):
         page = self.page
         note = lambda i, start, fret, **fx: {"id": f"n{i}", "start": start, "end": start + 1, "pitch": 55 + fret,

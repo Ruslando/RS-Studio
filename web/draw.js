@@ -1,3 +1,5 @@
+import { warningMarks } from './diagnostic-marks.js';
+export { diagnosticMarksAt } from './diagnostic-marks.js';
 import { issueInstanceKey } from './issue-identity.js';
 import { rowsFor } from './rocksmith-check.js';
 import { issueIgnored, showIgnoredIssues, issueIgnoreActions } from './issue-state.js';
@@ -47,7 +49,6 @@ import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from
 const omittedArrangementCache = new WeakMap();
 const FLAT = [[0, 0], [1, 0]];   // a curve that stays on the note's row
 
-let warningMarks = [];   // last frame's warning marks: { x0, x1, y0, y1, tip }
 const BEND_STACK_TIP = { title: ISSUE_TEXT.bendStack[0], body: ISSUE_TEXT.bendStack[1], tone: "warning" };
 
 // A legacy `arrangement` both drops notes and adds them. Cross out what it drops,
@@ -393,50 +394,7 @@ function drawBarNumbers(vx0, vx1) {
   }
 }
 
-// The frame itself. Registered with repaint.js at boot; everything else asks for
-// a paint through draw()/drawNow() there and never imports this module.
-function paintFrame({ panels = true } = {}) {
-  renderRepeatNavigator();
-  if (panels) renderArtifacts();
-  beginNoteMotionFrame(S.state, S.drag);
-  const playheadTime = playbackTime();
-  beginNotePlaybackFrame(S.state, playheadTime, transportPlaying());
-  // The fretboard is its own canvas below the stage, and it is painted here so
-  // that every existing repaint trigger — the playback loop above all — moves the
-  // hand too. Ahead of the guards below because the neck is drawn with or without
-  // a project, and it has its own.
-  drawFretboard();
-  if (!S.state || !S.state.spec) {
-    overview?.draw();
-    return;
-  }
-  if (editorEl.hidden || viewer.clientWidth <= RULER_W || viewer.clientHeight < 1) return;
-  if (!S.drag) S.hoverNote = hoveredStageNote();
-  // layout() primes the fixed ruler width before measuring #scroll. This is a
-  // last-resort recovery if stylesheet loading or a future CSS change ever lets
-  // the ruler consume the row again.
-  if (scroll.clientWidth < 1) layout();
-  if (scroll.clientWidth < 1) return; // hidden/zero viewport must not clear or shrink the canvas
-  // Project loading can reveal the app before its flex layout has reached the
-  // final size. Keep both canvas axes tied to the live parent viewport: a stale
-  // height compresses/clips the spectrogram just as badly as a stale width. The
-  // mismatch branch is cheap and layout() only rewrites canvas backing stores
-  // when their dimensions actually changed.
-  const dp = dpr();
-  const liveH = Math.max(STAGE_HEIGHT_MIN, stageRoom());
-  if (stage.width !== Math.round(scroll.clientWidth * dp) ||
-      stage.height !== Math.round(liveH * dp) || S.stageHeight !== liveH) layout();
-  const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth; // visible range (world px)
-  const vy0 = scroll.scrollTop;                                  // vertical scroll (pitch-zoom)
-  // Clear the small canvas in device space, then shift into world space so all
-  // the drawing below stays in absolute song px (x = time * pxPerSec, y from the top
-  // of the full pitch range), offset by the scroll position on both axes. The dp
-  // scale maps those CSS-px coordinates onto the HiDPI backing store.
-  sctx.setTransform(1, 0, 0, 1, 0, 0);
-  sctx.clearRect(0, 0, stage.width, stage.height);
-  sctx.fillStyle = PAINT.ground;
-  sctx.fillRect(0, 0, stage.width, stage.height);
-  sctx.setTransform(dp, 0, 0, dp, -vx0 * dp, -vy0 * dp);
+function paintStageBackground(vx0, vx1, vy0) {
   if (S.spectImg) {
     // Draw only the visible time-slice of the spectrogram, not the whole image.
     const iw = S.spectImg.width;
@@ -461,7 +419,9 @@ function paintFrame({ panels = true } = {}) {
   if (S.detectRegion) drawDetectRegion(vx0, vx1);
   if (S.drag && S.drag.mode === "trace") drawTraceRange(S.drag.points);
   else if ((S.toolMode === "trace" || S.traceHeld || S.heatPreview) && S.mouseX != null && S.mouseY != null) drawTraceRange([[S.mouseX, S.mouseY]]);
+}
 
+function collectFrameDiagnostics() {
   // Overlap stacks (same pitch + overlapping time inside one edit lane) are no
   // longer merged — flag them with a hot color + a count badge instead.
   const frameIssues = new Map(S.state.lanes.filter(lane => lane.visible).map(lane => [lane, rowsFor(lane)]));
@@ -478,6 +438,10 @@ function paintFrame({ panels = true } = {}) {
     stackBadges.push(...badges.filter(b => showIgnoredIssues || !ignoredStackNotes.has(b.note))
       .map(b => ({...b, ignored: ignoredStackNotes.has(b.note)})));
   }
+  return { frameIssues, stackCount, ignoredStackNotes, stackBadges };
+}
+
+function paintLaneNotes(vx0, vx1, stackCount, ignoredStackNotes) {
   // Note-name labels show at every pitch-zoom level (the rows can be a touch
   // shorter than the font at the lowest zoom, but the text stays legible); each
   // note still has to be wide enough or it's skipped, so labels never overflow
@@ -536,69 +500,9 @@ function paintFrame({ panels = true } = {}) {
       const curve = pitchCurve(n) || ribbon?.points || (slurred.has(source) ? FLAT : null);
       const active = !isPreview && editTargets.has(n);
       const glow = isPreview ? 0 : notePlaybackGlow(lane, n);
-      if (glow > 0) {
-        sctx.beginPath();
-        if (curve) traceBendPath(x, w, y + rowH / 2, curve, rowH);
-        else sctx.roundRect(x, y, w, rowH, Math.min(2, w / 2, rowH / 2));
-        paintNoteGlow(sctx, glow, curve ? rowH : 0);
-      }
-      // Selection uses an opaque, patterned body, including on curved notes.
-      sctx.globalAlpha = S.selection.has(n) ? 1 : laneAlpha * motion.alpha;
-      // How far the curve leaves the row: up for a bend, down for a whammy dip.
+      paintNoteBody(n, { x, y, w, rowH, curve, active, glow, laneAlpha, motion, fill });
+      // Curve extent positions the omission and range decorations.
       const drop = curve ? bendPeak(curve) * rowH : 0, dip = curve ? Math.max(0, -Math.min(...curve.map(([, v]) => v))) * rowH : 0;
-      // Dashed outer frames mark edit recipients, including distant occurrences
-      // in a shared selection. Playback retains its separate soft glow.
-      if (active && curve) {
-        sctx.save();
-        sctx.globalAlpha = 1;
-        sctx.lineCap = "butt"; sctx.lineJoin = "round";
-        sctx.beginPath(); traceBendPath(x, w, y + rowH / 2, curve, rowH);
-        sctx.lineWidth = rowH + 7; sctx.strokeStyle = PAINT.ink; sctx.stroke();
-        sctx.setLineDash([5, 3]);
-        sctx.lineWidth = rowH + 4; sctx.strokeStyle = PAINT.accent; sctx.stroke();
-        sctx.restore();
-      }
-      if (curve) {
-        sctx.lineCap = "butt"; sctx.lineJoin = "round";
-        sctx.beginPath(); traceBendPath(x, w, y + rowH / 2, curve, rowH);
-        if (S.selection.has(n)) {
-          const selectionHeight = Math.max(6, rowH);
-          paintNoteSelection(sctx, selectionHeight);
-          sctx.lineWidth = selectionHeight - 2; sctx.strokeStyle = noteSelectionFill(sctx); sctx.stroke();
-        } else if (n === S.hoverNote) {
-          sctx.lineWidth = rowH + 1.5; sctx.strokeStyle = PAINT.text; sctx.stroke();
-          sctx.lineWidth = Math.max(1, rowH - 1.5); sctx.strokeStyle = fill; sctx.stroke();
-          sctx.strokeStyle = hexA(PAINT.text, WASH); sctx.stroke();
-        } else {
-          sctx.lineWidth = rowH + 1; sctx.strokeStyle = veil(PAINT.ground); sctx.stroke();
-          sctx.lineWidth = rowH; sctx.strokeStyle = hexA(fill, 0.6); sctx.stroke();
-        }
-        if (motion.emphasis > 0) {
-          sctx.strokeStyle = hexA(PAINT.text, motion.emphasis * .35); sctx.stroke();
-        }
-        sctx.lineWidth = 1; sctx.lineCap = "round";
-      } else if (n.gripOnly) {
-        // Shown in the grip, never played: a faint body with a dashed rim.
-        sctx.save();
-        sctx.globalAlpha *= 0.35;
-        paintNoteRow(sctx, x, y, w, rowH, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis, motion.reveal);
-        sctx.restore();
-        sctx.save();
-        sctx.setLineDash([3, 2]); sctx.lineWidth = 1; sctx.strokeStyle = fill;
-        sctx.beginPath(); sctx.roundRect(x + 0.5, y + 0.5, Math.max(1, w - 1), rowH - 1, 3); sctx.stroke();
-        sctx.restore();
-      } else {
-        paintNoteRow(sctx, x, y, w, rowH, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis, motion.reveal);
-      }
-      if (active && !curve) {
-        sctx.save();
-        sctx.globalAlpha = 1;
-        sctx.beginPath(); sctx.roundRect(x - 3, y - 3, w + 6, rowH + 6, 4);
-        sctx.lineWidth = 4; sctx.strokeStyle = PAINT.ink; sctx.stroke();
-        sctx.setLineDash([5, 3]);
-        sctx.lineWidth = 2; sctx.strokeStyle = PAINT.accent; sctx.stroke();
-        sctx.restore();
-      }
       if (motion.cut > 0) {
         sctx.save();
         sctx.strokeStyle = hexA(PAINT.text, motion.cut); sctx.lineWidth = 2;
@@ -633,6 +537,10 @@ function paintFrame({ panels = true } = {}) {
       sctx.restore();
     }
   }
+  return { omittedCrosses, outOfRange, ghostNotes, repeatPreview };
+}
+
+function paintMotionGhosts(vx0, vx1) {
   // Removed notes and brief drag trails are visual remnants only. They never
   // enter the selection, hit tests, minimap, playback or export.
   const motionLabels = resolveNoteAppearance(spectrogramLabelOptions());
@@ -652,20 +560,13 @@ function paintFrame({ panels = true } = {}) {
     }
     sctx.restore();
   }
-  sctx.globalAlpha = 1;
-  sctx.textBaseline = "alphabetic";
-  drawMotifs(vx0, vx1);
-  drawShapes(vx0, vx1);
-  drawDropPreview();
-  drawStackBadges(stackBadges, vx0, vx1);
-  drawNoteFx(repeatPreviewHiddenNote(), repeatPreview);
-  drawBendHandles(vx0, vx1);   // over the names, which would hide them
-  drawOmittedNoteCrosses(omittedCrosses);
-  drawOutOfRangeNotes(outOfRange);
+}
+
+function paintDiagnosticMarks(vx0, vx1, frameIssues) {
   sctx.save();
   sctx.lineWidth = 1.5;
   sctx.font = stageUi(14); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
-  warningMarks = [];
+  warningMarks.length = 0;
   // tip: { title, body, tone } with tone "error" or "warning", which sets the colour.
   const frameWarning = (notes, tip) => {
     const colour = tip.tone === "error" ? PAINT.error : tip.tone === "note" ? PAINT.accent : PAINT.warn;
@@ -727,12 +628,9 @@ function paintFrame({ panels = true } = {}) {
     }
   }
   sctx.restore();
-  drawGhostNotes(ghostNotes);
-  drawReferences();
-  drawChordNames(vx0, vx1);
-  drawMatches();
-  drawRepeats();
+}
 
+function paintInteractionOverlays() {
   if (S.drag && S.drag.mode === "trace") drawTracePath(S.drag.points);
   if (S.marquee) {
     const x = Math.min(S.marquee.x0, S.marquee.x1), y = Math.min(S.marquee.y0, S.marquee.y1);
@@ -763,12 +661,9 @@ function paintFrame({ panels = true } = {}) {
     sctx.beginPath(); sctx.moveTo(S.mouseX, 0); sctx.lineTo(S.mouseX, contentH()); sctx.stroke();
     sctx.setLineDash([]);
   }
-  const px = xOf(playheadTime);
-  sctx.strokeStyle = PAINT.accent; sctx.lineWidth = 2;   // rule 7: the playhead is one of accent's four uses
-  sctx.beginPath(); sctx.moveTo(px, 0); sctx.lineTo(px, contentH()); sctx.stroke();
-  sctx.lineWidth = 1;
-  drawBarNumbers(vx0, vx1);
-  drawComments();
+}
+
+function paintMarkerRails(vx0, vx1) {
   sctx.save();
   const reveal = railScale();
   sctx.beginPath();
@@ -785,6 +680,145 @@ function paintFrame({ panels = true } = {}) {
     sctx.restore();
   }
   sctx.restore();
+}
+
+function paintNoteBody(n, { x, y, w, rowH, curve, active, glow, laneAlpha, motion, fill }) {
+  if (glow > 0) {
+    sctx.beginPath();
+    if (curve) traceBendPath(x, w, y + rowH / 2, curve, rowH);
+    else sctx.roundRect(x, y, w, rowH, Math.min(2, w / 2, rowH / 2));
+    paintNoteGlow(sctx, glow, curve ? rowH : 0);
+  }
+  // Selection uses an opaque, patterned body, including on curved notes.
+  sctx.globalAlpha = S.selection.has(n) ? 1 : laneAlpha * motion.alpha;
+  // Dashed outer frames mark edit recipients, including distant occurrences
+  // in a shared selection. Playback retains its separate soft glow.
+  if (active && curve) {
+    sctx.save();
+    sctx.globalAlpha = 1;
+    sctx.lineCap = "butt"; sctx.lineJoin = "round";
+    sctx.beginPath(); traceBendPath(x, w, y + rowH / 2, curve, rowH);
+    sctx.lineWidth = rowH + 7; sctx.strokeStyle = PAINT.ink; sctx.stroke();
+    sctx.setLineDash([5, 3]);
+    sctx.lineWidth = rowH + 4; sctx.strokeStyle = PAINT.accent; sctx.stroke();
+    sctx.restore();
+  }
+  if (curve) {
+    sctx.lineCap = "butt"; sctx.lineJoin = "round";
+    sctx.beginPath(); traceBendPath(x, w, y + rowH / 2, curve, rowH);
+    if (S.selection.has(n)) {
+      const selectionHeight = Math.max(6, rowH);
+      paintNoteSelection(sctx, selectionHeight);
+      sctx.lineWidth = selectionHeight - 2; sctx.strokeStyle = noteSelectionFill(sctx); sctx.stroke();
+    } else if (n === S.hoverNote) {
+      sctx.lineWidth = rowH + 1.5; sctx.strokeStyle = PAINT.text; sctx.stroke();
+      sctx.lineWidth = Math.max(1, rowH - 1.5); sctx.strokeStyle = fill; sctx.stroke();
+      sctx.strokeStyle = hexA(PAINT.text, WASH); sctx.stroke();
+    } else {
+      sctx.lineWidth = rowH + 1; sctx.strokeStyle = veil(PAINT.ground); sctx.stroke();
+      sctx.lineWidth = rowH; sctx.strokeStyle = hexA(fill, 0.6); sctx.stroke();
+    }
+    if (motion.emphasis > 0) {
+      sctx.strokeStyle = hexA(PAINT.text, motion.emphasis * .35); sctx.stroke();
+    }
+    sctx.lineWidth = 1; sctx.lineCap = "round";
+  } else if (n.gripOnly) {
+    // Shown in the grip, never played: a faint body with a dashed rim.
+    sctx.save();
+    sctx.globalAlpha *= 0.35;
+    paintNoteRow(sctx, x, y, w, rowH, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis, motion.reveal);
+    sctx.restore();
+    sctx.save();
+    sctx.setLineDash([3, 2]); sctx.lineWidth = 1; sctx.strokeStyle = fill;
+    sctx.beginPath(); sctx.roundRect(x + 0.5, y + 0.5, Math.max(1, w - 1), rowH - 1, 3); sctx.stroke();
+    sctx.restore();
+  } else {
+    paintNoteRow(sctx, x, y, w, rowH, fill, S.selection.has(n), n === S.hoverNote, motion.emphasis, motion.reveal);
+  }
+  if (active && !curve) {
+    sctx.save();
+    sctx.globalAlpha = 1;
+    sctx.beginPath(); sctx.roundRect(x - 3, y - 3, w + 6, rowH + 6, 4);
+    sctx.lineWidth = 4; sctx.strokeStyle = PAINT.ink; sctx.stroke();
+    sctx.setLineDash([5, 3]);
+    sctx.lineWidth = 2; sctx.strokeStyle = PAINT.accent; sctx.stroke();
+    sctx.restore();
+  }
+}
+
+// The frame itself. Registered with repaint.js at boot; everything else asks for
+// a paint through draw()/drawNow() there and never imports this module.
+function paintFrame({ panels = true } = {}) {
+  renderRepeatNavigator();
+  if (panels) renderArtifacts();
+  beginNoteMotionFrame(S.state, S.drag);
+  const playheadTime = playbackTime();
+  beginNotePlaybackFrame(S.state, playheadTime, transportPlaying());
+  // The fretboard is its own canvas below the stage, and it is painted here so
+  // that every existing repaint trigger — the playback loop above all — moves the
+  // hand too. Ahead of the guards below because the neck is drawn with or without
+  // a project, and it has its own.
+  drawFretboard();
+  if (!S.state || !S.state.spec) {
+    overview?.draw();
+    return;
+  }
+  if (editorEl.hidden || viewer.clientWidth <= RULER_W || viewer.clientHeight < 1) return;
+  if (!S.drag) S.hoverNote = hoveredStageNote();
+  // layout() primes the fixed ruler width before measuring #scroll. This is a
+  // last-resort recovery if stylesheet loading or a future CSS change ever lets
+  // the ruler consume the row again.
+  if (scroll.clientWidth < 1) layout();
+  if (scroll.clientWidth < 1) return; // hidden/zero viewport must not clear or shrink the canvas
+  // Project loading can reveal the app before its flex layout has reached the
+  // final size. Keep both canvas axes tied to the live parent viewport: a stale
+  // height compresses/clips the spectrogram just as badly as a stale width. The
+  // mismatch branch is cheap and layout() only rewrites canvas backing stores
+  // when their dimensions actually changed.
+  const dp = dpr();
+  const liveH = Math.max(STAGE_HEIGHT_MIN, stageRoom());
+  if (stage.width !== Math.round(scroll.clientWidth * dp) ||
+      stage.height !== Math.round(liveH * dp) || S.stageHeight !== liveH) layout();
+  const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth; // visible range (world px)
+  const vy0 = scroll.scrollTop;                                  // vertical scroll (pitch-zoom)
+  // Clear the small canvas in device space, then shift into world space so all
+  // the drawing below stays in absolute song px (x = time * pxPerSec, y from the top
+  // of the full pitch range), offset by the scroll position on both axes. The dp
+  // scale maps those CSS-px coordinates onto the HiDPI backing store.
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.clearRect(0, 0, stage.width, stage.height);
+  sctx.fillStyle = PAINT.ground;
+  sctx.fillRect(0, 0, stage.width, stage.height);
+  sctx.setTransform(dp, 0, 0, dp, -vx0 * dp, -vy0 * dp);
+  paintStageBackground(vx0, vx1, vy0);
+  const { frameIssues, stackCount, ignoredStackNotes, stackBadges } = collectFrameDiagnostics();
+  const { omittedCrosses, outOfRange, ghostNotes, repeatPreview } = paintLaneNotes(vx0, vx1, stackCount, ignoredStackNotes);
+  paintMotionGhosts(vx0, vx1);
+  sctx.globalAlpha = 1;
+  sctx.textBaseline = "alphabetic";
+  drawMotifs(vx0, vx1);
+  drawShapes(vx0, vx1);
+  drawDropPreview();
+  drawStackBadges(stackBadges, vx0, vx1);
+  drawNoteFx(repeatPreviewHiddenNote(), repeatPreview);
+  drawBendHandles(vx0, vx1);   // over the names, which would hide them
+  drawOmittedNoteCrosses(omittedCrosses);
+  drawOutOfRangeNotes(outOfRange);
+  paintDiagnosticMarks(vx0, vx1, frameIssues);
+  drawGhostNotes(ghostNotes);
+  drawReferences();
+  drawChordNames(vx0, vx1);
+  drawMatches();
+  drawRepeats();
+
+  paintInteractionOverlays();
+  const px = xOf(playheadTime);
+  sctx.strokeStyle = PAINT.accent; sctx.lineWidth = 2;   // rule 7: the playhead is one of accent's four uses
+  sctx.beginPath(); sctx.moveTo(px, 0); sctx.lineTo(px, contentH()); sctx.stroke();
+  sctx.lineWidth = 1;
+  drawBarNumbers(vx0, vx1);
+  drawComments();
+  paintMarkerRails(vx0, vx1);
   syncProjectStartHandle();
   overview?.draw();
 }
@@ -950,14 +984,4 @@ export function init_draw() {
     hideNoteMenu({ scroll: true });
     draw();
   }, { passive: true });
-}
-
-export function diagnosticMarksAt(x, y) {
-  const entries = new Map();
-  for (const mark of warningMarks) {
-    if (x < mark.x0 || x > mark.x1 || y < mark.y0 || y > mark.y1 || !mark.tip.diagnostic) continue;
-    const entry = mark.tip.diagnostic;
-    entries.set(issueInstanceKey(entry.lane, entry.issue), entry);
-  }
-  return [...entries.values()];
 }
