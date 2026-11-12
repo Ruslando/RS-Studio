@@ -2,9 +2,9 @@ import { wireDockControls } from './dock-controls.js';
 import { dockBounds, dockPosition } from './edge-dock.js';
 import { DRAG_HANDLE_ICON } from './icons.js';
 
-export function initRepeatDock(panel, handle) {
-  const key = 'rs-repeat-controls';
-  let state = { edge: 'top', fraction: .5 };
+// Also the split view's settings bar (split-view.js), under its own key.
+export function initRepeatDock(panel, handle, { key = 'rs-repeat-controls', edge = 'top' } = {}) {
+  let state = { edge, fraction: .5 };
   try {
     const saved = JSON.parse(localStorage.getItem(key));
     if (saved && ['top', 'right', 'bottom', 'left'].includes(saved.edge) && Number.isFinite(saved.fraction))

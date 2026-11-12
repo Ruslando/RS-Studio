@@ -91,11 +91,18 @@ export const crowdEventCode = $("crowdEventCode"), crowdEventTime = $("crowdEven
 export const toneMarkerPop = $("toneMarkerPop"), toneMarkerPopClose = $("toneMarkerPopClose");
 export const toneMarkerPreset = $("toneMarkerPreset"), toneMarkerTime = $("toneMarkerTime");
 export const toneMarkerDelete = $("toneMarkerDelete");
-export const sctx = $("stage").getContext("2d");
+export let sctx = $("stage").getContext("2d");
 const rctx = $("ruler").getContext("2d");
-export const stage = $("stage"), ruler = $("ruler"), scroll = $("scroll"), viewer = $("viewer");
-export const rulerRight = $("rulerRight");
-export const stageSpacer = $("stageSpacer");
+export let stage = $("stage"), ruler = $("ruler"), scroll = $("scroll"), viewer = $("viewer");
+export let rulerRight = $("rulerRight");
+export let stageSpacer = $("stageSpacer");
+// The elements a spectrogram view paints into. split-view.js points these at its
+// second pane for the length of that pane's paint, then back at the live editor.
+export const liveViewport = { stage, ruler, scroll, viewer, rulerRight, stageSpacer };
+export function bindViewport(view) {
+  ({ stage, ruler, scroll, viewer, rulerRight, stageSpacer } = view);
+  sctx = stage.getContext("2d");
+}
 export const overviewRuler = $("overviewRuler");
 export const minimap = $("minimap"), mmctx = minimap.getContext("2d");
 export const zoomResetBtn = $("zoomReset");

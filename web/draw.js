@@ -1,3 +1,4 @@
+import { paintSplitPane } from "./split-view.js";
 import { warningMarks } from './diagnostic-marks.js';
 import { issueInstanceKey } from './issue-identity.js';
 import { rowsFor } from './rocksmith-check.js';
@@ -760,8 +761,7 @@ function paintFrame({ panels = true } = {}) {
   renderRepeatNavigator();
   if (panels) renderArtifacts();
   beginNoteMotionFrame(S.state, S.drag);
-  const playheadTime = playbackTime();
-  beginNotePlaybackFrame(S.state, playheadTime, transportPlaying());
+  beginNotePlaybackFrame(S.state, playbackTime(), transportPlaying());
   // The fretboard is its own canvas below the stage, and it is painted here so
   // that every existing repaint trigger — the playback loop above all — moves the
   // hand too. Ahead of the guards below because the neck is drawn with or without
@@ -771,13 +771,26 @@ function paintFrame({ panels = true } = {}) {
     overview?.draw();
     return;
   }
-  if (editorEl.hidden || viewer.clientWidth <= RULER_W || viewer.clientHeight < 1) return;
+  // The split view's other pane first: the live stage paints last, so the hit
+  // targets a frame leaves behind (badges, labels, warning marks) are its own.
+  // It repaints on requested frames, and on every frame while its playhead moves.
+  // ponytail: no cache of its own; add one if a split ever lags.
+  paintSplitPane(paintStage, panels);
+  if (!paintStage()) return;
+  syncProjectStartHandle();
+  overview?.draw();
+}
+
+// One spectrogram view: whichever elements dom.js has bound (split-view.js).
+function paintStage() {
+  if (editorEl.hidden || viewer.clientWidth <= RULER_W || viewer.clientHeight < 1) return false;
+  const playheadTime = playbackTime();
   if (!S.drag) S.hoverNote = hoveredStageNote();
   // layout() primes the fixed ruler width before measuring #scroll. This is a
   // last-resort recovery if stylesheet loading or a future CSS change ever lets
   // the ruler consume the row again.
   if (scroll.clientWidth < 1) layout();
-  if (scroll.clientWidth < 1) return; // hidden/zero viewport must not clear or shrink the canvas
+  if (scroll.clientWidth < 1) return false; // hidden/zero viewport must not clear or shrink the canvas
   // Project loading can reveal the app before its flex layout has reached the
   // final size. Keep both canvas axes tied to the live parent viewport: a stale
   // height compresses/clips the spectrogram just as badly as a stale width. The
@@ -827,8 +840,7 @@ function paintFrame({ panels = true } = {}) {
   drawBarNumbers(vx0, vx1);
   drawComments();
   paintMarkerRails(vx0, vx1);
-  syncProjectStartHandle();
-  overview?.draw();
+  return true;
 }
 
 // The export's leading silence, before the song (S.leadView, lead-view.js):

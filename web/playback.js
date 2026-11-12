@@ -50,7 +50,13 @@ window.addEventListener("cw-project-closed", () => { scrollingSuspended = false;
 
 function hasAudioTransport() { return !!S.state?.stems?.length; }
 
+// The split view's other pane paints at its own playhead (split-view.js): paused,
+// or moving with the transport while the two are linked or synced.
+let shownTime = null, shownPlaying = false;
+export function showPlayhead(time, playing = false) { shownTime = time; shownPlaying = playing; }
+
 export function transportPlaying() {
+  if (shownTime != null) return shownPlaying;
   return !!preroll || (hasAudioTransport() ? !audio.paused : !!S.scorePlaying);
 }
 
@@ -131,6 +137,16 @@ const lookahead = () => (document.hidden ? 1.5 : LOOKAHEAD);
 // ---- synth playback (edit lanes only) ----
 // Silent when the lane or the note bus is muted, or either is at zero.
 const laneAudible = (lane) => !lane.muted && normLayerVolume(lane.volume) * busLevel("notes") > 0;
+
+// Who is heard. Null: the whole mix, as the sidebar sets it. The split view
+// (split-view.js) narrows it to its panes' audio and note layers, a layer
+// `offset` s ahead of the playhead when its pane is linked at another position.
+let focus = null;   // { stems: [id], lanes: [{ id, offset }] }
+let scheduledAhead = new Set();   // as `scheduled`, for an offset layer
+export function setPlaybackFocus(next) { focus = next; applyStemGains(); }
+const audibleLanes = () => (focus
+  ? focus.lanes.map(({ id, offset }) => ({ lane: editLanes().find((l) => l.id === id), offset }))
+  : editLanes().map((lane) => ({ lane, offset: 0 }))).filter(({ lane }) => lane && laneAudible(lane));
 
 function laneSynth(lane) {
   if (!window.Tone) return null;
@@ -278,7 +294,7 @@ function updateClock() {
 }
 
 function resetSchedule(current = hasAudioTransport() ? audio.currentTime : playbackTime()) {
-  scheduled.clear();
+  scheduled.clear(); scheduledAhead.clear();
   scheduledBeats.clear();
   notesFrom = metroFrom = current;
   notesResumeAt = current;
@@ -378,22 +394,23 @@ function scheduleNotes() {
   const resumeAt = notesResumeAt; notesResumeAt = null;
   notesFrom = horizon;   // advance during passage previews too — their notes are meant to be skipped, not queued
   if (S.passagePreviewActive) return; // similar-passage previews audition the stem slice only
-  for (const lane of editLanes()) {
-    if (!laneAudible(lane)) continue;
+  for (const { lane, offset } of audibleLanes()) {
     const synth = laneSynth(lane);
     if (!synth) continue;
     const onset = synthOnset(synth); // real output-path seconds (samples play at 1×), so not divided by rate
+    const done = offset ? scheduledAhead : scheduled;
     for (const event of lanePlaybackEvents(lane)) {
-      const soundingAtRestart = resumeAt !== null && event.start <= resumeAt && event.start + event.duration > resumeAt;
-      if ((event.start >= from || soundingAtRestart) && event.start < horizon && !scheduled.has(event)) {
+      const at = event.start - offset;   // on the playhead's clock
+      const soundingAtRestart = resumeAt !== null && at <= resumeAt && at + event.duration > resumeAt;
+      if ((at >= from || soundingAtRestart) && at < horizon && !done.has(event)) {
         // Resume old sustains from the current position. Ordinary attacks retain
         // the existing late-tick grace rather than losing short notes to jitter.
-        const start = soundingAtRestart && event.start < resumeAt ? Math.max(now, resumeAt) : event.start;
-        const remaining = playbackEventFrom(event, start, loopEnd);
+        const start = soundingAtRestart && at < resumeAt ? Math.max(now, resumeAt) : at;
+        const remaining = playbackEventFrom(event, start + offset, loopEnd + offset);
         if (!remaining) continue;
-        scheduled.add(event);
+        done.add(event);
         const r = rate();
-        const when = Math.max(S.anchorCtx + (remaining.start - S.anchorSong) / r - onset, ctxNow());
+        const when = Math.max(S.anchorCtx + (remaining.start - offset - S.anchorSong) / r - onset, ctxNow());
         try { playSampleEvent(synth, remaining, when, when + onset, r, concertRatio()); }
         catch { /* unavailable samples */ }
       }
@@ -495,6 +512,7 @@ export function ensureStemMixer() {
 // Full song is the default audible source. When it is muted, separated stems
 // solo restricts the audible group, but mute always silences its own stem.
 function stemAudible(stem) {
+  if (focus) return focus.stems.includes(stem.id) && !stem.muted;
   if (isMasterStem(stem)) return !stem.muted;
   if (masterStemAudible()) return false;
   const soloed = separatedStems().some((s) => s.solo);
@@ -588,6 +606,7 @@ export function applyPreservePitch() {
 // where the sound actually is, not where the decoder is. Paused/scrubbing
 // falls back to the element's reported time.
 export function playbackTime() {
+  if (shownTime != null) return shownTime;
   if (preroll) return prerollTime();
   if (leadCursor < 0) return leadCursor;
   if (S.state && !hasAudioTransport()) {

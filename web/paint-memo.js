@@ -23,3 +23,10 @@ export function paintMemo(fn) {
     return byRest.get(key);
   };
 }
+
+// A second view painted inside the same frame (split-view.js) has its own
+// geometry and timing: it must neither reuse nor leave behind this frame's answers.
+export function freshMemo(read) {
+  generation++;
+  try { return read(); } finally { generation++; }
+}

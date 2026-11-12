@@ -43,7 +43,7 @@ export const KEY_COMMANDS = [
     ["previousLayer", "Previous note layer"], ["nextLayer", "Next note layer"],
     ["addLayer", "Add note layer"], ["layerSettings", "Active note layer settings"],
     ["layerVisible", "Show / hide active note layer"], ["layerLock", "Lock / unlock active note layer"],
-    ["tablature", "Open tablature view"], ["editorSettings", "Editor settings"],
+    ["splitView", "Split view"], ["tablature", "Open tablature view"], ["editorSettings", "Editor settings"],
     ["projectDetails", "Project details"], ["tunings", "Manage tunings"],
     ["toneDesigner", "Tone designer"], ["keyboardSettings", "Keyboard shortcuts"],
     ["projectLibrary", "Open project from library"], ["closeProject", "Close project"],

@@ -477,7 +477,7 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 .overview-time-input:invalid { border-color: var(--error); }
 .overview-map { display: block; width: 100%; height: 79px; cursor: pointer; }
 
-#viewer { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; border-radius: 0; }
+#viewer, .split-viewer { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; border-radius: 0; }
 
 #fretboardBusy {
   pointer-events: none;
@@ -558,17 +558,17 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 
 #fretboard { display: block; width: 100%; height: 100%; }
 
-#ruler { width: 44px; background: var(--piano-bg); border-right: 1px solid var(--stage-line); flex: none; cursor: pointer; }
+#ruler, .split-ruler { width: 44px; background: var(--piano-bg); border-right: 1px solid var(--stage-line); flex: none; cursor: pointer; }
 
-#scroll { flex: 1; min-width: 0; overflow-x: scroll; overflow-y: hidden; position: relative; background: var(--spectral-ground); color-scheme: dark; }
+#scroll, .split-scroll { flex: 1; min-width: 0; overflow-x: scroll; overflow-y: hidden; position: relative; background: var(--spectral-ground); color-scheme: dark; }
 /* A styled scrollbar is a classic one: it takes layout room, so stageRoom() can
    reserve its strip. WebView2's default overlay bars float over the lowest rows. */
-#scroll::-webkit-scrollbar { width: 12px; height: 12px; background: var(--piano-bg); }
-#scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--label) 40%, transparent); border-radius: var(--r-control); border: 3px solid var(--piano-bg); }
-#scroll::-webkit-scrollbar-thumb:hover { background: var(--label); }
-#scroll::-webkit-scrollbar-corner { background: var(--piano-bg); }
-#stageSpacer { position: relative; }
-#stage { display: block; position: sticky; left: 0; top: 0; }
+#scroll::-webkit-scrollbar, .split-scroll::-webkit-scrollbar { width: 12px; height: 12px; background: var(--piano-bg); }
+#scroll::-webkit-scrollbar-thumb, .split-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--label) 40%, transparent); border-radius: var(--r-control); border: 3px solid var(--piano-bg); }
+#scroll::-webkit-scrollbar-thumb:hover, .split-scroll::-webkit-scrollbar-thumb:hover { background: var(--label); }
+#scroll::-webkit-scrollbar-corner, .split-scroll::-webkit-scrollbar-corner { background: var(--piano-bg); }
+#stageSpacer, .split-spacer { position: relative; }
+#stage, .split-stage { display: block; position: sticky; left: 0; top: 0; }
 
 #bpm { width: 84px; }
 #tsNum, #tsDen { width: 48px; }
@@ -1411,14 +1411,14 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 /* The board's own ground, or the strip's band reads as a solid bar above it. */
 #fretboardPanel { padding-top: var(--w-edge); background: var(--stage); }
 #fretboardPanel[data-collapsed] { padding-top: 0; }
-#viewer { padding-top: var(--w-edge); }
+#viewer, .split-viewer { padding-top: var(--w-edge); }
 /* The editing stage; the overview above it is its own panel. */
 #editingWorkspace {
   display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
   overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-container);
   background: var(--spectral-ground);
 }
-#rulerRight { display: block; flex: none; background: var(--piano-bg); border-left: 1px solid var(--stage-line); cursor: pointer; }
+#rulerRight, .split-ruler-right { display: block; flex: none; background: var(--piano-bg); border-left: 1px solid var(--stage-line); cursor: pointer; }
 
 
 .dp-run { align-items: center; gap: var(--s-sibling); }
@@ -1646,3 +1646,51 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .repeat-picker-row button[aria-current="true"] { color: var(--accent); }
 .repeat-picker-row input { flex-shrink: 0; margin: 0 8px 0 0; cursor: pointer; }
 .repeat-picker-heading { padding: 8px 8px 4px; color: var(--hint); border-top: 1px solid var(--line); }
+
+/* Split view (split-view.js): the live editor and the second pane, side by side
+   or stacked, each under its own header, and their fretboards side by side with a
+   divider of their own. The live one swaps places rather than content.
+   --split-a/-b share the panes' room, --fret-first is the first board's share. */
+#editor { --split-a: 1fr; --split-b: 1fr; --fret-first: 50%; }
+#editor.split #editingPanel { position: relative; display: grid; grid-template: auto minmax(0, 1fr) / minmax(0, var(--split-a)) auto minmax(0, var(--split-b)); }
+#editor.split #viewer { grid-area: 2 / 1; }
+#editor.split #splitPane { grid-area: 2 / 3; }
+#editor.split.live-second #viewer { grid-area: 2 / 3; }
+#editor.split.live-second #splitPane { grid-area: 2 / 1; }
+#splitHead0 { grid-area: 1 / 1; }
+#splitHead1 { grid-area: 1 / 3; }
+#splitDivider { grid-area: 1 / 2 / 3 / 3; }
+#editor.split.rows #editingPanel { grid-template: auto minmax(0, var(--split-a)) auto auto minmax(0, var(--split-b)) / minmax(0, 1fr); }
+#editor.split.rows #viewer { grid-area: 2 / 1; }
+#editor.split.rows #splitPane { grid-area: 5 / 1; }
+#editor.split.rows.live-second #viewer { grid-area: 5 / 1; }
+#editor.split.rows.live-second #splitPane { grid-area: 2 / 1; }
+#editor.split.rows #splitHead1 { grid-area: 4 / 1; }
+#splitDividerY { grid-area: 3 / 1; }
+#editor.rows #splitDivider, #editor:not(.rows) #splitDividerY { display: none; }
+.split-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-pair) var(--s-sibling); min-width: 0; padding: var(--s-pair) var(--s-sibling); background: var(--panel); box-shadow: inset 0 -1px var(--line); }
+.split-head[data-live] { box-shadow: inset 0 -2px var(--accent); }
+/* Split, each pane is a panel of its own (header over stage) and the divider is
+   the gap between them, like every other splitter in the app. */
+#editor.split #editingWorkspace { border: 0; border-radius: 0; background: transparent; }
+#editor.split #editingPanel { background: transparent; }
+#editor.split .split-head { border: 1px solid var(--line); border-bottom: 0; border-radius: var(--r-container) var(--r-container) 0 0; }
+#editor.split :is(#viewer, #splitPane) { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--r-container) var(--r-container); background: var(--spectral-ground); }
+/* The split's handles show their grip at rest too, not only on hover. */
+:is(#splitDivider, #splitDividerY, #splitFretDivider) { color: color-mix(in srgb, var(--hint) 55%, transparent); }
+:is(#splitDivider, #splitDividerY, #splitFretDivider):is(:hover, .is-dragging) { color: var(--text); }
+/* The boards share one panel, so theirs is a rule through the gap. */
+#splitFretDivider::before { content: ""; position: absolute; top: var(--s-sibling); bottom: var(--s-sibling); left: 50%; width: 1px; background: var(--line); }
+:is(.split-head, .split-viewer, #splitDivider, #splitDividerY, #splitFretboard, #splitFretDivider, #splitControls)[hidden] { display: none; }
+.split-head label { display: flex; align-items: center; gap: var(--s-pair); color: var(--hint); font-size: var(--text-caption); }
+.split-head select { max-width: 20ch; }
+#splitControls { position: absolute; z-index: calc(var(--z-splitter) + 1); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-sibling); width: max-content; max-width: calc(100% - 24px); padding: var(--s-pair); border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--surface-toolbar); box-shadow: var(--e1); }
+#splitControls label { display: flex; align-items: center; gap: var(--s-pair); color: var(--hint); font-size: var(--text-caption); }
+#splitDrag { min-width: var(--h-control); height: var(--h-control); padding: 0; cursor: grab; touch-action: none; }
+#splitControls.docking #splitDrag { cursor: grabbing; }
+#fretboardLive { position: relative; width: 100%; height: 100%; }
+#editor.split #fretboardLive, #splitFretboard { position: absolute; top: 0; height: 100%; }
+#editor.split #fretboardLive, #editor.split.live-second #splitFretboard { left: 0; width: var(--fret-first); }
+#editor.split.live-second #fretboardLive, #editor.split #splitFretboard { left: calc(var(--fret-first) + var(--s-panel)); width: calc(100% - var(--fret-first) - var(--s-panel)); }
+#splitFretboard { display: block; }
+#splitFretDivider { position: absolute; top: 0; bottom: 0; left: var(--fret-first); }

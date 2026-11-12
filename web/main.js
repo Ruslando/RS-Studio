@@ -7,6 +7,7 @@ import { init_ui, openSettingsModal } from "./ui.js";
 import { init_grid } from "./grid.js";
 import { init_lanes, renderLayerSettings } from "./lanes.js";
 import { init_draw } from "./draw.js";
+import { init_split_view } from "./split-view.js";
 import { init_settings } from "./settings.js";
 import { init_sound_designer } from "./sound-designer.js";
 import { init_tracing } from "./tracing.js";
@@ -46,6 +47,7 @@ init_ui({ doCopy, doCut, doDelete, doPaste, renderLayerSettings });
 init_grid();
 init_lanes({ refreshTabIfOpen });
 init_draw();
+init_split_view();
 init_settings();   // restore persisted prefs before features read their inputs
 init_sound_designer();
 init_tracing();

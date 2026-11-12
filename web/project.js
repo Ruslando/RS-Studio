@@ -591,7 +591,7 @@ export async function setTuning(change) {
 // The edit lanes are global, so they stay put across stems.
 let stemViewGeneration = 0;
 const channelRequests = new WeakMap();
-function spectrogramUrl(stem, channel) {
+export function spectrogramUrl(stem, channel) {
   const url = new URL(stem.spec.url, location.href);
   url.searchParams.set('channel', channel);
   // Default view is the fine CQT (3 rows per semitone); 'energy' (1 row) stays server-side only.

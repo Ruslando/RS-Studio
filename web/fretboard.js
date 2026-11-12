@@ -676,8 +676,11 @@ export function setFretboardVisible(on) {
 // Opening, closing and mode switches animate. Window/instrument resize settles
 // immediately. The neck is measured at its destination size, then
 // revealed by the panel's clip, so it never stretches during the transition.
-function layoutFretboard(slide = false) {
-  const cssW = fretboardStage.clientWidth;
+export function layoutFretboard(slide = false) {
+  // The boards, not the stage: with the split view open the stage holds two, and
+  // the panel fits the wider, so it keeps its height whichever pane is live.
+  const second = $("splitFretboard");
+  const cssW = Math.max(fretboardEl.clientWidth, second && !second.hidden ? second.clientWidth : 0);
   if (cssW < 2 * PAD) return;
   const spec = laneSpec(currentLane());
   // The strip that folds the panel sits above the board, in the panel's own padding.
@@ -1369,6 +1372,25 @@ function pinnedColumn(lane) {
   if (!note) return null;
   const col = columnOf(note)?.col;
   return col?.notes.some((n) => n.pos || n.arrangement || n.written) ? col : null;
+}
+
+// The split view's other pane: the same neck and hand at that pane's layer and
+// playhead, which split-view.js has swapped in. Nothing on it is editable.
+export function paintFretboardInto(canvas) {
+  const dp = dpr(), w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * dp)) canvas.width = Math.round(w * dp);
+  if (canvas.height !== Math.round(h * dp)) canvas.height = Math.round(h * dp);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dp, 0, 0, dp, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const lane = currentLane();
+  if (!visible || !lane || w < 2 * PAD) return;
+  const s = laneSpec(lane), projection = boardProjection(ctx, s, w, h - 12, laneTuning(lane));
+  if (!projection) return;
+  const { scale, X, Y, strung, tunePx } = projection;
+  const now = handNow(lane, s);
+  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat: anchorFret(lane), offered: 0, strung, tunePx });
+  drawHand(ctx, s, scale, X, Y, lane, now, null, { onion: false });
 }
 
 // Reserve room for the controls only in edit mode, below the strings.

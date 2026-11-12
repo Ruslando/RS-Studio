@@ -1622,6 +1622,7 @@ function handleEditShortcut(e, mod) {
   // the fretboard out of this file's imports, which it imports from already.
   else if (matchKey(e, "fretboard")) { e.preventDefault(); $("menuFretboard").click(); }
   else if (matchKey(e, "markerLanes")) { e.preventDefault(); $("menuMarkerLanes").click(); }
+  else if (matchKey(e, "splitView")) { e.preventDefault(); $("splitViewToggle").click(); }
 }
 
 export function init_edit({ openSettingsModal }) {
