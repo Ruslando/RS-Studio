@@ -4,7 +4,7 @@ import { findRepeats } from '../../web/repeats-core.js';
 import { noteName } from '../../web/util.js';
 class Element extends EventTarget {
   style = {}; dataset = {};
-  classList = { add() {} };
+  classList = { add() {}, toggle() {} };
   contains(node) { return this === node || this.children.some(c => c.contains(node)); }
   children = []; attributes = {}; textContent = ''; hidden = false; disabled = false; value = '';
   append(...children) { this.children.push(...children); }
@@ -17,8 +17,8 @@ class Element extends EventTarget {
 }
 const ids = ['repeatNavigator', 'repeatGroup', 'repeatGroupPrevious', 'repeatGroupNext', 'repeatPosition', 'repeatPrevious', 'repeatNext',
   'repeatInstance', 'repeatDrag',
-  'repeatChangeNavigation', 'repeatChangePrevious', 'repeatChangeNext', 'repeatChangePosition', 'repeatHover', 'repeatHoverRows', 'repeatHoverTitle',
-  'repeatNoteNavigation', 'repeatNoteFirst', 'repeatNoteCurrent', 'repeatNoteVersion', 'repeatNoteJump', 'repeatHoverClose', 'repeatClose'];
+  'repeatChangeNavigation', 'repeatChangePrevious', 'repeatChangeNext', 'repeatChangePosition', 'repeatHover', 'repeatHoverRows',
+  'repeatHoverHead', 'repeatHoverClose', 'repeatClose'];
 const controls = Object.fromEntries(ids.map(id => [id, new Element()]));
 const riff = [40, 43, 45, 47, 45, 43, 40, 38];
 const make = (start, pitches = riff) => pitches.map((pitch, i) => ({ id: `${start}:${i}`, start: start + i / 2, end: start + i / 2 + .4, pitch, pos: { string: 5, fret: pitch - 35 } }));
@@ -111,10 +111,15 @@ try {
     playhead = note.start + .01; module.syncRepeatPlayhead();
     return !controls.repeatHover.hidden;
   };
-  const rows = () => controls.repeatHoverRows.children.map(row => [row.children[0].textContent, row.children[1].children[0]?.textContent]);
-  const action = key => controls.repeatHoverRows.children.flatMap(row => row.children)
-    .flatMap(cell => cell.children).flatMap(child => [child, ...child.children])
-    .find(button => button.dataset.change === key);
+  // A card row: its label, the left value, the copy buttons, the right value.
+  // A value cell: its value, and hidden, its preview (old value, arrow, new value).
+  const shownIn = cell => cell?.children[0]?.children[0]?.children[0];
+  const cellText = cell => shownIn(cell)?.textContent ?? '';
+  const previewIn = cell => cell.children[0].children[1].children;
+  const rows = () => controls.repeatHoverRows.children.map(row => [row.children[0].textContent, cellText(row.children[1]), cellText(row.children[3])]);
+  const heads = () => controls.repeatHoverHead.children.map(cell => cell.textContent);
+  const direction = (key, target) => controls.repeatHoverRows.children.flatMap(row => row.children[2]?.children || [])
+    .find(button => button.dataset.change === key && button.dataset.target === String(target));
   // The playhead opens notes without any pointer hit targets or canvas draw.
   assert.equal(module.hoverRepeatDifference, undefined, 'mouse hover cannot open a comparison');
   playhead = lane.notes[1].start + .1; module.renderRepeatNavigator();
@@ -141,39 +146,19 @@ try {
   assert.equal(previews.at(-1)[1], third[2]);
   assert.equal(seeks.length, seekCount, 'following playback never seeks the transport back');
   const beforePreview = structuredClone(lane.notes), beforePreviewCommits = commits;
+  // The card puts the note beside the next instance where it differs, and shows only what differs.
   assert.equal(inspectNote(lane.notes[2]), true);
-  assert.equal(controls.repeatNoteVersion.textContent, '1 / 3');
-  assert.ok(rows().some(row => row.join('|') === 'Position|S6 · F10'));
-  assert.ok(rows().some(row => row[0] === 'Pitch'));
-  assert.ok(rows().some(row => row[0] === 'Length'));
-  assert.ok(!rows().some(row => row[0] === 'Slide starts'), 'inactive effects do not crowd the card');
+  assert.deepEqual(heads(), ['', 'Instance 1', '', 'Instance 2']);
+  assert.deepEqual(rows(), [['Position', 'S6 · F10', 'S5 · F10']], 'only the differing values, side by side');
   assert.equal(previews.at(-1)[1], lane.notes[2]);
-  controls.repeatNoteCurrent.click();
-  assert.equal(controls.repeatNoteVersion.textContent, '2 / 3');
-  assert.equal(previews.at(-1)[1], lane.notes[10]);
-  assert.ok(rows().some(row => row.join('|') === 'Position|S5 · F10'));
-  assert.equal(module.repeatPreviewHiddenNote(), lane.notes[2]);
-  assert.ok(action('position'), 'an uncommon position offers the common value');
-  assert.equal(action('position').title, undefined, 'Apply has no visible explanatory tooltip');
-  action('position').dispatchEvent(new Event('mouseenter'));
-  assert.ok(rows().some(row => row.join('|') === 'Position|S6 · F10'), 'Apply hover previews a common scalar value too');
-  action('position').dispatchEvent(new Event('mouseleave'));
-  assert.ok(rows().some(row => row.join('|') === 'Position|S5 · F10'), 'leaving restores the scalar value');
-  assert.equal(controls.repeatHoverRows.children.find(row => row.children[0].textContent === 'Position').children[1].className, 'repeat-uncommon', 'the one uncommon position is highlighted');
-  controls.repeatNoteCurrent.click();
-  assert.equal(controls.repeatNoteVersion.textContent, '3 / 3');
-  assert.equal(previews.at(-1)[1], third[2]);
-  assert.ok(rows().some(row => row.join('|') === 'Position|S6 · F10'));
-  controls.repeatNoteCurrent.click();
-  assert.equal(controls.repeatNoteVersion.textContent, '1 / 3', 'the note arrows wrap through all occurrences');
-  assert.equal(module.repeatPreviewHiddenNote(), null);
-  controls.repeatNoteFirst.click();
-  assert.equal(controls.repeatNoteVersion.textContent, '3 / 3', 'backward navigation wraps too');
-  const projected = module.repeatPreviewNote();
-  assert.equal(projected.source, third[2]);
-  assert.equal(projected.note.start, lane.notes[2].start);
-  assert.equal(projected.alpha, .55);
-  assert.notEqual(controls.repeatHoverRows.children.find(row => row.children[0].textContent === 'Position').children[1].className, 'repeat-uncommon', 'the common position is not highlighted');
+  const positionRow = controls.repeatHoverRows.children[0];
+  direction('position', 1).dispatchEvent(new Event('mouseenter'));
+  assert.equal(positionRow.children[3].dataset.preview, '', 'an arrow previews the cell it copies into');
+  assert.deepEqual(previewIn(positionRow.children[3]).map(part => part.textContent), ['S5 · F10', '→', 'S6 · F10'],
+    'the old value, then an arrow to the new one');
+  assert.equal(positionRow.children[1].dataset.preview, undefined, 'the source cell stays as it is');
+  direction('position', 1).dispatchEvent(new Event('mouseleave'));
+  assert.equal(positionRow.children[3].dataset.preview, undefined, 'leaving restores it');
   assert.deepEqual(lane.notes, beforePreview, 'previewing never edits notes');
   assert.equal(commits, beforePreviewCommits, 'previewing adds no undo steps');
   assert.equal(S.selection, selection);
@@ -182,159 +167,111 @@ try {
   window.dispatchEvent(new Event('wheel'));
   assert.equal(controls.repeatHover.hidden, false, 'mouse activity does not dismiss the playhead comparison');
 
-  module.hideRepeatHover();
-  module.drawRepeats(); inspectNote(lane.notes[2]); controls.repeatNoteCurrent.click();
   const originalPosition = structuredClone(lane.notes[10].pos), countBeforeApply = commits;
-  lockedNoteId = lane.notes[10].id;
-  controls.repeatNoteCurrent.click(); controls.repeatNoteFirst.click();
-  assert.equal(action('position').disabled, true, 'locked references cannot receive the common value');
-  lockedNoteId = null;
-  controls.repeatNoteCurrent.click(); controls.repeatNoteFirst.click();
-  action('position').click();
-  assert.deepEqual(lane.notes[10].pos, lane.notes[2].pos, 'Apply updates the displayed occurrence');
-  assert.equal(commits, countBeforeApply + 1, 'the common value is one undoable edit');
-  assert.equal(controls.repeatHover.hidden, true, 'resolving the last difference closes the preview');
+  lockedNoteId = lane.notes[10].id; module.hideRepeatHover(); inspectNote(lane.notes[2]);
+  assert.equal(direction('position', 1).disabled, true, 'a locked reference cannot receive the value');
+  lockedNoteId = null; module.hideRepeatHover(); inspectNote(lane.notes[2]);
+  direction('position', 1).click(); module.renderRepeatNavigator();
+  assert.deepEqual(lane.notes[10].pos, lane.notes[2].pos, '→ copies the left value to the right');
+  assert.equal(commits, countBeforeApply + 1, 'a copy is one undoable edit');
+  assert.equal(controls.repeatHover.hidden, true, 'resolving the last difference closes the card');
   lane.notes[10].pos = originalPosition; S.voicingRevision++; module.renderRepeatNavigator();
-  module.drawRepeats(); inspectNote(lane.notes[2]); controls.repeatNoteCurrent.click(); controls.repeatNoteJump.click();
-  assert.equal(controls.repeatNoteVersion.textContent, '2 / 3');
-  assert.equal(action('position'), undefined, 'the middle occurrence already matches its default suggestion');
-  lane.notes[10].pos = originalPosition; S.voicingRevision++; controls.repeatPrevious.click(); module.renderRepeatNavigator();
-  module.drawRepeats(); inspectNote(lane.notes[2]); controls.repeatNoteFirst.click();
-  controls.repeatNoteJump.click(); module.renderRepeatNavigator();
-  assert.equal(controls.repeatPosition.textContent, '3 / 3', 'jump activates the displayed instance');
-  assert.equal(controls.repeatNoteVersion.textContent, '3 / 3');
-  assert.equal(previews.at(-1)[1], third[2], 'jump keeps the corresponding note open on the fretboard');
-  assert.equal(controls.repeatHover.hidden, false);
-  assert.equal(module.repeatPreviewHiddenNote(), null, 'the destination is shown as its actual note');
-  assert.deepEqual(lane.notes, beforePreview, 'jumping does not change notes');
-  assert.equal(S.selection, selection, 'jumping preserves the selection');
-  controls.repeatPrevious.click(); controls.repeatPrevious.click(); module.renderRepeatNavigator();
+  module.hideRepeatHover(); inspectNote(lane.notes[2]);
+  const ownPosition = structuredClone(lane.notes[2].pos);
+  direction('position', 0).click(); module.renderRepeatNavigator();
+  assert.deepEqual(lane.notes[2].pos, originalPosition, '← copies the right value to the left');
+  assert.equal(heads()[3], 'Instance 3', 'the card moves on to the next instance that still differs');
+  lane.notes[2].pos = ownPosition; S.voicingRevision++; module.renderRepeatNavigator(); module.hideRepeatHover();
 
   third[0].fx = { vibrato: true }; S.voicingRevision++; module.renderRepeatNavigator();
-  module.drawRepeats(); inspectNote(lane.notes[0]); controls.repeatNoteFirst.click();
-  const direction = (key, target) => controls.repeatHoverRows.children.flatMap(row => row.children).flatMap(cell => cell.children)
-    .find(button => button.dataset.change === key && button.dataset.target === String(target));
+  module.drawRepeats(); inspectNote(lane.notes[0]);
+  assert.deepEqual(rows()[0], ['Vibrato', 'Off', 'On']);
+  assert.equal(heads()[3], 'Instance 3', 'an instance that matches is passed over');
   const beforeVibrato = commits;
   direction('fx.vibrato', 0).click();
-  assert.equal(lane.notes[0].fx.vibrato, true, 'the previewed vibrato can be applied to the opened note');
-  assert.equal(third[0].fx.vibrato, true);
+  assert.equal(lane.notes[0].fx.vibrato, true, 'the compared vibrato can be copied to this note');
   assert.equal(commits, beforeVibrato + 1);
   delete lane.notes[0].fx; S.voicingRevision++; module.renderRepeatNavigator();
-  module.drawRepeats(); inspectNote(lane.notes[0]); controls.repeatNoteFirst.click();
-  direction('fx.vibrato', 2).click();
-  assert.ok(!third[0].fx?.vibrato, 'the opened absence can remove vibrato from the previewed note');
-  assert.equal(controls.repeatHover.hidden, true, 'resolving vibrato closes the preview');
+  module.hideRepeatHover(); module.drawRepeats(); inspectNote(lane.notes[0]);
+  direction('fx.vibrato', 2).click(); module.renderRepeatNavigator();
+  assert.ok(!third[0].fx?.vibrato, 'and this note\'s absence to the compared one');
+  assert.equal(controls.repeatHover.hidden, true, 'resolving vibrato closes the card');
   assert.equal(S.selection, selection);
-  module.hideRepeatHover();
-  const lengthNotes = [lane.notes[0], lane.notes[8], third[0]], oldEnds = lengthNotes.map(note => note.end);
-  lengthNotes.forEach((note, i) => { note.end = note.start + [.4, .6, .8][i]; });
-  S.voicingRevision++; module.renderRepeatNavigator(); module.drawRepeats(); inspectNote(lane.notes[0]); controls.repeatNoteFirst.click();
-  controls.repeatNoteJump.click();
-  const medianAction = action('length');
-  medianAction.dispatchEvent(new Event('mouseenter'));
-  assert.ok(rows().some(row => row.join('|') === 'Length|0.6 beats'), 'Apply previews the median length');
-  assert.ok(Math.abs(third[0].end - third[0].start - .8) < 1e-9, 'hovering does not apply the length');
-  medianAction.click();
-  assert.ok(Math.abs(third[0].end - third[0].start - .6) < 1e-9, 'Apply sets the median length');
-  lengthNotes.forEach((note, i) => { note.end = oldEnds[i]; }); S.voicingRevision++; controls.repeatPrevious.click(); controls.repeatPrevious.click(); module.renderRepeatNavigator();
-  module.drawRepeats(); inspectNote(lane.notes[4]);
-  const absentCurveHeading = controls.repeatHoverRows.children.find(row => row.children[0].textContent === 'Whammy curve').children[0];
-  assert.equal(absentCurveHeading.className, 'repeat-curve-unavailable', 'an absent curve has a red label');
-  assert.equal(absentCurveHeading.attributes['aria-label'], 'Whammy curve unavailable');
-  module.hideRepeatHover();
-  for (const note of [lane.notes[4], lane.notes[12]]) {
-    note.whammy = 'dip'; note.whammyPoints = [[0, 0], [.4, -1], [1, 0]];
-  }
-  S.voicingRevision++; module.renderRepeatNavigator();
-  module.drawRepeats(); assert.equal(inspectNote(lane.notes[4]), true, "whammy note is a hover target"); controls.repeatNoteFirst.click();
-  const curveRow = controls.repeatHoverRows.children.find(row => row.children[0].textContent === 'Whammy curve');
-  assert.ok(curveRow, JSON.stringify({rows: rows(), version: controls.repeatNoteVersion.textContent, preview: previews.at(-1)?.[1]}));
-  assert.equal(curveRow.children[1].children[0].attributes.viewBox, '0 0 96 28');
-  assert.equal(curveRow.children[1].children[0].children.filter(child => child.attributes.class === 'repeat-curve-point').length, 3, 'the curve shows each control point');
-  assert.ok(!rows().some(row => row[0] === 'Whammy'), 'the separate whammy kind row is omitted');
-  const priorPath = curveRow.children[1].children[0].children[1].attributes.d;
-  const previewNotes = structuredClone(lane.notes), previewCommits = commits;
-  action('whammyPoints').dispatchEvent(new Event('mouseenter'));
-  assert.notEqual(curveRow.children[1].children[0].children[1].attributes.d, priorPath, 'Apply hover replaces the graph with the common curve');
-  action('whammyPoints').dispatchEvent(new Event('mouseleave'));
-  assert.equal(curveRow.children[1].children[0].children[1].attributes.d, priorPath, 'leaving Apply restores the current curve');
-  assert.deepEqual(lane.notes, previewNotes, 'Apply hover does not mutate notes');
-  assert.equal(commits, previewCommits, 'Apply hover adds no undo step');
-  assert.equal(curveRow.children[1].className, 'repeat-uncommon', 'the unusual curve is highlighted');
-  assert.ok(action('whammyPoints'), 'the uncommon curve offers the common curve');
-  third[4].whammyPoints = [[0, 0], [.7, -1], [1, 0]]; S.voicingRevision++;
-  module.renderRepeatNavigator(); rectangles.length = 0; module.drawRepeats();
-  inspectNote(lane.notes[4]); controls.repeatNoteFirst.click();
-  const updatedCurve = controls.repeatHoverRows.children.find(row => row.children[0].textContent === 'Whammy curve');
-  assert.equal(updatedCurve.children[1].children[0].attributes.viewBox, '0 0 96 28');
-  assert.equal(updatedCurve.children[1].className, 'repeat-uncommon', 'different curve timing remains highlighted');
-  assert.ok(!updatedCurve.children[1].children.some(child => child.textContent === 'Points differ'), 'redundant difference text is omitted');
-  assert.ok(rectangles.some(rect => rect.color === 'orange' && Math.abs(rect.rect[0] - (lane.notes[4].start * 10 - 2)) < 1e-5),
-    'the stage indicates the different curve points');
-  const curveBeforeApply = commits, sourceCurve = structuredClone(lane.notes[4].whammyPoints);
-  action('whammyPoints').click();
-  assert.deepEqual(third[4].whammyPoints, sourceCurve, 'Apply copies the common curve points');
-  assert.notEqual(third[4].whammyPoints, lane.notes[4].whammyPoints, 'the curves do not share mutable data');
-  assert.equal(commits, curveBeforeApply + 1);
-  assert.equal(controls.repeatHover.hidden, true, 'matching the common curve closes the preview');
-  module.hideRepeatHover();
-  for (const note of [lane.notes[4], lane.notes[12]]) { delete note.whammy; delete note.whammyPoints; }
-  third[4].whammyPoints = [[0, 0], [.5, -2], [1, 0]]; S.voicingRevision++;
 
-  // A missing counterpart can be previewed, including its frequency.
+  // A curve is drawn; an absent one reads None.
+  module.drawRepeats(); inspectNote(lane.notes[4]);
+  const curveRow = controls.repeatHoverRows.children.find(row => row.children[0].textContent === 'Whammy curve');
+  assert.ok(curveRow, JSON.stringify(rows()));
+  assert.equal(cellText(curveRow.children[1]), 'None');
+  assert.equal(shownIn(curveRow.children[3]).children[0].attributes.viewBox, '0 0 96 28');
+  assert.equal(shownIn(curveRow.children[3]).children[0].children.filter(child => child.attributes.class === 'repeat-curve-point').length, 3, 'the curve shows each control point');
+  assert.ok(!rows().some(row => row[0] === 'Whammy'), 'the separate whammy kind row is omitted');
+  assert.ok(rectangles.some(rect => rect.color === 'orange' && Math.abs(rect.rect[0] - (lane.notes[4].start * 10 - 2)) < 1e-5),
+    'the stage marks the different curve');
+  const previewNotes = structuredClone(lane.notes), previewCommits = commits;
+  direction('whammyPoints', 0).dispatchEvent(new Event('mouseenter'));
+  assert.equal(curveRow.children[1].dataset.preview, '');
+  const [oldCurve, , newCurve] = previewIn(curveRow.children[1]);
+  assert.equal(oldCurve.textContent, 'None');
+  assert.equal(newCurve.children[0].attributes.viewBox, '0 0 96 28', 'hovering ← previews the compared curve here');
+  direction('whammyPoints', 0).dispatchEvent(new Event('mouseleave'));
+  assert.deepEqual(lane.notes, previewNotes, 'hovering does not mutate notes');
+  assert.equal(commits, previewCommits);
+  direction('whammyPoints', 0).click();
+  assert.deepEqual(lane.notes[4].whammyPoints, third[4].whammyPoints, 'the curve points are copied');
+  assert.notEqual(lane.notes[4].whammyPoints, third[4].whammyPoints, 'the curves do not share mutable data');
+  assert.equal(commits, previewCommits + 1);
+  delete lane.notes[4].whammy; delete lane.notes[4].whammyPoints; S.voicingRevision++; module.renderRepeatNavigator(); module.hideRepeatHover();
+
+  // A missing counterpart.
   const manualReplacement = { ...missingThird, id: 'drawn-after-scan' };
   lane.notes.push(manualReplacement); S.voicingRevision++; module.renderRepeatNavigator();
   module.drawRepeats();
-  assert.equal(inspectNote(lane.notes[3]), false, 'a matching replacement clears the missing-note preview');
+  assert.equal(inspectNote(lane.notes[3]), false, 'a matching replacement clears the missing-note card');
   lane.notes = lane.notes.filter(note => note !== manualReplacement); S.voicingRevision++; module.renderRepeatNavigator();
-  module.drawRepeats(); inspectNote(lane.notes[3]); controls.repeatNoteFirst.click();
-  assert.equal(controls.repeatNoteVersion.textContent, '3 / 3');
-  assert.deepEqual(rows(), [['Note', 'Missing']]);
-  assert.equal(controls.repeatHoverRows.children[0].children[1].className, 'repeat-uncommon');
-  assert.equal(previews.at(-1)[1], null);
-  assert.ok(action('presence'), 'a missing note offers the common presence');
+  module.drawRepeats(); inspectNote(lane.notes[3]);
+  assert.deepEqual(rows(), [['Note', 'B2', 'Missing']]);
   const savedIds = lane.repeatGroups[0].copies[2];
-  action('presence').click();
+  direction('presence', 2).click();
   const recreated = lane.notes.find(note => note.id.startsWith('new'));
-  assert.ok(recreated, 'Apply adds a missing counterpart');
+  assert.ok(recreated, '→ adds the missing counterpart');
   assert.equal(recreated.start, missingThird.start);
-  assert.equal(controls.repeatHover.hidden, true, 'filling the missing note closes the resolved preview');
+  module.renderRepeatNavigator();
+  assert.equal(controls.repeatHover.hidden, true, 'filling the missing note closes the card');
   lane.notes = lane.notes.filter(note => note !== recreated);
   savedIds.splice(savedIds.indexOf(recreated.id), 1); S.voicingRevision++; module.renderRepeatNavigator();
-  module.drawRepeats(); inspectNote(lane.notes[3]); controls.repeatNoteFirst.click();
-  controls.repeatNoteJump.click(); module.renderRepeatNavigator();
-  assert.equal(controls.repeatPosition.textContent, '3 / 3', 'jump reaches the occurrence with a missing note');
-  assert.equal(controls.repeatHover.hidden, false, 'the missing note remains open after jumping');
-  assert.deepEqual(rows(), [['Note', 'Missing']]);
-  module.hideRepeatHover();
+  // Where the note is missing, the playhead finds no note of this instance's;
+  // the difference buttons still reach it.
+  assert.equal(inspectNote(missingThird), false, 'the playhead opens only this instance\'s own notes');
+  module.renderRepeatNavigator();
   assert.equal(controls.repeatPosition.textContent, '3 / 3');
+  controls.repeatChangePosition.value = `${third[0].id}:${lane.notes[3].id}`;
+  controls.repeatChangePosition.dispatchEvent(new Event('change')); module.renderRepeatNavigator();
+  assert.equal(controls.repeatHover.hidden, false, 'a missing note opens from the difference list');
+  assert.deepEqual(heads(), ['', 'Instance 3', '', 'Instance 1']);
+  assert.deepEqual(rows(), [['Note', 'Not present', 'B2']]);
+  assert.equal(previews.at(-1)[1], null);
+  module.hideRepeatHover();
   rectangles.length = 0; module.drawRepeats();
   const ghost = rectangles.find(r => r.color === 'orange' && r.dash.length);
   assert.ok(ghost, 'the missing note uses the same color with a dashed outline');
   assert.ok(rectangles.filter(r => r.color !== 'blue').every(r => r.color === 'orange'), 'all note differences use one color');
-  assert.equal(inspectNote(missingThird), true);
-  assert.deepEqual(rows(), [['Note', 'Missing']]);
-  controls.repeatNoteCurrent.click();
-  assert.equal(controls.repeatNoteVersion.textContent, '1 / 3');
-  assert.equal(previews.at(-1)[1], lane.notes[3], 'a missing note can preview a present occurrence');
-  controls.repeatNoteJump.click(); module.renderRepeatNavigator();
-  assert.equal(controls.repeatPosition.textContent, '1 / 3', 'jump from a missing note reaches its present counterpart');
-  assert.equal(controls.repeatHover.hidden, false);
-  module.hideRepeatHover();
+  controls.repeatPrevious.click(); controls.repeatPrevious.click(); module.renderRepeatNavigator();
+  assert.equal(controls.repeatPosition.textContent, '1 / 3');
 
-  // The common presence can also be absence when the other instances omit a note.
+  // An absence can be copied too: the note is removed.
   const notesBeforeRemoval = lane.notes, uniqueNote = lane.notes[3], secondNoteId = lane.notes[11].id;
   lane.notes = lane.notes.filter(note => note.id !== secondNoteId); S.voicingRevision++; module.renderRepeatNavigator();
-  module.drawRepeats(); inspectNote(uniqueNote);
-  assert.equal(action('presence').attributes['aria-label'], 'Remove this note to match the common absence');
+  module.hideRepeatHover(); module.drawRepeats(); inspectNote(uniqueNote);
+  assert.deepEqual(rows(), [['Note', 'B2', 'Missing']]);
   const removalCommit = commits;
-  action('presence').click();
-  assert.ok(!lane.notes.includes(uniqueNote), 'Apply can match a common absence');
+  direction('presence', 0).click();
+  assert.ok(!lane.notes.includes(uniqueNote), '← copies an absence');
   assert.equal(commits, removalCommit + 1);
   assert.equal(controls.repeatHover.hidden, true, 'the card closes when no corresponding note remains');
   lane.notes = notesBeforeRemoval; S.voicingRevision++; module.renderRepeatNavigator();
 
-  // Identical notes leave the floating preview closed.
+  // Identical notes leave the card closed.
   module.drawRepeats(); assert.equal(inspectNote(lane.notes[0]), false);
   module.hideRepeatHover();
 
@@ -368,7 +305,7 @@ try {
   assert.equal(controls.repeatPosition.textContent, '1 / 2', 'plain arrows never fall back to instance navigation');
   assert.equal(key('ArrowRight', { altKey: true }).handled, true);
   assert.equal(controls.repeatPosition.textContent, '2 / 2', 'Alt+arrows move through instances');
-  assert.equal(controls.repeatHover.hidden, true, 'an unchanged destination does not open a preview');
+  assert.equal(controls.repeatHover.hidden, true, 'an unchanged destination does not open a card');
   assert.equal(playhead, identical[0].start);
   key('ArrowLeft', { altKey: true }); assert.equal(controls.repeatPosition.textContent, '1 / 2');
   module.drawRepeats(); assert.equal(inspectNote(lane.notes[0]), false, 'unchanged notes stay closed');
@@ -376,18 +313,15 @@ try {
   module.hideRepeatHover();
   lane.notes[0].finger = 4; identical[0].finger = 3;
   lane.handHolds = [{ t: lane.notes[0].start, fret: 5 }, { t: identical[0].start, fret: 6 }];
-  S.voicingRevision++; module.renderRepeatNavigator(); module.drawRepeats(); inspectNote(lane.notes[0]); controls.repeatNoteCurrent.click();
+  S.voicingRevision++; module.renderRepeatNavigator(); module.drawRepeats(); inspectNote(lane.notes[0]);
   assert.equal(controls.repeatChangeNavigation.hidden, false, 'navigation reappears after a new difference');
-  const fieldCell = label => controls.repeatHoverRows.children.find(row => row.children[0].textContent === label).children[1];
-  assert.equal(fieldCell('Finger').className, 'repeat-uncommon', 'a two-instance tie compares against the opened note');
-  assert.ok(rows().some(row => row.join('|') === 'Hand anchor|F6'));
-  assert.equal(fieldCell('Hand anchor').className, 'repeat-uncommon');
-  action('handAnchor').click();
-  assert.ok(lane.handHolds.some(h => h.t === identical[0].start && h.fret === 5), 'Apply copies the anchor to the displayed occurrence');
-  assert.equal(action('handAnchor'), undefined);
-  controls.repeatNoteJump.click(); module.renderRepeatNavigator(); controls.repeatNoteFirst.click();
-  assert.ok(rows().some(row => row.join('|') === 'Finger|4'));
-  assert.equal(fieldCell('Finger').className, 'repeat-uncommon', 'opening the other occurrence reverses the comparison');
+  assert.deepEqual(rows(), [['Finger', '4', '3'], ['Hand anchor', 'F5', 'F6']]);
+  direction('handAnchor', 1).click();
+  assert.ok(lane.handHolds.some(h => h.t === identical[0].start && h.fret === 5), 'the anchor is copied across');
+  assert.deepEqual(rows(), [['Finger', '4', '3']]);
+  key('ArrowRight', { altKey: true }); module.hideRepeatHover(); inspectNote(identical[0]);
+  assert.deepEqual(heads(), ['', 'Instance 2', '', 'Instance 1'], 'this instance is always the left column alone');
+  assert.deepEqual(rows(), [['Finger', '3', '4']]);
   module.hideRepeatHover();
   const savedGroups = structuredClone(lane.repeatGroups);
   controls.repeatClose.click(); module.renderRepeatNavigator();
@@ -416,11 +350,13 @@ try {
     lane.notes.slice(0, 8).map(n => n.id), identical.slice(1).map(n => n.id),
   ] }] });
   module.renderRepeatNavigator(); controls.repeatNext.click(); module.renderRepeatNavigator(); module.drawRepeats();
-  assert.equal(inspectNote(identical[0]), true);
-  assert.deepEqual(rows(), [['Note', 'Missing']], 'the absent opening remains inspectable inside the phrase');
+  controls.repeatChangePosition.value = `${identical[1].id}:${lane.notes[0].id}`;
+  controls.repeatChangePosition.dispatchEvent(new Event('change')); module.renderRepeatNavigator();
+  assert.deepEqual(rows(), [['Note', 'Not present', 'E2']], 'the absent opening remains inspectable inside the phrase');
   identical[1].end += .2; S.voicingRevision++;
   module.hideRepeatHover(); module.drawRepeats(); assert.equal(inspectNote(identical[1]), true);
-  assert.ok(rows().some(row => row.join('|') === 'Onset in passage|0.5 beats'), 'tooltip onset is relative to the phrase, not its first surviving attack');
+  assert.ok(rows().some(row => row[0] === 'Length'));
+  assert.ok(!rows().some(row => row[0] === 'Onset in passage'), 'onset is relative to the phrase, not its first surviving attack');
   controls.repeatClose.click(); module.renderRepeatNavigator();
   lane.notes = withOpening; S.voicingRevision++;
   lane.repeatGroups = []; S.voicingRevision++; module.renderRepeatNavigator();
@@ -440,8 +376,7 @@ try {
     || row.children.some(el => el.dataset?.focusKey?.startsWith('move:') || el.type === 'checkbox')), false,
     'no variations to move to, nothing to include or exclude');
   inspectNote(versions[0][0]);
-  assert.equal(controls.repeatNoteVersion.textContent, '1 / 4');
-  assert.ok(action('fx.vibrato'), 'the comparison covers every instance of the group');
+  assert.deepEqual(rows()[0], ['Vibrato', 'On', 'Off'], 'the comparison covers every instance of the group');
   const chooseInstance = value => {
     controls.repeatInstance.value = value; controls.repeatInstance.dispatchEvent(new Event('change')); module.renderRepeatNavigator();
   };
@@ -463,7 +398,8 @@ try {
   assert.equal(controls.repeatPosition.textContent, '4 / 4', 'change navigation stays on the active instance');
   assert.equal(commits, beforeMove, 'choosing instances does not edit the project');
   // Beside the split view, the two shown instances are compared with each other alone.
-  const host = { revealed: [], isOpen: () => true, open() {}, reviewing() {}, reveal(at, how) { this.revealed.push({ ...at, ...how }); } };
+  let side = 0;
+  const host = { revealed: [], liveSide: () => side, isOpen: () => true, open() {}, reviewing() {}, reveal(at, how) { this.revealed.push({ ...at, ...how }); } };
   module.connectRepeatSplit(host);
   chooseInstance(versions[3][0].id);
   const beforePair = commits;
@@ -484,6 +420,14 @@ try {
   module.renderRepeatNavigator();
   assert.equal(controls.repeatChangeNavigation.hidden, false, 'a different partner brings its differences');
   const pairChanges = changePosition();
+  // The card compares with the other pane's instance, each value on its pane's side.
+  module.hideRepeatHover(); inspectNote(versions[3][2]);
+  assert.deepEqual(heads(), ['', 'Instance 4', '', 'Instance 2'], 'beside the split view, the other pane\'s instance');
+  assert.deepEqual(rows(), [['Pitch', noteName(versions[3][2].pitch), noteName(versions[1][2].pitch)]]);
+  side = 1; module.hideRepeatHover(); inspectNote(versions[3][2]);
+  assert.deepEqual(heads(), ['', 'Instance 2', '', 'Instance 4'], 'with this pane on the right, its value is on the right');
+  assert.deepEqual(rows()[0].slice(1), [noteName(versions[1][2].pitch), noteName(versions[3][2].pitch)]);
+  side = 0; module.hideRepeatHover();
   // Choosing an instance: a linked other pane goes to the start of its own.
   const revealedBefore = host.revealed.length;
   chooseInstance(versions[0][0].id); chooseInstance(versions[3][0].id);
@@ -502,9 +446,17 @@ try {
   assert.equal(controls.repeatPosition.textContent, '2 / 4', 'the other pane has its own instance');
   assert.equal(changePosition(), pairChanges, 'and sees the same differences from its side');
   module.renderRepeatNavigator();
+  // The other pane's instance can't be chosen here as well.
+  assert.deepEqual(controls.repeatInstance.children[1].children.map(row => row.children[0].disabled), [false, true, false, false],
+    'the other pane\'s instance is disabled in the picker');
+  chooseInstance(versions[1][0].id);
+  assert.equal(controls.repeatPosition.textContent, '4 / 4', 'and is refused when chosen');
+  controls.repeatPrevious.click(); controls.repeatPrevious.click(); module.renderRepeatNavigator();
+  assert.equal(controls.repeatPosition.textContent, '1 / 4', 'stepping passes over it');
+  chooseInstance(versions[3][0].id);
   module.pairRepeats(false); module.renderRepeatNavigator();
-  assert.equal(zone, null, 'unpaired, the playhead is free again');
-  assert.equal(controls.repeatPosition.textContent, '4 / 4');
+  assert.equal(controls.repeatNavigator.hidden, true, 'closing the split view ends the review');
+  assert.equal(zone, null, 'and frees the playhead');
   module.connectRepeatSplit(null);
   assert.equal(commits, beforePair, 'pairing panes does not edit the project');
   controls.repeatClose.click();
@@ -539,7 +491,9 @@ try {
   }
   seekRounding = 0;
   playhead = missingNavigationNote.start + .01; module.renderRepeatNavigator();
-  assert.equal(controls.repeatHover.hidden, false, 'a missing note still opens the preview');
+  assert.equal(controls.repeatHover.hidden, true, 'the playhead on a note missing here opens nothing');
+  playhead = navigationCopies[0][3].start + .01; module.renderRepeatNavigator();
+  assert.equal(controls.repeatHover.hidden, false, 'this instance\'s own differing note does');
   playhead = navigationCopies[0][4].start + .01; module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, true, 'moving to an unchanged note closes the preview');
   controls.repeatClose.click();
@@ -554,9 +508,23 @@ try {
   module.renderRepeatNavigator();
   playhead = legato[0][2].start - 1e-6; module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, false, 'a seek just short of the differing note opens it');
-  assert.equal(controls.repeatHoverTitle.textContent.split(' · ')[0], noteName(legato[0][2].pitch));
+  assert.deepEqual(rows()[0], ['Pitch', noteName(legato[0][2].pitch), noteName(legato[1][2].pitch)]);
   playhead = legato[0][3].start - 1e-6; module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, true, 'and one just short of the next note leaves it');
+  controls.repeatClose.click();
+  // A note only the other instance has, under the playhead beside one of this
+  // instance's own: the card is about this instance's note.
+  const extra = [make(.3), make(10.3)];
+  extra[1].push({ id: 'extra', start: extra[1][2].start, end: extra[1][2].end, pitch: 52, pos: { string: 3, fret: 7 } });
+  lane.notes = extra.flat(); lane.repeatGroups = []; S.voicingRevision++;
+  module.runFindRepeats(lane);
+  worker.onmessage({ data: [{ phraseLength: 4, copies: extra.map(notes => notes.map(n => n.id)) }] });
+  module.renderRepeatNavigator(); module.drawRepeats();
+  assert.ok(rectangles.some(r => r.color === 'orange' && r.dash.length), 'the other instance\'s note is outlined here');
+  playhead = extra[0][2].start + .01; module.renderRepeatNavigator();
+  assert.equal(controls.repeatHover.hidden, true, 'but this instance\'s matching note opens no card for it');
+  extra[0][2].finger = 2; S.voicingRevision++; module.renderRepeatNavigator();
+  assert.deepEqual(rows(), [['Finger', '2', 'Not set']], 'its own difference does');
   controls.repeatClose.click();
   lane.notes = originalNotes; lane.repeatGroups = []; S.voicingRevision++;
 

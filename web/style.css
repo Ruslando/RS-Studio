@@ -1578,34 +1578,35 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .repeat-nav-group[hidden] { display: none; }
 .repeat-nav-group + .repeat-nav-group { border-left: 1px solid var(--line); padding-left: var(--s-sibling); }
 .repeat-nav-group > span { color: var(--hint); font-size: var(--text-caption); }
-#repeatHover { position: fixed; z-index: 60; width: 280px; max-width: calc(100vw - 16px); padding: var(--s-sibling); border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); box-shadow: var(--e1); font-size: var(--text-caption); }
+/* The note comparison hangs below the middle of the repeat toolbar (above it, near the pane's foot). */
+#repeatHover { position: absolute; top: calc(100% + var(--s-pair)); left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(480px, calc(100vw - 16px)); padding: var(--s-pair) var(--s-sibling); border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); box-shadow: var(--e1); font-size: var(--text-caption); }
+#repeatHover.repeat-hover-above { top: auto; bottom: calc(100% + var(--s-pair)); }
 #repeatHover[hidden] { display: none; }
-.repeat-hover-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-pair); }
-.repeat-hover-head button { padding: 0; min-width: var(--h-compact); height: var(--h-compact); }
-.repeat-hover-head #repeatNoteJump { padding: 0 6px; font-size: var(--text-caption); }
-.repeat-hover-table { max-height: min(190px, 38vh); overflow-x: hidden; overflow-y: auto; margin: var(--s-pair) 0; }
-#repeatHover table { width: 100%; table-layout: fixed; border-collapse: collapse; }
-#repeatHover :is(th, td) { padding: var(--s-pair); text-align: left; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); }
-#repeatHover tbody th { font-weight: 400; color: var(--hint); }
-#repeatHover tbody th.repeat-curve-unavailable { color: var(--error); }
-#repeatHover thead th { font-weight: 500; color: var(--hint); }
-#repeatHover :is(th, td) { box-sizing: border-box; min-width: 0; padding: 3px 4px; line-height: 1.35; }
-.repeat-curve { display: block; width: 100%; min-width: 0; max-width: 100%; height: 28px; }
+#repeatNavigator #repeatHoverClose { position: absolute; top: var(--s-pair); right: var(--s-pair); padding: 0; min-width: var(--h-compact); height: var(--h-compact); }
+#repeatHover table { border-collapse: collapse; }
+#repeatHover :is(th, td) { box-sizing: border-box; padding: 4px 6px; text-align: left; vertical-align: middle; line-height: 1.35; white-space: nowrap; }
+#repeatHover tbody tr + tr :is(th, td) { border-top: 1px solid var(--line); }
+#repeatHover thead th { height: var(--h-compact); font-weight: 500; color: var(--hint); }
+#repeatHover thead th:last-child { padding-right: calc(var(--h-compact) + var(--s-sibling)); }
+#repeatHover thead th.repeat-here { color: var(--text); }
+#repeatHover tbody th { padding-right: var(--s-sibling); font-weight: 400; color: var(--hint); }
+#repeatHover td { color: var(--text); }
+#repeatHover .repeat-left { text-align: right; }
+/* The value and its preview share one grid cell: the wider of the two sets the width. */
+.repeat-value { display: grid; }
+.repeat-value > div { grid-area: 1 / 1; display: flex; align-items: center; gap: 6px; }
+.repeat-left .repeat-value > div { justify-content: flex-end; }
+#repeatHover td[data-preview] .repeat-now, #repeatHover td:not([data-preview]) .repeat-change { visibility: hidden; }
+.repeat-old, .repeat-arrow { color: var(--hint); }
+.repeat-change .repeat-curve { width: 64px; }
+#repeatHover .repeat-row-actions { padding: 4px 2px; text-align: center; }
+#repeatNavigator .repeat-copy-direction { min-width: 22px; height: 20px; padding: 0; font-size: var(--text-caption); }
+#repeatNavigator .repeat-copy-direction + .repeat-copy-direction { margin-left: 4px; }
+.repeat-curve { display: block; width: 96px; height: 28px; }
 .repeat-curve path { fill: none; }
 .repeat-curve-zero { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 2; }
 .repeat-curve-shape { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
-#repeatNoteNavigation { display: flex; align-items: center; gap: 2px; padding: 0; margin-left: auto; }
-#repeatNoteNavigation[hidden] { display: none; }
-#repeatNoteNavigation button { padding: 0; min-width: 23px; height: 23px; font-size: 18px; }
-#repeatNoteVersion { min-width: 6ch; text-align: center; font-size: var(--text-caption); }
-#repeatHover td.repeat-uncommon { color: var(--warn); font-weight: 600; }
-#repeatHover td.repeat-uncommon .repeat-curve-shape { stroke: currentColor; }
-#repeatHover tbody th { width: 36%; }
-#repeatHover .repeat-row-actions { width: 52px; text-align: right; }
-.repeat-apply-common { box-sizing: border-box; min-width: 0; max-width: 100%; min-height: 18px; padding: 0 5px; font-size: var(--text-caption); }
-.repeat-copy-direction { min-width: 20px; padding: 0 3px; min-height: 18px; font-size: var(--text-caption); }
-.repeat-curve-point { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; }
-.repeat-uncommon .repeat-curve-point { stroke: currentColor; }
+.repeat-curve-point { fill: var(--panel); stroke: currentColor; stroke-width: 1.5; }
 #fretboardPanel[data-comparison-preview] #fretboardControls { pointer-events: none; opacity: .6; }
 
 
@@ -1643,6 +1644,7 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .repeat-picker-row { display: flex; align-items: center; gap: 8px; }
 #repeatNavigator .repeat-picker-menu button { display: block; width: 100%; padding: 4px 8px; text-align: left; white-space: nowrap; }
 .repeat-picker-row button[aria-current="true"] { color: var(--accent); }
+.repeat-picker-row button:disabled { color: var(--hint); cursor: default; }
 
 /* Split view (split-view.js): the live editor and the second pane, side by side
    or stacked, each under its own header, and their fretboards side by side with a

@@ -13,7 +13,7 @@ export function renderRepeatPicker(picker, choices, value, { disabled = false } 
   for (const choice of choices) {
     const row = document.createElement('div'); row.className = 'repeat-picker-row';
     const button = document.createElement('button'); button.type = 'button'; button.textContent = choice.label;
-    button.dataset.focusKey = choice.value; button.disabled = disabled;
+    button.dataset.focusKey = choice.value; button.disabled = disabled || !!choice.disabled;
     button.setAttribute('aria-current', String(choice.value === value));
     button.addEventListener('click', () => select(choice.value)); row.append(button);
     menu.append(row);

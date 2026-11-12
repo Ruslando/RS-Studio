@@ -93,93 +93,21 @@ export function noteChangeRows(first, current, { beatAt = t => t, firstBeat = 0,
   return [...rows, ...techniqueChangeRows(first, current)];
 }
 
-// Describe the actual note even when every occurrence plays it identically.
-// Only active techniques are shown, keeping the card compact.
-export function noteCharacteristicRows(note, { beatAt = t => t, fingers = null, onset = null } = {}) {
-  if (!note) return [{ key: 'presence', label: 'Note', value: 'Missing' }];
-  const length = beatAt(note.end) - beatAt(note.start);
-  const finger = fingers?.has(note.id) ? fingers.get(note.id) : note.finger;
-  const rows = [
-    { key: 'pitch', label: 'Pitch', value: noteName(note.pitch) },
-    { key: 'length', label: 'Length', value: `${number(length)} ${Math.abs(length - 1) < 1e-9 ? 'beat' : 'beats'}` },
-    { key: 'position', label: 'Position', value: note.pos ? `S${note.pos.string + 1} · F${note.pos.fret}` : 'Not set' },
-    { key: 'finger', label: 'Finger', value: finger === 0 ? 'Thumb' : finger > 0 ? String(finger) : 'Not set' },
-  ];
-  if (Number.isFinite(onset)) rows.splice(2, 0, { key: 'onset', label: 'Onset in passage', value: `${number(onset)} ${Math.abs(onset - 1) < 1e-9 ? 'beat' : 'beats'}` });
-  const fields = effectiveTechniqueFields(note);
-  for (const [key, value] of Object.entries(fields)) {
-    if (key === 'fx') {
-      for (const [flag, active] of Object.entries(value || {})) if (clean(active) != null)
-        rows.push({ key: `fx.${flag}`, label: FX_LABELS[flag] || human(flag), value: format(flag, active) });
-    } else if (key === 'slideStart' && !note.slide) {
-      continue;
-    } else if (clean(value) != null && !(Array.isArray(value) && !value.length)) {
-      const row = { key, label: NAMES[key] || human(key), value: format(key, value) };
-      if (key === 'bendPoints' || key === 'whammyPoints') row.curve = value;
-      rows.push(row);
-    }
-  }
+// Where two instances' notes differ, a's value before b's. An instance is
+// { note, onset, handAnchor, slideCurve }. A curve stands for the effect
+// flags that shape it, so those flags get no rows of their own.
+const CURVE_FLAGS = ['whammy', 'bend', 'slide', 'slideIn', 'slideStart', 'slideEnd', 'slideFrets'];
+export function instanceChangeRows(a, b, { beatAt = t => t, fingers = null } = {}) {
+  const rows = noteChangeRows(a.note, b.note, { beatAt, fingers, firstBeat: a.onset ?? 0, currentBeat: b.onset ?? 0 })
+    .filter(row => !CURVE_FLAGS.includes(row.key));
+  if (!a.note || !b.note) return rows;
+  const anchor = fret => fret > 0 ? `F${fret}` : 'Not set';
+  if ((a.handAnchor ?? null) !== (b.handAnchor ?? null))
+    rows.push({ key: 'handAnchor', label: 'Hand anchor', before: anchor(a.handAnchor), after: anchor(b.handAnchor) });
+  const slide = peer => peer.slideCurve ?? slideRibbon(peer.note, null)?.points ?? [];
+  if ([a.note, b.note].some(note => note.slide || note.slideIn) && JSON.stringify(clean(slide(a))) !== JSON.stringify(clean(slide(b))))
+    rows.push({ key: 'slideCurve', label: 'Slide curve', before: '', after: '', curves: { before: slide(a), after: slide(b) } });
   return rows;
-}
-
-// Suggestions always select an existing value: lower numeric median, or the
-// middle occurrence in song order for categorical fields and curves.
-// Missing notes vote on presence but do not vote on a present note's fields.
-export function noteInstanceRows(instances, selected, { beatAt = t => t, fingers = null, activeIndex = null } = {}) {
-  const item = instances[selected];
-  if (!item) return [];
-  const present = instances.filter(instance => instance.note);
-  const rows = noteCharacteristicRows(item.note, { beatAt, fingers, onset: item.onset });
-  if (item.note && instances.some(peer => Object.hasOwn(peer, 'handAnchor')))
-    rows.push({ key: 'handAnchor', label: 'Hand anchor', value: item.handAnchor > 0 ? `F${item.handAnchor}` : 'Not set' });
-  if (item.note && present.length !== instances.length)
-    rows.unshift({ key: 'presence', label: 'Note', value: 'Present' });
-  const differenceCache = new WeakMap();
-  const differences = (a, b) => {
-    let cache = differenceCache.get(a);
-    if (!cache) differenceCache.set(a, cache = new WeakMap());
-    if (!cache.has(b)) cache.set(b, new Set(noteChangeRows(a.note, b.note, {
-      beatAt, fingers, firstBeat: a.onset ?? 0, currentBeat: b.onset ?? 0,
-    }).map(row => row.key)));
-    return cache.get(b);
-  };
-  if (item.note) for (const other of present) {
-    for (const change of noteChangeRows(item.note, other.note, { beatAt, fingers, firstBeat: item.onset ?? 0, currentBeat: other.onset ?? 0 })) {
-      if (!rows.some(row => row.key === change.key))
-        rows.push({ key: change.key, label: change.label, value: change.before, curve: change.curves?.before });
-    }
-  }
-  const slidePoints = peer => peer.slideCurve ?? (peer.note ? slideRibbon(peer.note, null)?.points : null) ?? [];
-  if (item.note && present.some(peer => peer.note.slide || peer.note.slideIn))
-    rows.push({ key: 'slideCurve', label: 'Slide curve', value: '', curve: slidePoints(item) });
-  for (const row of rows) {
-    const peers = row.key === 'presence' ? instances : row.key === 'position' ? present.filter(peer => peer.note.pitch === item.note.pitch) : present;
-    const curveKey = row.key === 'bendPoints' || row.key === 'whammyPoints';
-    const same = (a, b) => row.key === 'presence' ? !!a.note === !!b.note : row.key === 'handAnchor' ? (a.handAnchor ?? null) === (b.handAnchor ?? null) : row.key === 'slideCurve' ? JSON.stringify(clean(slidePoints(a))) === JSON.stringify(clean(slidePoints(b))) : !differences(a, b).has(row.key);
-    const numeric = {
-      length: peer => beatAt(peer.note.end) - beatAt(peer.note.start),
-      onset: peer => peer.onset ?? 0,
-      pitch: peer => peer.note.pitch,
-      finger: peer => fingers?.has(peer.note.id) ? fingers.get(peer.note.id) : peer.note.finger ?? -1,
-      handAnchor: peer => peer.handAnchor ?? -1,
-    }[row.key];
-    const ordered = numeric ? [...peers].sort((a,b) => numeric(a) - numeric(b)) : peers;
-    const middle = ordered[Math.floor((ordered.length - 1) / 2)];
-    row.uncommon = !!middle && !same(item, middle);
-    if (row.uncommon) row.commonIndex = instances.indexOf(peers.find(peer => same(peer, middle)) || middle);
-    if (row.key === 'length' && row.uncommon) {
-      row.commonLength = numeric(middle);
-      row.commonDisplay = `${number(row.commonLength)} ${Math.abs(row.commonLength - 1) < 1e-9 ? 'beat' : 'beats'}`;
-    }
-    if (curveKey && peers.some(peer => !same(item, peer) &&
-      curveSummary(effectiveTechniqueFields(peer.note)[row.key]) === row.value)) row.curveVaries = true;
-    if (row.curve?.length) {
-      const values = present.flatMap(peer => (row.key === 'slideCurve' ? slidePoints(peer) : noteCharacteristicRows(peer.note, { beatAt, fingers })
-        .find(candidate => candidate.key === row.key)?.curve)?.map(([, value]) => value) || []);
-      row.curveRange = [Math.min(0, ...values), Math.max(0, ...values)];
-    }
-  }
-  return rows.filter(row => !['whammy', 'bend', 'slide', 'slideIn', 'slideStart', 'slideEnd', 'slideFrets'].includes(row.key));
 }
 
 // Copy one displayed change, leaving unrelated note properties alone. Curves

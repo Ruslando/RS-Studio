@@ -2,7 +2,7 @@
 // applying positions is a separate, explicit edit.
 import { compareCopy, copyOrigin, groupsFromRepeats, resolveRepeatGroups } from './repeats-core.js';
 import { commit, commitStructure, snapshotEdit } from "./edit-history.js";
-import { scroll, sctx, stage } from './dom.js';
+import { scroll, sctx } from './dom.js';
 import { xOf, yOf } from './geometry.js';
 import { activeLane, canEditLane, refreshCounts } from './lanes.js';
 import { toast } from './notify.js';
@@ -18,11 +18,8 @@ import { manualViewportNavigation, moveViewportTo } from './viewport-motion.js';
 import { registerEscapeLayer, ESC_DEPTH } from './escape-stack.js';
 import { clearMatches } from './tracing.js';
 let actions;
-import { noteName } from './util.js';
-import { applyNoteCounterpart, applyPresenceCounterpart, curveGraph, noteChangeRows, noteInstanceRows } from './repeat-change-details.js';
-import { placeFloatingAvoiding } from './floating-position.js';
+import { applyNoteCounterpart, applyPresenceCounterpart, curveGraph, instanceChangeRows, noteChangeRows } from './repeat-change-details.js';
 import { hideTooltip } from './tooltip.js';
-import { pitchCurve } from './whammy.js';
 import { noteRibbon } from './note-render.js';
 import { paintNoteGlow } from './canvas-components.js';
 import { modalOpen } from './modal-focus.js';
@@ -83,11 +80,11 @@ function current() {
   review.first = copy.notes[0].note.id; review.copyKey = copy.ids[0];
   return { lane, groups, parent, group, copy, index, navigationCopies, navigationIndex, model: group.copies[0] };
 }
-// The other pane's instance: the one it chose, while it is in this group, or
-// else the next one after this pane's.
+// The other pane's instance: the one it chose, while it is in this group and
+// not this pane's, or else the next one after this pane's.
 function partnerCopy(parent, copy) {
   const other = review.other;
-  if (!parent.copies.some(c => c.ids[0] === other.copyKey)) {
+  if (other.copyKey === copy.ids[0] || !parent.copies.some(c => c.ids[0] === other.copyKey)) {
     const next = parent.copies[(parent.copies.indexOf(copy) + 1) % parent.copies.length];
     Object.assign(other, { copyKey: next.ids[0], first: next.notes[0].note.id,
       changeKey: null, changeAnchor: null, playheadMarker: null, manualSeekTime: null });
@@ -121,10 +118,11 @@ export function withRepeatPane(fn) {
 }
 // The split view opened or closed under a running review.
 // Paired, the playhead stays inside the instance its pane shows.
+// The comparison lives in the split view: leaving it ends the review.
 export function pairRepeats(on) {
+  if (!on) { closeRepeats(); return; }
   if (!review) return;
-  if (!on) review.other = null;
-  else if (!review.other) { review.other = {}; current(); }
+  if (!review.other) { review.other = {}; current(); }
   setPlaybackZone(review.other ? instanceZone : null);
   navKey = null; stopCache = null; draw();
 }
@@ -150,8 +148,6 @@ export function repeatZones() {
   return review?.other ? { live: instanceZone(), other: withRepeatPane(instanceZone) } : null;
 }
 const originalIndex = (state, copy) => state.parent.copies.findIndex(c => c.ids[0] === copy.ids[0]) + 1;
-const instancePosition = (state, index) => `${index + 1} / ${state.group.copies.length}` +
-  (state.parent.copies.length !== state.group.copies.length ? ` · #${originalIndex(state, state.group.copies[index])}` : '');
 function repeatCopyBounds(state, copy) {
   const clock = laneClock(state.lane), origin = copyOrigin(copy, clock.beatAt);
   const projected = state.group.copies.flatMap(other => other.notes.map(({ note, beat }) => ({
@@ -181,12 +177,16 @@ function revealCurrent({ seek = true } = {}) {
   moveViewportTo(xOf(b.t0) - scroll.clientWidth * 0.2, yOf((b.pLo + b.pHi) / 2) - scroll.clientHeight / 2);
   draw();
 }
+// The other pane's instance can't be chosen here as well.
+const shownElsewhere = copy => review?.other?.copyKey === copy.ids[0];
+const choosableCopies = state => state.navigationCopies.filter(c => c === state.copy || !shownElsewhere(c));
 function stepCopy(delta) {
   const state = current();
   if (!state) return;
-  const index = (state.navigationIndex + delta + state.navigationCopies.length) % state.navigationCopies.length;
-  review.first = state.navigationCopies[index].notes[0].note.id;
-  review.copyKey = state.navigationCopies[index].ids[0];
+  const copies = choosableCopies(state);
+  const next = copies[(copies.indexOf(state.copy) + delta + copies.length) % copies.length];
+  review.first = next.notes[0].note.id;
+  review.copyKey = next.ids[0];
   revealCurrent();
 }
 function closeRepeats() {
@@ -279,11 +279,11 @@ export function renderRepeatNavigator() {
   select.disabled = scanning || !state;
   nav.setAttribute('aria-busy', String(scanning));
   const instanceChoices = (state?.navigationCopies || []).map(copy => ({ value: copy.ids[0],
-    label: `Instance ${originalIndex(state, copy)}` }));
+    label: `Instance ${originalIndex(state, copy)}`, disabled: copy !== state.copy && shownElsewhere(copy) }));
   renderRepeatPicker($('repeatInstance'), instanceChoices, state?.copy.ids[0], { disabled: scanning || !state });
   $('repeatPosition').textContent = state ? `${state.navigationIndex + 1} / ${state.navigationCopies.length}` +
     (state.parent.copies.length !== state.navigationCopies.length ? ` · #${originalIndex(state, state.copy)}` : '') : 'Scanning…';
-  $('repeatPrevious').disabled = $('repeatNext').disabled = scanning || !state || state.navigationCopies.length < 2;
+  $('repeatPrevious').disabled = $('repeatNext').disabled = scanning || !state || choosableCopies(state).length < 2;
   $('repeatGroupPrevious').disabled = $('repeatGroupNext').disabled = scanning || groups.length < 2;
   const stops = state ? changeStops(state) : [];
   const changeIndex = stops.findIndex(stop => stop.key === review?.changeKey);
@@ -350,7 +350,7 @@ function stepGroup(delta) {
 }
 function selectInstance(value) {
   const state = current();
-  if (!state || !state.navigationCopies.some(copy => copy.ids[0] === value)) return;
+  if (!state || !choosableCopies(state).some(copy => copy.ids[0] === value)) return;
   review.copyKey = value; revealCurrent();
 }
 function changeStops(state) {
@@ -395,22 +395,6 @@ function focusRepeatMarker(state, marker) {
   seekRepeatPosition(marker.note.start);
   syncRepeatPlayhead();
   draw();
-}
-function jumpToNoteInstance() {
-  const state = current();
-  if (!hover || !state) return;
-  const copy = state.group.copies[hover.selected], anchorCopy = state.group.copies.find(c => c.ids[0] === hover.anchorKey);
-  if (!copy || !anchorCopy || !hover.marker.anchor) return;
-  const selected = hover.marker.first, anchor = hover.marker.anchor, beatAt = laneClock(state.lane).beatAt;
-  const relativeBeat = beatAt(anchor.start) - copyOrigin(anchorCopy, beatAt);
-  review.copyKey = copy.ids[0]; review.first = copy.notes[0].note.id; navKey = null;
-  const next = current();
-  if (!next) return;
-  const origin = copyOrigin(next.copy, beatAt);
-  const marker = comparisonDetails(next).targets.find(target => selected ? target.current?.id === selected.id :
-    !target.current && target.note.pitch === anchor.pitch && Math.abs(beatAt(target.note.start) - origin - relativeBeat) <= .125);
-  if (marker) focusRepeatMarker(next, marker);
-  else revealCurrent();
 }
 export function handleRepeatNavigationKey(event) {
   if (!review || worker || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || S.drag
@@ -459,45 +443,39 @@ function hoverInstances(state) {
       slideCurve: note ? noteRibbon(state.lane, note)?.points || [] : [] };
   });
 }
-function applyCommonValue(key, sourceIndex = null, targetIndex = null) {
+// Copy one difference from one instance's note onto the other's.
+function copyValue(key, source, target) {
   const state = current();
   if (!hover || !state || !canEditLane(state.lane)) return;
-  const clock = laneClock(state.lane), instances = hoverInstances(state), viewed = hover.selected, selected = targetIndex ?? viewed;
-  const row = noteInstanceRows(instances, selected, { beatAt: clock.beatAt, fingers: displayedFingers(state.lane), activeIndex: hover.index }).find(row => row.key === key);
-  if (!row) return;
-  if (sourceIndex != null) { row.commonIndex = sourceIndex; delete row.commonLength; }
-  else if (!row.uncommon || row.commonIndex == null) return;
-  const target = instances[selected].note;
-  let source = instances[row.commonIndex].note;
-  if (row.commonLength != null && source) source = { ...source, end: clock.timeAt(clock.beatAt(source.start) + row.commonLength) };
-  if (target && boxOfNote(target)?.group.locked) return;
-  const targetCopy = state.group.copies[selected], sourceCopy = state.group.copies[row.commonIndex];
+  const clock = laneClock(state.lane), instances = hoverInstances(state);
+  const targetNote = instances[target].note, sourceNote = instances[source].note;
+  if (targetNote && boxOfNote(targetNote)?.group.locked) return;
+  const targetCopy = state.group.copies[target], sourceCopy = state.group.copies[source];
   const options = { ...clock, fingers: displayedFingers(state.lane), mintId: nid, targetIds: targetCopy.ids,
     sourceOrigin: copyOrigin(sourceCopy, clock.beatAt), targetOrigin: copyOrigin(targetCopy, clock.beatAt) };
   const prev = snapshotEdit(), anchorId = hover.marker.anchor?.id, currentId = hover.marker.current?.id;
   let result = null, changed = false, alreadyCommitted = false;
-  if (key === 'handAnchor' && target) {
+  if (key === 'handAnchor' && targetNote) {
     const revision = S.voicingRevision;
-    actions.setHandAnchor(state.lane, target.start, instances[row.commonIndex].handAnchor || null);
+    actions.setHandAnchor(state.lane, targetNote.start, instances[source].handAnchor || null);
     changed = S.voicingRevision !== revision; alreadyCommitted = true;
   } else if (key === 'presence') {
-    result = applyPresenceCounterpart(state.lane, source, target, options); changed = result.changed;
-    if (result.note && !target && boxOfNote(result.note)?.group.locked) {
+    result = applyPresenceCounterpart(state.lane, sourceNote, targetNote, options); changed = result.changed;
+    if (result.note && !targetNote && boxOfNote(result.note)?.group.locked) {
       state.lane.notes = state.lane.notes.filter(note => note !== result.note);
       const i = targetCopy.ids.indexOf(result.note.id); if (i >= 0) targetCopy.ids.splice(i, 1);
       return;
     }
-  } else changed = applyNoteCounterpart(key, source, target, options);
+  } else changed = applyNoteCounterpart(key, sourceNote, targetNote, options);
   if (!changed) return;
   if (!alreadyCommitted && commit(prev, undefined, null, { preserveTiming: true }) === false) { hideRepeatHover(); return; }
-  if (key === 'presence' && !source && target) S.selection.delete(target);
+  if (key === 'presence' && !sourceNote && targetNote) S.selection.delete(targetNote);
   const byId = new Map(state.lane.notes.map(note => [note.id, note]));
-  const updated = result ? result.note : byId.get(target?.id);
-  hover.marker.first = selected === viewed ? updated || null : byId.get(instances[viewed].note?.id) || null;
-  hover.marker.current = selected === hover.index ? updated || null : byId.get(currentId) || null;
-  hover.marker.anchor = byId.get(anchorId) || source && byId.get(source.id) || updated || null;
+  const updated = result ? result.note : byId.get(targetNote?.id);
+  hover.marker.current = target === hover.index ? updated || null : byId.get(currentId) || null;
+  hover.marker.anchor = byId.get(anchorId) || sourceNote && byId.get(sourceNote.id) || updated || null;
   if (!hover.marker.anchor) { hideRepeatHover(); navKey = null; draw(); return; }
-  if (!byId.has(anchorId) && source) hover.anchorKey = sourceCopy.ids[0];
+  if (!byId.has(anchorId) && sourceNote) hover.anchorKey = sourceCopy.ids[0];
   if (hover.marker.current) hover.marker.note = hover.marker.current;
   hover.revision = S.voicingRevision;
   handRequest = null; handResult = null; handSeats = null; stopCache = null; navKey = null;
@@ -506,62 +484,77 @@ function applyCommonValue(key, sourceIndex = null, targetIndex = null) {
   if (!next) { hideRepeatHover(); draw(); return; }
   fillHoverRows(next); updateHoverPreview(); renderRepeatNavigator();
 }
+const differences = (state, instances, a, b) => instanceChangeRows(instances[a], instances[b],
+  { beatAt: laneClock(state.lane).beatAt, fingers: displayedFingers(state.lane) });
+// The note beside the one it is compared with, only where they differ: beside
+// the split view, the other pane's instance, in the column on its side; alone,
+// the next instance whose note differs.
 function fillHoverRows(state) {
-  const rows = $('repeatHoverRows'); rows.replaceChildren();
-  const beatAt = laneClock(state.lane).beatAt, instances = hoverInstances(state);
-  for (const row of noteInstanceRows(instances, hover.selected, { beatAt, fingers: displayedFingers(state.lane), activeIndex: hover.index })) {
-    const tr = document.createElement('tr'), heading = document.createElement('th'), cell = document.createElement('td');
+  const instances = hoverInstances(state), here = hover.index, count = state.group.copies.length;
+  const paired = !!review.other && count === 2;
+  let there = paired ? 1 - here : null, rows = [];
+  for (let step = 1; step < count && !rows.length; step++) {
+    if (!paired) there = (here + step) % count;
+    rows = differences(state, instances, here, there);
+  }
+  const flip = paired && splitHost?.liveSide?.() === 1;   // this pane is on the right
+  const names = [here, there].map(index => index == null ? '' : `Instance ${originalIndex(state, state.group.copies[index])}`);
+  const columns = flip ? [1, 0] : [0, 1];   // left and right column, as indexes into [this, compared]
+  // The left column leans right and the right one left, toward the arrows between them.
+  const sideClass = (column, mine) => `${column ? 'repeat-right' : 'repeat-left'}${mine ? ' repeat-here' : ''}`;
+  const th = (text, className = '') => {
+    const cell = document.createElement('th'); cell.textContent = text; cell.setAttribute('scope', 'col');
+    cell.className = className;
+    return cell;
+  };
+  $('repeatHoverHead').replaceChildren(th(''), th(names[columns[0]], sideClass(0, columns[0] === 0)), th(''),
+    th(names[columns[1]], sideClass(1, columns[1] === 0)));
+  const body = $('repeatHoverRows'); body.replaceChildren();
+  for (const row of rows) {
+    const values = [{ text: row.before, curve: row.curves?.before, index: here }, { text: row.after, curve: row.curves?.after, index: there }];
+    const [left, right] = columns.map(side => values[side]);
+    const range = [Math.min(0, ...[left, right].flatMap(v => (v.curve || []).map(([, y]) => y))),
+      Math.max(0, ...[left, right].flatMap(v => (v.curve || []).map(([, y]) => y)))];
+    const tr = document.createElement('tr'), heading = document.createElement('th');
     heading.textContent = row.label; heading.setAttribute('scope', 'row'); tr.append(heading);
-    const opened = instances[hover.index], viewed = instances[hover.selected];
-    const pairDiffers = hover.selected !== hover.index && (row.key === 'handAnchor'
-      ? opened.handAnchor !== viewed.handAnchor : row.key === 'slideCurve'
-      ? JSON.stringify(opened.slideCurve) !== JSON.stringify(viewed.slideCurve)
-      : noteChangeRows(opened.note, viewed.note, { beatAt, fingers: displayedFingers(state.lane), firstBeat: opened.onset ?? 0, currentBeat: viewed.onset ?? 0 }).some(change => change.key === row.key));
-    if (hover.selected !== hover.index ? pairDiffers : row.uncommon) {
-      cell.className = 'repeat-uncommon';
-      cell.setAttribute('aria-label', `${row.label}, less common across instances`);
-    }
-    const paintValue = valueRow => {
-      cell.replaceChildren();
-      const isCurve = ['whammyPoints', 'bendPoints', 'slideCurve'].includes(row.key);
-      const absentCurve = isCurve && !valueRow.curve?.length;
-      heading.className = absentCurve ? 'repeat-curve-unavailable' : '';
-      heading.setAttribute('aria-label', absentCurve ? `${row.label} unavailable` : row.label);
-      if (isCurve || valueRow.curve?.length) {
-        const points = valueRow.curve || [], range = row.curveRange || valueRow.curveRange || [0, 0];
-        curveCell(cell, points, row.label, range[0], range[1]);
-      } else { const value = document.createElement('span'); value.textContent = valueRow.value; cell.append(value); }
+    const shown = value => {
+      const holder = document.createElement('span');
+      if (value.curve?.length) curveCell(holder, value.curve, row.label, range[0], range[1]);
+      else holder.textContent = value.curve ? 'None' : value.text;
+      return holder;
     };
-    paintValue(row);
-    const actions = document.createElement('td'); actions.className = 'repeat-row-actions';
-    if (pairDiffers) {
-      for (const [source, target, symbol] of [[hover.index, hover.selected, '→'], [hover.selected, hover.index, '←']]) {
-        const button = document.createElement('button'); button.type = 'button'; button.className = 'repeat-copy-direction';
-        button.textContent = symbol; button.dataset.change = row.key; button.dataset.source = String(source); button.dataset.target = String(target);
-        button.setAttribute('aria-label', `Copy ${row.label.toLowerCase()} from instance ${source + 1} to instance ${target + 1}`);
-        button.disabled = !canEditLane(state.lane) || (!instances[target].note && row.key !== 'presence') || !!(instances[target].note && boxOfNote(instances[target].note)?.group.locked);
-        const sourceRow = noteInstanceRows(instances, source, { beatAt, fingers: displayedFingers(state.lane) }).find(value => value.key === row.key);
-        const preview = () => { if (!button.disabled && sourceRow) paintValue(sourceRow); };
-        button.addEventListener('mouseenter', preview); button.addEventListener('focus', preview);
-        button.addEventListener('mouseleave', () => paintValue(row)); button.addEventListener('blur', () => paintValue(row));
-        button.addEventListener('click', () => applyCommonValue(row.key, source, target)); actions.append(button);
-      }
-    } else if (row.uncommon && row.commonIndex != null) {
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'repeat-apply-common';
-      button.textContent = row.key === 'presence' ? (instances[row.commonIndex].note ? 'Add' : 'Remove') : 'Apply';
-      button.dataset.change = row.key;
-      const actionLabel = row.key === 'presence' && !instances[row.commonIndex].note ? 'Remove this note to match the common absence' : `Apply the common ${row.label.toLowerCase()}`;
-      button.setAttribute('aria-label', actionLabel);
-      button.disabled = !canEditLane(state.lane) || !!(instances[hover.selected].note && boxOfNote(instances[hover.selected].note)?.group.locked);
-      const commonRow = row.commonLength != null ? { ...row, value: row.commonDisplay } :
-        noteInstanceRows(instances, row.commonIndex, { beatAt, fingers: displayedFingers(state.lane) }).find(common => common.key === row.key);
-      const preview = () => { if (!button.disabled && commonRow) paintValue(commonRow); };
-      const restore = () => paintValue(row);
-      button.addEventListener('mouseenter', preview); button.addEventListener('mouseleave', restore);
-      button.addEventListener('focus', preview); button.addEventListener('blur', restore);
-      button.addEventListener('click', () => applyCommonValue(row.key)); actions.append(button);
+    // Each cell holds its value and, hidden, what a copy into it would make of
+    // it: the old value, an arrow, the new one. Both take the same space, so
+    // previewing never moves the card.
+    const cells = [left, right].map((value, column) => {
+      const cell = document.createElement('td'); cell.className = sideClass(column, value.index === here);
+      const layers = document.createElement('div'); layers.className = 'repeat-value';
+      const now = document.createElement('div'); now.className = 'repeat-now'; now.append(shown(value));
+      layers.append(now); cell.append(layers);
+      return { cell, layers, value };
+    });
+    cells.forEach((target, column) => {
+      const change = document.createElement('div'); change.className = 'repeat-change';
+      const arrow = document.createElement('span'); arrow.className = 'repeat-arrow'; arrow.textContent = '→';
+      const old = shown(target.value); old.className = 'repeat-old';
+      change.append(old, arrow, shown(cells[1 - column].value)); target.layers.append(change);
+    });
+    const buttons = document.createElement('td'); buttons.className = 'repeat-row-actions';
+    for (const [from, to, symbol] of [[0, 1, '→'], [1, 0, '←']]) {
+      const source = cells[from], target = cells[to];
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'repeat-copy-direction';
+      button.textContent = symbol; button.dataset.change = row.key; button.dataset.target = String(target.value.index);
+      const into = instances[target.value.index].note;
+      button.setAttribute('aria-label', `Copy ${row.label.toLowerCase()} to ${names[columns[to]].toLowerCase()}`);
+      button.disabled = !canEditLane(state.lane) || (!into && row.key !== 'presence') || !!(into && boxOfNote(into)?.group.locked);
+      const preview = () => { if (!button.disabled) target.cell.dataset.preview = ''; };
+      const restore = () => { delete target.cell.dataset.preview; };
+      button.addEventListener('mouseenter', preview); button.addEventListener('focus', preview);
+      button.addEventListener('mouseleave', restore); button.addEventListener('blur', restore);
+      button.addEventListener('click', () => copyValue(row.key, source.value.index, target.value.index));
+      buttons.append(button);
     }
-    tr.append(cell, actions); rows.append(tr);
+    tr.append(cells[0].cell, buttons, cells[1].cell); body.append(tr);
   }
 }
 function counterpart(state, anchorCopy, anchor, targetCopy) {
@@ -570,67 +563,19 @@ function counterpart(state, anchorCopy, anchor, targetCopy) {
   const result = compareCopy(anchorCopy, targetCopy, laneClock(state.lane).beatAt, displayedFingers(state.lane));
   return result.pairs.find(([a]) => a === anchor)?.[1] || result.changes.find(change => change.from === anchor)?.to || null;
 }
-function showNoteVersion(delta) {
-  const state = current();
-  if (!hover || !state) return;
-  hover.selected = (hover.selected + delta + state.group.copies.length) % state.group.copies.length;
-  const copy = state.group.copies[hover.selected], anchorCopy = state.group.copies.find(c => c.ids[0] === hover.anchorKey);
-  hover.marker.first = anchorCopy ? counterpart(state, anchorCopy, hover.marker.anchor, copy) : null;
-  hover.origins.first = copyOrigin(copy, laneClock(state.lane).beatAt);
-  hover.showFirst = hover.selected !== hover.index;
-  fillHoverRows(state);
-  updateHoverPreview();
-}
-export function repeatPreviewHiddenNote() {
-  return hover?.showFirst ? hover.marker.current : null;
-}
-function projectedFirstNote(state) {
-  if (!hover?.marker.first) return null;
-  const source = hover.marker.first, clock = laneClock(state.lane);
-  const origin = hover.origins.current, beat = clock.beatAt(source.start) - hover.origins.first;
-  const start = clock.timeAt(origin + beat);
-  return { ...source, start, end: clock.timeAt(origin + beat + clock.beatAt(source.end) - clock.beatAt(source.start)) };
-}
-function hoverAvoidance() {
-  const state = current();
-  if (!hover || !state) return { rects: [] };
-  const frame = stage.getBoundingClientRect();
-  const region = { left: frame.left, top: frame.top, right: frame.right ?? frame.left + scroll.clientWidth,
-    bottom: frame.bottom ?? frame.top + scroll.clientHeight };
-  const rects = [];
-  const protect = (note, original) => {
-    if (!note) return;
-    const ribbon = original && noteRibbon(state.lane, original);
-    const curve = pitchCurve(note) || ribbon?.points;
-    const offsets = curve ? curve.map(([, value]) => value * S.state.rowH) : [0];
-    const x = frame.left + xOf(note.start) - scroll.scrollLeft;
-    const y = frame.top + yOf(note.pitch) - scroll.scrollTop;
-    // Include the whole slide and curve, including a projected slide's end.
-    const ratio = original && original.end > original.start ? (note.end - note.start) / (original.end - original.start) : 1;
-    const end = ribbon?.end ? note.start + (ribbon.end - original.start) * ratio : note.end;
-    const width = Math.max(2, xOf(end) - xOf(note.start));
-    rects.push({ left: x - 7, right: x + width + 7,
-      top: y - Math.max(0, ...offsets) - 7, bottom: y + S.state.rowH - Math.min(0, ...offsets) + 7 });
-  };
-  protect(hover.marker.current || hover.marker.note, hover.marker.current);
-  protect(projectedFirstNote(state), hover.marker.first);
-  return { rects, region };
-}
 function updateHoverPreview() {
   if (!hover) return;
-  $('repeatHoverTitle').textContent = hover.marker.first ? `${noteName(hover.marker.first.pitch)} · Note` : 'Missing note';
   const state = current();
-  $('repeatNoteVersion').textContent = state ? instancePosition(state, hover.selected) : '1 / 1';
-  $('repeatNoteFirst').disabled = $('repeatNoteCurrent').disabled = (current()?.group.copies.length || 0) < 2;
-  actions.previewFretboardNote(hover.lane, hover.marker.first, `Instance ${state ? originalIndex(state, state.group.copies[hover.selected]) : hover.selected + 1}`);
-  placeFloatingAvoiding($('repeatHover'), hoverAvoidance);
+  actions.previewFretboardNote(hover.lane, hover.marker.current, `Instance ${state ? originalIndex(state, state.copy) : 1}`);
+  // Below the repeat toolbar, or above it where the pane has no room below.
+  const card = $('repeatHover'), nav = $('repeatNavigator').getBoundingClientRect?.(), room = $('repeatNavigator').parentElement?.getBoundingClientRect?.();
+  card.classList.toggle('repeat-hover-above', !!nav && !!room && nav.bottom + card.offsetHeight + 8 > room.bottom);
   draw();
 }
 export function hideRepeatHover() {
   const wasOpen = !!hover;
   hover = null;
   if ($('repeatHover')) $('repeatHover').hidden = true;
-  if ($('repeatNoteNavigation')) $('repeatNoteNavigation').hidden = true;
   if (wasOpen) { actions.previewFretboardNote(); draw(); }
   return wasOpen;
 }
@@ -671,7 +616,9 @@ export function syncRepeatPlayhead() {
   }
   const atPlayhead = marker => time >= marker.note.start - SEEK_SLACK && time < marker.note.end - SEEK_SLACK;
   const stops = changeStops(state);
-  const changed = stops.filter(stop => atPlayhead(stop.marker));
+  // Under the playhead, only this instance's own notes: a note missing here is
+  // the other instance's, so only the difference buttons open it.
+  const changed = stops.filter(stop => stop.marker.current && atPlayhead(stop.marker));
   const marker = (manual && stops.find(stop => stop.key === review.changeKey)
     || changed.find(stop => stop.key === review.changeKey) || changed[0])?.marker;
   const identity = [state.parent.id, state.copy.ids[0], marker && markerKey(state.copy, marker),
@@ -684,27 +631,16 @@ export function syncRepeatPlayhead() {
   if (marker) openRepeatMarker(state, marker);
 }
 function openRepeatMarker(state, marker) {
-  const clock = laneClock(state.lane);
   review.changeKey = markerKey(state.copy, marker); review.changeAnchor = { start: marker.note.start, pitch: marker.note.pitch };
   navKey = null;
   const anchorCopy = marker.anchorCopy || state.copy;
   marker.anchor ||= marker.current || marker.first; marker.first = marker.current;
   hover = { lane: state.lane, group: state.group.id, instance: state.copy.ids[0], marker, revision: S.voicingRevision,
-    selected: state.index, index: state.index, anchorKey: anchorCopy.ids[0],
-    origins: { first: copyOrigin(state.copy, clock.beatAt), current: copyOrigin(state.copy, clock.beatAt) } };
+    index: state.index, anchorKey: anchorCopy.ids[0] };
   hideTooltip();
   fillHoverRows(state);
-  $('repeatHoverTitle').textContent = `${noteName(marker.note.pitch)} · Note`;
-  hover.showFirst = false;
   $('repeatHover').hidden = false;
-  placeFloatingAvoiding($('repeatHover'), hoverAvoidance, { reset: true });
-  $('repeatNoteNavigation').hidden = false;
   updateHoverPreview();
-}
-export function repeatPreviewNote() {
-  const state = current();
-  if (!state || !hover?.showFirst || !hover.marker.first) return null;
-  return { lane: state.lane, source: hover.marker.first, note: projectedFirstNote(state), alpha: .55 };
 }
 function drawDifference(marker, left, right) {
   const { note, kind } = marker;
@@ -762,7 +698,6 @@ export function drawRepeats() {
   {
     const details = comparisonDetails(state);
     for (const marker of details.markers) {
-      if (hover?.showFirst && marker.anchor === hover.marker.anchor) continue;
       drawDifference(marker, left, right);
     }
   }
@@ -788,10 +723,6 @@ export function init_repeats(dependencies) {
   window.addEventListener('pointerdown', event => {
     for (const id of ['repeatInstance']) if (!$(id).contains(event.target)) $(id).open = false;
   });
-  document.body.append($('repeatHover'));
-  $('repeatNoteFirst').addEventListener('click', () => showNoteVersion(-1));
-  $('repeatNoteCurrent').addEventListener('click', () => showNoteVersion(1));
-  $('repeatNoteJump').addEventListener('click', jumpToNoteInstance);
   $('repeatHoverClose').addEventListener('click', hideRepeatHover);
   $('repeatClose').addEventListener('click', closeRepeats);
   registerEscapeLayer(ESC_DEPTH.popover, () => closeRepeatPickers() || hideRepeatHover());

@@ -3,12 +3,13 @@
 Find Repeats opens the split view with one instance in each pane. The first pane
 shows the instance under review; the second starts on the next instance. Every
 instance of a group is in one list. Each pane chooses its own instance with the
-repeat toolbar, which sits on the active pane; a click in the other pane makes
+repeat toolbar, which sits on the active pane; the instance shown in the other
+pane can't be chosen as well, so the panes never show the same one; a click in the other pane makes
 it active and acts there at once. The group is shared by both panes.
 
 The two shown instances are compared with each other alone. Highlights describe
-differences, rather than proving that a note is wrong. With the split view
-closed, the instance is compared with every instance of the group.
+differences, rather than proving that a note is wrong. Closing the split view
+ends the review.
 
 Playheads are independent or linked during a review; synced is unavailable,
 since both panes would then show one position. With linked playheads, both are
@@ -32,23 +33,20 @@ no additional outline. A single differing note is counted once even when it
 differs in several ways. Whammy type alone does not add an amber outline;
 whammy curve differences can.
 
-In the note preview, amber bold values flag a difference from the opened note
-when viewing another instance. On the opened instance, they flag a difference
-from the comparison value used by Apply. Numeric comparison values use the lower
-median; other values use the middle present instance in comparison order. The
-label “common” therefore does not always mean a majority vote. Position values
-are compared only among notes with the same pitch.
+The note card hangs below the repeat toolbar, or above it when the toolbar is
+near the foot of the pane, so it never covers the note itself. It lists only
+what differs, each value on its pane's side. Position values are
+compared only between notes with the same pitch. → copies a value from the left
+to the right, ← from the right to the left; hovering an arrow previews the
+result. Copying a missing note adds it, and copying an absence removes it. A
+curve is drawn with a dotted zero line; a curve that is absent reads None.
 
-Curves use a dotted zero line and a solid shape; differing shapes use the amber
-value color. A pink/red curve heading means curve data is unavailable. Previewing
-another instance projects its note into the current passage at 55% opacity and
-hides the current counterpart until the preview is closed or switched back.
-
-The note preview opens only for differences, including missing notes, and stays
-hidden during playback. Pausing on a differing note opens its preview. Left/right
+The note card opens only for differences and stays hidden during playback.
+Pausing on a differing note opens it. The playhead considers only the notes
+this instance has: a note missing here belongs to the compared instance, so its
+dashed outline opens from the difference buttons, not from the playhead. Left/right
 arrow keys retain normal note/chord navigation.
 Use the difference buttons or their dropdown to jump between differing notes;
 its entries show only position / total. Each button click advances one entry,
 wrapping from the last to the first or the first to the last. Alt+left/right
-selects an instance, and Shift+left/right selects a group. The arrows inside the note preview show the
-same note in other instances.
+selects an instance, and Shift+left/right selects a group.

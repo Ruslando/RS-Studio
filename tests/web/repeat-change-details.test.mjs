@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { curveGraph, curveSummary, noteChangeRows, noteCharacteristicRows, noteInstanceRows, techniqueChangeRows } from '../../web/repeat-change-details.js';
+import { curveGraph, curveSummary, instanceChangeRows, noteChangeRows, techniqueChangeRows } from '../../web/repeat-change-details.js';
 assert.deepEqual(techniqueChangeRows({ fx: { palmMute: true } }, { fx: { vibrato: true } }), [
   { key: 'fx.palmMute', label: 'Palm mute', before: 'On', after: 'Off' },
   { key: 'fx.vibrato', label: 'Vibrato', before: 'Off', after: 'On' },
@@ -29,50 +29,6 @@ assert.deepEqual(noteChangeRows(a, b, { firstBeat: 1, currentBeat: 1.125, finger
 assert.deepEqual(noteChangeRows(a, null), [{ key: 'presence', label: 'Note', before: 'E2', after: 'Missing' }]);
 assert.deepEqual(noteChangeRows(null, b), [{ key: 'presence', label: 'Note', before: 'Not present', after: 'F2' }]);
 assert.deepEqual([a, b], original, 'formatting hover details never changes notes');
-assert.deepEqual(noteCharacteristicRows(a, { fingers: new Map([['a', 0]]) }), [
-  { key: 'pitch', label: 'Pitch', value: 'E2' }, { key: 'length', label: 'Length', value: '1 beat' },
-  { key: 'position', label: 'Position', value: 'S6 · F0' }, { key: 'finger', label: 'Finger', value: 'Thumb' },
-]);
-assert.deepEqual(noteCharacteristicRows(null), [{ key: 'presence', label: 'Note', value: 'Missing' }]);
-const active = noteCharacteristicRows({ ...a, fx: { palmMute: true }, whammy: 'dip', whammyPoints: [[0, 0], [.5, -1], [1, 0]] });
-assert.ok(active.some(row => row.key === 'fx.palmMute' && row.value === 'On'));
-assert.ok(active.some(row => row.key === 'whammyPoints' && row.value === '1 st dip' && row.curve.length === 3));
-
-const occurrences = Array.from({ length: 6 }, (_, i) => ({
-  note: { ...a, id: `occ${i}`, start: i * 10, end: i * 10 + (i === 5 ? 2 : 3) }, onset: 4,
-}));
-const uncommon = (instances, selected, key) => noteInstanceRows(instances, selected).find(row => row.key === key)?.uncommon;
-assert.equal(uncommon(occurrences, 5, 'length'), true, 'one shorter length is uncommon');
-assert.equal(uncommon(occurrences, 0, 'length'), false, 'the five common lengths are not highlighted');
-const tied = occurrences.slice(0, 2).map((item, i) => ({ ...item, note: { ...item.note, end: item.note.start + 2 + i } }));
-assert.equal(uncommon(tied, 0, 'length'), false, 'the lower observed middle length is the median');
-assert.equal(noteInstanceRows(tied, 1).find(row => row.key === 'length').commonLength, 2);
-assert.equal(uncommon(tied, 1, 'length'), true);
-const absent = occurrences.map((item, i) => i === 5 ? { note: null, onset: null } : item);
-assert.equal(uncommon(absent, 5, 'presence'), true);
-assert.equal(uncommon(absent, 0, 'presence'), false);
-const curveVersions = occurrences.map((item, i) => ({ ...item, note: { ...item.note, whammy: 'dip',
-  whammyPoints: [[0, 0], [i === 5 ? .7 : .5, -1], [1, 0]] } }));
-assert.equal(uncommon(curveVersions, 5, 'whammyPoints'), true, 'a curve with different point timing is uncommon even when its depth matches');
-assert.equal(uncommon(curveVersions, 0, 'whammyPoints'), false);
-curveVersions[5].note.whammyPoints = [[0, 0], [.7, -2], [1, 0]];
-assert.equal(uncommon(curveVersions, 5, 'whammyPoints'), true, 'a different dip depth is highlighted');
-curveVersions[5].note.whammyPoints = [[0, 0], [.7, -1], [1, 0]];
-assert.equal(uncommon(curveVersions, 5, 'whammyPoints'), true, 'matching depth alone does not conceal different points');
-assert.equal(noteInstanceRows(curveVersions, 5).find(row => row.key === 'whammyPoints').commonIndex, 0);
-assert.equal(noteInstanceRows(curveVersions, 5).find(row => row.key === 'whammyPoints').curveVaries, true);
-curveVersions[5].note.whammyPoints = structuredClone(curveVersions[0].note.whammyPoints);
-assert.equal(uncommon(curveVersions, 5, 'whammyPoints'), false, 'matching the common points clears the highlight');
-const splitLeaders = occurrences.map((item, i) => ({ ...item, note: { ...item.note, end: item.note.start + (i < 2 ? 2 : i < 4 ? 3 : 4 + i) } }));
-assert.equal(noteInstanceRows(splitLeaders, 5).find(row => row.key === 'length').uncommon, true);
-assert.equal(noteInstanceRows(splitLeaders, 5).find(row => row.key === 'length').commonLength, 3, 'tied modes fall back to the median');
-const threeLengths = occurrences.map((item, i) => ({ ...item, note: { ...item.note, end: item.note.start + [2, 2, 3, 3, 4, 4][i] } }));
-assert.equal(uncommon(threeLengths, 2, 'length'), false);
-assert.equal(noteInstanceRows(threeLengths, 5).find(row => row.key === 'length').commonLength, 3);
-const oneMuted = occurrences.map((item, i) => ({ ...item, note: { ...item.note, fx: i === 5 ? { palmMute: true } : {} } }));
-assert.equal(uncommon(oneMuted, 5, 'fx.palmMute'), true, 'an uncommon active technique is highlighted');
-assert.equal(uncommon(oneMuted, 0, 'fx.palmMute'), false, 'the common disabled value is shown without highlighting');
-assert.equal(noteInstanceRows(oneMuted, 0).find(row => row.key === 'fx.palmMute').value, 'Off');
 console.log('Exact, named repeat change descriptions passed');
 
 const shallow = [[0, 0], [.58, -1], [1, 0]], deep = [[0, 0], [.68, -2], [1, 0]];
@@ -92,23 +48,15 @@ assert.deepEqual(noteChangeRows(null, null), [], 'two absent counterparts have n
 assert.equal(noteChangeRows(a, b).some(row => row.key === 'position'), false, 'different pitches do not offer a position comparison');
 assert.equal(noteChangeRows(a, { ...b, pitch: a.pitch }).some(row => row.key === 'position'), true, 'matching pitches can still compare strings and frets');
 
-const slideInstances = [0, 1, 2].map(i => ({ note: { ...a, id: `slide${i}`, start: i * 10, end: i * 10 + 1,
-  pos: { string: 3, fret: 8 }, slide: 'inBelow', slideEnd: i === 2 ? .7 : .3 }, onset: 0 }));
-const slideRows = noteInstanceRows(slideInstances, 2);
-assert.ok(!slideRows.some(row => ['slide', 'slideStart', 'slideEnd', 'slideFrets'].includes(row.key)), 'slide details are consolidated into a graph');
-const slideRow = slideRows.find(row => row.key === 'slideCurve');
-assert.deepEqual(slideRow.curve, [[0, -4], [.7, 0], [1, 0]]);
-assert.equal(slideRow.uncommon, true); assert.equal(slideRow.commonIndex, 0);
-const bendInstances = slideInstances.map((item, i) => ({ note: { ...a, id: `bend${i}`, bend: i === 2 ? 'full' : 'half' }, onset: 0 }));
-const bendRows = noteInstanceRows(bendInstances, 2);
-assert.ok(!bendRows.some(row => row.key === 'bend'), 'bend kind text is omitted');
-assert.ok(bendRows.find(row => row.key === 'bendPoints').curve.length);
-assert.equal(bendRows.find(row => row.key === 'bendPoints').commonIndex, 0);
-
-const twoFingers = [{note:{...a,finger:4},onset:0,handAnchor:5},{note:{...b,pitch:a.pitch,finger:3},onset:0,handAnchor:6}];
-assert.equal(noteInstanceRows(twoFingers,0).find(row=>row.key==='finger').commonIndex,1);
-assert.equal(noteInstanceRows(twoFingers,1).find(row=>row.key==='handAnchor').commonIndex,0);
-const fourLengths = [1,1,2,2].map((length,i)=>({note:{...a,start:i*10,end:i*10+length},onset:0}));
-assert.equal(noteInstanceRows(fourLengths,3).find(row=>row.key==='length').commonLength,1,'even sets use an existing lower middle length');
-const categories = [false,true,false,true].map((enabled,i)=>({note:{...a,id:`category${i}`,fx:{vibrato:enabled}},onset:0}));
-assert.equal(noteInstanceRows(categories,0).find(row=>row.key==='fx.vibrato').commonIndex,1,'categorical suggestions follow the middle occurrence in song order');
+const slideInstances = [0, 1].map(i => ({ note: { ...a, id: `slide${i}`, start: i * 10, end: i * 10 + 1,
+  pos: { string: 3, fret: 8 }, slide: 'inBelow', slideEnd: i ? .7 : .3 }, onset: 0 }));
+const slideRows = instanceChangeRows(slideInstances[0], slideInstances[1]);
+assert.deepEqual(slideRows.map(row => row.key), ['slideCurve'], 'slide details are consolidated into one curve');
+assert.deepEqual(slideRows[0].curves.after, [[0, -4], [.7, 0], [1, 0]]);
+const bendRows = instanceChangeRows({ note: { ...a, bend: 'half', bendPoints: [[0, 0], [1, 1]] } }, { note: { ...a, bend: 'full', bendPoints: [[0, 0], [1, 2]] } });
+assert.deepEqual(bendRows.map(row => row.key), ['bendPoints'], 'bend kind text is omitted beside its curve');
+const anchored = instanceChangeRows({ note: { ...a, finger: 4 }, handAnchor: 5 }, { note: { ...a, finger: 3 }, handAnchor: 6 });
+assert.deepEqual(anchored.map(row => [row.key, row.before, row.after]), [['finger', '4', '3'], ['handAnchor', 'F5', 'F6']]);
+assert.deepEqual(instanceChangeRows({ note: a, handAnchor: 5 }, { note: null }).map(row => row.key), ['presence'], 'a missing note is one row');
+assert.deepEqual(instanceChangeRows({ note: a, handAnchor: 5 }, { note: { ...a }, handAnchor: 5 }), [], 'identical instances have no rows');
+console.log('Two-instance comparison rows passed');

@@ -370,6 +370,7 @@ function showInstance({ t0, pitch }, { linked = false } = {}) {
 export function init_split_view() {
   connectRepeatSplit({
     isOpen: () => !!other,
+    liveSide: () => liveSide,
     open: (laneId) => {
       if (!other) open();
       if (!other) return;

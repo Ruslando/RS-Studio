@@ -39,7 +39,7 @@ import { laneChords } from "./chord-names.js";
 import { PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./lane-tuning.js";
-import { drawRepeats, renderRepeatNavigator, repeatPreviewHiddenNote, repeatPreviewNote } from "./repeats.js";
+import { drawRepeats, renderRepeatNavigator } from "./repeats.js";
 import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePath, drawTraceRange, matchAt, scheduleHoverMatchPreview, setPlaybackCursor } from "./tracing.js";
 import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
@@ -177,7 +177,6 @@ function drawBendHandles(vx0, vx1) {
   const curved = S.state.lanes.filter((lane) => lane.visible).flatMap((lane) => lane.notes.filter((n) =>
     (n.bend || n.whammy) && !S.selection.has(n) && xOf(n.end) >= vx0 && xOf(n.start) <= vx1));
   for (const n of [...curved, ...S.selection]) {
-    if (n === repeatPreviewHiddenNote()) continue;
     // Where a slide leaves or vibrato sets in only moves in time: a stem from
     // the note to an upright grip beside it (note-render.js).
     for (const slide of effectStartHandles(n, laneOf(n))) {
@@ -442,14 +441,12 @@ function collectFrameDiagnostics() {
   return { frameIssues, stackCount, ignoredStackNotes, stackBadges };
 }
 
-function paintLaneNote(n, source, isPreview, context) {
-  const { lane, repeatPreview, vx0, vx1, tuning, laneAlpha, laneColor, slurred,
+function paintLaneNote(n, context) {
+  const { lane, vx0, vx1, tuning, laneAlpha, laneColor, slurred,
     stackCount, ignoredStackNotes, editTargets, edgeKey, reattackEdges, omittedNotes, omittedCrosses, outOfRange } = context;
-  const motion = isPreview ? { start: n.start, end: n.end, scaleX: 1, scale: 1, alpha: repeatPreview.alpha, emphasis: 0, reveal: 1, cut: 0 } : noteMotion(lane, n);
-  const ribbon = noteRibbon(lane, source);
-  const ratio = isPreview && source.end > source.start ? (n.end - n.start) / (source.end - source.start) : 1;
-  const ribbonEnd = ribbon && isPreview ? n.start + (ribbon.end - source.start) * ratio : ribbon?.end;
-  const x = xOf(motion.start), w = Math.max(2, xOf(ribbonEnd ?? motion.end) - x), y = yOf(n.pitch);
+  const motion = noteMotion(lane, n);
+  const ribbon = noteRibbon(lane, n);
+  const x = xOf(motion.start), w = Math.max(2, xOf(ribbon?.end ?? motion.end) - x), y = yOf(n.pitch);
   if (x > vx1 || x + w < vx0) return; // off-screen
   const rowH = S.state.rowH;
   const fill = stackCount.has(n) && !ignoredStackNotes.has(n) ? PAINT.warn : laneColor;
@@ -462,9 +459,9 @@ function paintLaneNote(n, source, isPreview, context) {
   // so the drawn pitch always matches what's exported. A prebend's bar sits
   // flat but *above* the fretted row, which is what it actually sounds.
   // A note a legato slide lands on is not picked: drawn flat, as the slide's ribbon goes on.
-  const curve = pitchCurve(n) || ribbon?.points || (slurred.has(source) ? FLAT : null);
-  const active = !isPreview && editTargets.has(n);
-  const glow = isPreview ? 0 : notePlaybackGlow(lane, n);
+  const curve = pitchCurve(n) || ribbon?.points || (slurred.has(n) ? FLAT : null);
+  const active = editTargets.has(n);
+  const glow = notePlaybackGlow(lane, n);
   paintNoteBody(n, { x, y, w, rowH, curve, active, glow, laneAlpha, motion, fill });
   // Curve extent positions the omission and range decorations.
   const drop = curve ? bendPeak(curve) * rowH : 0, dip = curve ? Math.max(0, -Math.min(...curve.map(([, v]) => v))) * rowH : 0;
@@ -474,7 +471,7 @@ function paintLaneNote(n, source, isPreview, context) {
     sctx.beginPath(); sctx.moveTo(x, y - 2 * motion.cut); sctx.lineTo(x, y + rowH + 2 * motion.cut); sctx.stroke();
     sctx.restore();
   }
-  if (!isPreview && reattackEdges.has(edgeKey(n.pitch, n.start))) {
+  if (reattackEdges.has(edgeKey(n.pitch, n.start))) {
     sctx.save();
     sctx.globalAlpha = laneAlpha;
     sctx.strokeStyle = PAINT.text; sctx.lineWidth = 1.5;
@@ -497,7 +494,7 @@ function paintLaneNote(n, source, isPreview, context) {
     const crossY = drop ? y - drop : y;
     omittedCrosses.push({ x, y: crossY, w, h: rowH + drop + dip, alpha: laneAlpha });
   }
-  if (!isPreview && outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)) && (showIgnoredIssues || !issueIgnored(lane, {id: 'editor.note.outOfRange', notes: [n]})))
+  if (outOfFretboardRange(n.pitch, tuning, laneFretCount(lane)) && (showIgnoredIssues || !issueIgnored(lane, {id: 'editor.note.outOfRange', notes: [n]})))
     outOfRange.push({ x, y: drop ? y - drop : y, w, h: rowH + drop + dip, alpha: laneAlpha * (issueIgnored(lane, {id: 'editor.note.outOfRange', notes: [n]}) ? .35 : 1) });
   sctx.restore();
 }
@@ -516,7 +513,6 @@ function paintLaneNotes(vx0, vx1, stackCount, ignoredStackNotes) {
   const omittedCrosses = [];
   const outOfRange = [];
   const ghostNotes = [];
-  const repeatPreview = repeatPreviewNote();
   for (const lane of S.state.lanes) {
     if (!lane.visible) continue;
     const { omitted: omittedNotes, added: addedNotes } = arrangementMarksForLane(lane);
@@ -536,17 +532,11 @@ function paintLaneNotes(vx0, vx1, stackCount, ignoredStackNotes) {
     const reattackEdges = new Set(lane.notes.map((note) => edgeKey(note.pitch, note.end)));
     sctx.globalAlpha = laneAlpha;
     const slurred = legatoTargets(lane);
-    const context = { lane, repeatPreview, vx0, vx1, tuning, laneAlpha, laneColor, slurred,
+    const context = { lane, vx0, vx1, tuning, laneAlpha, laneColor, slurred,
       stackCount, ignoredStackNotes, editTargets, edgeKey, reattackEdges, omittedNotes, omittedCrosses, outOfRange };
-    const hasPreview = repeatPreview?.lane === lane;
-    for (let ni = 0; ni < lane.notes.length + (hasPreview ? 1 : 0); ni++) {
-      const isPreview = ni === lane.notes.length, n = isPreview ? repeatPreview.note : lane.notes[ni];
-      if (!isPreview && n === repeatPreviewHiddenNote()) continue;
-      const source = isPreview ? repeatPreview.source : n;
-      paintLaneNote(n, source, isPreview, context);
-    }
+    for (const n of lane.notes) paintLaneNote(n, context);
   }
-  return { omittedCrosses, outOfRange, ghostNotes, repeatPreview };
+  return { omittedCrosses, outOfRange, ghostNotes };
 }
 
 function paintMotionGhosts(vx0, vx1) {
@@ -813,7 +803,7 @@ function paintStage() {
   sctx.setTransform(dp, 0, 0, dp, -vx0 * dp, -vy0 * dp);
   paintStageBackground(vx0, vx1, vy0);
   const { frameIssues, stackCount, ignoredStackNotes, stackBadges } = collectFrameDiagnostics();
-  const { omittedCrosses, outOfRange, ghostNotes, repeatPreview } = paintLaneNotes(vx0, vx1, stackCount, ignoredStackNotes);
+  const { omittedCrosses, outOfRange, ghostNotes } = paintLaneNotes(vx0, vx1, stackCount, ignoredStackNotes);
   paintMotionGhosts(vx0, vx1);
   sctx.globalAlpha = 1;
   sctx.textBaseline = "alphabetic";
@@ -821,7 +811,7 @@ function paintStage() {
   drawShapes(vx0, vx1);
   drawDropPreview();
   drawStackBadges(stackBadges, vx0, vx1);
-  drawNoteFx(repeatPreviewHiddenNote(), repeatPreview);
+  drawNoteFx();
   drawBendHandles(vx0, vx1);   // over the names, which would hide them
   drawOmittedNoteCrosses(omittedCrosses);
   drawOutOfRangeNotes(outOfRange);
