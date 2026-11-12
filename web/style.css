@@ -1635,7 +1635,8 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #repeatDrag { cursor: grab; touch-action: none; }
 #repeatNavigator.docking #repeatDrag { cursor: grabbing; }
 .repeat-picker { position: relative; font-size: var(--text-control); }
-.repeat-picker summary { cursor: pointer; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--surface-inset); white-space: nowrap; }
+.repeat-picker summary { display: flex; align-items: center; box-sizing: border-box; cursor: pointer; list-style: none; white-space: nowrap; }
+.repeat-picker summary::-webkit-details-marker { display: none; }
 .repeat-picker summary[aria-disabled="true"] { opacity: .5; cursor: default; }
 .repeat-picker-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; min-width: 100%; width: max-content; max-width: min(320px, 80vw); max-height: min(360px, 60vh); overflow: auto; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--panel); box-shadow: var(--e1); }
 #repeatNavigator[data-menu-above="true"] .repeat-picker-menu { top: auto; bottom: calc(100% + 4px); }

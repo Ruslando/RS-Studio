@@ -27,7 +27,7 @@ import { noteRibbon } from './note-render.js';
 import { modalOpen } from './modal-focus.js';
 import { nid } from './ids.js';
 import { renderRepeatPicker } from './repeat-picker.js';
-import { playbackTime, seekPlayback } from './playback.js';
+import { playbackTime, seekPlayback, transportPlaying } from './playback.js';
 import { initRepeatDock } from './repeat-dock.js';
 import { alphabeticLabel } from './repeat-variations.js';
 
@@ -99,13 +99,19 @@ function repeatCopyBounds(state, copy) {
   return copy.phraseLength > 0 ? { ...bounds, t0: Math.min(clock.timeAt(origin), copy.notes[0].note.start),
     t1: clock.timeAt(origin + copy.phraseLength) } : bounds;
 }
+function seekRepeatPosition(time) {
+  seekPlayback(time);
+  // Media clocks can round a seek to just before the requested note or phrase.
+  // Keep the explicit destination until the transport actually moves again.
+  review.manualSeekTime = playbackTime();
+}
 function revealCurrent({ seek = true } = {}) {
   hideRepeatHover();
   if (review) { review.changeKey = null; review.changeAnchor = null; }
   const state = current();
   if (!state) { draw(); return; }
   const b = repeatCopyBounds(state, state.copy);
-  if (seek) { review.playheadMarker = null; seekPlayback(b.t0); }
+  if (seek) { review.playheadMarker = null; seekRepeatPosition(b.t0); }
   syncRepeatPlayhead();
   moveViewportTo(xOf(b.t0) - scroll.clientWidth * 0.2, yOf((b.pLo + b.pHi) / 2) - scroll.clientHeight / 2);
   draw();
@@ -229,7 +235,7 @@ export function renderRepeatNavigator() {
   const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = `– / ${stops.length}`; placeholder.disabled = true; changes.append(placeholder);
   for (const [index, stop] of stops.entries()) {
     const option = document.createElement('option'); option.value = stop.key;
-    option.textContent = `${index + 1} / ${stops.length} · ${noteName(stop.marker.note.pitch)}`; changes.append(option);
+    option.textContent = `${index + 1} / ${stops.length}`; changes.append(option);
   }
   changes.value = changeIndex < 0 ? '' : stops[changeIndex].key;
   changes.disabled = scanning || !stops.length;
@@ -245,12 +251,11 @@ function comparisonDetails(state) {
     const marker = { note, current: note, first: note, anchor: note, anchorCopy: state.copy };
     byNote.set(note, marker); return marker;
   });
-  const changed = (note, kind, color) => {
+  const changed = note => {
     const marker = byNote.get(note);
     if (!marker) return;
     if (!marker.kind) markers.push(marker);
-    // A played difference takes precedence over finger-only highlighting.
-    if (!marker.kind || kind === 'played') Object.assign(marker, { kind, color });
+    marker.kind = 'changed';
   };
   const origin = copyOrigin(state.copy, clock.beatAt);
   for (const other of review.excluded?.has(state.copy.ids[0]) ? [] : state.group.copies) {
@@ -260,11 +265,11 @@ function comparisonDetails(state) {
       const firstOrigin = copyOrigin(state.copy, clock.beatAt), otherOrigin = copyOrigin(other, clock.beatAt);
       const rows = noteChangeRows(change.from, change.to, { beatAt: clock.beatAt, fingers,
         firstBeat: clock.beatAt(change.from.start) - firstOrigin, currentBeat: clock.beatAt(change.to.start) - otherOrigin });
-      if (rows.some(row => row.key !== 'whammy' && (row.before !== row.after || row.curves))) changed(change.from, 'played', PAINT.warn);
+      if (rows.some(row => row.key !== 'whammy' && (row.before !== row.after || row.curves))) changed(change.from);
     }
-    for (const [a] of comparison.positionDifferences) changed(a, 'played', PAINT.warn);
-    for (const [a] of comparison.fingerDifferences) changed(a, 'finger', PAINT.accent);
-    for (const { note } of comparison.missing) changed(note, 'extra', PAINT.ok);
+    for (const [a] of comparison.positionDifferences) changed(a);
+    for (const [a] of comparison.fingerDifferences) changed(a);
+    for (const { note } of comparison.missing) changed(note);
     for (const { note, beat } of comparison.added) {
       if (state.copy.phraseLength > 0 && (beat < -.06 || beat >= state.copy.phraseLength - .06)) continue;
       const key = `${Math.round(beat * 10000)}:${note.pitch}`;
@@ -272,7 +277,7 @@ function comparisonDetails(state) {
       const start = clock.timeAt(origin + beat);
       const end = clock.timeAt(origin + beat + clock.beatAt(note.end) - clock.beatAt(note.start));
       const marker = { kind: 'missing', first: note, current: null, anchor: note, anchorCopy: other,
-        note: { pitch: note.pitch, start, end }, color: PAINT.error };
+        note: { pitch: note.pitch, start, end } };
       ghosts.set(key, marker); markers.push(marker); targets.push(marker);
     }
   }
@@ -344,7 +349,7 @@ function stepChange(delta) {
   const state = current();
   if (!state) return;
   const stops = changeStops(state);
-  if (!stops.length) { stepCopy(delta); return; }
+  if (!stops.length) return;
   let index = stops.findIndex(stop => stop.key === review.changeKey);
   if (index >= 0) index = (index + delta + stops.length) % stops.length;
   else {
@@ -370,7 +375,7 @@ function focusRepeatMarker(state, marker) {
   scroll.scrollLeft = clamp(xOf(marker.note.start) - scroll.clientWidth * .2, scroll.scrollWidth - scroll.clientWidth);
   scroll.scrollTop = clamp(yOf(marker.note.pitch) - scroll.clientHeight / 2, scroll.scrollHeight - scroll.clientHeight);
   review.changeKey = markerKey(state.copy, marker); review.playheadMarker = null;
-  seekPlayback(marker.note.start);
+  seekRepeatPosition(marker.note.start);
   syncRepeatPlayhead();
   draw();
 }
@@ -402,7 +407,7 @@ export function handleRepeatNavigationKey(event) {
   const delta = event.key === 'ArrowRight' ? 1 : -1;
   if (event.shiftKey) stepGroup(delta);
   else if (event.altKey) stepCopy(delta);
-  else stepChange(delta);
+  else return false; // Plain arrows retain the editor's individual-note navigation.
   event.preventDefault(); event.stopImmediatePropagation();
   return true;
 }
@@ -622,15 +627,17 @@ export function syncRepeatPlayhead() {
     hideRepeatHover(); return;
   }
   const time = playbackTime(), clock = laneClock(state.lane);
+  if (transportPlaying() || time !== review.manualSeekTime) review.manualSeekTime = null;
+  const manual = review.manualSeekTime === time;
   const contains = copy => {
     const from = copy.phraseLength > 0 ? clock.timeAt(copyOrigin(copy, clock.beatAt)) : copy.notes[0].note.start;
     const to = copy.phraseLength > 0 ? clock.timeAt(copyOrigin(copy, clock.beatAt) + copy.phraseLength)
       : Math.max(...copy.notes.map(entry => entry.note.end));
     return time >= from - 1e-7 && time < to - 1e-7;
   };
-  const parent = contains(state.copy) ? state.parent : [state.parent, ...state.groups.filter(g => g !== state.parent)]
+  const parent = manual || contains(state.copy) ? state.parent : [state.parent, ...state.groups.filter(g => g !== state.parent)]
     .find(group => group.copies.some(contains));
-  const copy = parent && (parent === state.parent && contains(state.copy) ? state.copy : parent.copies.find(contains));
+  const copy = parent && (parent === state.parent && (manual || contains(state.copy)) ? state.copy : parent.copies.find(contains));
   if (!copy) { review.playheadMarker = null; hideRepeatHover(); return; }
   if (parent.id !== state.parent.id || copy.ids[0] !== state.copy.ids[0]) {
     if (parent.id !== state.parent.id) review.variation = null;
@@ -639,13 +646,15 @@ export function syncRepeatPlayhead() {
     review.changeKey = null; review.changeAnchor = null;
     navKey = null; state = current();
   }
-  const atPlayhead = marker => time >= marker.note.start - 1e-7 && time < marker.note.end - 1e-7;
-  const changed = changeStops(state).filter(stop => atPlayhead(stop.marker));
-  let marker = (changed.find(stop => stop.key === review.changeKey) || changed[0])?.marker;
-  if (!marker) {
-    const note = state.copy.notes.find(entry => atPlayhead(entry))?.note;
-    if (note) marker = { note, current: note, first: note, anchor: note, anchorCopy: state.copy };
+  if (transportPlaying()) {
+    review.playheadMarker = null;
+    hideRepeatHover(); return;
   }
+  const atPlayhead = marker => time >= marker.note.start - 1e-7 && time < marker.note.end - 1e-7;
+  const stops = changeStops(state);
+  const changed = stops.filter(stop => atPlayhead(stop.marker));
+  const marker = (manual && stops.find(stop => stop.key === review.changeKey)
+    || changed.find(stop => stop.key === review.changeKey) || changed[0])?.marker;
   const identity = [state.parent.id, state.copy.ids[0], marker && markerKey(state.copy, marker),
     S.voicingRevision, S.fingerRevision, handResult, review.excluded, review.variation];
   if (review.playheadMarker && identity.every((value, i) => value === review.playheadMarker[i])) return;
@@ -679,17 +688,13 @@ export function repeatPreviewNote() {
   return { lane: state.lane, source: hover.marker.first, note: projectedFirstNote(state), alpha: .55 };
 }
 function drawDifference(marker, left, right) {
-  const { note, color, kind } = marker;
+  const { note, kind } = marker;
   const x = xOf(note.start), end = xOf(note.end);
   if (x > right || end < left) return;
-  const pad = kind === 'finger' ? 5 : 2, y = yOf(note.pitch);
-  sctx.strokeStyle = color; sctx.lineWidth = 3; sctx.setLineDash(kind === 'missing' ? [4, 3] : []);
+  const pad = 2, y = yOf(note.pitch);
+  sctx.strokeStyle = PAINT.warn; sctx.lineWidth = 3; sctx.setLineDash(kind === 'missing' ? [4, 3] : []);
   sctx.strokeRect(x - pad, y - pad, Math.max(2, end - x) + pad * 2, S.state.rowH + pad * 2);
   sctx.setLineDash([]);
-  if (kind === 'missing') {
-    sctx.beginPath(); sctx.moveTo(x, y); sctx.lineTo(Math.max(x + 2, end), y + S.state.rowH);
-    sctx.moveTo(x, y + S.state.rowH); sctx.lineTo(Math.max(x + 2, end), y); sctx.stroke();
-  }
 }
 export function drawRepeats() {
   const state = current();

@@ -31,7 +31,7 @@ button svg, .btn svg, .metro-toggle svg { display: block; flex: none; }
 :is(button, .clickable):active:not(:disabled) { background: var(--surface-button-hover); color: var(--text); }
 :is(button, .clickable):disabled              { color: var(--hint); background: transparent; }
 
-:is(button, input, select, textarea, [tabindex]):focus-visible {
+:is(button, input, select, textarea, summary, [tabindex]):focus-visible {
   border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); outline: none;
 }
 
@@ -50,7 +50,7 @@ button svg, .btn svg, .metro-toggle svg { display: block; flex: none; }
 
 :is(button.primary, .btn--primary, .btn--destructive):disabled { background: var(--control); border-color: var(--line); color: var(--hint); }
 
-.field, input[type="text"], input[type="number"], input[type="search"], select, textarea {
+.field, input[type="text"], input[type="number"], input[type="search"], select, textarea, .repeat-picker summary {
   height: var(--h-control); padding: 0 var(--s-row);
   background: var(--surface-inset); color: var(--text); border: 1px solid transparent;
   border-radius: var(--r-control); font: 400 var(--text-control)/1 var(--font-ui);
@@ -65,11 +65,11 @@ input[type="number"] {
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-:is(.field, input[type="text"], input[type="number"], input[type="search"], select, textarea):focus {
+:is(.field, input[type="text"], input[type="number"], input[type="search"], select, textarea, .repeat-picker summary):focus {
   border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); outline: none;
 }
 
-select {
+select, .repeat-picker summary {
   appearance: none; -webkit-appearance: none;
   width: auto; padding-right: calc(var(--s-row) + var(--s-row) + 10px);
   background-image:
