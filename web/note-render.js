@@ -356,6 +356,96 @@ function positionsForLabels(lane) {
   return entry.voiced;
 }
 
+// Label placement is separate from effect policy and preview geometry.
+function paintSlideNoteLabels(n, source, { x, x1, ribbon, onto, positions, mode, capo, shaping, label }) {
+  // The sliding part: after a late start, or before a slide-in lands (bend.js).
+  const into = SLIDE_IN.has(n.slide), w = xOf(ribbon.end) - x;
+  // The landing note of a slide-in is not picked again, so its name stands beside it.
+  if (into) paintNoteLabelBeside(sctx, label, x1, "right", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
+  else if (edgeSlide(n.slide)) paintNoteLabelBeside(sctx, label, x, "left", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
+  else centeredLabel(label, x, 0, n.pitch, x1 - x);
+  // A slide into or out of nowhere has no note at its far end, so name that pitch beside it.
+  if (edgeSlide(n.slide) && !shaping) {
+    const [t, semi] = into ? ribbon.points[0] : ribbon.points.at(-1), pos = positions?.get(source);
+    const far = spectrogramLabel({ pitch: n.pitch + semi }, pos && { ...pos, fret: pos.fret + semi }, mode, [], capo);
+    paintNoteLabelBeside(sctx, far, x + w * t, into ? "left" : "right", yOf(n.pitch + semi) + S.state.rowH / 2,
+      S.state.rowH, xOf(ribbon.end) - x);
+  }
+  if (n.slide === "shift") {
+    const ax = xOf(onto.start) + 1, ay = yOf(onto.pitch), h = S.state.rowH;
+    sctx.save(); sctx.lineCap = "round";
+    sctx.beginPath(); sctx.moveTo(ax, ay - 2); sctx.lineTo(ax, ay + h + 2);
+    sctx.lineWidth = 4; sctx.strokeStyle = halo(); sctx.stroke();
+    sctx.lineWidth = 2; sctx.strokeStyle = PAINT.text; sctx.stroke();
+    sctx.restore();
+  }
+}
+
+function paintBendNoteLabels(n, source, { x, x1, curve, positions, mode, tags, capo, shaping }) {
+  if (!shaping && (mode === 'notes' || mode === 'both')) for (const [t, semi] of curve)
+    centeredLabel(bendPitchName(n.pitch + semi), x + (x1 - x) * t, 0, n.pitch + semi, (x1 - x) / curve.length);
+  const baseLabel = !shaping && spectrogramLabel(n, positions?.get(source), mode === 'both' ? 'positions' : mode === 'notes' ? 'none' : mode, tags, capo);
+  if (baseLabel) centeredLabel(baseLabel, x, x1 - x, n.pitch);
+}
+
+function paintFreeLengthMarker(n, x1) {
+  // A small hollow diamond distinguishes a free-length tail from effects
+  // and diagnostics, even when note labels are hidden.
+  const cy = yOf(n.pitch) + S.state.rowH / 2, r = Math.min(3, S.state.rowH / 3);
+  sctx.save(); sctx.strokeStyle = PAINT.text; sctx.lineWidth = 1;
+  sctx.beginPath(); sctx.moveTo(x1, cy - r); sctx.lineTo(x1 + r, cy);
+  sctx.lineTo(x1, cy + r); sctx.lineTo(x1 - r, cy); sctx.closePath(); sctx.stroke(); sctx.restore();
+}
+
+function paintGraceNote(n, grace, x, lane, isPreview) {
+  const gx = xOf(grace.start), width = Math.max(2, x - gx), pitch = n.pitch + grace.offset;
+  paintNoteBar(sctx, gx, yOf(pitch), width, S.state.rowH, !lane.active || lane.locked ? grayHex(lane.color) : lane.color,
+    !isPreview && S.selection.has(n), !isPreview && S.hoverNote === n);
+}
+
+function noteEffectTags(n, source, ribbon, hammerTags) {
+  const tags = noteMarks(n).map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(source) || m : m);
+  if (n.slide && !ribbon && !edgeSlide(n.slide)) tags.push(SLIDE_TAG[n.slide] || "slide");
+  if (n.slideIn && !ribbon) tags.push(SLIDE_TAG[n.slideIn] || "slide");
+  if (n.harmonic) tags.push(HARMONIC_TAG[n.harmonic] || "harm.");
+  return tags;
+}
+
+function paintNoteEffects(n, source, isPreview, context) {
+  const { lane, preview, vx0, vx1, options, segments, positions, capo, hammerTags, slides, slurred } = context;
+  const x = xOf(n.start), x1 = xOf(n.end);
+  const sourceRibbon = noteRibbon(lane, source), sourceOnto = slides.get(source);
+  const ratio = isPreview && source.end > source.start ? (n.end - n.start) / (source.end - source.start) : 1;
+  const ribbon = sourceRibbon && isPreview ? { ...sourceRibbon, end: n.start + (sourceRibbon.end - source.start) * ratio } : sourceRibbon;
+  const onto = sourceOnto && isPreview ? { ...sourceOnto, start: n.start + (sourceOnto.start - source.start) * ratio } : sourceOnto;
+  const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
+  if ((grace ? xOf(grace.start) : x) > vx1 || Math.max(x1, ribbon ? xOf(ribbon.end) : x1) < vx0) return;
+  if (isPreview) {
+    sctx.save(); sctx.globalAlpha *= preview.alpha;
+  }
+  if (hasFreeNoteLength(n, segments)) {
+    paintFreeLengthMarker(n, x1);
+  }
+  const { mode, effects } = resolveNoteAppearance(options, !isPreview && S.hoverNote === n);
+  const tags = effects ? noteEffectTags(n, source, ribbon, hammerTags) : [];
+  const curve = bendCurve(n);
+  // A selected note being shaped shows its handles, not its names (they would cover them).
+  const shaping = !isPreview && S.selection.has(n) && !!(ribbon || pitchCurve(n));
+  const label = shaping ? "" : spectrogramLabel(n, positions?.get(source), mode, tags, capo);
+  if (ribbon && !curve) {
+    paintSlideNoteLabels(n, source, { x, x1, ribbon, onto, positions, mode, capo, shaping, label });
+  } else if (curve) {
+    paintBendNoteLabels(n, source, { x, x1, curve, positions, mode, tags, capo, shaping });
+  } else if (label && slurred.has(source)) paintNoteLabelBeside(sctx, label, x1, "right", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
+  else if (label) centeredLabel(label, x, x1 - x, n.pitch);
+  if (effects && !ribbon) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2, S.state.rowH);
+  if (effects && n.fx?.vibrato) paintVibratoWave(n, lane, isPreview ? ribbon : null);
+  if (grace) {
+    paintGraceNote(n, grace, x, lane, isPreview);
+  }
+  if (isPreview) sctx.restore();
+}
+
 export function drawNoteFx(hiddenNote = null, preview = null) {
   const vx0 = scroll.scrollLeft, vx1 = vx0 + scroll.clientWidth;
   const options = spectrogramLabelOptions();
@@ -371,75 +461,13 @@ export function drawNoteFx(hiddenNote = null, preview = null) {
     // Labels of a layer that is not being edited fade with its notes (draw.js).
     sctx.save();
     if (!lane.active || lane.locked) sctx.globalAlpha = 0.5;
+    const context = { lane, preview, vx0, vx1, options, segments, positions, capo, hammerTags, slides, slurred };
     const hasPreview = preview?.lane === lane;
     for (let ni = 0; ni < lane.notes.length + (hasPreview ? 1 : 0); ni++) {
       const isPreview = ni === lane.notes.length, n = isPreview ? preview.note : lane.notes[ni];
       if (!isPreview && n === hiddenNote) continue;
       const source = isPreview ? preview.source : n;
-      const x = xOf(n.start), x1 = xOf(n.end);
-      const sourceRibbon = noteRibbon(lane, source), sourceOnto = slides.get(source);
-      const ratio = isPreview && source.end > source.start ? (n.end - n.start) / (source.end - source.start) : 1;
-      const ribbon = sourceRibbon && isPreview ? { ...sourceRibbon, end: n.start + (sourceRibbon.end - source.start) * ratio } : sourceRibbon;
-      const onto = sourceOnto && isPreview ? { ...sourceOnto, start: n.start + (sourceOnto.start - source.start) * ratio } : sourceOnto;
-      const grace = graceBefore(n, gridAt(n.start)?.bpm || 120);
-      if ((grace ? xOf(grace.start) : x) > vx1 || Math.max(x1, ribbon ? xOf(ribbon.end) : x1) < vx0) continue;
-      if (isPreview) {
-        sctx.save(); sctx.globalAlpha *= preview.alpha;
-      }
-      if (hasFreeNoteLength(n, segments)) {
-        // A small hollow diamond distinguishes a free-length tail from effects
-        // and diagnostics, even when note labels are hidden.
-        const cy = yOf(n.pitch) + S.state.rowH / 2, r = Math.min(3, S.state.rowH / 3);
-        sctx.save(); sctx.strokeStyle = PAINT.text; sctx.lineWidth = 1;
-        sctx.beginPath(); sctx.moveTo(x1, cy - r); sctx.lineTo(x1 + r, cy);
-        sctx.lineTo(x1, cy + r); sctx.lineTo(x1 - r, cy); sctx.closePath(); sctx.stroke(); sctx.restore();
-      }
-      const { mode, effects } = resolveNoteAppearance(options, !isPreview && S.hoverNote === n);
-      const tags = effects ? noteMarks(n).map((m) => m === FX_GLYPHS.hammer ? hammerTags.get(source) || m : m) : [];
-      if (effects && n.slide && !ribbon && !edgeSlide(n.slide)) tags.push(SLIDE_TAG[n.slide] || "slide");
-      if (effects && n.slideIn && !ribbon) tags.push(SLIDE_TAG[n.slideIn] || "slide");
-      if (effects && n.harmonic) tags.push(HARMONIC_TAG[n.harmonic] || "harm.");
-      const curve = bendCurve(n);
-      // A selected note being shaped shows its handles, not its names (they would cover them).
-      const shaping = !isPreview && S.selection.has(n) && !!(ribbon || pitchCurve(n));
-      const label = shaping ? "" : spectrogramLabel(n, positions?.get(source), mode, tags, capo);
-      if (ribbon && !curve) {
-        // The sliding part: after a late start, or before a slide-in lands (bend.js).
-        const into = SLIDE_IN.has(n.slide), w = xOf(ribbon.end) - x;
-        // The landing note of a slide-in is not picked again, so its name stands beside it.
-        if (into) paintNoteLabelBeside(sctx, label, x1, "right", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
-        else if (edgeSlide(n.slide)) paintNoteLabelBeside(sctx, label, x, "left", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
-        else centeredLabel(label, x, 0, n.pitch, x1 - x);
-        // A slide into or out of nowhere has no note at its far end, so name that pitch beside it.
-        if (edgeSlide(n.slide) && !shaping) {
-          const [t, semi] = into ? ribbon.points[0] : ribbon.points.at(-1), pos = positions?.get(source);
-          const far = spectrogramLabel({ pitch: n.pitch + semi }, pos && { ...pos, fret: pos.fret + semi }, mode, [], capo);
-          paintNoteLabelBeside(sctx, far, x + w * t, into ? "left" : "right", yOf(n.pitch + semi) + S.state.rowH / 2,
-            S.state.rowH, xOf(ribbon.end) - x);
-        }
-        if (n.slide === "shift") {
-          const ax = xOf(onto.start) + 1, ay = yOf(onto.pitch), h = S.state.rowH;
-          sctx.save(); sctx.lineCap = "round";
-          sctx.beginPath(); sctx.moveTo(ax, ay - 2); sctx.lineTo(ax, ay + h + 2);
-          sctx.lineWidth = 4; sctx.strokeStyle = halo(); sctx.stroke();
-          sctx.lineWidth = 2; sctx.strokeStyle = PAINT.text; sctx.stroke();
-          sctx.restore();
-        }
-      } else if (curve) {
-        if (!shaping && (mode === 'notes' || mode === 'both')) for (const [t, semi] of curve)
-          centeredLabel(bendPitchName(n.pitch + semi), x + (x1 - x) * t, 0, n.pitch + semi, (x1 - x) / curve.length);
-        const baseLabel = !shaping && spectrogramLabel(n, positions?.get(source), mode === 'both' ? 'positions' : mode === 'notes' ? 'none' : mode, tags, capo);
-        if (baseLabel) centeredLabel(baseLabel, x, x1 - x, n.pitch);
-      } else if (label && slurred.has(source)) paintNoteLabelBeside(sctx, label, x1, "right", yOf(n.pitch) + S.state.rowH / 2, S.state.rowH, x1 - x);
-      else if (label) centeredLabel(label, x, x1 - x, n.pitch);
-      if (effects && !ribbon) paintSlideLabel(sctx, n.slide, x, x1, yOf(n.pitch) + S.state.rowH / 2, S.state.rowH);
-      if (effects && n.fx?.vibrato) paintVibratoWave(n, lane, isPreview ? ribbon : null);
-      if (grace) {
-        const gx = xOf(grace.start), width = Math.max(2, x - gx), pitch = n.pitch + grace.offset;
-        paintNoteBar(sctx, gx, yOf(pitch), width, S.state.rowH, !lane.active || lane.locked ? grayHex(lane.color) : lane.color,
-          !isPreview && S.selection.has(n), !isPreview && S.hoverNote === n);
-      }
-      if (isPreview) sctx.restore();
+      paintNoteEffects(n, source, isPreview, context);
     }
     sctx.restore();
   }
