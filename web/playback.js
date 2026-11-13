@@ -21,6 +21,13 @@ window.addEventListener("cw-project-opened", () => regionLoop.reset());
 window.addEventListener("cw-project-closed", () => regionLoop.reset());
 
 function updateRegionLoop() {
+  const held = playbackZone(), time = transportTime();
+  if (held) {
+    regionLoop.reset();
+    if (time >= held.t1) { pauseTransport(); seekPlayback(held.t1); }
+    else if (time < held.t0) seekPlayback(held.t0);
+    return;
+  }
   if (S.passagePreviewActive || S.drag?.mode === "region" || S.drag?.mode === "regionEdge") {
     regionLoop.reset(); return;
   }
@@ -107,6 +114,9 @@ export function pauseTransport() {
 
 export function playTransport() {
   if (!S.state) return Promise.resolve();
+  const held = playbackZone();
+  if (held && playbackTime() >= held.t1) return Promise.resolve();
+  if (held && transportTime() < held.t0) seekPlayback(held.t0);
   if (leadCursor < 0) { startPreroll(leadCursor); return Promise.resolve(); }
   if (hasAudioTransport()) return audio.play();
   if (S.scorePlaying) return Promise.resolve();
@@ -146,10 +156,12 @@ export function setPlaybackFocus(next) { focus = next; applyStemGains(); }
 const audibleLanes = () => editLanes().filter((lane) => (!focus || focus.lanes.includes(lane.id)) && laneAudible(lane));
 
 // A range the playhead cannot leave (repeats.js: the instance under review).
-// Seeks are held inside it and playback loops it, as it does a loop range.
+// Seeks stay inside it; playback stops at its end.
 let zone = null;   // () => { t0, t1 } | null
 export function setPlaybackZone(next) { zone = next; regionLoop.reset(); }
-const loopRange = () => S.detectRegion || zone?.() || null;
+export function playbackZone() { return zone?.() || null; }
+const loopRange = () => playbackZone() ? null : S.detectRegion || null;
+const playbackEnd = () => Math.min(playbackZone()?.t1 ?? Infinity, regionLoop.end(loopRange()));
 
 function laneSynth(lane) {
   if (!window.Tone) return null;
@@ -325,7 +337,7 @@ function scheduleMetro() {
   if (clockArmed) return; // no valid clock to schedule against yet
   // Tight grace: a late click is worse than a missed one — it lands off the grid.
   const [from, planned] = schedWindow(metroFrom, playbackTime(), lookahead(), 0.05);
-  const horizon = Math.min(planned, regionLoop.end(loopRange()));
+  const horizon = Math.min(planned, playbackEnd());
   metroFrom = horizon;   // advance even while the metronome is off, so enabling it mid-play can't backfire old beats
   if (!window.Tone || !S.state || !metroOn.checked) return;
   const segs = gridSegments();
@@ -393,7 +405,7 @@ function scheduleNotes() {
   if (!window.Tone || !S.state || clockArmed) return;
   const now = playbackTime();
   const [from, planned] = schedWindow(notesFrom, now, lookahead());
-  const loopEnd = regionLoop.end(loopRange()), horizon = Math.min(planned, loopEnd);
+  const loopEnd = playbackEnd(), horizon = Math.min(planned, loopEnd);
   const resumeAt = notesResumeAt; notesResumeAt = null;
   notesFrom = horizon;   // advance during passage previews too — their notes are meant to be skipped, not queued
   if (S.passagePreviewActive) return; // similar-passage previews audition the stem slice only
@@ -607,6 +619,10 @@ export function applyPreservePitch() {
 // where the sound actually is, not where the decoder is. Paused/scrubbing
 // falls back to the element's reported time.
 export function playbackTime() {
+  const time = transportTime(), held = shownTime == null ? playbackZone() : null;
+  return held ? clamp(time, held.t0, held.t1) : time;
+}
+function transportTime() {
   if (shownTime != null) return shownTime;
   if (preroll) return prerollTime();
   if (leadCursor < 0) return leadCursor;
@@ -629,8 +645,8 @@ export function playbackTime() {
 // and alphaTab. Updating the readout and scheduler here prevents a view-specific
 // cursor from moving while the actual playback clock remains somewhere else.
 export function seekPlayback(t) {
-  const held = zone?.();
-  if (held && Number.isFinite(t)) t = clamp(t, held.t0, Math.max(held.t0, held.t1 - 1e-3));
+  const held = playbackZone();
+  if (held) t = clamp(Number.isFinite(t) ? t : held.t0, held.t0, held.t1);
   regionLoop.reset();
   if (viewportFollowing("playback")) stopViewportMotion();
   const lower = -(S.leadView || 0);   // the shown silence, before the song
@@ -711,6 +727,7 @@ function schedulerTick() {
   if (!S.state || !transportPlaying() || preroll) return;   // no notes before the song
   updateClock();
   updateRegionLoop();
+  if (!transportPlaying()) return;
   scheduleNotes();
   scheduleMetro();
   resyncFollowers();
@@ -768,14 +785,17 @@ export function init_playback() {
   window.addEventListener('cw-keymap-changed', syncPlayHint);
   syncPlayHint();
   startScheduler();
-  audio.addEventListener("play", () => { regionLoop.reset(); updateRegionLoop(); });
   audio.addEventListener("ended", () => {
+    if (playbackZone()) { pauseTransport(); seekPlayback(playbackZone().t1); return; }
     if (S.passagePreviewActive) return;
     const next = regionLoop.update(audio.currentTime, loopRange());
     if (next !== null) { seekPlayback(next); audio.play().catch(() => {}); }
   });
   playBtn.addEventListener("click", async () => { await ensureTone(); togglePlay(); });
   audio.addEventListener("play", () => {
+    clockArmed = true; armSong = audio.currentTime;
+    regionLoop.reset(); updateRegionLoop();
+    if (!transportPlaying()) return;
     scrollingSuspended = false; playBtn.innerHTML = PAUSE_ICON; syncPlayHint();
     setSynthsMuted(false); ensureStemMixer(); startFollowers(); resetSchedule();
     window.dispatchEvent(new CustomEvent("cw-transport", { detail: "play" }));

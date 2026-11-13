@@ -99,6 +99,25 @@ function partnerCopy(parent, copy) {
 let splitHost = null;
 export function connectRepeatSplit(host) { splitHost = host; }
 const PANE = ['copyKey', 'first', 'changeKey', 'changeAnchor', 'playheadMarker', 'manualSeekTime'];
+// Keep identities and navigation choices, never note objects or render caches.
+export function savedRepeatReview() {
+  if (!review || worker) return null;
+  const pane = value => Object.fromEntries(['copyKey', 'first', 'changeKey', 'changeAnchor', 'manualSeekTime']
+    .filter(key => value[key] != null).map(key => [key, structuredClone(value[key])]));
+  return { lane: review.lane, group: review.group, ...pane(review),
+    ...(review.other ? { other: pane(review.other) } : {}) };
+}
+export function restoreRepeatReview(saved) {
+  closeRepeats(); optionsKey = null;
+  const lane = S.state?.editLanes.find(lane => lane.id === saved?.lane);
+  if (!lane || !groupsOf(lane).some(group => group.id === saved.group)) return;
+  review = structuredClone(saved);
+  if (splitHost?.isOpen()) {
+    pairRepeats(true); splitHost.reviewing(true);
+  } else delete review.other;
+  actions.setFretboardVisible(true);
+  renderRepeatNavigator(); draw();
+}
 function swapPane() {
   const theirs = review.other;
   review.other = Object.fromEntries(PANE.map(key => [key, review[key]]));
@@ -250,24 +269,30 @@ export function runFindRepeats(lane = activeLane()) {
   draw();
 }
 
-export function renderRepeatNavigator() {
+const navigatorCaches = new WeakMap();
+export function renderRepeatNavigator(elements = null) {
+  const $ = id => elements ? elements[id] : document.getElementById(id);
   const nav = $('repeatNavigator');
   if (!nav) return;
-  syncRepeatPlayhead();
+  if (!elements) syncRepeatPlayhead();
   const lane = S.state ? activeLane() : null, state = current(), scanning = !!worker && scanLane === lane;
   nav.hidden = !scanning && !state;
-  if (nav.hidden) { hideRepeatHover(); return; }
-  if (hover && (hover.lane !== lane || hover.group !== state?.group.id || hover.instance !== state?.copy.ids[0]
+  if (nav.hidden) { if (!elements) hideRepeatHover(); return; }
+  if (!elements && hover && (hover.lane !== lane || hover.group !== state?.group.id || hover.instance !== state?.copy.ids[0]
     || hover.revision !== S.voicingRevision || S.drag)) hideRepeatHover();
   const key = [S.state, lane, lane?.notes, lane?.repeatGroups, S.voicingRevision,
     review?.group, review?.other?.copyKey, review?.first, review?.changeKey, scanning, !!lane?.locked, !!lane?.visible, S.fingerRevision, handResult];
-  if (navKey && key.every((v, i) => v === navKey[i])) return;
-  navKey = key;
+  const cache = elements ? navigatorCaches.get(elements) || {} : null;
+  const previousKey = elements ? cache.key : navKey;
+  if (previousKey && key.every((v, i) => v === previousKey[i])) return;
+  if (elements) { cache.key = key; navigatorCaches.set(elements, cache); }
+  else navKey = key;
   const groups = state?.groups || [];
   const optionSig = JSON.stringify(groups.map(g => [g.id, g.name, g.copies.length]));
   const select = $('repeatGroup');
-  if (optionsKey !== optionSig) {
-    optionsKey = optionSig;
+  if ((elements ? cache.options : optionsKey) !== optionSig) {
+    if (elements) cache.options = optionSig;
+    else optionsKey = optionSig;
     select.replaceChildren();
     for (const group of groups) {
       const option = document.createElement('option');
@@ -297,7 +322,7 @@ export function renderRepeatNavigator() {
   changes.value = changeIndex < 0 ? '' : stops[changeIndex].key;
   changes.disabled = scanning || !stops.length;
   $('repeatChangePrevious').disabled = $('repeatChangeNext').disabled = scanning || !state || !stops.length;
-  if (hover && state) fillHoverRows(state);
+  if (!elements && hover && state) fillHoverRows(state);
 
 }
 
@@ -599,9 +624,12 @@ export function syncRepeatPlayhead() {
       : Math.max(...copy.notes.map(entry => entry.note.end));
     return time >= from - SEEK_SLACK && time < to - SEEK_SLACK;
   };
-  const parent = manual || contains(state.copy) ? state.parent : [state.parent, ...state.groups.filter(g => g !== state.parent)]
+  // Paired review owns its instances. A clock tick or rounded boundary seek
+  // must never select a nearby instance; only the instance controls may do so.
+  const fixed = !!review.other;
+  const parent = fixed || manual || contains(state.copy) ? state.parent : [state.parent, ...state.groups.filter(g => g !== state.parent)]
     .find(group => group.copies.some(contains));
-  const copy = parent && (parent === state.parent && (manual || contains(state.copy)) ? state.copy : parent.copies.find(contains));
+  const copy = parent && (parent === state.parent && (fixed || manual || contains(state.copy)) ? state.copy : parent.copies.find(contains));
   if (!copy) { review.playheadMarker = null; hideRepeatHover(); return; }
   if (parent.id !== state.parent.id || copy.ids[0] !== state.copy.ids[0]) {
     review.group = parent.id; review.copyKey = copy.ids[0]; review.first = copy.notes[0].note.id;
@@ -744,6 +772,5 @@ export function init_repeats(dependencies) {
   window.addEventListener('keydown', handleRepeatNavigationKey, true);
   registerEscapeLayer(ESC_DEPTH.transient, closeRepeats);
   const reset = () => { closeRepeats(); optionsKey = null; };
-  window.addEventListener('cw-project-opened', reset);
   window.addEventListener('cw-project-closed', reset);
 }

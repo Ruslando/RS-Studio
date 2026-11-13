@@ -18,7 +18,7 @@ import { gridAt, segBarSec } from "./grid-read.js";
 import { songBarStarts } from "./song-bars.js";
 import { editLanes } from "./lanes.js";
 import { selectedTablatureLane } from "./layer-role.js";
-import { playbackTime, ensureTone, previewNotes } from "./playback.js";
+import { playbackTime, playbackZone, ensureTone, previewNotes } from "./playback.js";
 import { S, setSelection } from "./store.js";
 import { seekPlayback as setPlaybackCursor } from "./playback.js";
 import { clamp } from "./util.js";
@@ -188,6 +188,8 @@ function focusColumn(note, { seek = true, column = null } = {}) {
   const ctx = note && columnOf(note);
   if (!ctx) return;
   const focused = column || ctx.col;
+  const held = playbackZone();
+  if (held && (focused.t0 < held.t0 || focused.t0 >= held.t1)) return;
   setSelection(new Set(focused.notes));
   // ↑ ↓ pick between two things sounding at the same moment, so they must not move
   // the playhead: moving it would change the very set they are choosing from.
@@ -213,7 +215,8 @@ function arrowLane() {
 export function stepColumnFocus(dir) {
   const lane = arrowLane();
   if (!lane) return;
-  const cols = chordColumns(lane.notes);
+  const held = playbackZone();
+  const cols = chordColumns(lane.notes).filter(column => !held || column.t0 >= held.t0 && column.t0 < held.t1);
   if (!cols.length) return;
   const next = adjacentColumn(cols, playbackTime(), dir, S.selection);
   if (next) focusColumn(next.notes[0], { column: next });
@@ -227,7 +230,9 @@ export function stepVoiceFocus(dir) {
   const lane = arrowLane();
   if (!lane) return;
   const time = playbackTime() + 1e-3;
+  const held = playbackZone();
   const sounding = chordColumns(lane.notes)
+    .filter(column => !held || column.t0 >= held.t0 && column.t0 < held.t1)
     .filter(column => column.t0 <= time && column.notes.some(note => note.end > time))
     .sort((a, b) => Math.max(...a.notes.map(note => note.pitch)) - Math.max(...b.notes.map(note => note.pitch)));
   if (sounding.length < 2) return;

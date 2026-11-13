@@ -33,6 +33,7 @@ import { closeStemSettings, initStemSettings, openStemSettings } from "./stem-se
 import { downloadProjectBlob, toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
 import { S } from "./store.js";
+import { savedSplitView } from "./split-view.js";
 import { initProjectView, restoreView, savedView } from "./project-view.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
@@ -129,7 +130,7 @@ function projectBody() {
     scoreBars: (song.scoreBars || []).map((bar) => ({ ...bar })),
     timings: timingsForSave(),
     scoreDuration: Number(S.state.scoreDuration) || Number(S.state.duration) || 1,
-    view: { intensity: S.state.viewIntensity || [0, 100], spectrogram: S.state.specView || 'fine', sharp: !!S.state.specSharp, stem: S.state.curStem, zoomX: S.zoomX, zoomY: S.zoomY, speed: speedSel.value },
+    view: { intensity: S.state.viewIntensity || [0, 100], spectrogram: S.state.specView || 'fine', sharp: !!S.state.specSharp, stem: S.state.curStem, zoomX: S.zoomX, zoomY: S.zoomY, speed: speedSel.value, split: savedSplitView() },
     grid: {
       bpm: song.grid.bpm, offset: song.grid.offset, subdiv: song.grid.subdiv,
       snap: true, showGrid: true,
@@ -376,6 +377,7 @@ function restoredProjectStructure(data) {
 function restoredProjectState(data, { sourceLanes, coveredBars, restoredSections }) {
   return {
     job: data.job,
+    savedSplitView: data.view?.split,
     name: data.name,
     filename: data.filename,
     duration: data.duration,

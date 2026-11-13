@@ -10,6 +10,7 @@ class Target extends EventTarget {
 }
 let seconds = 0, scheduler;
 const calls = [];
+const events = [];
 const audio = Object.assign(new Target(), { paused: true, currentTime: 0, playbackRate: 1, duration: 10,
   play() { this.paused = false; this.dispatchEvent(new Event('play')); return Promise.resolve(); },
   pause() { this.paused = true; this.dispatchEvent(new Event('pause')); },
@@ -42,7 +43,7 @@ try {
     './volume.js': { busLevel: () => 1 },
     './viewport-motion.js': { viewportFollowing: () => false, stopViewportMotion: noop },
     './playback-effects.js': {
-      playbackEventFrom, playbackEvents, playSampleEvent: (synth, event) => calls.push(event.pitch),
+      playbackEventFrom, playbackEvents, playSampleEvent: (synth, event) => { calls.push(event.pitch); events.push(event); },
     },
   }, { './constants.js': true, './util.js': true, './region-loop.js': true, './keymap.js': true });
   playback.init_playback();
@@ -84,5 +85,36 @@ try {
   audio.dispatchEvent(new Event('ended'));
   assert.equal(audio.currentTime, 2, 'song-end loops seek back into the range');
   assert.equal(audio.paused, false, 'song-end loops restart the media transport');
+  playback.pauseTransport();
+  // Instance boundaries are hard stops, even with a separate range selected.
+  const held = { t0: 2, t1: 2.05 };
+  playback.setPlaybackZone(() => held);
+  assert.equal(playback.seekPlayback(-1), 2, 'seeks cannot leave through the start');
+  assert.equal(playback.seekPlayback(3), 2.05, 'seeks cannot leave through the end');
+  assert.equal(playback.seekPlayback(NaN), 2, 'invalid seeks still respect the boundary');
+  for (const media of [false, true]) {
+    S.state.stems = media ? [{ id: 'master' }] : [];
+    S.detectRegion = { t0: 0, t1: 10 };
+    playback.seekPlayback(2); calls.length = 0; events.length = 0;
+    await playback.playTransport();
+    if (media) { audio.currentTime = 2.01; seconds += .01; }
+    scheduler();
+    assert.deepEqual(calls, [64], 'the instance lookahead excludes the next instance');
+    assert.ok(events.every(event => event.start + event.duration <= held.t1));
+    seconds += .1;
+    if (media) audio.currentTime = 2.1;
+    assert.equal(playback.playbackTime(), held.t1, 'a late clock never exposes a playhead beyond the end');
+    scheduler();
+    assert.equal(playback.transportPlaying(), false, 'instance playback stops instead of looping');
+    assert.equal(playback.playbackTime(), held.t1, 'the stopped playhead stays at the instance end');
+    assert.deepEqual(calls, [64], 'reaching the end never schedules a repeated first attack');
+    await playback.playTransport();
+    assert.equal(playback.transportPlaying(), false, 'play at the end cannot escape into another instance');
+    if (media) {
+      audio.dispatchEvent(new Event('ended'));
+      assert.equal(audio.paused, true, 'a media ended event cannot restart the instance');
+    }
+  }
+  playback.setPlaybackZone(null);
 } finally { Object.assign(globalThis, saved); }
 console.log('Playback loop integration passed');

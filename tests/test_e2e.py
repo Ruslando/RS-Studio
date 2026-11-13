@@ -42,6 +42,180 @@ def _gp5_song() -> bytes:
 
 
 class EndToEndTests(unittest.TestCase):
+    def open_repeat_project(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes.find(lane => lane.active) || S.state.editLanes[0];
+            lane.notes = [0, 4, 8].flatMap(start => [40,43,45,47,45,43,40,38].map((pitch,i) => ({
+                id:`repeat-${start}-${i}`, start:start+i*.5, end:start+i*.5+.4,
+                pitch, pos:{string:5,fret:pitch-35}
+            })));
+            lane.repeatGroups = []; S.voicingRevision++;
+            (await import('/repeats.js')).runFindRepeats(lane);
+        }''')
+        expect(page.locator('#repeatNavigator')).to_be_visible()
+        expect(page.locator('#repeatNavigator')).to_have_attribute('aria-busy', 'false')
+        expect(page.locator('#splitPane')).to_be_visible()
+
+    def test_repeat_comparison_restores_after_project_reopen(self):
+        self.open_repeat_project()
+        page = self.page
+        page.click('#repeatNext')
+        before = page.evaluate('''async () => {
+            const state = (await import('/split-view.js')).savedSplitView();
+            await (await import('/project.js')).saveToServer();
+            (await import('/project.js')).markSaved();
+            return state;
+        }''')
+        page.evaluate('''async () => { await (await import('/project.js')).closeProject(); }''')
+        page.evaluate('''async job => { await (await import('/project.js')).loadCached(job); }''', self.reference_job)
+        expect(page.locator('#repeatNavigator')).to_be_visible()
+        expect(page.locator('#splitPane')).to_be_visible()
+        after = page.evaluate("async () => (await import('/split-view.js')).savedSplitView()")
+        self.assertEqual(after['review']['group'], before['review']['group'])
+        self.assertEqual(after['review']['copyKey'], before['review']['copyKey'])
+        self.assertEqual(after['review']['other']['copyKey'], before['review']['other']['copyKey'])
+        self.assertAlmostEqual(after['live']['time'], before['live']['time'], places=3)
+        # With no local view preferences, the saved project carries the mode too.
+        page.evaluate('''async job => {
+            await (await import('/project.js')).closeProject();
+            localStorage.removeItem(`cw.split.${job}`);
+            localStorage.removeItem(`cw.view.${job}`);
+            await (await import('/project.js')).loadCached(job);
+        }''', self.reference_job)
+        expect(page.locator('#repeatNavigator')).to_be_visible()
+        portable = page.evaluate("async () => (await import('/split-view.js')).savedSplitView()")
+        self.assertEqual(portable['review']['copyKey'], before['review']['copyKey'])
+        self.assertEqual(portable['review']['other']['copyKey'], before['review']['other']['copyKey'])
+        self.assertAlmostEqual(portable['live']['time'], before['live']['time'], places=3)
+        # Closing the comparison is itself remembered, even with the split left open.
+        page.click('#repeatClose')
+        page.evaluate('''async () => { await (await import('/project.js')).closeProject(); }''')
+        page.evaluate('''async job => { await (await import('/project.js')).loadCached(job); }''', self.reference_job)
+        expect(page.locator('#repeatNavigator')).to_be_hidden()
+
+    def test_note_arrows_keep_linked_repeat_playhead_visible(self):
+        self.open_repeat_project()
+        page = self.page
+        page.select_option('#splitMode', 'link')
+        page.check('#splitSyncView')
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js');
+            const {PX_PER_SEC} = await import('/constants.js');
+            S.zoomX = 12; S.pxPerSec = PX_PER_SEC * S.zoomX;
+            (await import('/geometry.js')).layout();
+            (await import('/repaint.js')).draw();
+            document.activeElement.blur();
+            await new Promise(requestAnimationFrame);
+        }''')
+        for key in ['ArrowRight', 'ArrowRight', 'ArrowLeft']:
+            page.evaluate("document.querySelector('#splitPane .split-scroll').scrollLeft = 0")
+            page.keyboard.press(key)
+            result = page.evaluate('''async () => {
+                await new Promise(requestAnimationFrame);
+                await new Promise(requestAnimationFrame);
+                const view = (await import('/split-view.js')).savedSplitView();
+                const {xOf} = await import('/geometry.js');
+                const sc = document.querySelector('#splitPane .split-scroll');
+                return {x:xOf(view.other.time), left:sc.scrollLeft, width:sc.clientWidth};
+            }''')
+            self.assertGreaterEqual(result['x'], result['left'])
+            self.assertLessEqual(result['x'], result['left'] + result['width'])
+
+    def test_repeat_instance_contains_navigation_and_stops_at_end(self):
+        self.open_repeat_project()
+        page = self.page
+        page.select_option('#splitMode', 'link')
+        page.evaluate('document.activeElement.blur()')
+        initial = page.evaluate("async () => (await import('/repeats.js')).savedRepeatReview()")
+        for _ in range(12):
+            page.keyboard.press('ArrowRight')
+        state = page.evaluate('''async () => {
+            const repeats = await import('/repeats.js'), playback = await import('/playback.js');
+            const {S} = await import('/store.js');
+            return {review:repeats.savedRepeatReview(), zone:playback.playbackZone(),
+                time:playback.playbackTime(), notes:[...S.selection].map(note => note.start)};
+        }''')
+        self.assertEqual(state['review']['copyKey'], initial['copyKey'])
+        self.assertTrue(state['notes'])
+        self.assertTrue(all(state['zone']['t0'] <= start < state['zone']['t1'] for start in state['notes']))
+        self.assertGreaterEqual(state['time'], state['zone']['t0'])
+        self.assertLessEqual(state['time'], state['zone']['t1'])
+        # A delayed frame can run past the next instance's start. The chosen
+        # instance remains fixed and playback stops at its own exact end.
+        page.evaluate('''async () => {
+            const playback = await import('/playback.js');
+            playback.seekPlayback(playback.playbackZone().t1 - .05);
+            await playback.playTransport();
+        }''')
+        page.wait_for_function("async () => !(await import('/playback.js')).transportPlaying()")
+        stopped = page.evaluate('''async () => {
+            const playback = await import('/playback.js'), repeats = await import('/repeats.js');
+            playback.seekPlayback(playback.playbackZone().t1 + .02);
+            return {review:repeats.savedRepeatReview(), time:playback.playbackTime(), zone:playback.playbackZone()};
+        }''')
+        self.assertEqual(stopped['review']['copyKey'], initial['copyKey'])
+        self.assertAlmostEqual(stopped['time'], state['zone']['t1'], places=6)
+        self.assertEqual(stopped['zone'], state['zone'])
+        page.click('#repeatNext')
+        selected = page.evaluate("async () => (await import('/repeats.js')).savedRepeatReview()")
+        self.assertNotEqual(selected['copyKey'], initial['copyKey'], 'the instance control can still choose another instance')
+
+    def test_repeat_navigation_is_visible_and_usable_in_both_panes(self):
+        self.open_repeat_project()
+        page = self.page
+        expect(page.locator('#repeatNavigator')).to_be_visible()
+        expect(page.locator('#splitRepeatNavigator')).to_be_visible()
+        expect(page.locator('#repeatPosition')).to_have_text('1 / 3')
+        expect(page.locator('#splitRepeatPosition')).to_have_text('2 / 3')
+        initial = page.evaluate("async () => (await import('/repeats.js')).savedRepeatReview()")
+        page.click('#splitRepeatNext')
+        expect(page.locator('#repeatPosition')).to_have_text('3 / 3')
+        expect(page.locator('#splitRepeatPosition')).to_have_text('1 / 3')
+        changed = page.evaluate("async () => (await import('/repeats.js')).savedRepeatReview()")
+        self.assertEqual(changed['other']['copyKey'], initial['copyKey'], 'the command leaves the first pane on its own instance')
+        # The inactive pane's native picker also chooses for that pane.
+        page.click('#splitRepeatInstance summary')
+        page.locator('#splitRepeatInstance button').filter(has_text='Instance 2').click()
+        expect(page.locator('#repeatPosition')).to_have_text('2 / 3')
+        expect(page.locator('#splitRepeatPosition')).to_have_text('3 / 3')
+        expect(page.locator('#repeatNavigator')).to_be_visible()
+        expect(page.locator('#splitRepeatNavigator')).to_be_visible()
+        page.select_option('#splitLayout', 'rows')
+        expect(page.locator('#repeatNavigator')).to_be_visible()
+        expect(page.locator('#splitRepeatNavigator')).to_be_visible()
+        page.click('#splitRepeatClose')
+        expect(page.locator('#repeatNavigator')).to_be_hidden()
+        expect(page.locator('#splitRepeatNavigator')).to_be_hidden()
+
+    def test_repeat_navigation_keeps_its_position_when_panes_activate(self):
+        self.open_repeat_project()
+        page = self.page
+        def positions():
+            return page.evaluate('''async () => {
+                await new Promise(requestAnimationFrame);
+                await new Promise(requestAnimationFrame);
+                const rows = document.querySelector('#splitLayout').value === 'rows';
+                return ['repeatNavigator','splitRepeatNavigator'].map(id => {
+                    const panel = document.getElementById(id), box = panel.getBoundingClientRect();
+                    const pane = panel.parentElement.getBoundingClientRect();
+                    return {side:rows ? pane.y : pane.x, x:box.x, y:box.y};
+                }).sort((a,b) => a.side-b.side);
+            }''')
+        for layout in ['columns', 'rows']:
+            page.select_option('#splitLayout', layout)
+            page.locator('#repeatDrag').press('ArrowDown')
+            page.locator('#splitRepeatDrag').press('ArrowUp')
+            before = positions()
+            for _ in range(2):
+                page.locator('#splitPane .split-ruler').click()
+                after = positions()
+                for old, new in zip(before, after):
+                    self.assertAlmostEqual(new['x'], old['x'], delta=1)
+                    self.assertAlmostEqual(new['y'], old['y'], delta=1)
+
     @classmethod
     def setUpClass(cls):
         cls.data = Path(tempfile.mkdtemp(prefix="rs-e2e-"))

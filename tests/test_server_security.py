@@ -56,6 +56,18 @@ class ServerSecurityTests(unittest.TestCase):
     def import_chart(self, files):
         return self.client.post("/api/projects/import", files={"file": ("song.chart", _chart(files))})
 
+    def test_repeat_comparison_view_survives_save_load_and_export(self):
+        job = self.import_chart({"project.json": {"name": "Repeats", "stems": []}}).json()["job"]
+        view = {"split": {"open": True, "mode": "link", "review": {
+            "lane": "bass", "group": "verse", "copyKey": "first", "other": {"copyKey": "second"}}}}
+        response = self.client.post(f"/api/projects/{job}", json={"view": view})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.get(f"/api/projects/{job}").json()["view"], view)
+        exported = self.client.post(f"/api/projects/{job}/export", json={"view": view})
+        self.assertEqual(exported.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+            self.assertEqual(json.loads(archive.read("project.json"))["view"], view)
+
     def test_walkthrough_review_endpoints_are_removed(self):
         path = "/api/walkthrough/critique"
         self.assertNotIn(path, [getattr(route, "path", None) for route in server.app.routes])

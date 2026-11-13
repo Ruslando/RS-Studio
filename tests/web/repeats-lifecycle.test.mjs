@@ -65,6 +65,7 @@ try {
   const project = await mockImport(new URL('../../web/project.js', import.meta.url), {
     './icons.js': { icon: () => '' },
     './store.js': { S }, './constants.js': { instrKey: () => 'bass', INSTRUMENTS: { bass: { tuning: 'standard' } } },
+    './split-view.js': { savedSplitView: () => ({ open: true, review: { lane: lane.id, group: 'repeat_1' } }) },
     './dom.js': { speedSel: { value: '1' } },
     './metadata.js': { metadataPayload: x => x, projectName: () => 'Test' },
     './marker-rails.js': { normalizedLaneFields: () => ({}) },
@@ -78,6 +79,7 @@ try {
     './tone-marker-core.js': { withStartTone: () => [] },
   }, { './util.js': true, './motifs.js': true, './repeats-core.js': true });
   await project.saveToServer();
+  assert.equal(payload.view.split.review.group, 'repeat_1', 'project files include the open comparison');
   assert.deepEqual(payload.editLanes[0].repeatGroups, groups, 'save payload includes group names and memberships');
   const reopened = project.mapLane(payload.editLanes[0]);
   assert.deepEqual(reopened.repeatGroups, groups, 'load retains saved groups');

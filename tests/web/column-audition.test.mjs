@@ -7,6 +7,7 @@ const a = { start: 0, end: 2, pitch: 60 }, b = { start: 1, end: 2, pitch: 64 },
 const columns = [{ t0: 0, notes: [a] }, { t0: 1, notes: [b, c] }];
 const lane = { notes: [a, b, c] }, S = { state: { rowH: 20 }, selection: new Set() };
 let time = 0;
+let zone = null;
 const heard = [], unlocks = [];
 const { stepColumnFocus, stepVoiceFocus } = await mockImport(new URL('../../web/voicing.js', import.meta.url), {
   './store.js': { S, setSelection: notes => { S.selection = notes; } },
@@ -18,7 +19,7 @@ const { stepColumnFocus, stepVoiceFocus } = await mockImport(new URL('../../web/
   './voicing-core.js': { chordColumns: () => columns },
   './column-navigation.js': { adjacentColumn },
   './util.js': { clamp: (v, min, max) => Math.min(max, Math.max(min, v)) },
-    './playback.js': { seekPlayback: t => { time = t; }, playbackTime: () => time,
+    './playback.js': { seekPlayback: t => { time = t; }, playbackTime: () => time, playbackZone: () => zone,
     ensureTone: () => new Promise(resolve => unlocks.push(resolve)),
     previewNotes: (notes, voice) => heard.push({ notes, voice }) },
 });
@@ -73,4 +74,23 @@ assert.deepEqual(heard.pop().notes, [landing]);
 stepVoiceFocus(-1); unlocks.shift()(); await Promise.resolve();
 assert.deepEqual([...S.selection], [source]);
 assert.equal(source.slide, 'legato', 'selection does not unlink the slide');
+zone = { t0: 3, t1: 5 };
+time = 4; S.selection = new Set([landing]);
+stepColumnFocus(1);
+assert.equal(time, 4, 'right cannot target the note at the instance end');
+assert.deepEqual([...S.selection], [landing], 'a blocked step keeps the selected notes');
+assert.equal(unlocks.length, 0, 'a blocked step cannot audition notes outside the instance');
+stepColumnFocus(-1); unlocks.shift()(); await Promise.resolve(); heard.pop();
+assert.equal(time, 3);
+stepColumnFocus(-1);
+assert.equal(time, 3, 'left cannot target a preceding instance');
+assert.equal(unlocks.length, 0);
+time = 5; S.selection = new Set([landing]);
+stepColumnFocus(-1); unlocks.shift()(); await Promise.resolve(); heard.pop();
+assert.equal(time, 4, 'from the stopped boundary, left returns to the last onset inside');
+zone = { t0: 4, t1: 5 };
+time = 4.5; S.selection = new Set([landing]);
+stepVoiceFocus(-1);
+assert.equal(unlocks.length, 0, 'vertical navigation cannot select an overlapping note from before the instance');
+assert.deepEqual([...S.selection], [landing]);
 console.log('Arrow navigation auditions notes and chords after audio initialization');

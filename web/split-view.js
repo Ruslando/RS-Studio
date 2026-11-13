@@ -27,8 +27,9 @@ import { prepareSpectSample } from "./tracing.js";
 import { timingIdOf, withTiming } from "./timing.js";
 import { layoutFretboard, paintFretboardInto } from "./fretboard.js";
 import { splitter } from "./splitters.js";
-import { initRepeatDock } from "./repeat-dock.js";
-import { connectRepeatSplit, holdRepeatPlayhead, pairRepeats, repeatZones, swapRepeatPane, withRepeatPane } from "./repeats.js";
+import { initRepeatDock, swapRepeatDocks } from "./repeat-dock.js";
+import { createRepeatNavigatorMirror } from "./repeat-navigator-mirror.js";
+import { connectRepeatSplit, holdRepeatPlayhead, pairRepeats, repeatZones, restoreRepeatReview, savedRepeatReview, swapRepeatPane, withRepeatPane } from "./repeats.js";
 import { busLevel } from "./volume.js";
 import { clamp, normLayerVolume } from "./util.js";
 
@@ -48,6 +49,7 @@ let liveSide = 0;     // where the live editor sits: 0 first (left/top), 1 secon
 let mode = "free";    // "free" | "link" | "sync"
 let offset = 0;       // linked: the other playhead's lead over the live one, s
 let headKey = "", focusKey = "";
+let renderRepeatMirror = null;
 // Linked, the other pane's audio layer plays at its own position.
 // ponytail: a plain element, outside the Web Audio mix; route it through the stem
 // mixer if its few ms of extra output latency ever matter.
@@ -125,6 +127,7 @@ function swap() {
   holdRepeatPlayhead();
   Object.assign(S, { mouseX: null, mouseY: null, hoverNote: null });   // the pointer is on the other stage now
   layoutFretboard();
+  swapRepeatDocks($("repeatNavigator"), $("splitRepeatNavigator"));
   syncFocus(); follow(); draw(); later();
 }
 
@@ -191,16 +194,20 @@ export function paintSplitPane(paint, panels) {
       if (other.px && other.px !== S.pxPerSec) sc.scrollLeft = (sc.scrollLeft + w / 2) * S.pxPerSec / other.px - w / 2;
       other.px = S.pxPerSec;
       if (syncViewBox.checked) sc.scrollTop = liveTop * S.stageHeight / keep.stageHeight;
-      // Moving, it pages along with its playhead like the live editor does.
+      // Playback and explicit seeks (including arrow-key note navigation) keep
+      // the other pane's playhead visible. Consume seeks once so a paused pane
+      // can still be scrolled freely afterwards.
       const x = xOf(time);
-      if (playing && (x < sc.scrollLeft || x > sc.scrollLeft + w * 0.9)) sc.scrollLeft = x - w * 0.1;
+      if ((playing || (other.followSeek && mode !== "free"))
+        && (x < sc.scrollLeft || x > sc.scrollLeft + w * 0.9)) sc.scrollLeft = Math.max(0, x - w * 0.1);
+      other.followSeek = false;
       // Shown an instance by the repeat review: frame it like the live editor does.
       if (other.reveal) {
         sc.scrollLeft = Math.max(0, xOf(other.reveal.t0) - w * 0.2);
         sc.scrollTop = Math.max(0, yOf(other.reveal.pitch) - sc.clientHeight / 2);
         other.reveal = null;
       }
-      withRepeatPane(paint);
+      withRepeatPane(() => { renderRepeatMirror?.(); paint(); });
       if (!fretboard.hidden) paintFretboardInto(fretboard);
     };
     freshMemo(() => (lane ? withTiming(timingIdOf(lane), run) : run()));
@@ -265,6 +272,7 @@ function setReviewing(on) {
   reviewing = on;
   modeSel.querySelector('option[value="sync"]').disabled = on;
   if (on && mode === "sync") { modeSel.value = "link"; setMode("link"); }
+  later();
 }
 
 function setMode(next) {
@@ -302,14 +310,19 @@ function remember() {
   if (other) lastOther = { stemId: other.loading ?? other.stemId, laneId: other.laneId, zoomX: other.zoomX, zoomY: other.zoomY,
     left: paneView.scroll.scrollLeft, top: paneView.scroll.scrollTop, time: otherTime(), liveSide, offset };
 }
+export function savedSplitView() {
+  remember();
+  const live = S.state ? liveView() : null;
+  if (live) { delete live.img; delete live.imgUrl; }
+  return { open: !!other, layout: layoutSel.value, mode, syncView: syncViewBox.checked,
+    ...shares, other: lastOther, live, review: savedRepeatReview() };
+}
 function save() {
   clearTimeout(saveTimer); saveTimer = 0;
   const key = storeKey();
   if (!key) return;
-  remember();
   try {
-    localStorage.setItem(key, JSON.stringify({ open: !!other, layout: layoutSel.value, mode,
-      syncView: syncViewBox.checked, ...shares, other: lastOther }));
+    localStorage.setItem(key, JSON.stringify(savedSplitView()));
   } catch { /* storage blocked: the split just opens fresh next time */ }
 }
 const later = () => { if (!saveTimer) saveTimer = setTimeout(save, 500); };
@@ -317,6 +330,7 @@ function restore() {
   close({ keep: false });
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(storeKey())); } catch { /* none kept */ }
+  saved ||= S.state?.savedSplitView;
   layoutSel.value = saved?.layout === "rows" ? "rows" : "columns";
   mode = modeSel.value = ["link", "sync"].includes(saved?.mode) ? saved.mode : "free";
   syncViewBox.checked = !!saved?.syncView;
@@ -325,6 +339,8 @@ function restore() {
   lastOther = saved?.other && typeof saved.other === "object" ? saved.other : null;
   clearTimeout(saveTimer); saveTimer = 0;   // nothing changed yet
   if (saved?.open) open();
+  if (saved?.live) showLive(saved.live);
+  restoreRepeatReview(saved?.review);
 }
 
 function open() {
@@ -356,6 +372,7 @@ function close({ keep = true } = {}) {
   toggle.setAttribute("aria-pressed", "false");
   layoutFretboard(); draw();
   if (keep) save();
+  else { clearTimeout(saveTimer); saveTimer = 0; }
 }
 
 // The repeat review shows a second instance here (repeats.js).
@@ -368,6 +385,7 @@ function showInstance({ t0, pitch }, { linked = false } = {}) {
 }
 
 export function init_split_view() {
+  renderRepeatMirror = createRepeatNavigatorMirror(pane, () => { if (other) swap(); });
   connectRepeatSplit({
     isOpen: () => !!other,
     liveSide: () => liveSide,
@@ -416,7 +434,10 @@ export function init_split_view() {
     move: (delta, { size, from }) => resizeBoards((from + delta) / size),
     toggle: () => resizeBoards(0.5),
   });
-  window.addEventListener("cw-transport", follow);
+  window.addEventListener("cw-transport", event => {
+    if (other && mode !== "free" && event.detail === "seek") other.followSeek = true;
+    follow();
+  });
   // A channel or view change reloads the live picture; the other pane's follows.
   window.addEventListener("cw-stem-view-changed", () => { if (other) loadOther(other.loading ?? other.stemId); });
 }

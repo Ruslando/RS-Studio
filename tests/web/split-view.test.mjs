@@ -25,6 +25,7 @@ const S = { zoomX: 2, zoomY: 1, pxPerSec: 200, stageHeight: 300, spectImg: 'mixI
   state: { lanes, editLanes: lanes, stems, curStem: 'mix', spec: 'mixSpec', rowH: 10, duration: 100 } };
 const followers = [], focuses = [], pairs = [];
 let host = null, repeatSwaps = 0, zones = null;
+let review = null;
 globalThis.window = new EventTarget();
 const store = {};
 globalThis.localStorage = { getItem: key => store[key] ?? null, setItem(key, value) { store[key] = value; } };
@@ -47,8 +48,9 @@ const split = await mockImport(new URL('../../web/split-view.js', import.meta.ur
   './timing.js': { timingIdOf: lane => lane.id, withTiming: (id, fn) => fn() },
   './fretboard.js': { layoutFretboard() {}, paintFretboardInto() { fretboards++; } },
   './splitters.js': { splitter() {} },
-  './repeat-dock.js': { initRepeatDock() {} },
-  './repeats.js': { connectRepeatSplit(h) { host = h; }, pairRepeats(on) { pairs.push(on); }, swapRepeatPane() { repeatSwaps++; if (zones) zones = { live: zones.other, other: zones.live }; }, holdRepeatPlayhead() {}, repeatZones: () => zones, withRepeatPane: fn => fn() },
+  './repeat-dock.js': { initRepeatDock() {}, swapRepeatDocks() {} },
+  './repeat-navigator-mirror.js': { createRepeatNavigatorMirror: () => () => {} },
+  './repeats.js': { connectRepeatSplit(h) { host = h; }, pairRepeats(on) { pairs.push(on); if (!on) review = null; }, savedRepeatReview: () => review, restoreRepeatReview(saved) { review = saved ?? null; }, swapRepeatPane() { repeatSwaps++; if (zones) zones = { live: zones.other, other: zones.live }; }, holdRepeatPlayhead() {}, repeatZones: () => zones, withRepeatPane: fn => fn() },
   './volume.js': { busLevel: () => 1 },
   './util.js': { clamp: (v, lo, hi) => Math.min(hi, Math.max(lo, v)), normLayerVolume: v => v ?? 1 },
 });
@@ -109,6 +111,35 @@ split.paintSplitPane(() => {}, true);
 assert.deepEqual(focuses.at(-1).lanes, [activeLane().id], 'synced: notes only from the live pane too');
 split.paintSplitPane(() => { painted = shown; }, true);
 assert.equal(painted, 60, 'synced panes share the playhead');
+const seek = value => {
+  time = value;
+  window.dispatchEvent(Object.assign(new Event('cw-transport'), { detail: 'seek' }));
+};
+const otherScroll = () => painted.bound.scroll;
+split.paintSplitPane(() => { painted = { bound }; }, true);
+const inactiveScroll = otherScroll();
+const assertPlayheadVisible = () => split.paintSplitPane(() => {
+  const x = shown * S.pxPerSec;
+  assert.ok(x >= bound.scroll.scrollLeft && x <= bound.scroll.scrollLeft + bound.scroll.clientWidth,
+    'a paused seek keeps the other playhead in its own viewport');
+}, true);
+inactiveScroll.scrollLeft = 0;
+seek(80); assertPlayheadVisible();
+seek(1); assertPlayheadVisible();
+inactiveScroll.scrollLeft = 4000;
+split.paintSplitPane(() => {}, true);
+assert.equal(inactiveScroll.scrollLeft, 4000, 'a paused redraw preserves manual scrolling after the seek');
+setMode('link');
+zones = { live: { t0: 0, t1: 30 }, other: { t0: 50, t1: 80 } };
+inactiveScroll.scrollLeft = 0;
+seek(15); assertPlayheadVisible();
+assert.equal(shown, null, 'painting restores the live playhead');
+zones = null;
+setMode('free');
+inactiveScroll.scrollLeft = 1234;
+seek(90); split.paintSplitPane(() => {}, true);
+assert.equal(inactiveScroll.scrollLeft, 1234, 'an independent pane keeps its viewport on a seek elsewhere');
+setMode('sync'); time = 60;
 playing = true; setMode('free'); const side = editorEl.classList.contains('live-second'); hoverOther();
 assert.notEqual(editorEl.classList.contains('live-second'), side, 'a click activates the pane while playing too');
 assert.equal(playing, true, 'without stopping the transport');
@@ -189,4 +220,24 @@ assert.equal(follower.paused, false, 'inside again, it plays');
 playing = false; zones = null; window.dispatchEvent(new Event('cw-transport'));
 $('splitViewToggle').dispatchEvent(new Event('click'));
 assert.equal(pairs.at(-1), false, 'closing the split unpairs it');
+S.state.job = 'persisted';
+$('splitViewToggle').dispatchEvent(new Event('click'));
+review = { lane: 'a', group: 'verse', copyKey: 'first', other: { copyKey: 'second' } };
+const keptReview = structuredClone(review);
+window.dispatchEvent(new Event('cw-project-closed'));
+assert.equal(review, null, 'closing tears down the running review');
+window.dispatchEvent(new Event('cw-project-opened'));
+assert.deepEqual(review, keptReview, 'reopening restores the review saved before split teardown');
+assert.equal(split.savedSplitView().open, true);
+// The portable project view works without this machine's preferences.
+S.state.savedSplitView = split.savedSplitView();
+window.dispatchEvent(new Event('cw-project-closed'));
+delete store['cw.split.persisted'];
+window.dispatchEvent(new Event('cw-project-opened'));
+assert.deepEqual(review, keptReview, 'a project file also restores its comparison');
+review = null; // explicitly closed with the repeat close button
+window.dispatchEvent(new Event('cw-project-closed'));
+window.dispatchEvent(new Event('cw-project-opened'));
+assert.equal(review, null, 'an explicitly closed review stays closed');
+window.dispatchEvent(new Event('cw-project-closed'));
 console.log('split view OK');

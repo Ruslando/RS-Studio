@@ -58,7 +58,7 @@ try {
   playback.pauseTransport(); playback.setPlaybackFocus(null);
   playback.setPlaybackZone(() => ({ t0: 2, t1: 4 }));
   playback.seekPlayback(7);
-  assert.ok(playback.playbackTime() >= 2 && playback.playbackTime() < 4, 'a seek past the instance stops at its end');
+  assert.equal(playback.playbackTime(), 4, 'a seek past the instance stops exactly at its end');
   playback.seekPlayback(0);
   assert.equal(playback.playbackTime(), 2, 'a seek before it stops at its start');
   playback.setPlaybackZone(null);
