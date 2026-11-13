@@ -65,6 +65,14 @@ test('saving and live resolution preserve phrase boundaries, late entries and in
   assert.ok(filled.notes.some(e => e.note === added), 'filling the missing opening is reflected without rescanning');
   assert.ok(Math.abs(copyOrigin(filled) - 580) < .01);
   assert.equal(groupsFromRepeats(groups, saved)[0].id, saved[0].id, 'rescans keep group identity');
+  // A group that splits on a rescan leaves its generated name behind; names stay unique.
+  const earlier = saved.map((g, i) => ({ ...g, name: i === 1 ? 'Group I' : i === 2 ? 'Verse end' : g.name }));
+  const names = groupsFromRepeats(groups, earlier).map(g => g.name);
+  assert.equal(new Set(names).size, names.length);
+  assert.equal(names[1], 'Group B', 'a generated name follows the group\'s place');
+  assert.equal(names[2], 'Verse end', 'a name the user gave is kept');
+  assert.deepEqual(resolveRepeatGroups({ notes, repeatGroups: earlier }).map(g => g.name).filter(n => n.startsWith('Group')).length,
+    names.length - 1, 'saved duplicates are renumbered without a rescan');
 });
 
 test('the worker carries inferred origins across its ID-only message boundary', async () => {

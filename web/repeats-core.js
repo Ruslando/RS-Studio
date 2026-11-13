@@ -443,6 +443,10 @@ export function playLike(repeat, model, fingers = null) {
   return changed;
 }
 
+// Generated names follow the group's place in the song and are renumbered
+// whenever groups change; only a name the user gave is kept.
+const automaticName = name => /^Group (\d+|[A-Z]+)$/.test(name);
+
 // Groups refer to stable note ids rather than replacing motifs/shapes or adding
 // marks inside locked references. All views resolve current objects after undo.
 export function resolveRepeatGroups(lane, beatAt = t => t) {
@@ -477,7 +481,7 @@ export function resolveRepeatGroups(lane, beatAt = t => t) {
   for (const group of groups) for (const copy of group.copies)
     copy.notes.sort((a, b) => a.note.start - b.note.start || a.note.pitch - b.note.pitch);
   for (const [index, group] of groups.entries()) {
-    if (/^Group \d+$/.test(group.name)) group.name = `Group ${alphabeticLabel(index)}`;
+    if (automaticName(group.name)) group.name = `Group ${alphabeticLabel(index)}`;
     group.variations = repeatVariations(group, beatAt);
   }
   return groups.sort((a, b) => a.name.localeCompare(b.name));
@@ -523,7 +527,7 @@ export function groupsFromRepeats(repeats, previous = [], beatAt = t => t) {
     const variations = repeatVariations({ ...repeat, ...(manual ? { variations: old.g.variations } : {}) }, beatAt);
     const variationLayout = variations.length > 1 || manual ? { variations, ...(manual ? { variationMode: 'manual' } : {}) } : {};
     if (preserve) {
-      available.delete(old.g); return { id: old.g.id, name: /^Group \d+$/.test(old.g.name) ? `Group ${alphabeticLabel(index)}` : old.g.name, copies, ...layout, ...variationLayout };
+      available.delete(old.g); return { id: old.g.id, name: automaticName(old.g.name) ? `Group ${alphabeticLabel(index)}` : old.g.name, copies, ...layout, ...variationLayout };
     }
     const n = ++serial;
     return { id: `repeat_${n}`, name: `Group ${alphabeticLabel(index)}`, copies, ...layout, ...variationLayout };

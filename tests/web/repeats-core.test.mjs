@@ -154,8 +154,8 @@ console.log('repeats-core: ok');
 {
   const copies = at(0), later = at(10);
   const lane = { notes: [...copies, ...later], repeatGroups: [
-    { id: 'z', name: 'Group Z', copies: [copies.map(n => n.id)] },
-    { id: 'a', name: 'Group A', copies: [later.map(n => n.id)] },
+    { id: 'z', name: 'Verse', copies: [copies.map(n => n.id)] },
+    { id: 'a', name: 'Chorus', copies: [later.map(n => n.id)] },
   ] };
-  assert.deepEqual(resolveRepeatGroups(lane).map(g => g.name), ['Group A', 'Group Z']);
+  assert.deepEqual(resolveRepeatGroups(lane).map(g => g.name), ['Chorus', 'Verse']);
 }
