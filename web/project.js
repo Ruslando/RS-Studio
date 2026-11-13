@@ -46,6 +46,7 @@ export { markSaved };
 import { inferTablatureEnabled, laneScrollSpeed } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
 import { normalizeRepeatGroups } from "./repeats-core.js";
+import { obeyedHolds } from "./hand-anchor-core.js";
 import { isValidTuningKey, tuningKeyFor } from "./lane-tuning.js";
 import { parseTuning } from "./util.js";
 import { setView } from "./tablature.js";
@@ -301,10 +302,10 @@ export function mapLane(l, startAt = 0) {
     // Read back defensively: a bad fret or a bad time is dropped rather than
     // reaching the voicer, where it would move a hand nobody put.
     handHolds: Array.isArray(l.handHolds)
-      ? l.handHolds
+      ? obeyedHolds(notes, l.handHolds
         .map((h) => ({ id: h?.id || `anchor_${h?.t}_${h?.fret}`, t: Number(h?.t), fret: Number(h?.fret) }))
         .filter((h) => Number.isFinite(h.t) && Number.isFinite(h.fret) && h.fret >= 0)
-        .sort((a, b) => a.t - b.t)
+        .sort((a, b) => a.t - b.t))
       : [],
     gmProgram: Number.isFinite(l.gmProgram) ? l.gmProgram : undefined,
     // Its part of the Guitar Pro file it was imported from (guitar-pro-core.js

@@ -59,6 +59,14 @@ try {
   edit.redo(); assert.deepEqual(lane.handHolds.map(h => h.fret), [7, 7]);
   edit.setHandAnchor(lane, 4, null); assert.deepEqual(lane.handHolds, [], 'Auto clears the whole reference');
   edit.undo(); assert.deepEqual(lane.handHolds.map(h => h.fret), [7, 7]);
+  // A hold left at a note's earlier time still belongs to its column, where the
+  // earliest hold is obeyed: a new hand must replace it rather than sit behind it.
+  const kept = lane.handHolds;
+  lane.handHolds = [{ id: 'stale', t: 3.5, fret: 5 }];
+  edit.setHandAnchor(lane, 4, 7);
+  assert.deepEqual(lane.handHolds.map(h => [h.t, h.fret]), [[0, 7], [4, 7]], 'the new hand replaces the stale hold');
+  edit.setHandAnchor(lane, 4, null); assert.deepEqual(lane.handHolds, [], 'Auto clears it as well');
+  lane.handHolds = kept;
   lane.refBoxes[1].locked = true;
   const count = S.undoStack.length; edit.setHandAnchor(lane, 4, 9);
   assert.deepEqual(lane.handHolds.map(h => h.fret), [7, 7], 'locked references protect anchor-only edits too');

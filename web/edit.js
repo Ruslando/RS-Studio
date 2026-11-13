@@ -787,16 +787,22 @@ function writeAlternative(colNotes, choice, influence) {
 // Choose Auto (null) to clear it.
 export function setHandAnchor(lane, t, fret) {
   if (!canEditLane(lane) || !Number.isFinite(t) || (fret !== null && (!Number.isFinite(fret) || fret < 1))) return;
-  const near = (h) => Math.abs(Number(h.t) - t) <= 1e-6;
-  const had = (lane.handHolds || []).find(near);
-  const rest = (lane.handHolds || []).filter((h) => !near(h));
+  // Every hold after the previous column, up to this one, belongs to this column,
+  // and the engine obeys the earliest of them (holdsByColumn). A hold left at a
+  // moved note's old time would otherwise shadow the new one for good, so the new
+  // hand replaces them all, and Auto clears them all.
+  const columns = chordColumns(lane.notes), at = columns.findIndex((c) => c.t0 >= t - 1e-6);
+  const after = at > 0 ? columns[at - 1].t0 : -Infinity, until = at >= 0 ? columns[at].t0 : t;
+  const owned = (h) => Number(h.t) > after + 1e-6 && Number(h.t) <= until + 1e-6;
+  const own = (lane.handHolds || []).filter(owned).sort((a, b) => a.t - b.t), had = own[0];
+  const rest = (lane.handHolds || []).filter((h) => !owned(h));
   // A hand chosen by hand replaces a fingering chosen for the same notes: the engine
   // fingers them for the new hand. Picking the hand that is already held still
   // does that, for fingers that came after it (or with an import).
-  const column = fret === null ? [] : chordColumns(lane.notes).find((c) => c.t0 >= t - 1e-6)?.notes || [];
+  const column = fret === null || at < 0 ? [] : columns[at].notes;
   const fingered = column.some((n) => n.pos?.finger != null
     || slideFingerGroup(lane.notes, n, (m) => m.pos).some((m) => m.finger != null));
-  if ((!had && fret === null) || (had && Number(had.fret) === fret && !fingered)) return;
+  if ((!had && fret === null) || (own.length === 1 && Number(had.fret) === fret && !fingered)) return;
   const prev = snapshotEdit();
   lane.handHolds = (fret === null ? rest : [...rest, { id: had?.id || `anchor_${nid()}`, t, fret }]).sort((a, b) => a.t - b.t);
   dropChosenFingers(lane, column);

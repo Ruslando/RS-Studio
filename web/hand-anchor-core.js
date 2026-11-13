@@ -18,3 +18,16 @@ export function automaticHandSeat(notes, tuning, time, options = {}) {
   const result = voiceNotesFingered(notes, tuning, Infinity, { ...options, holds });
   return column.notes.map(note => result.seats.get(note)).find(seat => seat != null) ?? null;
 }
+
+// Of several holds on one column the engine obeys the earliest (holdsByColumn);
+// the others change nothing and only shadow a later edit. Keep the one obeyed.
+// `holds` in time order.
+export function obeyedHolds(notes, holds) {
+  const starts = chordColumns(notes).map(column => column.t0), seen = new Set();
+  return holds.filter(hold => {
+    const i = starts.findIndex(t0 => t0 >= Number(hold.t) - 1e-6);
+    if (i < 0) return true;
+    if (seen.has(i)) return false;
+    seen.add(i); return true;
+  });
+}

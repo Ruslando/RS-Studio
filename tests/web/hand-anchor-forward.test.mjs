@@ -21,3 +21,9 @@ for (const fret of [3, 4]) {
 const first = seats([{ t: notes[2].start, fret: 7 }]), both = seats([{ t: notes[2].start, fret: 7 }, { t: notes[5].start, fret: 4 }]);
 assert.deepEqual(both.slice(0, 5), first.slice(0, 5));
 
+// Loading keeps one anchor per note or chord: the earliest, which is the one obeyed.
+import { obeyedHolds } from '../../web/hand-anchor-core.js';
+const stale = [{ t: 2.7, fret: 5 }, { t: 3, fret: 4 }, { t: 3.5, fret: 2 }, { t: 9, fret: 1 }];
+assert.deepEqual(obeyedHolds(notes, stale), [stale[0], stale[2], stale[3]]);
+const loaded = seats(obeyedHolds(notes, stale));
+assert.deepEqual(loaded, seats(stale), 'dropping the shadowed anchors changes no hand');
