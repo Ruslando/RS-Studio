@@ -82,3 +82,16 @@ export function createOverviewTime({ root, button, input, getProject, getTime, o
   input.addEventListener('blur', () => apply(false));
   return { sync };
 }
+
+// A time to a tenth of a second as m:ss.s (72.1 → "1:12.1").
+export function formatTenths(seconds) {
+  const tenths = Math.round(Math.max(0, Number(seconds) || 0) * 10);
+  return `${Math.floor(tenths / 600)}:${String(Math.floor(tenths / 10) % 60).padStart(2, '0')}.${tenths % 10}`;
+}
+
+// m:ss.s or plain seconds, with a decimal point or comma ("1:12,1", "72.1"); null otherwise.
+export function parseTenths(value) {
+  const match = /^(?:(\d+):)?(\d+(?:[.,]\d*)?)$/.exec(String(value).trim());
+  if (!match || (match[1] && Number(match[2].replace(',', '.')) >= 60)) return null;
+  return Number(match[1] || 0) * 60 + Number(match[2].replace(',', '.'));
+}

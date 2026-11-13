@@ -12,6 +12,7 @@ import { MAX_CAPO, editLanes } from "./lanes.js";
 import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane, laneScrollSpeed } from "./layer-role.js";
 import { nameExportChords } from "./chord-names.js";
 import { applyCoverChange, clearProjectCover, coverStatus, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { formatTenths, parseTenths } from "./timeline-time.js";
 import { icon } from "./icons.js";
 import { downloadProjectBlob, toast } from "./notify.js";
 import { jobRequest } from "./operation-progress.js";
@@ -208,14 +209,31 @@ const inClip = (t) => t >= clip.start && t <= previewEnd();
 
 // The playhead goes back to the clip's start with every change; playing, the
 // clip plays again from there. `live` (while dragging) only moves the playhead.
-function setClip(start, length = clip.length, live = false) {
+function setClip(start, length = clip.length, live = false, remember = true) {
   length = Math.min(PREVIEW_MAX, Math.max(PREVIEW_MIN, Math.round(length * 10) / 10));
   start = Math.max(0, Math.min(Math.max(0, songLength - length), start));
   clip = { start: Math.round(start * 10) / 10, length };
-  $("rsPreviewStart").value = clip.start.toFixed(1);
+  $("rsPreviewStart").value = formatTenths(clip.start);
   $("rsPreviewLength").value = String(clip.length);
+  if (remember) rememberClip();
   if (live) setPlayhead(clip.start);
   else seekPreview(clip.start);
+}
+
+// The clip is the song's, saved with the project as soon as it is chosen, not
+// only on export. Debounced: a drag sets it every frame.
+let rememberTimer = 0;
+function rememberClip() {
+  const job = S.state?.job;
+  if (!job || job === "tutorial") return;
+  const rs = (S.state.metadata ||= {}).rocksmith ||= {};
+  if (rs.previewStart === clip.start && rs.previewLength === clip.length) return;
+  Object.assign(rs, { previewStart: clip.start, previewLength: clip.length });
+  clearTimeout(rememberTimer);
+  rememberTimer = setTimeout(() => fetch(`/api/projects/${job}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ metadata: metadataPayload(S.state.metadata) }),
+  }).catch(() => {}), 400);   // ponytail: a failed save is retried by the next change or the export
 }
 
 function setPlayhead(t) {
@@ -307,7 +325,6 @@ function renderPreviewClip() {
   $("rsPreviewOverview").closest(".section").hidden = !stem || songLength < PREVIEW_MIN;
   if (!stem || songLength < PREVIEW_MIN) return;
   if (transportPlaying()) togglePlay();     // one song playing at a time
-  $("rsPreviewStart").max = songLength.toFixed(1);
   previewImage = null;
   if (stem.spec?.url) {
     previewImage = new Image();
@@ -316,7 +333,7 @@ function renderPreviewClip() {
   }
   const saved = S.state.metadata?.rocksmith || {};
   setClip(Number.isFinite(saved.previewStart) ? saved.previewStart : defaultStart(),
-    Number.isFinite(saved.previewLength) ? saved.previewLength : PREVIEW_DEFAULT);
+    Number.isFinite(saved.previewLength) ? saved.previewLength : PREVIEW_DEFAULT, false, false);
 }
 
 function initPreviewClip() {
@@ -348,7 +365,7 @@ function initPreviewClip() {
   // The dialog is hidden until opened, so the canvases are sized once it shows.
   new ResizeObserver(() => { previewOverview.fit(PREVIEW_MAP_H); previewOverview.draw(); }).observe($("rsPreviewOverview"));
   window.addEventListener("cw-intensity-status", () => previewOverview.draw());
-  $("rsPreviewStart").addEventListener("change", () => setClip(Number($("rsPreviewStart").value) || 0));
+  $("rsPreviewStart").addEventListener("change", () => setClip(parseTenths($("rsPreviewStart").value) ?? clip.start));
   $("rsPreviewLength").addEventListener("change", () => setClip(clip.start, Number($("rsPreviewLength").value) || PREVIEW_DEFAULT));
   // The editor's buttons give the focus up after a jump, so Space plays rather
   // than jumping again; here it goes back to the window, whose Space plays.
@@ -369,7 +386,7 @@ function initPreviewClip() {
       jumpPreview(e.key === "ArrowLeft" ? -1 : 1);
       return;
     }
-    if (!matchKey(e, "playPause") || e.target.closest("button, select, textarea, input[type=text], input:not([type])")) return;
+    if (!matchKey(e, "playPause") || e.target.closest("button, select, textarea, input[type=text]:not(#rsPreviewStart), input:not([type])")) return;
     e.preventDefault();
     if ($("rsPreviewOverview").closest(".section").hidden) return;
     playPreview();

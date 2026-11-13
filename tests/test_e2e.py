@@ -4955,9 +4955,10 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#rsVolume")).to_have_count(0)       # volume is leveled, not asked
         expect(page.locator("#rsPreviewLength")).to_have_value("28")
         playhead = lambda: float(page.locator("#rsPreviewRuler").get_attribute("aria-valuenow"))
+        start = lambda: (lambda m, s: int(m) * 60 + float(s))(*page.locator("#rsPreviewStart").input_value().split(":"))
         # The playhead waits at the clip's start, and Space plays at once: the
         # window has the focus, not the title field.
-        self.assertAlmostEqual(playhead(), float(page.locator("#rsPreviewStart").input_value()), delta=0.05)
+        self.assertAlmostEqual(playhead(), start(), delta=0.05)
         frame = strip.bounding_box()
         page.keyboard.press("Space")
         expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "true")
@@ -4972,31 +4973,38 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#rsTitle")).to_have_value("E2E Audio")
         expect(page.locator("#rsPreviewPlay")).to_have_attribute("aria-pressed", "true")
         page.keyboard.press("Space")
-        song = float(page.locator("#rsPreviewStart").get_attribute("max"))
+        song = float(page.evaluate("async () => (await import('/store.js')).S.state.duration"))
         # A short clip, so it can sit anywhere in this short song; the first chorus starts it.
         page.fill("#rsPreviewLength", "5")
         page.locator("#rsPreviewLength").dispatch_event("change")
         page.fill("#rsPreviewStart", "6")
         page.locator("#rsPreviewStart").dispatch_event("change")
         page.click("#rsPreviewPrev")
-        expect(page.locator("#rsPreviewStart")).to_have_value("2.0")
+        expect(page.locator("#rsPreviewStart")).to_have_value("0:02.0")
         page.click("#rsPreviewNext")
-        expect(page.locator("#rsPreviewStart")).to_have_value("6.1")
+        expect(page.locator("#rsPreviewStart")).to_have_value("0:06.1")
         page.click("#rsPreviewPrev")
-        expect(page.locator("#rsPreviewStart")).to_have_value("2.0")
+        expect(page.locator("#rsPreviewStart")).to_have_value("0:02.0")
         # Lengths are clamped to 5..30 s and the clip stays inside the song.
         page.fill("#rsPreviewLength", "60")
         page.locator("#rsPreviewLength").dispatch_event("change")
         expect(page.locator("#rsPreviewLength")).to_have_value("30")
-        self.assertLessEqual(float(page.locator("#rsPreviewStart").input_value()), max(0.0, song - 30) + 0.05)
+        self.assertLessEqual(start(), max(0.0, song - 30) + 0.05)
         page.fill("#rsPreviewLength", "5")
         page.locator("#rsPreviewLength").dispatch_event("change")
         strip = strip.bounding_box()
         # Changing the clip puts the playhead back at its start.
         page.mouse.click(strip["x"] + strip["width"] * 0.9, strip["y"] + 4)
-        page.fill("#rsPreviewStart", "1")
+        page.fill("#rsPreviewStart", "0:01,3")   # m:ss with a comma, to a tenth
         page.locator("#rsPreviewStart").dispatch_event("change")
-        self.assertAlmostEqual(playhead(), 1, delta=0.05)
+        expect(page.locator("#rsPreviewStart")).to_have_value("0:01.3")
+        self.assertAlmostEqual(playhead(), 1.3, delta=0.05)
+        # Chosen is saved: the project on disk has it without an export.
+        page.wait_for_function("""async () => {
+            const { S } = await import('/store.js');
+            const m = await (await fetch(`/api/projects/${S.state.job}`)).json();
+            return m.metadata?.rocksmith?.previewStart === 1.3;
+        }""")
         # Space is this window's: it plays the clip, and the editor stays stopped.
         page.focus("#rsPreviewStart")
         page.keyboard.press("Space")
