@@ -59,7 +59,7 @@ import { createEditorShortcutRunner } from "./editor-shortcuts.js";
 import { navigateMarker } from "./marker-artifacts.js";
 import { clearMarkerSelection, copyMarkers, cutMarkers, deleteMarkers, forgetMarkerClip, hasMarkerClip, hasMarkerSelection, pasteMarkers } from "./marker-clipboard.js";
 import { normLayerVolume } from "./util.js";
-import { slideFingerGroup, chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
+import { slideFingerGroup, chordColumns, normalizeOverrideInfluence, overrideFlow, placeNote, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
 
 // Preserve the editor API for existing integrations. Features use edit-history directly.
 export { snapshotEdit, commit, commitStructure, commitDiagnostics, restoreEditSnapshot, undo, redo, updateUndoButtons } from "./edit-history.js";
@@ -665,7 +665,7 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null, foll
   const prev = snapshotEdit();
   for (const n of colNotes) {
     const p = want(n);
-    if (p) n.pos = { string: p.string, fret: p.fret, scope, follow: flow.follow };
+    if (p) placeNote(n, { string: p.string, fret: p.fret, scope, follow: flow.follow });
     else delete n.pos;
   }
   follow?.();
@@ -928,7 +928,7 @@ function applyHammerPosition(lane, shape, positionOf, maxFret = laneFretCount(la
     if (linked.changes.every(({ note, pos }) => !note.arrangement && note.pos &&
       Object.keys(pos).every(key => note.pos[key] === pos[key]))) return { handled: true, error: null };
     const prev = snapshotEdit();
-    for (const { note: member, pos } of linked.changes) { member.pos = { ...pos }; delete member.arrangement; }
+    for (const { note: member, pos } of linked.changes) { placeNote(member, { ...pos }); delete member.arrangement; }
     commit(prev, undefined, null, { preserveTiming: true }); draw(); refreshTabIfOpen();
     return { handled: true, error: null };
   }
@@ -942,7 +942,7 @@ function pinColumnAt(note, string, fret, before) {
   const follow = normalizeOverrideInfluence(overrideFlow(col)).follow;
   for (const n of col) {
     const p = n === note ? { string, fret } : before.voiced.get(n);
-    if (p) n.pos = { string: p.string, fret: p.fret, scope: "local", follow };
+    if (p) placeNote(n, { string: p.string, fret: p.fret, scope: "local", follow });
   }
 }
 

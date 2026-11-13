@@ -1,4 +1,4 @@
-import { overrideFlow } from './voicing-core.js';
+import { overrideFlow, placeNote } from './voicing-core.js';
 import { applySharedPositionPlan, positionSelection, sharedPositionPlan } from './position-selection.js';
 import { hammerPositionPlan } from './hammer-positions.js';
 
@@ -20,7 +20,7 @@ export function positionPreviewLane(lane, columnNotes, shape, selection, tuning,
     if (linked.error) return null;
     if (linked.linked) {
       for (const change of linked.changes) {
-        const target = noteFor(change.note); target.pos = { ...change.pos }; delete target.arrangement;
+        const target = noteFor(change.note); placeNote(target, { ...change.pos }); delete target.arrangement;
       }
       return { lane: copy, noteFor };
     }
@@ -28,7 +28,7 @@ export function positionPreviewLane(lane, columnNotes, shape, selection, tuning,
     for (const note of columnNotes) {
       const target = noteFor(note), pos = shape.get(note);
       if (!target || !pos) return null;
-      target.pos = { string: pos.string, fret: pos.fret, scope: 'local', follow: flow.follow };
+      placeNote(target, { string: pos.string, fret: pos.fret, scope: 'local', follow: flow.follow });
       if (kind === 'chord') delete target.arrangement;
     }
   }

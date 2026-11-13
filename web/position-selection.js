@@ -1,5 +1,5 @@
 import { noteName } from "./util.js";
-import { chordColumns, placementLimits, shapeFault, writeColumnOverride } from './voicing-core.js';
+import { chordColumns, placeNote, placementLimits, shapeFault, writeColumnOverride } from './voicing-core.js';
 import { hammerPositionGroup, hammerPositionPlan } from './hammer-positions.js';
 
 const pitchKey = notes => notes.map(n => n.pitch).sort((a, b) => a - b).join(',');
@@ -112,7 +112,7 @@ export function applySharedPositionPlan(plan) {
   for (const { note, pos } of plan.changes) {
     const same = note.pos && Object.keys(pos).every(key => note.pos[key] === pos[key]);
     if (same && !note.arrangement) continue;
-    note.pos = { ...pos };
+    placeNote(note, { ...pos });
     delete note.arrangement;
     changed = true;
   }

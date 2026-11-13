@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mockImport, mockEditor } from './mock-import.mjs';
-import { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, voiceNotes, voiceNotesFingered } from '../../web/voicing-core.js';
+import { chordColumns, normalizeOverrideInfluence, overrideFlow, placeNote, shapeFault, voiceNotes, voiceNotesFingered } from '../../web/voicing-core.js';
 const noop = () => {};
 const lane = { id: 'bass', instrument: 'bass', visible: true, notes: [
   { id: 'c', pitch: 49, start: .3, end: 1.3, pos: { string: 1, fret: 11 }, finger: 1, fx: { hammer: 'origin' } },
@@ -27,7 +27,7 @@ try {
     './tracing.js': { clearMatches: noop }, './repaint.js': { draw: noop }, './save-state.js': { refreshSaveState: noop },
     "./lane-tuning.js": { laneFretTuning: () => [43, 38, 33, 28], laneFretCount: () => 24 },
     "./tablature.js": { refreshTabIfOpen: noop },
-    './voicing.js': { chordColumns, normalizeOverrideInfluence, overrideFlow, shapeFault, voiceNotes, voiceNotesFingered },
+    './voicing.js': { chordColumns, normalizeOverrideInfluence, overrideFlow, placeNote, shapeFault, voiceNotes, voiceNotesFingered },
     './song-bars.js': { songBarStarts: () => [0, 4, 8] },
   }, { './util.js': true, './hammer-positions.js': true, './position-selection.js': true });
   const before = structuredClone(lane.notes);
@@ -38,7 +38,8 @@ try {
   assert.deepEqual(lane.notes.map(n => n.pos.fret), [6, 8, 11]);
   assert.deepEqual(lane.notes.map(n => n.pos.string), [0, 0, 1]);
   assert.equal(S.undoStack.length, 1, 'both notes move in one undo step');
-  assert.deepEqual(lane.notes.map(n => [n.start, n.end, n.pitch, n.finger, n.fx]), before.map(n => [n.start, n.end, n.pitch, n.finger, n.fx]));
+  assert.deepEqual(lane.notes.map(n => [n.start, n.end, n.pitch, n.fx]), before.map(n => [n.start, n.end, n.pitch, n.fx]));
+  assert.deepEqual(lane.notes.map(n => n.finger), [undefined, undefined, undefined], 'typed fingers were for the old place');
   edit.undo(); assert.deepEqual(lane.notes, before);
   edit.redo(); assert.deepEqual(lane.notes.map(n => n.pos.fret), [6, 8, 11]);
 } finally { Object.assign(globalThis, saved); }

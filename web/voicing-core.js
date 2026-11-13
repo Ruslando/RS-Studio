@@ -1248,6 +1248,13 @@ function writtenColumnForm(columnNotes) {
   return columnNotes.map(({ arrangement, written, ...rest }) => ({ ...rest, ...(rest.pos ? { pos: { ...rest.pos } } : {}) }));
 }
 
+// Pin `note` at `pos`. A finger typed on the note was typed for where it was: one
+// that moves to another string or fret drops it and is fingered for the new place.
+export function placeNote(note, pos) {
+  if (note.finger != null && note.pos && (note.pos.string !== pos.string || note.pos.fret !== pos.fret)) delete note.finger;
+  note.pos = pos;
+}
+
 // Apply `choice` to one column of `laneNotes`, which means rewriting the column
 // to what the shape actually plays: voices it drops leave the lane, pitches it
 // adds arrive as real notes, and every survivor is pinned to its string/fret.
@@ -1294,7 +1301,7 @@ function rewriteColumn(laneNotes, columnNotes, choice, flow, mintId) {
   const written = writtenColumnForm(columnNotes);
   const { keep, add, drop } = columnRewritePlan(columnNotes, choice, flow);
   for (const { note, pos } of keep) {
-    if (pos) note.pos = pos; else delete note.pos;
+    if (pos) placeNote(note, pos); else delete note.pos;
     delete note.arrangement;   // a legacy arrangement on this column is now spelled out in notes
     note.written = written;
   }
