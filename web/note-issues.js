@@ -79,23 +79,40 @@ export function gpOnlyTechniques(n) {
 }
 
 // Same-pitch notes that overlap in time, as clusters of two or more, earliest first.
-export function stackClusters(notes) {
+// Diagnostics allow unisons on separate strings; the visual count includes them.
+export function stackClusters(notes, separateStrings = true) {
   const byPitch = new Map();
   for (const n of notes) (byPitch.get(n.pitch) || byPitch.set(n.pitch, []).get(n.pitch)).push(n);
   const out = [];
   for (const arr of byPitch.values()) {
     if (arr.length < 2) continue;
     arr.sort((p, q) => p.start - q.start);
-    for (let i = 0, j; i < arr.length; i = j) {
-      let maxEnd = arr[i].end;
-      // More than a hair of overlap, so notes that only touch are not a stack.
-      // Placed on different strings (a 12-string's unisons), the same pitch is two notes (voicing-core.js unstacked).
-      const apart = (m) => Number.isInteger(arr[i].pos?.string) && Number.isInteger(m.pos?.string) && m.pos.string !== arr[i].pos.string;
-      for (j = i + 1; j < arr.length && arr[j].start < maxEnd - OVERLAP_EPS && !apart(arr[j]); j++) maxEnd = Math.max(maxEnd, arr[j].end);
-      if (j - i > 1) out.push(arr.slice(i, j));
+    let active = [];
+    const finish = (group) => { if (group.notes.length > 1) out.push(group.notes.sort((a, b) => a.start - b.start)); };
+    for (const n of arr) {
+      const cutoff = n.start + OVERLAP_EPS;
+      active = active.filter(group => {
+        if (group.end > cutoff) return true;
+        finish(group); return false;
+      });
+      // Separate strings can sound a unison. They must not end the scan for
+      // duplicates on another string, or extend that string's overlap window.
+      const string = Number.isInteger(n.pos?.string) ? n.pos.string : null;
+      const matches = active.filter(group => !separateStrings || string === null ||
+        (group.ends.get(null) ?? -Infinity) > cutoff || (group.ends.get(string) ?? -Infinity) > cutoff);
+      const group = { notes: [], end: n.end, ends: new Map([[string, n.end]]) };
+      for (const match of matches) {
+        group.notes.push(...match.notes);
+        group.end = Math.max(group.end, match.end);
+        for (const [key, end] of match.ends) group.ends.set(key, Math.max(group.ends.get(key) ?? -Infinity, end));
+      }
+      group.notes.push(n);
+      active = active.filter(group => !matches.includes(group));
+      active.push(group);
     }
+    active.forEach(finish);
   }
-  return out;
+  return out.sort((a, b) => a[0].start - b[0].start);
 }
 
 // Bend points of one note that land on the same millisecond: [{ index, count, time }].

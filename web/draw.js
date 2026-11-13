@@ -435,8 +435,9 @@ function collectFrameDiagnostics() {
     const ignored = frameIssues.get(lane).filter(i => i.kind === 'stack' && issueIgnored(lane, i));
     for (const issue of ignored) for (const note of issue.notes) ignoredStackNotes.add(note);
     for (const [note, count] of counts) if (showIgnoredIssues || !ignoredStackNotes.has(note)) stackCount.set(note, count);
-    stackBadges.push(...badges.filter(b => showIgnoredIssues || !ignoredStackNotes.has(b.note))
-      .map(b => ({...b, ignored: ignoredStackNotes.has(b.note)})));
+    // Ignoring the warning suppresses its warning color and tooltip, but the
+    // count still tells the editor that more than one note occupies this bar.
+    stackBadges.push(...badges.map(b => ({...b, ignored: !counts.has(b.note) || ignoredStackNotes.has(b.note)})));
   }
   return { frameIssues, stackCount, ignoredStackNotes, stackBadges };
 }
@@ -599,7 +600,11 @@ function paintDiagnosticMarks(vx0, vx1, frameIssues) {
       const tip = { title: issue.title, body: issue.help, tone: issue.tone, diagnostic: {lane, issue}, ignored };
       const n = issue.notes[0];
       if (issue.kind === 'outOfRange') hoverMark(xOf(n.start), yOf(n.pitch), Math.max(2, xOf(n.end) - xOf(n.start)), S.state.rowH, tip);
-      else if (issue.kind === 'stack' || issue.kind === 'bendStack') hoverMark(xOf(n.start), yOf(n.pitch), 18, S.state.rowH, tip);
+      else if (issue.kind === 'stack') {
+        if (xOf(n.start) <= vx1 && issue.notes.some(note => xOf(note.end) >= vx0))
+          hoverMark(Math.max(xOf(n.start), vx0), yOf(n.pitch), 18, S.state.rowH, tip);
+      }
+      else if (issue.kind === 'bendStack') hoverMark(xOf(n.start), yOf(n.pitch), 18, S.state.rowH, tip);
       else frames.push([issue.code === 'slide' ? [...issue.notes, ...issue.notes.map(n => laneSlides(lane).get(n)).filter(Boolean)] : issue.notes, tip]);
     }
   }
@@ -810,11 +815,12 @@ function paintStage() {
   drawMotifs(vx0, vx1);
   drawShapes(vx0, vx1);
   drawDropPreview();
-  drawStackBadges(stackBadges, vx0, vx1);
   drawNoteFx();
   drawBendHandles(vx0, vx1);   // over the names, which would hide them
   drawOmittedNoteCrosses(omittedCrosses);
   drawOutOfRangeNotes(outOfRange);
+  // Counts stay readable over note labels and diagnostic decorations.
+  drawStackBadges(stackBadges, vx0, vx1);
   paintDiagnosticMarks(vx0, vx1, frameIssues);
   drawGhostNotes(ghostNotes);
   drawReferences();

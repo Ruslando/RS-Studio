@@ -256,31 +256,34 @@ export function stackedBendPoints(n) {
 }
 
 // Find overlapping same-pitch note clusters within one edit lane. Fills the
-// shared `counts` map (note -> cluster size) for recoloring, and pushes one
-// badge per cluster (anchored at its earliest note) for the numbered marker.
+// shared `counts` map for warning colors. The numbered marker counts every
+// visually overlapping note, including playable unisons on separate strings.
 export function collectStacks(lane, counts, badges) {
   for (const cluster of stackClusters(lane.notes)) {
     for (const n of cluster) counts.set(n, cluster.length);
-    badges.push({ note: cluster[0], count: cluster.length });   // start-sorted → the first is the anchor
+  }
+  for (const cluster of stackClusters(lane.notes, false)) {
+    badges.push({ note: cluster[0], end: Math.max(...cluster.map(n => n.end)), count: cluster.length });
   }
 }
 
 // Numbered badge on each overlap cluster: a dark disc with a white count and a
-// --error ring, so a 2-/3-/…-deep stack is obvious at a glance.
+// --warn ring, so a 2-/3-/…-deep stack is obvious at a glance.
 export function drawStackBadges(badges, vx0, vx1) {
   if (!badges.length) return;
   sctx.save();
   // A count, inside a 15px disc pinned to a note: mono, and 9 for both reasons.
   sctx.font = stageMono(STAGE_ANCHORED, 600);
   sctx.textAlign = "center"; sctx.textBaseline = "middle";
-  for (const { note, count, ignored } of badges) {
-    const x = xOf(note.start), y = yOf(note.pitch);
-    if (x > vx1 || x + 18 < vx0) continue;
-    sctx.save(); if (ignored) sctx.globalAlpha *= .35;
+  for (const { note, end = note.end, count, ignored } of badges) {
+    const startX = xOf(note.start), y = yOf(note.pitch);
+    if (startX > vx1 || xOf(end) < vx0) continue;
+    const x = Math.max(startX, vx0);
+    sctx.save();
     const cx = x + 9, cy = y + S.state.rowH / 2, r = 7.5;
     sctx.beginPath(); sctx.arc(cx, cy, r, 0, Math.PI * 2);
     sctx.fillStyle = veil(PAINT.ground); sctx.fill();
-    sctx.lineWidth = 2; sctx.strokeStyle = PAINT.warn; sctx.stroke();
+    sctx.lineWidth = 2; sctx.strokeStyle = ignored ? PAINT.hint : PAINT.warn; sctx.stroke();
     sctx.fillStyle = PAINT.text; sctx.fillText(String(count), cx, cy + 0.5);
     sctx.restore();
   }

@@ -755,6 +755,56 @@ class EndToEndTests(unittest.TestCase):
             if example == "chord-showcase":
                 self.assertGreater(chords, 10)
 
+    def test_overlap_count_remains_visible_when_warning_is_ignored(self):
+        self.assert_overlap_count_visible()
+
+    def test_overlap_count_includes_notes_on_separate_strings(self):
+        self.assert_overlap_count_visible(separate_strings=True)
+
+    def assert_overlap_count_visible(self, separate_strings=False):
+        self.open_reference_project()
+        result = self.page.evaluate("""async separateStrings => {
+            const {S, setSelection} = await import('/store.js');
+            const {rebuildLanes} = await import('/lanes.js');
+            const {xOf, yOf} = await import('/geometry.js');
+            const {drawNow} = await import('/repaint.js');
+            const {sctx} = await import('/dom.js');
+            const {warningMarks} = await import('/diagnostic-marks.js');
+            const {PAINT} = await import('/stage-paint.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [
+                {id:'overlap-a', start:2, end:4, pitch:64},
+                {id:'overlap-b', start:2, end:4, pitch:64},
+            ];
+            if (separateStrings) lane.notes.forEach((note, i) => {
+                note.pos = {string:i, fret:64-[64,59][i]};
+            });
+            lane.refBoxes = {}; lane.repeatGroups = [];
+            S.state.editLanes = [lane];
+            S.state.metadata.rocksmith = {ignoredIssues:separateStrings ? [] : ['editor.note.stack']};
+            S.voicingRevision++;
+            setSelection(new Set()); rebuildLanes();
+            const scroll = document.getElementById('scroll');
+            scroll.scrollLeft = 0; scroll.scrollTop = Math.max(0, yOf(64)-150);
+            const text = [], fillText = sctx.fillText;
+            sctx.fillText = function(value, x, y, ...rest) {
+                text.push({value:String(value), x, y, alpha:this.globalAlpha,
+                    ring:this.strokeStyle});
+                return fillText.call(this, value, x, y, ...rest);
+            };
+            try { drawNow(); } finally { sctx.fillText = fillText; }
+            return {
+                badge: text.find(t => t.value === '2' && Math.abs(t.x-xOf(2)-9)<.1
+                    && Math.abs(t.y-yOf(64)-S.state.rowH/2-.5)<.1),
+                hint: PAINT.hint,
+                warnings: warningMarks.filter(m => m.tip.diagnostic?.issue.kind === 'stack').length,
+            };
+        }""", separate_strings)
+        self.assertIsNotNone(result.get('badge'), 'ignored warnings must retain the overlap count')
+        self.assertEqual(result['badge']['alpha'], 1, 'the count must remain legible')
+        self.assertEqual(result['badge']['ring'], result['hint'], 'the ignored count uses a neutral ring')
+        self.assertEqual(result['warnings'], 0, 'the ignored warning stays hidden')
+
     def test_canvas_warning_menu_uses_current_frame_and_undo(self):
         self.open_reference_project()
         page = self.page

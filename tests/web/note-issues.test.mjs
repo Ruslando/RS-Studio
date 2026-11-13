@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { laneIssues } from '../../web/note-issues.js';
+import { laneIssues, stackClusters } from '../../web/note-issues.js';
 
 // One list, each problem tagged error or warning.
 const BASS = [43, 38, 33, 28];
@@ -10,6 +10,16 @@ assert.deepEqual(kinds([note(0, 1, 33, { fx: { dead: true } }), note(1, 2, 44)])
 assert.deepEqual(kinds([note(0, 1, 20)]), [['outOfRange', 'warning']], 'said once, not also as a shape');
 assert.deepEqual(kinds([note(0, 1, 40), note(0.5, 1.5, 40)]), [['stack', 'warning']]);
 assert.deepEqual(kinds([note(0, 1, 40), note(1, 2, 40)]), [], 'touching notes are not a stack');
+const placed = (start, end, string) => note(start, end, 40, { pos: { string, fret: 2 } });
+const a = placed(0, 2, 0), b = placed(0.1, 3, 1), c = placed(0.5, 1, 0), d = placed(1, 2, 1);
+assert.deepEqual(stackClusters([a, b, c, d]), [[a, c], [b, d]],
+  'interleaved unisons on another string do not hide duplicate stacks');
+assert.deepEqual(stackClusters([a, b]), [], 'separate strings can play the same pitch');
+assert.deepEqual(stackClusters([placed(0, 1, 0), placed(0.5, 3, 1), placed(2, 4, 0)]), [],
+  'a separate string cannot bridge a gap between notes');
+const unplaced = note(0.75, 1.5, 40);
+assert.deepEqual(stackClusters([a, b, unplaced]), [[a, b, unplaced]],
+  'an unplaced note connects both overlapping string groups');
 assert.deepEqual(kinds([note(0, 1, 40, { bend: 'full', bendPoints: [[0, 0], [0.5, 1], [0.5, 2]] })]), [['bendStack', 'warning']]);
 // Five notes at once on four strings: no shape plays them.
 assert.deepEqual(kinds([28, 33, 38, 43, 48].map((p) => note(0, 1, p))), [['shape', 'warning']]);
