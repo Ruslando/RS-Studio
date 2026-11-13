@@ -350,7 +350,10 @@ class EndToEndTests(unittest.TestCase):
     def apply_settings_and_close(self):
         self.page.click("#settingsApply")
         expect(self.page.locator("#settingsModalBackdrop")).to_be_visible()
-        expect(self.page.locator("#settingsApply")).to_be_hidden()
+        if 'project-window' in self.page.locator('#settingsModal').get_attribute('class'):
+            expect(self.page.locator("#settingsApply")).to_be_disabled()
+        else:
+            expect(self.page.locator("#settingsApply")).to_be_hidden()
         self.page.click("#settingsModalClose")
 
     def test_model_download_refreshes_pickers_and_displays_supported_modes(self):
@@ -5819,6 +5822,81 @@ class EndToEndTests(unittest.TestCase):
         page.click("#welcomeSettingsBtn")
         page.click("[data-settings-pane=tunings]")
         expect(page.locator(".tuning-item", has_text="My tuning")).to_have_count(1)
+
+    def test_project_pitch_controls_distinguish_recording_and_output(self):
+        self.new_audio_project()
+        page = self.page
+        original = page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const reference = 1200*Math.log2(441/440);
+            await (await import('/project.js')).setTuning({reference, shift:0});
+            S.state.tuning.estimate = reference;
+            return structuredClone(S.state.tuning);
+        }""")
+        self.file_menu('#menuProjectSettings')
+        expect(page.locator('#settingsApply')).to_have_text('Save changes')
+        expect(page.locator('#settingsApply')).to_be_disabled()
+        expect(page.locator('#projTuningRef')).to_have_value('441.0')
+        expect(page.locator('#projTuningDetected')).to_have_text('Detected 441.0 Hz')
+        expect(page.locator('#projTuningAudio')).to_have_value('none')
+        expect(page.locator('#projTuningExport')).to_have_text('441.0 Hz')
+        self.assertGreaterEqual(page.locator('#settingsModal').bounding_box()['width'], 700)
+        # Audio processing is opt-in and uses the exact stored reference.
+        page.select_option('#projTuningAudio', 'a440')
+        self.assertAlmostEqual(float(page.locator('#projTuningShift').input_value()), -original['reference'])
+        expect(page.locator('#projTuningExport')).to_have_text('440.0 Hz')
+        page.select_option('#projTuningAudio', 'none')
+        expect(page.locator('#projTuningShift')).to_have_value('0')
+        # Override a mistaken estimate without changing the audio at all.
+        page.click('#projTuningRef440')
+        expect(page.locator('#projTuningRef')).to_have_value('440.0')
+        expect(page.locator('#projTuningAudio')).to_have_value('none')
+        expect(page.locator('#projTuningExport')).to_have_text('440.0 Hz')
+        with page.expect_request(re.compile(r'/tuning$')) as request:
+            page.click('#settingsApply')
+        self.assertEqual(request.value.post_data_json, {'reference': 0, 'shift': 0})
+        expect(page.locator('#projMetaStatus')).to_have_text('Saved', timeout=60000)
+        expect(page.locator('#settingsApply')).to_be_disabled()
+        saved = page.evaluate("async () => (await import('/store.js')).S.state.tuning")
+        self.assertEqual(saved['reference'], 0)
+        self.assertEqual(saved['shift'], 0)
+        page.fill('#projTuningRef', '442.0')
+        expect(page.locator('#projTuningAudio')).to_have_value('none')
+        expect(page.locator('#projTuningShift')).to_have_value('0')
+        expect(page.locator('#projTuningExport')).to_have_text('442.0 Hz')
+        page.select_option('#projTuningAudio', 'custom')
+        expect(page.locator('#projTuningShift')).to_be_visible()
+        page.fill('#projTuningShift', '25')
+        self.assertGreater(float(page.locator('#projTuningExport').inner_text().split()[0]), 442)
+        page.fill('#projTuningShift', '51')
+        page.click('#settingsApply')
+        expect(page.locator('#projMetaStatus')).to_contain_text('within the field')
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.tuning"), saved)
+        page.click('#settingsProjectCancel')
+        self.file_menu('#menuProjectSettings')
+        expect(page.locator('#projTuningRef')).to_have_value('440.0')
+        expect(page.locator('#projTuningAudio')).to_have_value('none')
+        page.click('#projTuningMeasure')
+        expect(page.locator('#projMetaStatus')).to_be_hidden(timeout=60000)
+        expect(page.locator('#projTuningRef')).to_have_value('440.0')
+        detected_hz = page.evaluate("async () => (440*2**((await import('/store.js')).S.state.tuning.estimate/1200)).toFixed(1)")
+        page.click('#projTuningUse')
+        expect(page.locator('#projTuningRef')).to_have_value(detected_hz)
+        expect(page.locator('#projTuningAudio')).to_have_value('none')
+        page.click('#projTuningRef440')
+        for theme in ['dark', 'light']:
+            page.evaluate('(theme) => document.documentElement.dataset.theme = theme', theme)
+            self.assertFalse(page.locator('#settingsModal .settings-layout > .dialog-body').evaluate('el => el.scrollWidth > el.clientWidth'))
+        page.set_viewport_size({'width': 520, 'height': 600})
+        expect(page.locator('#settingsProjectCancel')).to_be_in_viewport()
+        self.assertFalse(page.locator('#settingsModal .settings-layout > .dialog-body').evaluate('el => el.scrollWidth > el.clientWidth'))
+
+    def test_project_pitch_without_audio_is_disabled(self):
+        self.open_reference_project()
+        self.file_menu('#menuProjectSettings')
+        for control in ['projTuningRef', 'projTuningRef440', 'projTuningAudio', 'projTuningShift', 'projTuningUse', 'projTuningMeasure']:
+            expect(self.page.locator(f'#{control}')).to_be_disabled()
+        expect(self.page.locator('#projTuningDetected')).to_have_text('No audio')
 
     def test_project_is_renamed_then_deleted_from_the_library(self):
         page = self.page

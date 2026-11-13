@@ -1175,8 +1175,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <p id="modelStatus" class="sp-note model-status" hidden></p>
         </div>
         <div class="sp-pane" id="spProject" hidden>
-          <!-- Rule 27: title and artist are read together, and so are album and
-               year; four digits never earn a row of their own. -->
+          <section class="project-section">
           <div class="cover-row">
           <div class="field-group block">
             <span class="field-label">Cover art</span>
@@ -1209,27 +1208,42 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           </div>
           </div>
           </div>
-          <!-- Concert pitch: how far the recording sits off A440 (cents), and how
-               far playback and the Rocksmith export move the audio. -->
-          <div class="field-group block" id="projTuning">
-            <span class="field-label">Concert pitch</span>
-            <label class="field-slider"><span class="label">Recording</span>
-              <input type="number" id="projTuningRef" min="427.5" max="452.8" step="0.1" title="Where the recording's A4 sits. The spectrogram and note detection follow it." />
-              <span class="ro">Hz</span>
-            </label>
-            <label class="field-slider"><span class="label">Shift audio</span>
-              <input type="range" id="projTuningShift" min="-50" max="50" step="1" value="0" title="Move playback and the exported audio by up to a quarter tone" />
-              <span id="projTuningShiftValue" class="ro">0 ct</span>
-            </label>
-            <p class="sp-note" id="projTuningDetected"></p>
-            <div class="tuning-actions">
-              <button type="button" id="projTuningUse" class="btn btn--compact">Use detected</button>
-              <button type="button" id="projTuningMeasure" class="btn btn--compact">Measure</button>
-              <button type="button" id="projTuningTo440" class="btn btn--compact" title="Shift the audio so it plays at A4 = 440 Hz">Shift to A440</button>
+          </section>
+          <section class="project-section" id="projTuning" aria-labelledby="projPitchHeading">
+            <h2 id="projPitchHeading">Pitch</h2>
+            <div class="project-pitch-row">
+              <label for="projTuningRef" title="Reference used by the editor and Rocksmith export">A4 reference</label>
+              <div class="project-pitch-controls">
+                <span class="project-pitch-input"><input type="number" id="projTuningRef" min="427.5" max="452.9" step="0.1" aria-describedby="projTuningDetected" /><span>Hz</span></span>
+                <button type="button" id="projTuningRef440" class="btn btn--compact" title="Set the reference to 440 Hz">440 Hz</button>
+              </div>
             </div>
-            <p class="sp-note" id="projTuningExport"></p>
-          </div>
-          <p id="projMetaStatus" class="sp-note" hidden></p>
+            <div class="project-pitch-row project-pitch-estimate">
+              <span></span>
+              <div class="project-pitch-controls">
+                <span id="projTuningDetected"></span>
+                <button type="button" id="projTuningUse" class="btn btn--compact">Use detected</button>
+                <button type="button" id="projTuningMeasure" class="btn btn--compact">Measure</button>
+              </div>
+            </div>
+            <div class="project-pitch-row">
+              <label for="projTuningAudio">Audio</label>
+              <div class="project-pitch-controls">
+                <select id="projTuningAudio" title="Pitch processing for playback and exported audio">
+                  <option value="none">Unchanged</option>
+                  <option value="a440">Match A440</option>
+                  <option value="custom">Custom shift</option>
+                </select>
+                <label class="project-pitch-input" id="projTuningCustom" hidden>
+                  <input type="number" id="projTuningShift" min="-50" max="50" step="0.1" value="0" aria-label="Audio shift in cents" title="Audio pitch shift, from −50 to +50 cents" /><span>cents</span>
+                </label>
+              </div>
+            </div>
+            <div class="project-pitch-row project-pitch-result">
+              <span>Export A4</span><output id="projTuningExport" aria-live="polite"></output>
+            </div>
+          </section>
+          <p id="projMetaStatus" class="sp-note" role="status" hidden></p>
         </div>
         <!-- Tunings: the list on the left, the selected tuning's editor on the right.
              Edits a draft (tuning-editor.js) that Apply saves and Cancel drops. -->
@@ -1279,6 +1293,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
       <div class="dialog-footer">
         <button type="button" id="keymapReset" class="danger" hidden>Reset to defaults</button>
         <div class="dialog-actions">
+          <button type="button" id="settingsProjectCancel" hidden>Cancel</button>
           <button type="button" id="settingsApply" class="primary" hidden>Apply</button>
         </div>
       </div>

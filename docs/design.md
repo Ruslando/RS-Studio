@@ -473,6 +473,13 @@ Settings is the one window with a navigation column: 190 wide,
 with `.pane-intro` (title 16/600, without a subtitle).
 Appearance uses the same radio preview cards as Timeline scrolling to select
 Dark or Light, without a dropdown.
+Project details uses the wide window (720), with song metadata and a 128px cover
+above compact pitch rows: A4 reference in Hz, an audio processing selector, and
+the resulting export reference. Audio processing is explicitly Unchanged,
+Match A440, or Custom shift (cents). Changing the reference alone never enables
+audio shifting. The detected pitch is advisory and has a Use detected action;
+440 Hz sets the reference directly. Explanations belong in control tooltips.
+Save changes and Cancel stay in the footer. The body scrolls on small screens.
 Each preview scales an inert copy of the actual project launcher, using its
 existing markup, icons and component styles with the actual theme tokens.
 Its radio label stays in the surrounding theme.

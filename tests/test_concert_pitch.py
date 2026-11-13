@@ -89,7 +89,28 @@ class ConcertPitchTests(unittest.TestCase):
         [attrs] = [next(iter(json.loads(blob)["Entries"].values()))["Attributes"]
                    for path, blob in read_psarc(files).items() if path.endswith(".json")]
         self.assertAlmostEqual(attrs["CentOffset"], -19.8)
+        # A detected estimate is advisory: the user's A440 override is exported
+        # as A440 even when the original estimate said 441 Hz.
+        spec["tuning"] = {"estimate": float(1200 * np.log2(441 / 440)), "reference": 0, "shift": 0}
+        files, _, _ = builder.build_cdlc(spec, None, _wems=(b"a", b"b"), _song_length=20.0)
+        [attrs] = [next(iter(json.loads(blob)["Entries"].values()))["Attributes"]
+                   for path, blob in read_psarc(files).items() if path.endswith(".json")]
+        self.assertEqual(attrs["CentOffset"], 0)
         self.assertEqual(builder._concert_pitch({"tuning": {"reference": "x", "shift": 900}}), (0.0, 50.0))
+
+    def test_a440_reference_override_does_not_shift_exported_audio(self):
+        with tempfile.TemporaryDirectory() as folder:
+            workdir = Path(folder)
+            source = workdir / "recording.wav"
+            _tone(source, 441.0)
+            spec = {"tuning": {"estimate": float(1200 * np.log2(441 / 440)), "reference": 0, "shift": 0}}
+            with patch("rs_studio.audio_channels.pitch_shift") as shift:
+                main, *_ = builder._prepare_audio(source, 1, workdir, [], spec=spec)
+            shift.assert_not_called()
+            original, sr = sf.read(source, always_2d=True)
+            exported, exported_sr = sf.read(main, always_2d=True)
+            self.assertEqual(sr, exported_sr)
+            np.testing.assert_array_equal(exported, original)
 
 
 class TuningRouteTests(unittest.TestCase):
