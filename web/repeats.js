@@ -83,6 +83,9 @@ function current() {
 // The other pane's instance: the one it chose, while it is in this group and
 // not this pane's, or else the next one after this pane's.
 function partnerCopy(parent, copy) {
+  // A single instance has no partner; both panes show it. Choosing "another"
+  // would pick itself and queue a reveal that repeats this forever.
+  if (parent.copies.length < 2) return null;
   const other = review.other;
   if (other.copyKey === copy.ids[0] || !parent.copies.some(c => c.ids[0] === other.copyKey)) {
     const next = parent.copies[(parent.copies.indexOf(copy) + 1) % parent.copies.length];
