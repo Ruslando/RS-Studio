@@ -4817,7 +4817,7 @@ class EndToEndTests(unittest.TestCase):
         expect(root.locator('.artifact-name').filter(has_text='Layer solo')).to_have_count(1)
         expect(root.locator('.artifact-name').filter(has_text='Song verse')).to_have_count(0)
 
-    def test_fixed_hands_stay_hidden_and_survive_reload(self):
+    def test_fixed_hands_show_on_the_rail_and_survive_reload(self):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
@@ -4835,7 +4835,7 @@ class EndToEndTests(unittest.TestCase):
         }""")
         self.assertEqual(result['holds'][0]['fret'], 7)
         self.assertEqual(set(result['seats']), {7})
-        self.assertNotIn('hand-anchor', result['rails'])
+        self.assertIn('hand-anchor', result['rails'])   # display only: no menu entry, no popup
         self.assertNotIn('Add hand anchor', result['menu'])
         self.assertNotIn('anchor', result['kinds'])
         expect(page.locator('#handAnchorPop')).to_have_count(0)
