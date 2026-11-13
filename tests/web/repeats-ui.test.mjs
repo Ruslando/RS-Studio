@@ -106,7 +106,14 @@ try {
   assert.ok(badges.includes('Group A · instance 1'), 'a frame names its group and instance');
   assert.ok(badges.includes('Group A · instance 3'));
   assert.ok(rectangles.some(r => r.color === 'orange'), 'the first occurrence is also marked when another differs');
+  // Only the instance controls choose an instance: the note's own first, then the playhead on it.
+  const showInstance = key => {
+    if (controls.repeatInstance.value === key) return;
+    controls.repeatInstance.value = key; controls.repeatInstance.dispatchEvent(new Event('change'));
+  };
   const inspectNote = note => {
+    const copy = lane.repeatGroups?.find(g => g.id === controls.repeatGroup.value)?.copies.find(ids => ids.includes(note.id));
+    if (copy) showInstance(copy[0]);
     playhead = -1; module.syncRepeatPlayhead();
     playhead = note.start + .01; module.syncRepeatPlayhead();
     return !controls.repeatHover.hidden;
@@ -139,11 +146,11 @@ try {
   assert.equal(controls.repeatHover.hidden, false, 'the next differing note under the playhead opens the card');
   playhead = lane.notes[2].end + .01; module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, true, 'the comparison closes in the gap between notes');
-  const seekCount = seeks.length;
+  const seekCount = seeks.length, chosen = controls.repeatInstance.value;
   playhead = third[2].start + .1; module.renderRepeatNavigator();
-  assert.equal(controls.repeatInstance.value, third[0].id, 'an external seek follows the instance under the playhead');
-  assert.equal(controls.repeatHover.hidden, false);
-  assert.equal(seeks.length, seekCount, 'following playback never seeks the transport back');
+  assert.equal(controls.repeatInstance.value, chosen, 'a playhead put in another instance never chooses it');
+  assert.equal(controls.repeatHover.hidden, true, 'that instance\'s notes open no card here');
+  assert.equal(seeks.length, seekCount, 'nor is the transport sent back');
   const beforePreview = structuredClone(lane.notes), beforePreviewCommits = commits;
   // The card puts the note beside the next instance where it differs, and shows only what differs.
   assert.equal(inspectNote(lane.notes[2]), true);
@@ -240,6 +247,7 @@ try {
   savedIds.splice(savedIds.indexOf(recreated.id), 1); S.voicingRevision++; module.renderRepeatNavigator();
   // Where the note is missing, the playhead finds no note of this instance's;
   // the difference buttons still reach it.
+  showInstance(third[0].id);
   assert.equal(inspectNote(missingThird), false, 'the playhead opens only this instance\'s own notes');
   module.renderRepeatNavigator();
   assert.equal(controls.repeatPosition.textContent, '3 / 3');

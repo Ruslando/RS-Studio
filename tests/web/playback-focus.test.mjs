@@ -54,14 +54,18 @@ try {
   };
   assert.deepEqual(await heard(null), [64, 71], 'no split view: every audible layer at the playhead');
   assert.deepEqual(await heard({ stems: [], lanes: ['a'] }), [64], 'only the live pane\'s layer is heard');
-  // The instance under review holds the playhead: seeks stay inside it.
+  // The instance under review holds playback; paused, the playhead goes anywhere.
   playback.pauseTransport(); playback.setPlaybackFocus(null);
   playback.setPlaybackZone(() => ({ t0: 2, t1: 4 }));
   playback.seekPlayback(7);
-  assert.equal(playback.playbackTime(), 4, 'a seek past the instance stops exactly at its end');
+  assert.equal(playback.playbackTime(), 7, 'paused, a seek may leave the instance');
+  await playback.playTransport();
+  assert.equal(playback.playbackTime(), 2, 'play from outside starts at the instance start');
+  playback.seekPlayback(7);
+  assert.equal(playback.playbackTime(), 4, 'playing, a seek past the instance stops exactly at its end');
   playback.seekPlayback(0);
-  assert.equal(playback.playbackTime(), 2, 'a seek before it stops at its start');
-  playback.setPlaybackZone(null);
+  assert.equal(playback.playbackTime(), 2, 'and one before it at its start');
+  playback.pauseTransport(); playback.setPlaybackZone(null);
   playback.seekPlayback(7);
   assert.equal(playback.playbackTime(), 7, 'without one, seeks go anywhere');
 } finally { Object.assign(globalThis, saved); }

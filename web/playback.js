@@ -114,9 +114,8 @@ export function pauseTransport() {
 
 export function playTransport() {
   if (!S.state) return Promise.resolve();
-  const held = playbackZone();
-  if (held && playbackTime() >= held.t1) return Promise.resolve();
-  if (held && transportTime() < held.t0) seekPlayback(held.t0);
+  const held = playbackZone(), at = transportTime();
+  if (held && (at < held.t0 || at >= held.t1)) seekPlayback(held.t0);
   if (leadCursor < 0) { startPreroll(leadCursor); return Promise.resolve(); }
   if (hasAudioTransport()) return audio.play();
   if (S.scorePlaying) return Promise.resolve();
@@ -155,8 +154,9 @@ let focus = null;   // { stems: [id], lanes: [id] }
 export function setPlaybackFocus(next) { focus = next; applyStemGains(); }
 const audibleLanes = () => editLanes().filter((lane) => (!focus || focus.lanes.includes(lane.id)) && laneAudible(lane));
 
-// A range the playhead cannot leave (repeats.js: the instance under review).
-// Seeks stay inside it; playback stops at its end.
+// A range playback cannot leave (repeats.js: the instance under review). Paused,
+// the playhead goes anywhere; play starts from the range's start when it is
+// outside, and stops at its end.
 let zone = null;   // () => { t0, t1 } | null
 export function setPlaybackZone(next) { zone = next; regionLoop.reset(); }
 export function playbackZone() { return zone?.() || null; }
@@ -619,7 +619,7 @@ export function applyPreservePitch() {
 // where the sound actually is, not where the decoder is. Paused/scrubbing
 // falls back to the element's reported time.
 export function playbackTime() {
-  const time = transportTime(), held = shownTime == null ? playbackZone() : null;
+  const time = transportTime(), held = shownTime == null && transportPlaying() ? playbackZone() : null;
   return held ? clamp(time, held.t0, held.t1) : time;
 }
 function transportTime() {
@@ -645,7 +645,7 @@ function transportTime() {
 // and alphaTab. Updating the readout and scheduler here prevents a view-specific
 // cursor from moving while the actual playback clock remains somewhere else.
 export function seekPlayback(t) {
-  const held = playbackZone();
+  const held = transportPlaying() ? playbackZone() : null;
   if (held) t = clamp(Number.isFinite(t) ? t : held.t0, held.t0, held.t1);
   regionLoop.reset();
   if (viewportFollowing("playback")) stopViewportMotion();

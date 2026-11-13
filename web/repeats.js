@@ -620,27 +620,11 @@ export function syncRepeatPlayhead() {
     if (review) review.playheadMarker = null;
     hideRepeatHover(); return;
   }
-  const time = playbackTime(), clock = laneClock(state.lane);
+  const time = playbackTime();
   if (transportPlaying() || time !== review.manualSeekTime) review.manualSeekTime = null;
   const manual = review.manualSeekTime === time;
-  const contains = copy => {
-    const from = copy.phraseLength > 0 ? clock.timeAt(copyOrigin(copy, clock.beatAt)) : copy.notes[0].note.start;
-    const to = copy.phraseLength > 0 ? clock.timeAt(copyOrigin(copy, clock.beatAt) + copy.phraseLength)
-      : Math.max(...copy.notes.map(entry => entry.note.end));
-    return time >= from - SEEK_SLACK && time < to - SEEK_SLACK;
-  };
-  // Paired review owns its instances. A clock tick or rounded boundary seek
-  // must never select a nearby instance; only the instance controls may do so.
-  const fixed = !!review.other;
-  const parent = fixed || manual || contains(state.copy) ? state.parent : [state.parent, ...state.groups.filter(g => g !== state.parent)]
-    .find(group => group.copies.some(contains));
-  const copy = parent && (parent === state.parent && (fixed || manual || contains(state.copy)) ? state.copy : parent.copies.find(contains));
-  if (!copy) { review.playheadMarker = null; hideRepeatHover(); return; }
-  if (parent.id !== state.parent.id || copy.ids[0] !== state.copy.ids[0]) {
-    review.group = parent.id; review.copyKey = copy.ids[0]; review.first = copy.notes[0].note.id;
-    review.changeKey = null; review.changeAnchor = null;
-    navKey = null; state = current();
-  }
+  // Only the instance and group controls choose the instance. The playhead,
+  // placed anywhere, even inside another instance, never does.
   if (transportPlaying()) {
     review.playheadMarker = null;
     hideRepeatHover(); return;

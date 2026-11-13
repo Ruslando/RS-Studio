@@ -86,17 +86,19 @@ try {
   assert.equal(audio.currentTime, 2, 'song-end loops seek back into the range');
   assert.equal(audio.paused, false, 'song-end loops restart the media transport');
   playback.pauseTransport();
-  // Instance boundaries are hard stops, even with a separate range selected.
+  // Instance boundaries are hard stops for playback, even with a separate range
+  // selected. Paused, the playhead may be put anywhere.
   const held = { t0: 2, t1: 2.05 };
   playback.setPlaybackZone(() => held);
-  assert.equal(playback.seekPlayback(-1), 2, 'seeks cannot leave through the start');
-  assert.equal(playback.seekPlayback(3), 2.05, 'seeks cannot leave through the end');
-  assert.equal(playback.seekPlayback(NaN), 2, 'invalid seeks still respect the boundary');
+  assert.equal(playback.seekPlayback(3), 3, 'paused, a seek may leave the instance');
+  assert.equal(playback.playbackTime(), 3);
   for (const media of [false, true]) {
     S.state.stems = media ? [{ id: 'master' }] : [];
     S.detectRegion = { t0: 0, t1: 10 };
-    playback.seekPlayback(2); calls.length = 0; events.length = 0;
+    playback.seekPlayback(media ? 2 : 5); calls.length = 0; events.length = 0;
     await playback.playTransport();
+    assert.equal(playback.playbackTime(), 2, 'play starts inside the instance');
+    assert.equal(playback.seekPlayback(-1), 2, 'playing, seeks cannot leave through the start');
     if (media) { audio.currentTime = 2.01; seconds += .01; }
     scheduler();
     assert.deepEqual(calls, [64], 'the instance lookahead excludes the next instance');
@@ -109,7 +111,8 @@ try {
     assert.equal(playback.playbackTime(), held.t1, 'the stopped playhead stays at the instance end');
     assert.deepEqual(calls, [64], 'reaching the end never schedules a repeated first attack');
     await playback.playTransport();
-    assert.equal(playback.transportPlaying(), false, 'play at the end cannot escape into another instance');
+    assert.equal(playback.playbackTime(), held.t0, 'play at the end starts the instance again');
+    playback.pauseTransport(); playback.seekPlayback(held.t1);
     if (media) {
       audio.dispatchEvent(new Event('ended'));
       assert.equal(audio.paused, true, 'a media ended event cannot restart the instance');

@@ -25,9 +25,12 @@ Playheads are independent or linked during a review; synced is unavailable,
 since both panes would then show one position. With linked playheads, both are
 the same distance into their own instance: 3 s into one is 3 s into the other.
 Choosing an instance puts both at the start of theirs, and a shorter instance's
-playhead waits at its end while the longer one plays on. The playhead stays
-inside the active pane's instance: seeks stop at its edges and playback loops
-it. Notes are heard from the active pane only.
+playhead waits at its end while the longer one plays on. Paused, the playhead
+can be put anywhere, also inside another instance; that never chooses it, as
+only the repeat toolbar chooses instances. Playback never leaves the active
+pane's instance: play starts at its start when the playhead is outside, seeks
+during playback stop at its edges, and playback stops at its end. Audio and
+notes are heard from the active pane only.
 
 | Appearance | Meaning |
 | --- | --- |
