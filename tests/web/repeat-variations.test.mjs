@@ -4,16 +4,20 @@ import test from 'node:test';
 import { findRepeats, groupsFromRepeats, normalizeRepeatGroups, resolveRepeatGroups } from '../../web/repeats-core.js';
 import { repeatVariations } from '../../web/repeat-variations.js';
 
-test('bass main passage contains the two recurring note-pattern variations', () => {
+test('recurring phrase versions are groups of their own; recurring single-note changes are variations', () => {
   const rows = JSON.parse(readFileSync(new URL('./fixtures/kroi-bass-notes.json', import.meta.url))).notes;
   const notes = rows.map(([pitch, start, end], i) => ({ id: `v${i}`, pitch, start, end }));
-  const found = findRepeats(notes), saved = groupsFromRepeats(found), main = saved[1];
-  assert.deepEqual(main.variations.map(v => v.copies.map(key => main.copies.findIndex(ids => ids[0] === key) + 1)), [[1, 4], [2, 3, 5]]);
+  const found = findRepeats(notes), saved = groupsFromRepeats(found);
+  // The main passage has two endings and bar 3-4 rhythms, each played more than once.
+  assert.deepEqual(found.slice(1, 3).map(g => g.copies.map(c => Math.round(c.notes[0].note.start))), [[34, 594], [66, 402, 626]]);
+  assert.ok(found.slice(1, 3).every(g => g.phraseLength === 32));
+  const riff = saved[9];
+  assert.deepEqual(riff.variations.map(v => v.copies.map(key => riff.copies.findIndex(ids => ids[0] === key) + 1)), [[1, 7, 8], [3, 4, 5, 6], [2, 9]]);
   assert.deepEqual(normalizeRepeatGroups(JSON.parse(JSON.stringify(saved)), notes), saved);
-  assert.deepEqual(resolveRepeatGroups({ notes, repeatGroups: saved })[1].variations, main.variations);
-  main.variationMode = 'manual';
-  const moved = main.variations[0].copies.pop(); main.variations[1].copies.push(moved);
-  assert.deepEqual(groupsFromRepeats(found, saved)[1].variations, main.variations, 'manual assignments survive rescanning');
+  assert.deepEqual(resolveRepeatGroups({ notes, repeatGroups: saved })[9].variations, riff.variations);
+  riff.variationMode = 'manual';
+  const moved = riff.variations[0].copies.pop(); riff.variations[1].copies.push(moved);
+  assert.deepEqual(groupsFromRepeats(found, saved)[9].variations, riff.variations, 'manual assignments survive rescanning');
 });
 
 test('variation detection ignores techniques and fingering, and leaves isolated mistakes within a variation', () => {

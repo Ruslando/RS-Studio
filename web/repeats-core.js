@@ -3,6 +3,7 @@
 import { effectiveTechniqueFields } from './repeat-change-details.js';
 import { passageStructure } from './passage-structure.js';
 import { pulsePassages } from './pulse-passages.js';
+import { recurringCores } from './repeat-cores.js';
 import { alphabeticLabel, repeatVariations } from './repeat-variations.js';
 
 const REPEAT_MIN_NOTES = 4;
@@ -332,7 +333,7 @@ function includeSingletonPassages(out, events, structure, structured, eventOf) {
 
 export function findRepeats(notes, beatAt = t => t) {
   const pulse = pulsePassages(notes, beatAt);
-  if (pulse) return pulse;
+  if (pulse) return recurringCores(pulse);
   const events = onsetEvents(notes, beatAt);
   const structure = passageStructure(events, beatAt);
   const structured = events.filter(e => e.notes.length >= 3).length >= events.length / 2;
@@ -381,7 +382,7 @@ export function findRepeats(notes, beatAt = t => t) {
     out.push(bounded);
   }
   includeSingletonPassages(out, events, structure, structured, eventOf);
-  return out.sort((a, b) => a.copies[0].notes[0].note.start - b.copies[0].notes[0].note.start);
+  return recurringCores(out);
 }
 
 const samePlacement = (a, b) => a.pos?.string === b.pos?.string && a.pos?.fret === b.pos?.fret;

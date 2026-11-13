@@ -7,6 +7,15 @@ repeat toolbar, which sits on the active pane; the instance shown in the other
 pane can't be chosen as well, so the panes never show the same one; a click in the other pane makes
 it active and acts there at once. The group is shared by both panes.
 
+A group holds only what recurs. A fill or ending played in no other instance
+is a variation: it needs defining only once, so it belongs to no group. The
+passage around it becomes the group, or splits into groups where different
+instances share it, and the same material found in different passages is one
+group. A version that several instances play alike, such as one of two
+endings, is a group of its own. Octave variants, a single changed note and a
+one-off brief ornament inside the passage stay in the group and show as
+differences.
+
 The two shown instances are compared with each other alone. Highlights describe
 differences, rather than proving that a note is wrong. Closing the split view
 ends the review.

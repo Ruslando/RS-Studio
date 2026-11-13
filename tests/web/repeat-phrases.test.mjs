@@ -49,16 +49,18 @@ test('a dense ornament does not break a longer phrase at three unmatched attacks
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/kroi-lead-notes.json', import.meta.url)));
 const kroi = () => fixture.notes.map(([pitch, start, end], i) => ({ id: `kroi${i}`, pitch, start, end }));
-test('Kroi Lead yields the four complete recurring phrase families', () => {
+test('Kroi Lead yields its recurring phrase families', () => {
   const notes = kroi(), unchanged = structuredClone(notes), found = findRepeats(notes);
-  assert.equal(found.length, 4);
-  assert.deepEqual(found.map(g => g.copies.length), [6, 2, 4, 4]);
-  const expectedStarts = [[36, 68, 404, 596, 628, 659.95625], [123.5, 459.5],
+  assert.equal(found.length, 5);
+  assert.deepEqual(found.map(g => g.copies.length), [2, 4, 2, 4, 4]);
+  const expectedStarts = [[36, 659.95625], [68, 404, 596, 628], [123.5, 459.5],
     [195.875, 227.875, 531.875, 563.875], [308, 324, 340, 356]];
   found.forEach((g, i) => starts(g).forEach((start, j) => assert.ok(Math.abs(start - expectedStarts[i][j]) < 1e-5)));
-  assert.deepEqual(found[1].copies.map(c => c.notes.length), [15, 15], 'the chord/run fill is separate from the riff across the long rest');
-  assert.deepEqual(found[2].copies.map(c => c.notes.length), [26, 26, 26, 26], 'the octave variation keeps its chorus membership');
-  assert.deepEqual(found[3].copies.map(c => c.notes.length), [5, 6, 5, 6], 'bridge embellishments stay in their phrase');
+  assert.deepEqual(found.slice(0, 2).map(g => g.copies.map(c => c.notes.length)), [[26, 26], [25, 25, 25, 25]],
+    'the verse riff splits by its fourth bar, which each version plays more than once');
+  assert.deepEqual(found[2].copies.map(c => c.notes.length), [15, 15], 'the chord/run fill is separate from the riff across the long rest');
+  assert.deepEqual(found[3].copies.map(c => c.notes.length), [26, 26, 26, 26], 'the octave variation keeps its chorus membership');
+  assert.deepEqual(found[4].copies.map(c => c.notes.length), [5, 6, 5, 6], 'bridge embellishments stay in their phrase');
   const ids = found.flatMap(g => g.copies.flatMap(c => c.notes.map(e => e.note.id)));
   assert.equal(new Set(ids).size, ids.length, 'phrase instances never share a note');
   for (const group of found) for (const copy of group.copies.slice(1)) {

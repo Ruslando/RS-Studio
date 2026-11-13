@@ -9,10 +9,13 @@ const membership = groups => groups.map(g => g.copies.map(c => c.notes.map(e => 
 
 test('Kroi rhythm has complete progressions, bridge figures and a single whole outro', () => {
   const notes = notesOf(), original = structuredClone(notes), groups = findRepeats(notes);
-  assert.deepEqual(groups.map(g => g.copies.length), [5, 4, 4, 2, 1]);
+  assert.deepEqual(groups.map(g => g.copies.length), [5, 2, 4, 2, 4, 2, 1]);
   const bounds = [
     [[34, 63], [66, 95], [402, 431], [594, 623], [626, 655]],
-    [[194, 225.5], [226, 257.5], [530, 561.5], [562, 593.5]],
+    // The chorus opens with one of two voicings, each played twice.
+    [[194, 197.5], [530, 533.5]],
+    [[198, 225.5], [230, 257.5], [534, 561.5], [566, 593.5]],
+    [[226, 229.5], [562, 565.5]],
     [[306, 321], [322, 337], [338, 353], [354, 369]],
     [[370, 377], [386, 393]],
     [[657.992737, 692.233167]],
@@ -24,7 +27,7 @@ test('Kroi rhythm has complete progressions, bridge figures and a single whole o
     assert.deepEqual(new Set(copy.notes.map(e => e.note.id)), new Set(inside.map(n => n.id)), 'all notes inside the passage belong, including every chord voice');
   }));
   assert.deepEqual(groups.map(g => g.copies.map(c => c.notes.length)), [
-    [274, 274, 274, 274, 274], [274, 274, 274, 274], [19, 19, 19, 19], [10, 10], [479],
+    [274, 274, 274, 274, 274], [35, 35], [239, 239, 239, 239], [35, 35], [19, 19, 19, 19], [10, 10], [479],
   ]);
   const ids = membership(groups).flat(2);
   assert.equal(new Set(ids).size, ids.length, 'groups never share notes');
