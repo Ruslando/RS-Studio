@@ -10,12 +10,12 @@
 // pane makes it the live one and then lands there as the click it was. The
 // transport and the sidebar follow the live pane.
 //
-// Each pane is heard as its own audio layer; notes only from the live pane's
-// layer (setPlaybackFocus).
+// Only the live pane is heard: its audio layer and its notes (setPlaybackFocus).
+// The other pane's playhead moves, silently.
 // Playheads: independent (only the live pane plays), linked (both move with the
 // transport, each at its own position) or synced (one playhead for both).
 import { PX_PER_SEC } from "./constants.js";
-import { $, audio, bindViewport, editorEl, liveViewport } from "./dom.js";
+import { $, bindViewport, editorEl, liveViewport } from "./dom.js";
 import { S } from "./store.js";
 import { draw } from "./repaint.js";
 import { freshMemo } from "./paint-memo.js";
@@ -30,8 +30,7 @@ import { splitter } from "./splitters.js";
 import { initRepeatDock, swapRepeatDocks } from "./repeat-dock.js";
 import { createRepeatNavigatorMirror } from "./repeat-navigator-mirror.js";
 import { connectRepeatSplit, holdRepeatPlayhead, pairRepeats, repeatZones, restoreRepeatReview, savedRepeatReview, swapRepeatPane, withRepeatPane } from "./repeats.js";
-import { busLevel } from "./volume.js";
-import { clamp, normLayerVolume } from "./util.js";
+import { clamp } from "./util.js";
 
 const panel = $("editingPanel"), pane = $("splitPane"), toggle = $("splitViewToggle");
 const dividers = { columns: $("splitDivider"), rows: $("splitDividerY") };
@@ -50,11 +49,6 @@ let mode = "free";    // "free" | "link" | "sync"
 let offset = 0;       // linked: the other playhead's lead over the live one, s
 let headKey = "", focusKey = "";
 let renderRepeatMirror = null;
-// Linked, the other pane's audio layer plays at its own position.
-// ponytail: a plain element, outside the Web Audio mix; route it through the stem
-// mixer if its few ms of extra output latency ever matter.
-const follower = new Audio();
-follower.preload = "auto"; follower.preservesPitch = true;
 
 // What the pane paints with besides the project. Pointer and gesture state is
 // the live pane's alone, so the other pane paints without it.
@@ -88,12 +82,11 @@ const liveView = () => ({
 const imageUrl = (stem) => stem && spectrogramUrl(stem, stem.channel || "stereo").href;
 const liveImageUrl = () => (S.spectImg ? imageUrl(stemOf(S.state.curStem)) : null);
 
-// The audio and note layers of each pane, for the transport (playback.js).
+// What the transport plays (playback.js): the live pane's audio and note layers.
 function syncFocus() {
   if (!other) return;
   const live = activeLane()?.id;
-  const stems = mode === "sync" ? [S.state.curStem, other.stemId] : [S.state.curStem];
-  const next = { stems: [...new Set(stems.filter(Boolean))], lanes: live ? [live] : [] };
+  const next = { stems: S.state.curStem ? [S.state.curStem] : [], lanes: live ? [live] : [] };
   const key = JSON.stringify(next);
   if (key !== focusKey) { focusKey = key; setPlaybackFocus(next); }
 }
@@ -128,7 +121,7 @@ function swap() {
   Object.assign(S, { mouseX: null, mouseY: null, hoverNote: null });   // the pointer is on the other stage now
   layoutFretboard();
   swapRepeatDocks($("repeatNavigator"), $("splitRepeatNavigator"));
-  syncFocus(); follow(); draw(); later();
+  syncFocus(); draw(); later();
 }
 
 // A press in the other pane makes it live, and then reaches what the live editor
@@ -154,25 +147,11 @@ function handOnClick(e) {
   target.dispatchEvent(new MouseEvent("click", e));
 }
 
-// Linked: keep the other pane's audio layer playing at its own position.
-// ponytail: hard resync past 80 ms; a vari-speed trim like the stem followers' if it flams.
-function follow() {
-  const stem = mode === "link" && other && transportPlaying() && stemOf(other.stemId);
-  const { at, zone } = stem ? linkedTime() : { at: 0, zone: null };
-  if (!stem || at < Math.max(0, zone.t0) || at >= zone.t1) { follower.pause(); return; }
-  if (follower.dataset.stem !== stem.id) { follower.src = stem.audioUrl; follower.dataset.stem = stem.id; }
-  follower.volume = stem.muted ? 0 : clamp(normLayerVolume(stem.volume) * busLevel("audio"), 0, 1);
-  if (follower.playbackRate !== audio.playbackRate) follower.playbackRate = audio.playbackRate;
-  try { if (Math.abs(follower.currentTime - at) > 0.08) follower.currentTime = at; } catch { /* not loaded yet */ }
-  if (follower.paused) follower.play().catch(() => {});
-}
-
 export function paintSplitPane(paint, panels) {
   if (!other || !(panels || moving())) return;
   // Opened before the live picture had loaded: the pane fetches its own.
   if (!other.img && other.loading == null && other.imgUrl !== imageUrl(stemOf(other.stemId))) loadOther(other.stemId);
   syncFocus();
-  if (moving()) follow();
   if (syncViewBox.checked) { other.zoomX = S.zoomX; other.zoomY = S.zoomY; }
   const time = otherTime(), playing = moving(), liveTop = liveViewport.scroll.scrollTop;
   const lanes = S.state.lanes, live = lanes.find((l) => l.active);
@@ -253,7 +232,7 @@ function loadOther(id) {
   img.decode().then(() => {
     if (other !== view || view.loading !== id) return;
     Object.assign(view, { stemId: id, img, imgUrl: url, loading: null });
-    syncFocus(); follow(); draw(); later();
+    syncFocus(); draw(); later();
   }, () => { if (view.loading === id) { view.loading = null; view.imgUrl = url; draw(); } });   // no retry loop
 }
 function chooseStem(side, id) {
@@ -279,7 +258,7 @@ function setMode(next) {
   other.time = otherTime();   // where the old mode left it
   mode = next;
   offset = other.time - playbackTime();
-  syncFocus(); follow(); draw(); later();
+  syncFocus(); draw(); later();
 }
 
 function setLayout(next) {
@@ -359,14 +338,14 @@ function open() {
   for (const el of [pane, ...Object.values(dividers), fretboard, fretDivider, controls, ...heads]) el.hidden = false;
   toggle.setAttribute("aria-pressed", "true");
   if (last?.stemId && last.stemId !== other.stemId) loadOther(last.stemId);
-  layoutFretboard(); syncFocus(); follow(); draw(); later();
+  layoutFretboard(); syncFocus(); draw(); later();
   pairRepeats(true);
 }
 function close({ keep = true } = {}) {
   if (!other) return;
   remember();   // reopening the split here brings the other pane back
   other = null;
-  follower.pause(); setPlaybackFocus(null); pairRepeats(false);
+  setPlaybackFocus(null); pairRepeats(false);
   editorEl.classList.remove("split", "live-second");
   for (const el of [pane, ...Object.values(dividers), fretboard, fretDivider, controls, ...heads]) el.hidden = true;
   toggle.setAttribute("aria-pressed", "false");
@@ -436,7 +415,6 @@ export function init_split_view() {
   });
   window.addEventListener("cw-transport", event => {
     if (other && mode !== "free" && event.detail === "seek") other.followSeek = true;
-    follow();
   });
   // A channel or view change reloads the live picture; the other pane's follows.
   window.addEventListener("cw-stem-view-changed", () => { if (other) loadOther(other.loading ?? other.stemId); });
