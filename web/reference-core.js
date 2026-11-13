@@ -75,7 +75,8 @@ export function effectSig(note, { includePos = false } = {}) {
     if ((!includePos && (key === "pos" || key === "arrangement"))
       || note[key] == null) continue;
     let value = note[key];
-    if (key === "fx") value = JSON.stringify(value);
+    // fx is a flat set of flags; the order they were written in says nothing.
+    if (key === "fx") value = JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))));
     else if (key === "pos") value = JSON.stringify({
       string: value.string,
       fret: value.fret,

@@ -74,6 +74,7 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
   // Two notes are "the same" for a reference when their effects are; where they are fretted is not an effect.
   assert.notEqual(effectSig({ slide: "shift" }), effectSig({}));
   assert.notEqual(effectSig({ fx: { palmMute: true } }), effectSig({ fx: { vibrato: true } }));
+  assert.equal(effectSig({ fx: { accent: true, staccato: true } }), effectSig({ fx: { staccato: true, accent: true } }), "flag order is no difference");
   assert.equal(effectSig({ pos: { string: 1, fret: 2 } }), effectSig({}));
   assert.notEqual(effectSig({ pos: { string: 1, fret: 2 } }, { includePos: true }), effectSig({}, { includePos: true }));
   assert.notEqual(effectSig({ pos: { string: 1, fret: 2, follow: "here" } }, { includePos: true }),
