@@ -25,7 +25,7 @@ import { scoreProjectionSignature } from "./guitar-pro-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
 import { sectionMarkersForExport } from "./section-marker-core.js";
 import { isTablatureLane, selectedTablatureLane } from "./layer-role.js";
-import { gpDebug, modernGpProjectionStatus, modernGpResult, projectedGpLaneScore } from "./guitar-pro-score.js";
+import { modernGpProjectionStatus, modernGpResult, projectedGpLaneScore } from "./guitar-pro-score.js";
 import { songTimeToTabMs, tabMsToSongTime } from "./util.js";
 import { representPickedOpenSlides } from "./voicing-core.js";
 
@@ -47,13 +47,9 @@ const aborted = () => Object.assign(new Error("tablature generation cancelled"),
 // every caller means the same thing by them — show me the tab, take it away.
 export const tabViewOn = () => !!tabViewBackdropEl && !tabViewBackdropEl.hidden;
 
-// "tab-seen" is the debug mode: every layer written from what the editor holds,
-// ignoring its imported Guitar Pro data, to see what an import missed.
-let tabAsSeen = false;
 export function setView(view) {
   if (!S.state) return;
-  const tab = view === "tab" || view === "tab-seen";
-  if (tab && tabAsSeen !== (view === "tab-seen")) { tabAsSeen = !tabAsSeen; if (tabViewOn()) { refreshTab(); return; } }
+  const tab = view === "tab";
   if (tab === tabViewOn()) return;
   tabViewBackdropEl.hidden = !tab;
   if (tab) { refreshTab(); tabLoop(); tabShowCursor(); }
@@ -357,13 +353,12 @@ async function refreshTab() {
   try {
     const timing = { bars: S.state.scoreBars || [], tempoMap: S.state.tempoMap || [],
       grid: S.appliedGrid || S.state.baseGrid || {} };
-    const marker = `projected:${tabAsSeen}:${S.state.job}:${lane.id}:${scoreProjectionSignature([lane])}:${JSON.stringify(timing)}`;
+    const marker = `projected:${S.state.job}:${lane.id}:${scoreProjectionSignature([lane])}:${JSON.stringify(timing)}`;
     if (marker === tabSpecJson && tabApi) return;
     tabWarnEl.textContent = "";
     document.getElementById("tabBusy").hidden = false;
     await loadAlphaTab();
-    gpDebug.asSeen = tabAsSeen;
-    const score = await projectedGpLaneScore(alphaTab, lane, controller.signal).finally(() => { gpDebug.asSeen = false; });
+    const score = await projectedGpLaneScore(alphaTab, lane, controller.signal);
     if (controller.signal.aborted) return;
     const api = ensureTabApi();
     if (!api) throw new Error("alphaTab failed to load");
@@ -372,7 +367,7 @@ async function refreshTab() {
     if (ok === false) throw new Error("alphaTab could not load the selected layer");
     tabSpecJson = marker;
     const warnings = score.cwWarnings || [];
-    tabWarnEl.textContent = [tabAsSeen ? "Debug: as the editor sees it, imported file data ignored" : "", ...warnings].filter(Boolean).join(" · ");   // the dot says "warning"
+    tabWarnEl.textContent = warnings.join(" · ");   // the dot says "warning"
     tabWarnEl.classList.add("status-line--warn");
   } catch (e) {
     tabLoadGuard = null;
@@ -409,16 +404,15 @@ export async function exportTab() {
 
 // Modern GP7+ export starts from the selected source hierarchy and applies the
 // editor projection through the same alphaTab Score used by the app preview.
-export async function exportModernGp(asSeen = false) {
+export async function exportModernGp() {
   if (!S.state) return;
-  gpDebug.asSeen = asSeen === true;
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) { toast(status.reason, 4200); return; }
-  const name = exportSongName(metadataFromState(S.state), S.state.name || S.state.filename || "score") + (gpDebug.asSeen ? " (as seen)" : "");
+  const name = exportSongName(metadataFromState(S.state), S.state.name || S.state.filename || "score");
   await jobRequest("Exporting Guitar Pro", name + ".gp", async (panel) => {
     panel.update({ stage: "Writing the file", fraction: null });
     await loadAlphaTab();
-    const { bytes, warnings } = await modernGpResult(alphaTab).finally(() => { gpDebug.asSeen = false; });
+    const { bytes, warnings } = await modernGpResult(alphaTab);
     downloadProjectBlob(new Blob([bytes], { type: "application/octet-stream" }), name + ".gp");
     toast(warnings.length ? `Exported ${name}.gp · ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : `Exported ${name}.gp`,
           2200, warnings.length ? "warn" : "ok");

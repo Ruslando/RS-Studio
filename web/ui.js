@@ -507,9 +507,7 @@ export function init_ui({ doCopy, doCut, doDelete, doPaste, renderLayerSettings 
     if (!inTourCard(e.target) && !e.target.closest(".menu-anchor")) closeMenus();
   });
   wireMenu("menuPreviewTab", () => setView("tab"));
-  wireMenu("menuPreviewTabSeen", () => setView("tab-seen"));
   wireMenu("menuExportModernGp", () => exportModernGp());
-  wireMenu("menuExportGpAsSeen", () => exportModernGp(true));
   wireMenu("menuExportTab", exportTab);
   wireMenu("menuExportRocksmith", exportRocksmith);
   wireMenu("menuUndo", undo);

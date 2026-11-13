@@ -118,8 +118,8 @@ roundTrip(2);
 }
 
 // What the editor holds of a file says everything the file says: imported, then
-// written from the layer's notes alone (as "Tablature view as the editor sees it"
-// does), every beat and note comes back as the file has it. Covers what the first
+// written from the layer's notes alone (gpDebug.asSeen, as
+// tools/gp-audit does), every beat and note comes back as the file has it. Covers what the first
 // real file showed was lost: effects on tied parts, a slide in and out of one note,
 // triplets, a grace note, hammer-ons, whammy curves and a strum.
 {
