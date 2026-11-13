@@ -740,6 +740,7 @@ export function init_repeats(dependencies) {
   });
   $('repeatHoverClose').addEventListener('click', hideRepeatHover);
   $('repeatClose').addEventListener('click', closeRepeats);
+  $('findRepeatsBtn').addEventListener('click', () => runFindRepeats());
   registerEscapeLayer(ESC_DEPTH.popover, () => closeRepeatPickers() || hideRepeatHover());
   $('repeatGroup').addEventListener('change', () => {
     if (!review) return;

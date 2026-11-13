@@ -49,7 +49,6 @@ import { S, setSelection } from "./store.js";
 
 import { laneFretCount, laneFretTuning } from "./lane-tuning.js";
 import { refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
-import { runFindRepeats } from "./repeats.js";
 import { hammerPositionGroup, hammerPositionPlan } from './hammer-positions.js';
 import { pasteHandAnchors } from './clipboard-fingering.js';
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
@@ -1123,7 +1122,6 @@ export function openCanvasMenu(clientX, clientY, atTime) {
     { label: "Detect notes…", fn: () => openDetectPanel(clientX, clientY) },
     ...(S.detectRegion ? [{ label: "Find similar to range", kw: "search match repeat", fn: runFindSimilar }] : []),
     ...addMarker,
-    { label: "Find repeats in this layer", kw: "search match similar passage fingering same", fn: () => runFindRepeats(targetLane()) },
     { label: "Add comment", kw: "note annotation", fn: () => addCommentAt(clientX, clientY) },
     { sep: true },
     { label: "Paste", fn: () => doPaste() },
@@ -1228,7 +1226,6 @@ function appliedEffects(sel) {
 function similarEntries() {
   return [
     { label: "Find similar passage", kw: "search match repeat copies duplicate", fn: runFindSimilar },
-    { label: "Find repeats in this layer", kw: "search match similar passage fingering same", fn: () => runFindRepeats(laneOf([...S.selection][0]) || targetLane()) },
     ...(S.matches.length ? [
       { label: "Previous similar passage", kw: "search match back", keepOpen: true,
         fn: () => focusAdjacentMatch(-1, { preview: true }) },

@@ -18,7 +18,7 @@ class Element extends EventTarget {
 const ids = ['repeatNavigator', 'repeatGroup', 'repeatGroupPrevious', 'repeatGroupNext', 'repeatPosition', 'repeatPrevious', 'repeatNext',
   'repeatInstance', 'repeatDrag',
   'repeatChangeNavigation', 'repeatChangePrevious', 'repeatChangeNext', 'repeatChangePosition', 'repeatHover', 'repeatHoverRows',
-  'repeatHoverHead', 'repeatHoverClose', 'repeatClose'];
+  'repeatHoverHead', 'repeatHoverClose', 'repeatClose', 'findRepeatsBtn'];
 const controls = Object.fromEntries(ids.map(id => [id, new Element()]));
 const riff = [40, 43, 45, 47, 45, 43, 40, 38];
 const make = (start, pitches = riff) => pitches.map((pitch, i) => ({ id: `${start}:${i}`, start: start + i / 2, end: start + i / 2 + .4, pitch, pos: { string: 5, fret: pitch - 35 } }));
