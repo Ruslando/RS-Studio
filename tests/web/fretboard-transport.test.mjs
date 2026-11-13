@@ -62,19 +62,6 @@ try {
   assert.equal(mode(), 'false', 'a collapsed fretboard stays inactive');
   board.setFretboardVisible(true);
   assert.equal(mode(), 'true', 'reopening while paused restores edit mode');
-  const note = { id: 'source', pitch: 40, start: 2, end: 3, pos: { string: 5, fret: 0 } };
-  const lane = { notes: [note] }, before = structuredClone(note), selection = S.selection;
-  board.previewFretboardNote(lane, note, 'First occurrence');
-  assert.equal(dom.fretboardPanel.attributes.has('data-comparison-preview'), true);
-  assert.equal(board.fretboardEditTargets().size, 0, 'a comparison preview exposes no edit recipients');
-  assert.equal(S.selection, selection, 'previewing never selects its source note');
-  assert.deepEqual(note, before, 'previewing never edits its source note');
-  board.previewFretboardNote(lane, null, 'Instance 2');
-  assert.equal(dom.fretboardPanel.attributes.has('data-comparison-preview'), true, 'a missing note remains a read-only preview');
-  assert.equal(board.fretboardEditTargets().size, 0, 'a missing note cannot expose the ordinary edit targets');
-  board.previewFretboardNote();
-  assert.equal(dom.fretboardPanel.attributes.has('data-comparison-preview'), false, 'clearing restores the ordinary board');
-  assert.equal(mode(), 'true', 'previewing does not change the user’s edit-mode choice');
 
 } finally { Object.assign(globalThis, saved); }
 console.log('Fretboard transport defaults passed');

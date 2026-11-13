@@ -15,7 +15,7 @@ import { init_repeats } from "./repeats.js";
 import { init_interaction, updateAutoScroll } from "./interaction.js";
 import { init_sidebar } from "./sidebar.js";
 import { init_splitters } from "./splitters.js";
-import { init_fretboard, previewFretboardNote, setFretboardVisible } from "./fretboard.js";
+import { init_fretboard, setFretboardVisible } from "./fretboard.js";
 import { init_geometry } from "./geometry.js";
 import { init_tablature, refreshTabIfOpen } from "./tablature.js";
 import { init_edit, doCopy, doCut, doDelete, doPaste, setHandAnchor } from "./edit.js";
@@ -51,7 +51,7 @@ init_split_view();
 init_settings();   // restore persisted prefs before features read their inputs
 init_sound_designer();
 init_tracing();
-init_repeats({ setHandAnchor, previewFretboardNote, setFretboardVisible });
+init_repeats({ setHandAnchor, setFretboardVisible });
 initDrawingSettings();
 initComments();
 initSpectrogramControls();

@@ -565,8 +565,6 @@ function counterpart(state, anchorCopy, anchor, targetCopy) {
 }
 function updateHoverPreview() {
   if (!hover) return;
-  const state = current();
-  actions.previewFretboardNote(hover.lane, hover.marker.current, `Instance ${state ? originalIndex(state, state.copy) : 1}`);
   // Below the repeat toolbar, or above it where the pane has no room below.
   const card = $('repeatHover'), nav = $('repeatNavigator').getBoundingClientRect?.(), room = $('repeatNavigator').parentElement?.getBoundingClientRect?.();
   card.classList.toggle('repeat-hover-above', !!nav && !!room && nav.bottom + card.offsetHeight + 8 > room.bottom);
@@ -576,7 +574,7 @@ export function hideRepeatHover() {
   const wasOpen = !!hover;
   hover = null;
   if ($('repeatHover')) $('repeatHover').hidden = true;
-  if (wasOpen) { actions.previewFretboardNote(); draw(); }
+  if (wasOpen) draw();
   return wasOpen;
 }
 // The transport is the only source of automatic comparison-card selection.

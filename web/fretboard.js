@@ -351,14 +351,6 @@ let hoverPicked = false, hoverAt = -1;   // the browsed ring came from hovering,
 let chordShown = null;
 // A legal hand position under the pointer in the fret-number row.
 let handPeek = null;
-let comparisonPreview = null;
-// A temporary, read-only view used by repeat comparison. It never seeks the
-// transport or changes the editor's selection or positions.
-export function previewFretboardNote(lane = null, note = null, label = '') {
-  comparisonPreview = lane ? { lane, note, label } : null;
-  fretboardPanel.toggleAttribute('data-comparison-preview', !!comparisonPreview);
-  draw();
-}
 let pendingHandColumn = null;
 
 let shownAnyway = null;   // { key: hand revision, column: "laneId:t0" }
@@ -386,7 +378,6 @@ function playheadColumnNote(lane) {
 
 // Expose the actual edit recipients, independently of the playback cursor.
 export function fretboardEditTargets() {
-  if (comparisonPreview) return new Set();
   const lane = currentLane();
   if (!visible || !editing || transportPlaying() || !lane || !canEditLane(lane)) return new Set();
   const group = selectedPositions(lane);
@@ -935,15 +926,15 @@ function paintFretNumbers(ctx, s, X, Y, { endHalf, lastFret }) {
 
 }
 
-function syncFretboardWarning(lane, comparing, missingPreview) {
+function syncFretboardWarning(lane) {
   const warning = $("fretboardWarning");
-  const warningTime = comparing && comparisonPreview.note ? comparisonPreview.note.start + 1e-6 : frozenAt(lane) ?? boardTime();
-  const here = lane && !missingPreview ? chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
+  const warningTime = frozenAt(lane) ?? boardTime();
+  const here = lane ? chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
     .find(({ t0, notes }) => warningTime >= t0 - 1e-5 && warningTime < Math.max(...notes.map(n => n.end))) : null;
   // Stretched shapes are visible immediately; invalid shapes require opt-in.
   const invalidKey = here?.kind === "impossible" ? `${lane.id}:${here.t0}` : null;
   const impossible = !!invalidKey && !shapeRevealed(lane, invalidKey);
-  const selectionError = !comparing && editing && !transportPlaying() ? selectedPositions(lane).error : null;
+  const selectionError = editing && !transportPlaying() ? selectedPositions(lane).error : null;
   const blocked = editing && !transportPlaying() && (!!selectionError || impossible);
   warning.hidden = !selectionError && !here;
   const [shapeTitle, shapeHelp] = SHAPE_WARNINGS[here?.kind] || SHAPE_WARNINGS.impossible;
@@ -954,19 +945,6 @@ function syncFretboardWarning(lane, comparing, missingPreview) {
   fretboardShowAnyway.dataset.key = invalidKey || "";
   fretboardPanel.toggleAttribute("data-unplayable", impossible);
   return { impossible, blocked };
-}
-
-function paintComparisonBoard(ctx, s, scale, X, Y, { lane, missingPreview, strung, tunePx }) {
-  board = null; spots = null; activeAlternative = null;
-  if (alts) alts.boxes = [];
-  const now = missingPreview ? null : handNow(lane, s, comparisonPreview.note.start + 1e-6);
-  const index = now ? gripIndex(now.found.columns, now.t) : -1;
-  const seat = index >= 0 ? now.found.columns[index].seat : 0;
-  paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, offered: 0, strung, tunePx });
-  if (now) drawHand(ctx, s, scale, X, Y, lane, now, null, { onion: false });
-  fretboardName.textContent = `${comparisonPreview.label} · ${missingPreview ? 'Missing note' : noteName(comparisonPreview.note.pitch)}`;
-  fretboardBusy.hidden = missingPreview || !!now;
-  if (!now && !missingPreview) fretboardBusyLabel.textContent = 'Loading comparison fingering';
 }
 
 function prepareBoardOffers(ctx, s, scale, X, Y, lane, impossible, blocked) {
@@ -1295,9 +1273,7 @@ export function drawFretboard() {
   // another string count than its instrument's neck gets the instrument and nothing
   // else, so its tuning is not drawn either.
   const lane = currentLane();
-  const comparing = !!comparisonPreview && comparisonPreview.lane === lane && (!comparisonPreview.note || lane?.notes.includes(comparisonPreview.note));
-  const missingPreview = comparing && !comparisonPreview.note;
-  const { impossible, blocked } = syncFretboardWarning(lane, comparing, missingPreview);
+  const { impossible, blocked } = syncFretboardWarning(lane);
   if (fretboardPanel.hasAttribute("data-edit-blocked") !== blocked) {
     fretboardPanel.toggleAttribute("data-edit-blocked", blocked);
     layoutFretboard(); return;
@@ -1315,15 +1291,11 @@ export function drawFretboard() {
   // and this only has to choose between three sizes. A string at the nut is a pitch
   // row, so it gets rule 6's anchored 9 when 11 will not fit, and nothing when 9
   // will not either: the same "drop the label too wide for its note" the stage does.
-  const disabled = comparing || !editing || !canEditLane(lane) || transportPlaying();
+  const disabled = !editing || !canEditLane(lane) || transportPlaying();
   updateChordField(lane, disabled);
   const projection = boardProjection(ctx, s, w, h - 12, tuning);
   if (!projection) return;
   const { scale, X, Y, strung, tunePx } = projection;
-  if (comparing) {
-    paintComparisonBoard(ctx, s, scale, X, Y, { lane, missingPreview, strung, tunePx });
-    return;
-  }
   const { at, chord, offering, hovered, spot } = prepareBoardOffers(ctx, s, scale, X, Y, lane, impossible, blocked);
   const now = impossible || shaping ? null : handNow(lane, s);
   syncSuggestion(lane, s);

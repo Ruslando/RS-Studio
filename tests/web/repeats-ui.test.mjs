@@ -30,7 +30,7 @@ const stageScroll = { scrollLeft: 0, clientWidth: 500, clientHeight: 300, scroll
 let playhead = 0, playing = false, seekRounding = 0, zone = null;
 const seeks = [];
 let active = lane, commits = 0, movements = 0, fretboardOpens = 0, worker;
-const rectangles = [], badges = [], previews = [], anchors = [];
+const rectangles = [], badges = [], anchors = [];
 let generatedFingers = new Map(), noteUid = 0, lockedNoteId = null, modalIsOpen = false;
 const glows = [];
 const ctx = { beginPath() {}, rect(x, y, w, h) { this.path = { x, y, w, h }; }, save() {}, restore() {}, setLineDash(dash) { this.dash = dash; }, strokeText() {}, fillText(text) { badges.push(text); }, fillRect() {},
@@ -80,7 +80,7 @@ try {
     './note-render.js': { noteRibbon: () => null }, './canvas-components.js': { paintNoteGlow(context, level) { glows.push({ ...context.path, level }); } }, './constants.js': { stageUi: () => '11px sans-serif' },
     './stage-paint.js': { PAINT: { trace: 'blue', warn: 'orange', error: 'pink', accent: 'cyan', ok: 'green' }, halo: () => 'black' },
   }, { './repeat-picker.js': true, './repeats-core.js': true, './util.js': true, './repeat-change-details.js': true, './whammy.js': true, './note-effects.js': true });
-  module.init_repeats({ ...{ setHandAnchor(lane, t, fret) { lane.handHolds = (lane.handHolds || []).filter(h => h.t !== t); if (fret != null) lane.handHolds.push({t, fret}); commit(); } }, ...{ previewFretboardNote: (...args) => previews.push(args), setFretboardVisible: on => { assert.equal(on, true); fretboardOpens++; } } });
+  module.init_repeats({ ...{ setHandAnchor(lane, t, fret) { lane.handHolds = (lane.handHolds || []).filter(h => h.t !== t); if (fret != null) lane.handHolds.push({t, fret}); commit(); } }, ...{ setFretboardVisible: on => { assert.equal(on, true); fretboardOpens++; } } });
   const changePosition = () => controls.repeatChangePosition.children.find(option => option.value === controls.repeatChangePosition.value)?.textContent.split(' · ')[0];
   const before = structuredClone(lane.notes);
   module.runFindRepeats(lane);
@@ -125,10 +125,9 @@ try {
   playhead = lane.notes[1].start + .1; module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, true, 'unchanged notes do not open the floating preview');
   playhead = lane.notes[2].start + .1; module.renderRepeatNavigator();
-  assert.equal(previews.at(-1)[1], lane.notes[2]);
+  assert.equal(controls.repeatHover.hidden, false, 'a differing note opens the card');
   playing = true; module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, true, 'starting playback hides the note preview');
-  assert.equal(previews.at(-1).length, 0, 'starting playback clears the fretboard preview');
   playhead = lane.notes[2].start + .1; module.renderRepeatNavigator();
   assert.equal(controls.repeatHover.hidden, true, 'playback never reopens the preview');
   playing = false; module.renderRepeatNavigator();
@@ -143,14 +142,13 @@ try {
   const seekCount = seeks.length;
   playhead = third[2].start + .1; module.renderRepeatNavigator();
   assert.equal(controls.repeatInstance.value, third[0].id, 'an external seek follows the instance under the playhead');
-  assert.equal(previews.at(-1)[1], third[2]);
+  assert.equal(controls.repeatHover.hidden, false);
   assert.equal(seeks.length, seekCount, 'following playback never seeks the transport back');
   const beforePreview = structuredClone(lane.notes), beforePreviewCommits = commits;
   // The card puts the note beside the next instance where it differs, and shows only what differs.
   assert.equal(inspectNote(lane.notes[2]), true);
   assert.deepEqual(heads(), ['', 'Instance 1', '', 'Instance 2']);
   assert.deepEqual(rows(), [['Position', 'S6 · F10', 'S5 · F10']], 'only the differing values, side by side');
-  assert.equal(previews.at(-1)[1], lane.notes[2]);
   const positionRow = controls.repeatHoverRows.children[0];
   direction('position', 1).dispatchEvent(new Event('mouseenter'));
   assert.equal(positionRow.children[3].dataset.preview, '', 'an arrow previews the cell it copies into');
@@ -250,7 +248,6 @@ try {
   assert.equal(controls.repeatHover.hidden, false, 'a missing note opens from the difference list');
   assert.deepEqual(heads(), ['', 'Instance 3', '', 'Instance 1']);
   assert.deepEqual(rows(), [['Note', 'Not present', 'B2']]);
-  assert.equal(previews.at(-1)[1], null);
   module.hideRepeatHover();
   rectangles.length = 0; module.drawRepeats();
   const ghost = rectangles.find(r => r.color === 'orange' && r.dash.length);

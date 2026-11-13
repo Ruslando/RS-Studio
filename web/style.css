@@ -1607,7 +1607,6 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .repeat-curve-zero { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 2; }
 .repeat-curve-shape { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
 .repeat-curve-point { fill: var(--panel); stroke: currentColor; stroke-width: 1.5; }
-#fretboardPanel[data-comparison-preview] #fretboardControls { pointer-events: none; opacity: .6; }
 
 
 #spectrogramControls { position: absolute; z-index: 2; width: 320px; max-width: calc(100% - 16px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--e1); }
