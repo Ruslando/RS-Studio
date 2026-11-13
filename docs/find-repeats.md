@@ -2,7 +2,8 @@
 
 Find Repeats opens the split view with one instance in each pane. The first pane
 shows the instance under review; the second starts on the next instance. Every
-instance of a group is in one list. Each pane chooses its own instance with the
+instance of a group is in one list. Groups with only one instance are kept
+but not shown, since there is nothing to compare. Each pane chooses its own instance with the
 repeat toolbar, which sits on the active pane; the instance shown in the other
 pane can't be chosen as well, so the panes never show the same one; a click in the other pane makes
 it active and acts there at once. The group is shared by both panes.

@@ -446,6 +446,12 @@ export function playLike(repeat, model, fingers = null) {
 // Generated names follow the group's place in the song and are renumbered
 // whenever groups change; only a name the user gave is kept.
 const automaticName = name => /^Group (\d+|[A-Z]+)$/.test(name);
+// Letters go to the shown groups (two or more instances) first, in song order;
+// single passages, which are not shown, take the letters after them.
+function generatedNames(groups) {
+  const order = [...groups.filter(g => g.copies.length > 1), ...groups.filter(g => g.copies.length < 2)];
+  return groups.map(g => `Group ${alphabeticLabel(order.indexOf(g))}`);
+}
 
 // Groups refer to stable note ids rather than replacing motifs/shapes or adding
 // marks inside locked references. All views resolve current objects after undo.
@@ -480,8 +486,9 @@ export function resolveRepeatGroups(lane, beatAt = t => t) {
   }
   for (const group of groups) for (const copy of group.copies)
     copy.notes.sort((a, b) => a.note.start - b.note.start || a.note.pitch - b.note.pitch);
+  const names = generatedNames(groups);
   for (const [index, group] of groups.entries()) {
-    if (automaticName(group.name)) group.name = `Group ${alphabeticLabel(index)}`;
+    if (automaticName(group.name)) group.name = names[index];
     group.variations = repeatVariations(group, beatAt);
   }
   return groups.sort((a, b) => a.name.localeCompare(b.name));
@@ -515,7 +522,7 @@ export function normalizeRepeatGroups(value, notes) {
 // Preserve names/ids on a rescan when the detected group substantially overlaps.
 export function groupsFromRepeats(repeats, previous = [], beatAt = t => t) {
   let serial = Math.max(0, ...previous.map(g => Number(g.id.match(/^repeat_(\d+)$/)?.[1]) || 0));
-  const available = new Set(previous);
+  const available = new Set(previous), names = generatedNames(repeats);
   return repeats.map((repeat, index) => {
     const copies = repeat.copies.map(c => c.notes.map(({ note }) => note.id));
     const layout = repeat.phraseLength > 0 ? { phraseLength: repeat.phraseLength, offsets: repeat.copies.map(c => c.notes[0].beat) } : {};
@@ -527,9 +534,9 @@ export function groupsFromRepeats(repeats, previous = [], beatAt = t => t) {
     const variations = repeatVariations({ ...repeat, ...(manual ? { variations: old.g.variations } : {}) }, beatAt);
     const variationLayout = variations.length > 1 || manual ? { variations, ...(manual ? { variationMode: 'manual' } : {}) } : {};
     if (preserve) {
-      available.delete(old.g); return { id: old.g.id, name: automaticName(old.g.name) ? `Group ${alphabeticLabel(index)}` : old.g.name, copies, ...layout, ...variationLayout };
+      available.delete(old.g); return { id: old.g.id, name: automaticName(old.g.name) ? names[index] : old.g.name, copies, ...layout, ...variationLayout };
     }
     const n = ++serial;
-    return { id: `repeat_${n}`, name: `Group ${alphabeticLabel(index)}`, copies, ...layout, ...variationLayout };
+    return { id: `repeat_${n}`, name: names[index], copies, ...layout, ...variationLayout };
   });
 }

@@ -325,18 +325,12 @@ try {
   assert.equal(controls.repeatNavigator.hidden, true, 'the close button exits repeat review');
   assert.deepEqual(lane.repeatGroups, savedGroups, 'closing leaves saved groups intact');
 
-  // A one-off passage retains the toolbar without opening comparison cards.
+  // A one-off passage has nothing to compare: it is kept, but not shown.
   module.runFindRepeats(lane);
   worker.onmessage({ data: [{ copies: [identical.map(n => n.id)] }] });
   module.renderRepeatNavigator();
-  assert.equal(controls.repeatNavigator.hidden, false);
-  assert.equal(controls.repeatPosition.textContent, '1 / 1');
-  assert.equal(controls.repeatChangeNavigation.hidden, true, 'a one-off passage has only one instance selector');
-  assert.equal(controls.repeatPrevious.disabled, true);
-  assert.equal(controls.repeatNext.disabled, true);
-  module.drawRepeats(); assert.equal(inspectNote(identical[0]), false, 'a single instance has no differences to preview');
-  controls.repeatClose.click(); module.renderRepeatNavigator();
-  assert.equal(controls.repeatNavigator.hidden, true);
+  assert.equal(lane.repeatGroups.length, 1, 'the passage is saved');
+  assert.equal(controls.repeatNavigator.hidden, true, 'but no review opens for it');
 
   // A delayed first attack must not shift every counterpart and hide the
   // genuinely missing opening of a structurally bounded passage.
@@ -472,6 +466,16 @@ try {
   module.restoreRepeatReview({ ...keptReview, lane: 'removed' });
   assert.equal(controls.repeatNavigator.hidden, true, 'a missing layer cannot restore a review');
   module.restoreRepeatReview(keptReview);
+  // A group with one instance is not offered; a stale choice of it settles on a shown group.
+  const single = make(120.3), revealedSingle = host.revealed.length;
+  lane.notes = [...lane.notes, ...single]; lane.repeatGroups.push({ id: 'repeat_single', name: 'Single', copies: [single.map(n => n.id)] });
+  S.voicingRevision++; module.renderRepeatNavigator();
+  assert.ok(!controls.repeatGroup.children.some(option => option.value === 'repeat_single'), 'a one-instance group is not listed');
+  controls.repeatGroup.value = 'repeat_single'; controls.repeatGroup.dispatchEvent(new Event('change'));
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  assert.ok(host.revealed.length - revealedSingle <= 2, 'no endless search for a second instance');
+  module.renderRepeatNavigator();
+  assert.equal(controls.repeatPosition.textContent.split(' / ')[1], '4', 'the review stays on a group it shows');
   module.pairRepeats(false); module.renderRepeatNavigator();
   assert.equal(controls.repeatNavigator.hidden, true, 'closing the split view ends the review');
   assert.equal(zone, null, 'and frees the playhead');

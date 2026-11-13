@@ -57,7 +57,8 @@ const signature = lane => {
 const groupsOf = lane => {
   const key = [S.state, lane, lane.notes, lane.repeatGroups, S.voicingRevision];
   if (!groupsCache || key.some((v, i) => v !== groupsCache.key[i]))
-    groupsCache = { key, groups: resolveRepeatGroups(lane, laneClock(lane).beatAt) };
+    // A passage with one instance has nothing to compare: it is kept, not shown.
+    groupsCache = { key, groups: resolveRepeatGroups(lane, laneClock(lane).beatAt).filter(group => group.copies.length > 1) };
   return groupsCache.groups;
 };
 function current() {
@@ -257,9 +258,10 @@ export function runFindRepeats(lane = activeLane()) {
       }) }));
     const groups = groupsFromRepeats(repeats, lane.repeatGroups, beatAt);
     if (JSON.stringify(groups) !== JSON.stringify(lane.repeatGroups || [])) editGroups(lane, () => { lane.repeatGroups = groups; });
-    review = groups.length ? { lane: lane.id, group: groups[0].id } : null;
+    const shown = groups.filter(group => group.copies.length > 1);
+    review = shown.length ? { lane: lane.id, group: shown[0].id } : null;
     navKey = null;
-    toast(`${groups.length} repeat group${groups.length === 1 ? '' : 's'} in “${lane.name}”`);
+    toast(`${shown.length} repeat group${shown.length === 1 ? '' : 's'} in “${lane.name}”`);
     revealCurrent();
     if (review) splitHost?.open(lane.id);   // the comparison opens split: one instance in each pane
   };
