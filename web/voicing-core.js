@@ -3013,7 +3013,26 @@ const REST_GAP = 0.1;   // s; the shortest rest that frees the hand, however sho
 // cannot be held any other way (a chord wider than the reach) keeps a hand.
 const stretchCost = (frets, span, reach = MAX_REACH) => (frets <= span ? 0 : frets > reach ? 1e6 : 3 ** (frets - span - 1));
 
+// A hand the player puts down reaches forward only. The walk is a Viterbi, so a
+// fixed hand would otherwise re-plan the columns before it as well: they had
+// stood where the next notes needed them, and once the hand is put somewhere
+// else there they shift back. So the walk runs without any hold, and from each
+// hold on it runs again with that hold as its start, ignoring later ones; each
+// replaces what follows. Nothing before a hold depends on it.
+// ponytail: one walk per hold (holds x columns); one forward pass carrying the
+// prefix's states if a song with hundreds of holds gets slow.
 function planHand(reach, named, span = SPAN, maxReach = MAX_REACH, times = null, fingerCost = null, loose = null) {
+  const none = named.map(() => null);
+  const out = walkHand(reach, none, span, maxReach, times, fingerCost, loose);
+  named.forEach((g, h) => {
+    if (g == null) return;
+    const after = walkHand(reach.slice(h), [g, ...none.slice(h + 1)], span, maxReach, times?.slice(h), fingerCost, loose?.slice(h));
+    out.splice(h, after.length, ...after);
+  });
+  return out;
+}
+
+function walkHand(reach, named, span = SPAN, maxReach = MAX_REACH, times = null, fingerCost = null, loose = null) {
   const n = reach.length, out = new Array(n).fill(null);
   let prev = null;                         // [{ g, cost, from }] of the last fretted column
   let last = -1, free = false;             // that column, and whether the hand let go since
