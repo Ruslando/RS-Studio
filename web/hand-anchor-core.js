@@ -31,3 +31,16 @@ export function obeyedHolds(notes, holds) {
     seen.add(i); return true;
   });
 }
+
+// Only where the hand moves: { t, fret } at the first note on a new seat. Notes
+// without a seat (open strings) keep the hand where it was.
+export function seatChanges(notes, seats) {
+  const out = [];
+  let last = null;
+  for (const note of notes) {
+    const seat = seats.get(note);
+    if (!Number.isFinite(seat) || seat === last) continue;
+    last = seat; out.push({ t: note.start, fret: seat });
+  }
+  return out;
+}
