@@ -11,7 +11,7 @@
 //   new-project.js       the New Project modal (it owns its own draft)
 //   stem-settings.js     the stem panel (its buttons call the ops below)
 
-import { normalizeOverrideInfluence } from "./voicing-core.js";
+import { loadNotePositions } from "./voicing-core.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { INSTRUMENTS, PX_PER_SEC, ZOOM_MAX_X, ZOOM_MAX_Y, ZOOM_MIN_X, ZOOM_MIN_Y, instrKey } from "./constants.js";
 import { confirmChoice } from "./dialog.js";
@@ -263,18 +263,7 @@ function chooseAudioAttachment() {
 // Notes/lanes share one object shape in every lane, so copy-paste is trivial.
 export function mapLane(l, startAt = 0) {
   const instrument = instrKey(l.instrument);
-  // `source` named the tool that made each note — "trace", "pasted", a detector's
-  // own label. Nothing displayed it and one migration heuristic read it, so it is
-  // dropped on the way in and the next save writes the project without it. A note
-  // is a note however it got there.
-  const notes = (l.notes || []).map(({ source, auto, ...n }) => {
-    // Older projects kept the engine's answer apart (`auto`); a position is a position.
-    if (!n.pos && Number.isInteger(auto?.string) && Number.isInteger(auto?.fret)) n.pos = { string: auto.string, fret: auto.fret };
-    // Every saved override uses Guided, including retired Only here / Locked modes.
-    for (const field of ['pos', 'arrangement']) if (n[field])
-      n[field] = { ...n[field], ...normalizeOverrideInfluence(n[field]) };
-    return n;
-  });
+  const notes = loadNotePositions(l.notes);
   migrateMotifs(notes);
   // Keep a valid tuning key. Bare strings (an import, a custom tuning deleted
   // since) are looked up by those strings, so E A D G B E is E Standard; strings

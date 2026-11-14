@@ -677,7 +677,7 @@ function applyColumnPos(colNotes, shape, scope = "local", influence = null, foll
 // rewrites the column to what that shape plays — pins for the notes it keeps,
 // deletions for the ones it drops, real new notes for the ones it adds — so the
 // spectrogram afterwards is what the neck showed. null returns the column to
-// automatic (pins only; a deleted note comes back through undo).
+// automatic placement of the current notes.
 export function applyColumnAlternative(colNotes, choice, influence = null) {
   const group = positionSelection(laneOf(colNotes?.[0]), S.selection);
   if (group.multiple) {
@@ -738,20 +738,13 @@ function revoiceSelection() {
   const lanes = [...new Set([...S.selection].map(laneOf))].filter((l) => l && canEditLane(l) && isTablatureLane(l));
   if (!lanes.length) return;
   const prev = snapshotEdit();
-  const picked = new Set(S.selection);
   for (const lane of lanes) {
-    // A column rewritten to other notes comes back as it was written, as new note
-    // objects, so the selection swaps them in.
+    // Recalculate positions of the current notes without restoring earlier tones.
     for (const col of chordColumns(lane.notes)) {
-      if (!col.notes.some((n) => picked.has(n)) || !col.notes.some((n) => n.pos || n.arrangement || n.written)) continue;
-      writeAlternative(col.notes, null, null);   // a rewrite selects the new column
-      const now = new Set(lane.notes);
-      if (col.notes.every((n) => now.has(n))) continue;
-      col.notes.forEach((n) => picked.delete(n));
-      S.selection.forEach((n) => picked.add(n));
+      if (!col.notes.some((n) => S.selection.has(n)) || !col.notes.some((n) => n.pos)) continue;
+      writeAlternative(col.notes, null, null);
     }
   }
-  setSelection(picked);
   commit(prev); draw(); refreshTabIfOpen();
 }
 
@@ -1018,7 +1011,7 @@ export function clearOverrideAt(lane, colNotes, t) {
     const rest = lane.handHolds.filter((h) => Math.abs(Number(h.t) - t) > 1e-6);
     if (rest.length !== lane.handHolds.length) { lane.handHolds = rest; touched = true; }
   }
-  if (colNotes?.some((n) => n.pos || n.arrangement || n.written))
+  if (colNotes?.some((n) => n.pos))
     touched = writeAlternative(colNotes, null, null) || touched;
   if (!touched) return;
   commit(prev); draw(); refreshTabIfOpen();

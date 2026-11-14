@@ -1339,7 +1339,7 @@ function pinnedColumn(lane) {
   const note = focusNote(lane);
   if (!note) return null;
   const col = columnOf(note)?.col;
-  return col?.notes.some((n) => n.pos || n.arrangement || n.written) ? col : null;
+  return col?.notes.some((n) => n.pos) ? col : null;
 }
 
 // The split view's other pane: the same neck and hand at that pane's layer and
@@ -1378,7 +1378,7 @@ function drawBundle(ctx, s, scale, X, Y, lane, held, width, height, chord, placi
   const group = selectedPositions(lane);
   const column = (editing) && !shaping && !playing ? pinnedColumn(lane) : null;
   const selectedOverride = group.multiple && !group.error
-    && group.columns.some(c => c.notes.some(n => n.pos || n.arrangement || n.written));
+    && group.columns.some(c => c.notes.some(n => n.pos));
   const overridden = (editing) && !shaping && !playing
     && (group.multiple ? selectedOverride : !!column || !!held);
   // While a shape is being built the bundle names the note being placed, which is

@@ -77,7 +77,7 @@ try {
     "./lane-tuning.js": { isValidTuningKey: () => true },
     './layer-role.js': { inferTablatureEnabled: () => true },
     './tone-marker-core.js': { withStartTone: () => [] },
-  }, { './util.js': true, './motifs.js': true, './repeats-core.js': true });
+  }, { './util.js': true, './motifs.js': true, './repeats-core.js': true, './voicing-core.js': true, './hand-anchor-core.js': true });
   await project.saveToServer();
   assert.equal(payload.view.split.review.group, 'repeat_1', 'project files include the open comparison');
   assert.deepEqual(payload.editLanes[0].repeatGroups, groups, 'save payload includes group names and memberships');
@@ -85,5 +85,29 @@ try {
   assert.deepEqual(reopened.repeatGroups, groups, 'load retains saved groups');
   assert.deepEqual(reopened.notes.map(n => [n.id, n.start, n.end, n.motifId, n.shapeId]),
     original.map(n => [n.id, n.start, n.end, n.motifId, n.shapeId]), 'load retains imported timing and existing markings');
+
+  // Every project generation saves its current positions, never a hidden earlier chord.
+  const oldChord = [{ id: 'discarded', pitch: 30, start: 0, end: 1 }];
+  for (const notes of [
+    [{ id: 'fresh', pitch: 45, start: 0, end: 1, pos: { string: 4, fret: 0 } }],
+    [{ id: 'current', pitch: 52, start: 0, end: 1, pos: { string: 4, fret: 7 }, written: oldChord }],
+    [{ id: 'old', pitch: 52, start: 0, end: 1, auto: { string: 3, fret: 2 }, written: oldChord }],
+    [{ id: 'both', pitch: 52, start: 0, end: 1, pos: { string: 4, fret: 7 }, auto: { string: 3, fret: 2 } }],
+    [{ id: 'overlay', pitch: 52, start: 0, end: 1, pos: { string: 3, fret: 2 },
+      arrangement: { notes: [{ pitch: 52, string: 4, fret: 7 }, { pitch: 60, string: 2, fret: 5 }] }, written: oldChord }],
+  ]) {
+    const input = { ...lane, notes }, beforeLoad = structuredClone(input);
+    const loaded = project.mapLane(input);
+    assert.deepEqual(input, beforeLoad, 'loading leaves the source payload untouched');
+    assert.ok(loaded.notes.every(n => n.pos && !('auto' in n) && !('written' in n) && !('arrangement' in n)));
+    const expected = notes[0].arrangement?.notes.map(n => [n.pitch, n.string, n.fret])
+      || notes.map(n => [n.pitch, (n.pos || n.auto).string, (n.pos || n.auto).fret]);
+    const positions = l => l.notes.map(n => [n.pitch, n.pos.string, n.pos.fret]);
+    assert.deepEqual(positions(loaded), expected, 'current positions take precedence over old data');
+    S.state.editLanes = [loaded];
+    await project.saveToServer();
+    assert.deepEqual(payload.editLanes[0].notes, loaded.notes, 'saving writes the actual loaded positions');
+    assert.deepEqual(project.mapLane(payload.editLanes[0]).notes, loaded.notes, 'migration happens once and survives reopening');
+  }
 } finally { Object.assign(globalThis, globals); }
 console.log('Repeat groups: undo, redo, save and reopen passed');

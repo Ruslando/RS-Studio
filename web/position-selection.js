@@ -129,7 +129,7 @@ export function resetSharedPositions(lane, selection) {
   const restored = [];
   let changed = false;
   for (const column of group.columns) {
-    changed ||= column.notes.some(n => n.pos || n.arrangement || n.written);
+    changed ||= column.notes.some(n => n.pos);
     const result = writeColumnOverride(notes, column.notes.map(n => copies.get(n)), null, {});
     notes = result.notes;
     restored.push(...result.column);

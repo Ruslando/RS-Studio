@@ -1237,17 +1237,6 @@ function columnRewritePlan(columnNotes, choice, flow) {
   return { keep, add, drop: [...spare.values()].flat() };
 }
 
-// The column exactly as transcribed, carried on every note of an overridden
-// column (the same trick `arrangement` used, so it survives sorting and copying).
-// A rewrite deletes and creates notes, so returning to automatic has to put those
-// notes back, not merely drop the pins. Taken ONCE, at the first override, so it
-// always names the written chord rather than whichever alternative came before.
-function writtenColumnForm(columnNotes) {
-  const saved = columnNotes.find((n) => n.written)?.written;
-  if (saved) return saved;
-  return columnNotes.map(({ arrangement, written, ...rest }) => ({ ...rest, ...(rest.pos ? { pos: { ...rest.pos } } : {}) }));
-}
-
 // Pin `note` at `pos`. A finger typed on the note was typed for where it was: one
 // that moves to another string or fret drops it and is fingered for the new place.
 export function placeNote(note, pos) {
@@ -1258,7 +1247,7 @@ export function placeNote(note, pos) {
 // Apply `choice` to one column of `laneNotes`, which means rewriting the column
 // to what the shape actually plays: voices it drops leave the lane, pitches it
 // adds arrive as real notes, and every survivor is pinned to its string/fret.
-// A null choice restores the written chord and voices it automatically again.
+// A null choice clears positions so the current notes can be placed again.
 //
 // Returns { notes, column } — the lane's new note array and the column's new
 // notes. Pure: no undo, no redraw, no selection, nothing outside the notes.
@@ -1271,8 +1260,7 @@ export function writeColumnOverride(laneNotes, columnNotes, choice, flow, mintId
 }
 
 // A rewritten column stays in the arpeggio or handshape it was in (web/shapes.js):
-// notes it adds join it, and a restored snapshot does not bring back a shape the
-// column has since left. A column split across shapes keeps each note's own.
+// notes it adds join it. A column split across shapes keeps each note's own.
 function keepColumnShape(before, after) {
   const first = before[0];
   const shared = first?.shapeId && before.every((n) => n.shapeId === first.shapeId)
@@ -1286,24 +1274,15 @@ function keepColumnShape(before, after) {
 }
 
 function rewriteColumn(laneNotes, columnNotes, choice, flow, mintId) {
-  const gone = new Set(columnNotes);
-  const without = () => laneNotes.filter((n) => !gone.has(n));
   if (!choice) {
-    const saved = columnNotes.find((n) => n.written)?.written;
-    if (!saved) {
-      for (const n of columnNotes) { delete n.pos; delete n.arrangement; }
-      return { notes: laneNotes, column: columnNotes };
-    }
-    // Clones, so the snapshot itself stays untouched and can be restored again.
-    const column = saved.map((n) => ({ ...n }));
-    return { notes: [...without(), ...column], column };
+    for (const n of columnNotes) { delete n.pos; delete n.arrangement; delete n.written; }
+    return { notes: laneNotes, column: columnNotes };
   }
-  const written = writtenColumnForm(columnNotes);
   const { keep, add, drop } = columnRewritePlan(columnNotes, choice, flow);
   for (const { note, pos } of keep) {
     if (pos) placeNote(note, pos); else delete note.pos;
     delete note.arrangement;   // a legacy arrangement on this column is now spelled out in notes
-    note.written = written;
+    delete note.written;
   }
   if (!add.length && !drop.length) return { notes: laneNotes, column: keep.map((k) => k.note) };
   // Added notes take the column's own extent — the same bar the hover preview
@@ -1312,7 +1291,7 @@ function rewriteColumn(laneNotes, columnNotes, choice, flow, mintId) {
   const end = Math.max(...columnNotes.map((n) => n.end));
   const stroke = columnNotes.find((n) => n.stroke)?.stroke;
   const born = add.map(({ pitch, pos }) => ({
-    ...(mintId ? { id: mintId() } : {}), start, end, pitch, pos, written,
+    ...(mintId ? { id: mintId() } : {}), start, end, pitch, pos,
     ...(stroke ? { stroke } : {}),
   }));
   const dropped = new Set(drop);
@@ -1320,6 +1299,40 @@ function rewriteColumn(laneNotes, columnNotes, choice, flow, mintId) {
     notes: [...laneNotes.filter((n) => !dropped.has(n)), ...born],
     column: [...keep.map((k) => k.note), ...born].sort((a, b) => a.pitch - b.pitch),
   };
+}
+
+// Opening any project keeps its current notes and positions, never an earlier
+// chord snapshot. Old overlays become ordinary notes once, before the first solve.
+export function loadNotePositions(savedNotes) {
+  let notes = (savedNotes || []).map(({ source, auto, written, ...note }) => {
+    const pos = note.pos || (Number.isInteger(auto?.string) && Number.isInteger(auto?.fret) ? auto : null);
+    if (pos) note.pos = { ...pos, ...normalizeOverrideInfluence(pos) };
+    return note;
+  });
+  if (!notes.some(n => n.arrangement)) return notes;
+  const ids = new Set(notes.map(n => n.id));
+  let next = 1;
+  const mintId = () => {
+    while (ids.has(`loaded_note_${next}`)) next++;
+    const id = `loaded_note_${next++}`;
+    ids.add(id);
+    return id;
+  };
+  for (const column of chordColumns(notes)) {
+    const arrangement = column.notes.find(n => n.arrangement)?.arrangement;
+    if (!Array.isArray(arrangement?.notes) || !arrangement.notes.length) continue;
+    const voices = arrangement.notes;
+    const choice = { notes: voices, shape: new Map(voices.map(n => [n, { string: n.string, fret: n.fret }])) };
+    const start = Math.min(...column.notes.map(n => n.start));
+    const end = Math.max(...column.notes.map(n => n.end));
+    const result = writeColumnOverride(notes, column.notes, choice, normalizeOverrideInfluence(arrangement), mintId);
+    // Legacy overlays played every voice for the whole column (arrangedNotes),
+    // even when a matching source note had a shorter duration or a later onset.
+    for (const note of result.column) { note.start = start; note.end = end; }
+    notes = result.notes;
+  }
+  for (const note of notes) delete note.arrangement;
+  return notes;
 }
 
 

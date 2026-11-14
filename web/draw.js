@@ -479,18 +479,6 @@ function paintLaneNote(n, context) {
     sctx.beginPath(); sctx.moveTo(x + 0.5, y + 2); sctx.lineTo(x + 0.5, y + rowH - 2); sctx.stroke();
     sctx.restore();
   }
-  if (n.arrangement || n.written) {  // A column rewritten to other notes gets a star.
-    // The mark follows the end of a bent note's bar.
-    // Drawn above-left, outside the bar, so it never competes with the
-    // note's own fill color or the name label.
-    const py = curve ? y - curve[curve.length - 1][1] * rowH : y;
-    sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "alphabetic";
-    sctx.lineWidth = 2.5; sctx.strokeStyle = halo();
-    sctx.strokeText("*", x, py - 1);           // dark halo for legibility over the spectrogram
-    sctx.lineWidth = 1; sctx.fillStyle = PAINT.error;
-    sctx.fillText("*", x, py - 1);
-    sctx.font = stageMono(STAGE_ANCHORED); sctx.textAlign = "left"; sctx.textBaseline = "middle";
-  }
   if (omittedNotes.has(n)) {
     const crossY = drop ? y - drop : y;
     omittedCrosses.push({ x, y: crossY, w, h: rowH + drop + dip, alpha: laneAlpha });
