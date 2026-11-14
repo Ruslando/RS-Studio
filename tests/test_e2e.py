@@ -4946,6 +4946,83 @@ class EndToEndTests(unittest.TestCase):
         expect(root.locator('.artifact-name').filter(has_text='Layer solo')).to_have_count(1)
         expect(root.locator('.artifact-name').filter(has_text='Song verse')).to_have_count(0)
 
+    def test_slide_in_paints_start_and_landing_hand_flags(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [{id:'slide-hand-rail', start:2, end:4, pitch:73,
+                pos:{string:0,fret:9,scope:'local'}, finger:1,
+                slide:'inBelow', slideFrets:4, slideEnd:.5}];
+            lane.handHolds = [{t:2,fret:9}];
+            S.voicingRevision++;
+            const {sctx} = await import('/dom.js');
+            const {railBand} = await import('/marker-rails.js');
+            const {scroll} = await import('/dom.js');
+            window.slideHandPaint = [];
+            const original = sctx.fillText.bind(sctx);
+            sctx.fillText = (text,x,y,...rest) => {
+                const top = scroll.scrollTop + railBand('hand-anchor').y;
+                if (y >= top && y <= top+20) window.slideHandPaint.push(String(text));
+                return original(text,x,y,...rest);
+            };
+            (await import('/repaint.js')).draw();
+        }""")
+        page.wait_for_function("window.slideHandPaint.includes('5') && window.slideHandPaint.includes('9')")
+
+    def test_slide_hand_rail_matches_compiled_rocksmith_export(self):
+        from rs_studio.rocksmith import chart
+        self.open_reference_project()
+        for kind, capo, finger in (("inBelow", 0, 1), ("inAbove", 0, 1),
+                                   ("inBelow", 2, 1), ("inBelow", 0, 3),
+                                   ("shift", 0, 1), ("legato", 2, 1)):
+            with self.subTest(kind=kind, capo=capo, finger=finger):
+                got = self.page.evaluate("""async ({kind,capo,finger}) => {
+                    const {S} = await import('/store.js');
+                    const lane = S.state.editLanes[0];
+                    lane.capo = capo;
+                    const onto = ['shift','legato'].includes(kind);
+                    const fret = kind === 'inAbove' ? 5 : onto ? 5 : 9;
+                    lane.notes = [{id:'rail-export-source', start:2, end:4,
+                        pitch:64+capo+fret, pos:{string:0,fret,scope:'local'},
+                        finger, slide:kind, slideFrets:4, slideEnd:.4}];
+                    if (onto) lane.notes.push({id:'rail-export-target', start:4, end:5,
+                        pitch:73+capo, pos:{string:0,fret:9,scope:'local'},finger});
+                    lane.handHolds = [];
+                    S.voicingRevision++;
+                    const found = await (await import('/lane-fingering.js')).laneFingering(lane);
+                    const {timingSegments} = await import('/grid-read.js');
+                    const {timingData,timingIdOf} = await import('/timing.js');
+                    const segments = timingSegments(timingData(timingIdOf(lane)));
+                    const eighthAt = t => 30 / ([...segments].reverse().find(s=>s.t<=t+1e-6)?.bpm || 120);
+                    const changes = (await import('/hand-anchor-core.js')).seatChanges(
+                        found.notes,found.seats,found.voiced,eighthAt);
+                    const spec = await (await import('/tablature.js')).buildSpecForLanesAsync([lane]);
+                    return {changes,spec};
+                }""", {"kind": kind, "capo": capo, "finger": finger})
+                spec = got["spec"]
+                compiled = chart.compile_track(spec["tracks"][0], spec["grid"], 10.,
+                                               dynamic_difficulty=True)
+                # Compare the actual export, including generated slide-in notes,
+                # against the hand position in force on the editor's rail.
+                for song in (compiled.sng, compiled.dd_sng):
+                    for pi_id, pi in enumerate(song.phrase_iterations):
+                        level = song.levels[song.phrases[pi.phrase_id].max_difficulty]
+                        for note in level.notes:
+                            if note.phrase_iteration_id != pi_id:
+                                continue
+                            shown = [c for c in got["changes"] if c["t"] <= note.time + 1e-6]
+                            self.assertTrue(shown)
+                            self.assertEqual(note.anchor_fret, shown[-1]["fret"] + capo)
+                    for change in got["changes"]:
+                        pi = next(pi for pi in reversed(song.phrase_iterations)
+                                  if pi.start_time <= change["t"] + 1e-6)
+                        level = song.levels[song.phrases[pi.phrase_id].max_difficulty]
+                        active = [a for a in level.anchors if a.start_time <= change["t"] + 1e-6]
+                        self.assertTrue(active)
+                        self.assertEqual(active[-1].fret, change["fret"] + capo)
+
     def test_fixed_hands_show_on_the_rail_and_survive_reload(self):
         self.open_reference_project()
         page = self.page

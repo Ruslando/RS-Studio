@@ -1,4 +1,5 @@
 import { chordColumns, voiceNotesFingered } from './voicing-core.js';
+import { slideInOf, edgeSlideSpan, slideEndOf } from './bend.js';
 
 // Auto means the answer without any anchor belonging to this column. Keep the
 // rest of the song's anchors, tuning and note-position overrides intact.
@@ -34,13 +35,29 @@ export function obeyedHolds(notes, holds) {
 
 // Only where the hand moves: { t, fret } at the first note on a new seat. Notes
 // without a seat (open strings) keep the hand where it was.
-export function seatChanges(notes, seats) {
+export function seatChanges(notes, seats, voiced = new Map(), eighthAt = () => .25) {
+  const events = [];
+  for (const column of chordColumns(notes)) {
+    const note = column.notes.find(n => Number.isFinite(seats.get(n)));
+    if (!note) continue;
+    const seat = seats.get(note);
+    const kind = slideInOf(note), pos = voiced.get(note) || note.pos;
+    // Seats describe the landing. A single sliding finger starts elsewhere;
+    // the marker rail must describe both ends, just like the moving fretboard.
+    const offset = column.notes.length === 1 && kind && pos
+      ? edgeSlideSpan(note, pos.fret, kind) : 0;
+    events.push({ t: note.start, fret: Math.max(1, seat + offset) });
+    if (offset) events.push({
+      t: note.start + (note.end - note.start) * slideEndOf(note, note.end - note.start, eighthAt(note.start)),
+      fret: seat,
+    });
+  }
+  events.sort((a, b) => a.t - b.t);
   const out = [];
   let last = null;
-  for (const note of notes) {
-    const seat = seats.get(note);
-    if (!Number.isFinite(seat) || seat === last) continue;
-    last = seat; out.push({ t: note.start, fret: seat });
+  for (const event of events) {
+    if (event.fret === last) continue;
+    last = event.fret; out.push(event);
   }
   return out;
 }

@@ -41,6 +41,51 @@ def _entity(time, *notes, chord_id=-1, sustain=0.0):
 
 
 class LevelTests(unittest.TestCase):
+    def test_retained_hopos_are_not_reinterpreted_on_easier_levels(self):
+        notes = [_n(1 + i * .125, 1, 3 + (i % 5) * 2, .125,
+                    **({"fx": {"hammer": "hammer"}} if i else {})) for i in range(64)]
+        c = _compiled({"name": "hopos", "tuning": GUITAR, "notes": notes})
+        hopo_mask = S.HAMMERON | S.PULLOFF
+        original = {n.time: n.mask & hopo_mask for n in c.sng.levels[0].notes}
+        checked = 0
+        for level in c.dd_sng.levels[:-1]:
+            for n in level.notes:
+                if n.mask & hopo_mask:
+                    self.assertEqual(n.mask & hopo_mask, original[n.time])
+                    checked += 1
+        self.assertGreater(checked, 0)
+
+    def test_retained_slides_keep_the_full_charts_destination(self):
+        for chord in (False, True):
+            with self.subTest(chord=chord):
+                notes = []
+                for i in range(64):
+                    for string in ([1, 2] if chord else [1]):
+                        notes.append(_n(1 + i * .125, string, 3 + (i % 5) * 2, .12,
+                                        **({"slide": "shift"} if i % 8 == 0 else {})))
+                c = _compiled({"name": "slides", "tuning": GUITAR, "notes": notes})
+
+                def slides(song, level):
+                    out = {}
+                    for n in level.notes:
+                        if n.chord_id == -1:
+                            if n.mask & S.SLIDE:
+                                out[(n.time, n.string)] = n.slide_to
+                        elif n.chord_notes_id != -1:
+                            cn = song.chord_notes[n.chord_notes_id]
+                            for string, mask in enumerate(cn.mask):
+                                if mask & S.SLIDE:
+                                    out[(n.time, string)] = cn.slide_to[string]
+                    return out
+
+                original = slides(c.sng, c.sng.levels[0])
+                checked = 0
+                for level in c.dd_sng.levels[:-1]:
+                    for key, target in slides(c.dd_sng, level).items():
+                        self.assertEqual(target, original[key])
+                        checked += 1
+                self.assertGreater(checked, 0)
+
     def test_off_unless_asked(self):
         self.assertIsNone(chart.compile_track(_riffs(), GRID, 40.0).dd_sng)
 
@@ -147,6 +192,19 @@ class ScoreTests(unittest.TestCase):
 
 
 class ChoiceTests(unittest.TestCase):
+    def test_replacement_hopo_predecessor_must_have_the_right_direction(self):
+        for source, destination, replacement, expected in (
+                (3, 5, 9, False), (3, 5, 2, True),
+                (9, 5, 3, False), (9, 5, 7, True)):
+            with self.subTest(source=source, replacement=replacement):
+                first = _entity(0, (0, replacement, {"end": .5}), sustain=.5)
+                skipped = _entity(.5, (0, source, {"end": 1}), sustain=.5)
+                hopo = _entity(1, (0, destination, {"fx": {"hammer": "hammer"}}))
+                kept = dd.choose(.7, [first, skipped, hopo], [0, 100, 0], dd.Templates([]), 0)
+                self.assertEqual([e.time for e in kept], [0, 1])
+                self.assertEqual("hammer" in kept[-1].notes[0][2]["fx"], expected)
+                self.assertIn("hammer", hopo.notes[0][2]["fx"])
+
     def _templates(self, *frets):
         return dd.Templates([S.ChordTemplate(frets=list(f), fingers=[-1] * 6, notes=[-1] * 6, name="X") for f in frets])
 
@@ -193,6 +251,17 @@ class ChoiceTests(unittest.TestCase):
 
 
 class CountTests(unittest.TestCase):
+    def test_equivalent_effect_storage_does_not_inflate_levels(self):
+        beats = [(i * 500, i % 4 == 0) for i in range(17)]
+        plain = [_entity(1 + i * .125, (0, 3, {})) for i in range(64)]
+        variants = [{}, {"fx": {}}, {"fx": {"vibrato": False}},
+                    {"fx": {"hammer": "origin"}, "tremPick": False}]
+        mixed = [_entity(e.time, (0, 3, variants[i % len(variants)])) for i, e in enumerate(plain)]
+        self.assertEqual(dd.level_count(plain, [], beats, 1000, 9000), 8)
+        self.assertEqual(dd.level_count(mixed, [], beats, 1000, 9000), 8)
+        self.assertEqual(dd._signature({"fx": {"accent": True, "palmMute": True}}),
+                         dd._signature({"fx": {"palmMute": True, "accent": True}}))
+
     def test_level_count_stays_within_dlc_builders_bounds(self):
         templates = dd.Templates([])
         single = [_entity(0, (0, 3, {}))]

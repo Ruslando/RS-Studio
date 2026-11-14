@@ -219,6 +219,11 @@ def _add_slide_ins(notes: list, grid: dict, fixes: list, capo: int = 0) -> list:
                 if k not in ("bend", "bendPoints", "slideStart", "vibratoStart", "vibratoEnd", "slideFrets", "fx", *_SHAPE_FIELDS)}
         lead.update(start=start, end=cut, fret=fret + sign * step, pitch=_f(n.get("pitch")) + sign * step, slide="legato",
                     _helper=True)
+        # The editor supplies the landing's hand position. The same finger
+        # starts the slide `step` frets away, so its hand must move with it.
+        # These values are capo-relative; _hand_anchors adds the capo once.
+        if isinstance(n.get("hand"), (int, float)):
+            lead["hand"] = max(1, n["hand"] + sign * step)
         if fx:
             lead["fx"] = fx
         main = {k: v for k, v in plain.items() if k not in _ATTACK_ONLY}
@@ -1637,8 +1642,11 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
         # anything else is a hammer-on, from nowhere if nothing precedes it.
         if fx.get("hammer") and fx["hammer"] != "origin":
             prev = prev_on_string(idx, string)
-            mask |= S.PULLOFF if (prev is not None and prev[0] > fret
-                                  and abs(time - prev[1]) < 0.03) else S.HAMMERON
+            # Resolve once against the full chart. DD must not reinterpret a
+            # retained technique after its original predecessor is removed.
+            pull_off = n.setdefault("_ddPullOff", prev is not None and prev[0] > fret
+                                    and abs(time - prev[1]) < 0.03)
+            mask |= S.PULLOFF if pull_off else S.HAMMERON
             arr_props["hopo"] = True
         linked = False
         if n.get("linkNext"):
@@ -1662,6 +1670,11 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
             target = next_on_string(idx, string)
             if target is not None and onset is not None and target[1] > onset + 1e-4:
                 target = None
+            original_target = n.setdefault("_ddSlideTarget", target)
+            # Shift slides retain their authored destination even if that
+            # note is absent. A legato slide also needs its actual child.
+            target = (None if slide == "legato" and target != original_target
+                      else original_target)
             if target is not None and target[0] != fret and target[0] > 0:
                 sustain = max(sustain, SUSTAIN_MIN)
                 mask |= S.SLIDE | S.SUSTAIN

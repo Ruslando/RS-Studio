@@ -14,6 +14,8 @@ import { PAINT } from './stage-paint.js';
 import { laneFingering, laneFingeringKey } from './lane-fingering.js';
 import { draw } from './repaint.js';
 import { seatChanges } from './hand-anchor-core.js';
+import { timingSegments } from './grid-read.js';
+import { timingData, timingIdOf } from './timing.js';
 
 const RAIL = 'hand-anchor', HEIGHT = 20;
 const shownLane = () => { const lane = S.state ? activeLane() : null; return lane?.visible ? lane : null; };
@@ -28,9 +30,11 @@ function changesOf(lane) {
     entry?.controller.abort();
     entry = { key, controller: new AbortController(), changes: entry?.changes || [] };
     cache.set(lane, entry);
-    laneFingering(lane, entry.controller.signal).then(({ notes, seats }) => {
+    laneFingering(lane, entry.controller.signal).then(({ notes, seats, voiced }) => {
       if (cache.get(lane) !== entry) return;
-      entry.changes = seatChanges(notes, seats); draw();
+      const segments = timingSegments(timingData(timingIdOf(lane)));
+      const eighthAt = t => 30 / ([...segments].reverse().find(s => s.t <= t + 1e-6)?.bpm || 120);
+      entry.changes = seatChanges(notes, seats, voiced, eighthAt); draw();
     }).catch(() => {});
   }
   return entry.changes;

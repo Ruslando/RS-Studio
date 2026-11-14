@@ -143,7 +143,15 @@ _PLAYED = ("fx", "bend", "slide", "slideEnd", "slideFrets", "tremPick", "harmoni
 
 
 def _signature(n: dict) -> tuple:
-    return tuple(repr(n.get(k)) for k in _PLAYED)
+    def canonical(value):
+        if isinstance(value, dict):
+            return tuple(sorted((k, canonical(v)) for k, v in value.items() if v))
+        if isinstance(value, (list, tuple)):
+            return tuple(canonical(v) for v in value)
+        return value if value else None
+
+    fx = {k: v for k, v in _fx(n).items() if not (k == "hammer" and v == "origin")}
+    return tuple(canonical(fx) if k == "fx" else canonical(n.get(k)) for k in _PLAYED)
 
 
 def level_count(entities: list, templates: list, beats: list, start: int, end: int) -> int:
@@ -380,7 +388,12 @@ def _keeps_hopo(ent, kept: list, entities: list, original) -> bool:
     if before_level is kept[-1] and before_level.chord_id == -1:
         prev = before_level.notes[0]
         prev_fx = _fx(prev[2])
-        return not (prev_fx.get("dead") or (prev[2].get("harmonic") and prev[2]["harmonic"] != "pinch")) and prev[1] != fret
+        source = next(n for n in before_all.notes if n[0] == string)
+        pull_off = ent.notes[0][2].get("_ddPullOff")
+        if pull_off is None:
+            pull_off = source[1] > fret and abs(float(source[2].get("end", before_all.time)) - ent.time) < 0.03
+        right_direction = prev[1] > fret if pull_off else prev[1] < fret
+        return not (prev_fx.get("dead") or (prev[2].get("harmonic") and prev[2]["harmonic"] != "pinch")) and right_direction
     return False
 
 

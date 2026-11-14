@@ -260,6 +260,28 @@ def _one(note):
 
 
 class EdgeSlideTest(unittest.TestCase):
+    def test_slide_in_moves_the_hand_from_start_to_landing(self):
+        for kind, landing, hand, initial_hand in (
+                ("inBelow", 9, 9, 5), ("inAbove", 5, 5, 9),
+                ("inBelow", 9, 7, 3)):
+            for capo in (0, 2):
+                for dd in (False, True):
+                    with self.subTest(kind=kind, hand=hand, capo=capo, dd=dd):
+                        track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40], "capo": capo,
+                                 "notes": [{"string": 5, "start": 1., "end": 2., "fret": landing,
+                                            "hand": hand, "finger": landing - hand + 1,
+                                            "slide": kind, "slideFrets": 4, "slideEnd": .25}]}
+                        c = compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.,
+                                          dynamic_difficulty=dd)
+                        song = c.dd_sng if dd else c.sng
+                        level = song.levels[-1]
+                        lead, main = level.notes
+                        self.assertEqual((lead.anchor_fret, main.anchor_fret),
+                                         (initial_hand + capo, hand + capo))
+                        self.assertTrue(any(abs(a.start_time - 1.25) < 1e-6 and a.fret == hand + capo
+                                            for a in level.anchors))
+                        self.assertEqual(lead.fret - lead.anchor_fret, main.fret - main.anchor_fret)
+
     def test_slide_out_reaches_its_frets(self):
         (n,), _ = _one({"fret": 9, "pitch": 54, "slide": "outDown", "slideFrets": 3})
         self.assertTrue(n.mask & S.UNPITCHEDSLIDE)
