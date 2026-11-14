@@ -39,6 +39,7 @@ import importlib
 import io
 import ipaddress
 import json
+import logging
 import math
 import mimetypes
 import os
@@ -55,11 +56,13 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from . import __version__, models, pipeline, processing, tab, tutorial, updates
 from .local_security import LocalRequestMiddleware
@@ -173,6 +176,24 @@ class ConditionalGZipMiddleware:
 
 app.add_middleware(ConditionalGZipMiddleware, minimum_size=1024)
 app.add_middleware(LocalRequestMiddleware)
+
+
+class FrontendError(BaseModel):
+    phase: Literal["startup", "runtime"]
+    kind: Literal["exception", "rejection", "script-load", "console"]
+    message: str = Field(min_length=1, max_length=16000)
+
+
+@app.post("/api/frontend-error", status_code=204)
+def api_frontend_error(error: FrontendError) -> Response:
+    # Use the server's stderr logger so desktop JavaScript failures are visible
+    # in the same terminal as `uv run rs-studio app`, with their original stack.
+    # Drop terminal control characters, while retaining multiline stack traces.
+    message = "".join(c for c in error.message if c in "\n\t" or c.isprintable())
+    logging.getLogger("uvicorn.error").error(
+        "[frontend:%s:%s] %s", error.phase, error.kind, message,
+    )
+    return Response(status_code=204)
 
 
 def _now() -> str:

@@ -82,3 +82,4 @@ init_updates();
 initModalFocus();
 initSelectPickers();
 init_artifacts();
+window.dispatchEvent(new Event('cw-app-ready'));

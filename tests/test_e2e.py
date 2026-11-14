@@ -3383,6 +3383,56 @@ class EndToEndTests(unittest.TestCase):
         page.click('#settingsModalClose')
         expect(preview).to_have_attribute('data-running', 'false')
 
+    def test_frontend_startup_failures_reach_terminal(self):
+        page = self.page
+        cases = [
+            ('throw new Error("injected startup failure");', 'exception', 'injected startup failure'),
+            ('const broken = ;', 'exception', 'Unexpected token'),
+            ('import "./missing-diagnostic-module.js";', 'script-load', 'Could not load script'),
+        ]
+        for source, kind, message in cases:
+            with self.subTest(kind=kind, message=message):
+                page.route('**/main.js', lambda route: route.fulfill(
+                    content_type='text/javascript', body=source))
+                with page.expect_response(lambda r: r.url.endswith('/api/frontend-error')) as report:
+                    page.reload()
+                self.assertEqual(report.value.status, 204)
+                payload = report.value.request.post_data_json
+                self.assertEqual(payload['phase'], 'startup')
+                self.assertEqual(payload['kind'], kind)
+                self.assertIn(message, payload['message'])
+                terminal = (self.data / 'server.log').read_text(encoding='utf-8')
+                self.assertIn(f'[frontend:startup:{kind}]', terminal)
+                self.assertIn(message, terminal)
+                # These failures are intentional. Unexpected errors still fail.
+                self.assertTrue(self.faults)
+                self.assertTrue(all(message in fault or '404' in fault for fault in self.faults), self.faults)
+                self.faults.clear()
+                page.unroute('**/main.js')
+
+    def test_frontend_runtime_failures_reach_terminal(self):
+        page = self.page
+        for kind, code, message in [
+            ('exception', 'setTimeout(() => { throw new Error("injected click failure"); }, 0)', 'injected click failure'),
+            ('rejection', 'void Promise.reject(new Error("injected async failure"))', 'injected async failure'),
+            ('console', 'console.error("injected console failure", new Error("diagnostic stack"))', 'injected console failure'),
+        ]:
+            with self.subTest(kind=kind):
+                with page.expect_response(lambda r: r.url.endswith('/api/frontend-error')) as report:
+                    page.evaluate('() => { ' + code + '; }')
+                self.assertEqual(report.value.status, 204)
+                payload = report.value.request.post_data_json
+                self.assertEqual(payload['phase'], 'runtime')
+                self.assertEqual(payload['kind'], kind)
+                self.assertIn(message, payload['message'])
+                terminal = (self.data / 'server.log').read_text(encoding='utf-8')
+                self.assertIn(f'[frontend:runtime:{kind}]', terminal)
+                self.assertIn(message, terminal)
+                self.assertIn('at ', payload['message'])
+                self.assertTrue(self.faults)
+                self.assertTrue(all(message in fault for fault in self.faults), self.faults)
+                self.faults.clear()
+
     def test_startup_with_fretboard_animations_disabled(self):
         page = self.page
         settings = json.dumps({'fretboardAnimations': False})
