@@ -108,6 +108,7 @@ function buildSpecFromPrepared(prepared) {
       return {
         id: l.id,
         name: l.name,
+        ...(l.handAnchorVersion === 1 ? { handAnchorVersion: 1 } : {}),
         ...ownTimingFields(l),
         ...normalizedLaneFields(l),
         toneMarkers: toneMarkersForExport(l.toneMarkers),

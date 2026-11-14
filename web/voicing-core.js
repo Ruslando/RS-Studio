@@ -1671,7 +1671,7 @@ const hammerDest = (n) => n.fx && (n.fx.hammer === "dest" || n.fx.hammer === "bo
 // Times and not note objects, because a hold outlives the notes under it. Re-tracing
 // a passage, nudging an onset or deleting a note all leave the hand where the player
 // put it, which a pin hung off a note cannot do.
-function holdsByColumn(columns, holds) {
+function holdsByColumn(columns, holds, changes = false) {
   const out = new Array(columns.length).fill(null);
   for (const h of Array.isArray(holds) ? holds : []) {
     const t = Number(h?.t), fret = Number(h?.fret);
@@ -1679,6 +1679,10 @@ function holdsByColumn(columns, holds) {
     if (!Number.isFinite(t) || !Number.isFinite(fret) || fret < 1) continue;
     const i = columns.findIndex((c) => Number(c.t0) >= t - 1e-6);
     if (i >= 0 && out[i] == null) out[i] = { fret };
+  }
+  if (changes) {
+    let active = null;
+    for (let i = 0; i < out.length; i++) { active = out[i] || active; out[i] = active; }
   }
   return out;
 }
@@ -1792,7 +1796,7 @@ function registerColumns(columns, tuning, options = {}) {
   const low = order.map((i) => tuning[i]);
   const seat = new Map(order.map((appIndex, leanIndex) => [appIndex, leanIndex]));
 
-  const holds = holdsByColumn(columns, options.holds);
+  const holds = holdsByColumn(columns, options.holds, options.anchorChanges);
   const frets = fretboardFor(options.instrument).frets - (Number(options.capo) || 0);
   // A column that is all inside arpeggios or handshapes is pinned to their grip
   // (shapeGrips), which keeps any position its notes have.
@@ -1819,9 +1823,8 @@ function registerColumns(columns, tuning, options = {}) {
       if (Number.isFinite(g.seat)) gripSeat = g.seat;
     }
     return {
-      // A hand put here by the player fixes the hand of this column only. It does not
-      // move notes: where they go is decided before the hand (see planHand). A chosen
-      // fingering puts the hand where those fingers are (handOfFingers).
+      // Saved changes supply the active hand at every column in their range.
+      // Positions stay fixed; explicit fingers that disagree are reported later.
       handAt: holds[i]?.fret ?? gripSeat ?? (chosen.size ? handOfFingers(locked, chosen, handProfileForTuning(tuning)) : null),
       fingers: chosen,
       pitches: notes.map((n) => n.pitch),
@@ -1997,8 +2000,11 @@ export function scoreShapesAsDecided(shapes, columns, focusIdx, tuning, options 
     if (!shape) return UNPLAYED;
     const got = priced[next++];
     if (!got || !Number.isFinite(got.cost)) return UNPLAYED;
-    const hand = handForShape(shape, got.seat, handProfileForTuning(tuning));
+    const active = options.anchorChanges ? [...(options.holds || [])].sort((a, b) => a.t - b.t)
+      .filter(h => h.t <= column.t0 + 1e-6).at(-1) : null;
+    const hand = handForShape(shape, active?.fret ?? got.seat, handProfileForTuning(tuning), new Map(), !!active);
     if (!hand.playable) return UNPLAYED;
+    if (active && hand.seat !== active.fret) return UNPLAYED;
     return { ...got, seat: hand.seat,
       fingers: [...shape].map(([note, pos]) => [pos.string, hand.fingers.get(note) ?? NO_FINGER]) };
   });
@@ -2028,7 +2034,37 @@ export function voiceNotesFingered(notes, tuning, cap = Infinity, options = {}) 
     }
   });
   carrySlideFingers(chosen, fingers, seats, handProfileForTuning(tuning));
-  return { voiced, fingers, seats };
+  const found = { voiced, fingers, seats };
+  if (options.anchorChanges) applyHandAnchors(notes, found, tuning, options.holds);
+  return found;
+}
+
+// A saved change owns the whole following range. Keep its value even when a
+// note or an explicitly chosen finger cannot reach it; report that conflict.
+export function applyHandAnchors(notes, found, tuning, holds = []) {
+  const profile = handProfileForTuning(tuning), conflicts = new Map();
+  const ordered = [...holds].sort((a, b) => a.t - b.t);
+  let i = 0, active = null;
+  for (const column of chordColumns(notes)) {
+    while (i < ordered.length && ordered[i].t <= column.t0 + 1e-6) active = ordered[i++];
+    if (!active) continue;
+    const shape = new Map(column.notes.flatMap(n => found.voiced.has(n) ? [[n, found.voiced.get(n)]] : []));
+    const required = new Map(column.notes.flatMap(n => {
+      const finger = n.finger ?? n.pos?.finger;
+      return isChosenFinger(finger) ? [[n, finger]] : [];
+    }));
+    const hand = handForShape(shape, active.fret, profile, required, true);
+    const mismatch = !hand.playable || (shape.size && hand.seat != null && hand.seat !== active.fret)
+      || [...required].some(([n, f]) => shape.get(n)?.fret > 0 && hand.fingers.get(n) !== f);
+    for (const note of column.notes) {
+      found.seats.set(note, active.fret);
+      const finger = required.get(note) ?? hand.fingers.get(note);
+      if (finger != null) found.fingers.set(note, finger);
+      if (mismatch) conflicts.set(note, active.id);
+    }
+  }
+  found.handConflicts = conflicts;
+  return found;
 }
 
 // A SLIDE KEEPS ITS FINGER, AND THE HAND GOES WITH IT. A shift/legato slide is one

@@ -24,7 +24,7 @@ try {
   const { laneFingering } = await mockImport(new URL('../../web/lane-fingering.js', import.meta.url), {
     './store.js': { S }, './song-bars.js': { songBarStarts: () => [0, 4] },
     './timing.js': { onLiveTiming: () => true },
-    './voicing-core.js': { arrangedNotes: notes => notes, isChosenFinger: () => false, chordColumns: () => [] },
+    './voicing-core.js': { applyHandAnchors: (notes, found) => found, arrangedNotes: notes => notes, isChosenFinger: () => false, chordColumns: () => [] },
   }, { './lane-tuning.js': true, './fretboard-cache.js': true });
 
   const controller = new AbortController();

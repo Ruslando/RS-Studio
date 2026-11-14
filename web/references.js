@@ -142,8 +142,8 @@ export function lockedReferenceSnapshot() {
     const clock = laneClock(lane);
     const boxes = group.anchors.map((_, i) => boxRect(group, i, clock));
     protectedRefs.push({ lane: lane.id, ref, shape: lockShape(group), boxes,
-      holds: boxes.map((box, i) => referenceHands(lane.notes, lane.handHolds, box, group.anchors[i], clock, boxMinIn(box.t0))
-        .map(({ hold }) => ({ t: hold.t, fret: hold.fret }))),
+      holds: boxes.map((box, i) => referenceHands(lane.notes, lane.handHolds, box, group.anchors[i], clock, boxMinIn(box.t0), lane.handAnchorVersion === 1)
+        .map(({ dt, fret }) => ({ t: clock.timeAt(clock.beatAt(group.anchors[i]) + dt), fret }))),
       notes: boxes.map(box => lockNotes(notesInBox(box, lane.notes))) });
   });
   return protectedRefs;
@@ -170,8 +170,8 @@ export function lockedReferenceFault(previous, translation = 0) {
         for (const note of expectedNotes) { note.start += translation; note.end += translation; }
       }
       const expectedHolds = (protectedRef.holds?.[i] || []).map(h => ({ ...h, t: h.t + translation }));
-      const actualHolds = referenceHands(lane.notes, lane.handHolds, box, group.anchors[i], clock, boxMinIn(box.t0))
-        .map(({ hold }) => ({ t: hold.t, fret: hold.fret }));
+      const actualHolds = referenceHands(lane.notes, lane.handHolds, box, group.anchors[i], clock, boxMinIn(box.t0), lane.handAnchorVersion === 1)
+        .map(({ dt, fret }) => ({ t: clock.timeAt(clock.beatAt(group.anchors[i]) + dt), fret }));
       if (!same(actualHolds, expectedHolds)) return protectedRef.ref;
       if (!same(box, expectedBox) || !same(JSON.parse(lockNotes(notesInBox(box, lane.notes))), expectedNotes)) return protectedRef.ref;
     }
@@ -523,7 +523,7 @@ function reconcileRefGroup(lane, ref, group, prevNotes, prevGroup, mirrorSource,
   const contents = group.anchors.map((a, i) => notesInBox(boxRect(group, i, clock), lane.notes));
   const hands = (notes, holds, g, i) => {
     const box = boxRect(g, i, clock);
-    return referenceHands(notes, holds, box, g.anchors[i], clock, boxMinIn(box.t0));
+    return referenceHands(notes, holds, box, g.anchors[i], clock, boxMinIn(box.t0), lane.handAnchorVersion === 1);
   };
   let src = mirrorSource && mirrorSource.ref === ref ? mirrorSource.i : -1;
   if (src < 0 && prevGroup && prevGroup.anchors.length === group.anchors.length) {

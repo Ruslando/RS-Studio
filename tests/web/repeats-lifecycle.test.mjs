@@ -73,6 +73,7 @@ try {
     './section-marker-core.js': { normalizeSectionMarkers: () => [] },
     './comment-core.js': { normalizeComments: () => [] },
     './save-state.js': { configureSaveState: noop },
+    './lane-fingering.js': { laneFingering: async lane => { lane.handAnchorVersion = 1; lane.handHolds ||= []; } },
     './volume.js': { normMix: () => ({}) },
     "./lane-tuning.js": { isValidTuningKey: () => true },
     './layer-role.js': { inferTablatureEnabled: () => true },

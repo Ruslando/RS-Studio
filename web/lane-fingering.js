@@ -5,7 +5,8 @@ import { songBarStarts } from "./song-bars.js";
 import { onLiveTiming, timingData, timingIdOf } from "./timing.js";
 import { fretboardHandKey } from "./fretboard-cache.js";
 import { paintMemo } from "./paint-memo.js";
-import { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered } from "./voicing-core.js";
+import { applyHandAnchors, arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered } from "./voicing-core.js";
+import { HAND_ANCHOR_VERSION, initialHandAnchors, normalizeHandAnchors } from './hand-anchor-state.js';
 import { S } from "./store.js";
 import { withoutDirtying } from "./save-state.js";
 import { minDur } from "./grid-read.js";
@@ -49,7 +50,7 @@ async function voiceLaneAsync(lane, notes, tuning, signal) {
   if (typeof Worker === "undefined") {
     const { voiced, fingers, seats } = voiceNotesFingered(notes, tuning, Infinity,
       { bars: laneBars(lane), instrument: lane.instrument, capo: lane.capo,
-        holds: lane.handHolds });
+        holds: lane.handHolds, anchorChanges: lane.handAnchorVersion === HAND_ANCHOR_VERSION });
     const got = {
       positions: notes.map((note) => voiced.get(note) || null),
       fingers: notes.map((note) => fingers.get(note) ?? null),
@@ -109,7 +110,7 @@ function voiceInWorker(lane, notes, tuning) {
     };
     worker.onerror = () => { worker.terminate(); reject(new Error("automatic fingering worker failed")); };
     worker.postMessage({ task: "voice", notes, tuning, bars: laneBars(lane),
-      instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
+      instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds, anchorChanges: lane.handAnchorVersion === HAND_ANCHOR_VERSION });
   });
 }
 
@@ -140,7 +141,7 @@ export function laneFingeringNow(lane) {
   const cached = laneVoicingCache.get(lane);
   const key = laneFingeringKey(lane, tuning), hit = cached?.key === key && cached.positions.length === notes.length;
   const found = hit ? handedMap(notes, cached) : voiceNotesFingered(notes, tuning, Infinity,
-      { bars: laneBars(lane), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
+      { bars: laneBars(lane), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds, anchorChanges: lane.handAnchorVersion === HAND_ANCHOR_VERSION });
   if (!hit) laneVoicingCache.set(lane, { key,
     positions: notes.map(n => found.voiced.get(n) || null),
     fingers: notes.map(n => found.fingers.get(n) ?? null), seats: notes.map(n => found.seats.get(n) ?? null) });
@@ -173,7 +174,24 @@ function finishLaneFingering(lane, notes, tuning, found, remember) {
   // longer fits (keepVoicing). No undo step and no new revision — the answer is the
   // same, it is only remembered.
   // Only for the lane itself: previews voice a copy, and their answer is hypothetical.
-  if (remember && S.state?.editLanes?.includes(lane)) withoutDirtying((before) => keepVoicing(lane.notes, found, tuning, before));
+  const holds = lane.handAnchorVersion === HAND_ANCHOR_VERSION && lane.handHolds?.length
+    ? normalizeHandAnchors(lane.notes, lane.handHolds) : initialHandAnchors(notes, found.seats, lane.handHolds);
+  if (remember && S.state?.editLanes?.includes(lane)) withoutDirtying((before) => {
+    let changed = false;
+    if (lane.handAnchorVersion !== HAND_ANCHOR_VERSION || JSON.stringify(holds) !== JSON.stringify(lane.handHolds)) {
+      before(); changed = true;
+      lane.handHolds = holds; lane.handAnchorVersion = HAND_ANCHOR_VERSION;
+    }
+    applyHandAnchors(notes, found, tuning, holds);
+    return keepVoicing(lane.notes, found, tuning, changed ? null : before) || changed;
+  });
+  else applyHandAnchors(notes, found, tuning, holds);
+  if (remember && S.state?.editLanes?.includes(lane)) {
+    lane._handConflicts = found.handConflicts;
+    laneVoicingCache.set(lane, { key: laneFingeringKey(lane, tuning),
+      positions: notes.map(n => found.voiced.get(n) || null),
+      fingers: notes.map(n => found.fingers.get(n) ?? null), seats: notes.map(n => found.seats.get(n) ?? null) });
+  }
   return { tuning, notes, ...found };
 }
 

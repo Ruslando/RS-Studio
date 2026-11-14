@@ -42,6 +42,117 @@ def _gp5_song() -> bytes:
 
 
 class EndToEndTests(unittest.TestCase):
+    def test_hand_anchor_changes_edit_drag_delete_undo_and_reopen(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate('''async () => {
+            const {S} = await import('/store.js'), lane = S.state.editLanes[0];
+            lane.instrument = 'electric'; lane.tuning = 'guitar6'; lane.capo = 0;
+            lane.transpositionPitch = 0; lane.refBoxes = {}; lane.repeatGroups = [];
+            lane.notes = [5,5,7].map((fret,i) => ({id:`anchor-note-${i}`, pitch:64+fret,
+                start:[2.13,3.77,5.49][i], end:[2.6,4.2,6][i], pos:{string:0,fret}}));
+            lane.handHolds = lane.notes.map((n,i) => ({id:`anchor-${i}`,t:n.start,fret:[3,3,5][i]}));
+            delete lane.handAnchorVersion;
+            S.zoomX = 1; S.pxPerSec = (await import('/constants.js')).PX_PER_SEC;
+            (await import('/geometry.js')).layout();
+            S.selection = new Set(); S.voicingRevision++;
+            await (await import('/lane-fingering.js')).laneFingering(lane);
+            (await import('/repaint.js')).draw();
+        }''')
+        state = '''async () => {
+            const {S} = await import('/store.js'), lane = S.state.editLanes[0];
+            const found = await (await import('/lane-fingering.js')).laneFingering(lane);
+            return {anchors:lane.handHolds.map(h=>[h.t,h.fret]),version:lane.handAnchorVersion,
+                seats:lane.notes.map(n=>found.seats.get(n)),
+                positions:lane.notes.map(n=>[n.pitch,n.pos.string,n.pos.fret]),undo:S.undoStack.length};
+        }'''
+
+        def flag_point(t):
+            return page.evaluate('''async t => {
+                const {scroll,stage} = await import('/dom.js');
+                const {xOf} = await import('/geometry.js');
+                const {railBand} = await import('/marker-rails.js');
+                scroll.scrollLeft = 0;
+                await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+                const r = stage.getBoundingClientRect();
+                return {x:r.left+xOf(t)-scroll.scrollLeft+5,y:r.top+railBand('hand-anchor').y+10};
+            }''', t)
+
+        initial = page.evaluate(state)
+        self.assertEqual(initial['anchors'], [[2.13,3],[5.49,5]])
+        first = flag_point(2.13)
+        page.mouse.click(first['x'],first['y'])
+        expect(page.get_by_role('button',name='Delete hand change',exact=True)).to_be_disabled()
+        page.get_by_role('button',name='Initial hand position',exact=True).hover()
+        page.locator('.ctxmenu-child').get_by_role('button',name='4',exact=True).click()
+        changed = page.evaluate(state)
+        self.assertEqual(changed['seats'],[4,4,5])
+        self.assertEqual(changed['positions'],initial['positions'])
+
+        source, target = flag_point(5.49), flag_point(3.77)
+        page.mouse.move(source['x'],source['y']); page.mouse.down()
+        page.mouse.move(target['x']+2,target['y'],steps=8); page.mouse.up()
+        moved = page.evaluate(state)
+        self.assertEqual(moved['anchors'],[[2.13,4],[3.77,5]])
+        self.assertEqual(moved['undo'],changed['undo']+1,'one drag is one undo step')
+        page.evaluate("async () => (await import('/edit.js')).undo()")
+        self.assertEqual(page.evaluate(state)['seats'],[4,4,5])
+        page.evaluate("async () => (await import('/edit.js')).redo()")
+        self.assertEqual(page.evaluate(state)['seats'],[4,5,5])
+
+        source, target = flag_point(3.77), flag_point(5.49)
+        page.mouse.move(source['x'],source['y']); page.mouse.down()
+        page.mouse.move(target['x'],target['y'],steps=5)
+        page.keyboard.press('Escape'); page.mouse.up()
+        self.assertEqual(page.evaluate(state)['anchors'],moved['anchors'],'Escape cancels the draft')
+        source = flag_point(3.77)
+        page.mouse.click(source['x'],source['y'])
+        page.get_by_role('button',name='Delete hand change',exact=True).click()
+        self.assertEqual(page.evaluate(state)['seats'],[4,4,4])
+        self.assertEqual(page.evaluate("async () => (await import('/marker-rails.js')).markerSelection().size"),0)
+        page.evaluate("async () => (await import('/edit.js')).undo()")
+
+        source = flag_point(3.77)
+        page.keyboard.down('Control'); page.mouse.click(source['x'],source['y']); page.keyboard.up('Control')
+        page.keyboard.press('Delete')
+        self.assertEqual(page.evaluate(state)['seats'],[4,4,4], 'selected flags support Delete')
+        page.evaluate("async () => (await import('/edit.js')).undo()")
+        protected = page.evaluate(state)
+        first = flag_point(2.13)
+        page.keyboard.down('Control'); page.mouse.click(first['x'],first['y']); page.keyboard.up('Control')
+        page.keyboard.press('Delete')
+        self.assertEqual(page.evaluate(state)['anchors'],protected['anchors'])
+        self.assertEqual(page.evaluate(state)['undo'],protected['undo'], 'deleting the initial value has no effect')
+
+        exported = page.evaluate('''async () => {
+            const lane = (await import('/store.js')).S.state.editLanes[0];
+            const spec = await (await import('/tablature.js')).buildSpecForLanesAsync([lane]);
+            return {hands:spec.tracks[0].notes.map(n=>n.hand),version:spec.tracks[0].handAnchorVersion};
+        }''')
+        self.assertEqual(exported,{'hands':[4,5,5],'version':1})
+        before = page.evaluate(state)
+        hidden = page.evaluate('''async () => {
+            const project = await import('/project.js'), {S} = await import('/store.js');
+            const lane = {...S.state.editLanes[0], id:'unseen-hand-lane', active:false, visible:false,
+                notes:[{id:'unseen-hand-note',start:7,end:8,pitch:69,pos:{string:0,fret:5}}],
+                handAnchorVersion:1,handHolds:[],refBoxes:{},repeatGroups:[]};
+            S.state.editLanes.push(lane);
+            if (S.state.lanes !== S.state.editLanes) S.state.lanes.push(lane);
+            const job = S.state.job;
+            await project.saveToServer();
+            const saved = structuredClone(lane.handHolds);
+            project.markSaved(); await project.closeProject();
+            await project.loadCached(job);
+            return {saved,reopened:S.state.editLanes.find(l=>l.id==='unseen-hand-lane').handHolds};
+        }''')
+        self.assertEqual(len(hidden['saved']),1,'saving initializes notes in an unseen, previously empty lane')
+        self.assertEqual(hidden['saved'][0]['t'],7)
+        self.assertEqual(hidden['reopened'],hidden['saved'])
+        after = page.evaluate(state)
+        self.assertEqual(after['version'],1)
+        for key in ('anchors','seats','positions'):
+            self.assertEqual(after[key],before[key],key)
+
     def open_repeat_project(self):
         self.open_reference_project()
         page = self.page
@@ -3244,14 +3355,16 @@ class EndToEndTests(unittest.TestCase):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
+        before = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
         hand = lambda value: page.locator(f'#fretboardHandPositions [data-value="{value}"]')
         expect(hand(7)).to_be_enabled()
         page.locator('#fretboardHandPositions [data-value="7"]').click()
         holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
-        self.assertEqual([(h['t'], h['fret']) for h in holds], [(2, 7)])
-        page.locator('#fretboardHandPositions [data-value="auto"]').click()
-        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds"), [])
+        self.assertEqual((holds[0]['t'], holds[0]['fret']), (2, 7))
+        expect(page.locator('#fretboardHandPositions [data-value="auto"]')).to_be_disabled()
         page.keyboard.press('Control+z')
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds"), before)
+        page.keyboard.press('Control+Shift+z')
         expect(hand(7)).to_have_attribute('aria-checked', 'true')
         page.locator('#lanes .lock-btn').click()
         expect(hand(7)).to_be_disabled()
@@ -4946,7 +5059,7 @@ class EndToEndTests(unittest.TestCase):
         expect(root.locator('.artifact-name').filter(has_text='Layer solo')).to_have_count(1)
         expect(root.locator('.artifact-name').filter(has_text='Song verse')).to_have_count(0)
 
-    def test_slide_in_paints_start_and_landing_hand_flags(self):
+    def test_slide_in_has_one_editable_anchor_and_derived_hand_motion(self):
         self.open_reference_project()
         page = self.page
         page.evaluate("""async () => {
@@ -4969,7 +5082,8 @@ class EndToEndTests(unittest.TestCase):
             };
             (await import('/repaint.js')).draw();
         }""")
-        page.wait_for_function("window.slideHandPaint.includes('5') && window.slideHandPaint.includes('9')")
+        page.wait_for_function("window.slideHandPaint.includes('9')")
+        self.assertNotIn('5', page.evaluate('window.slideHandPaint'), 'slide travel does not create a second editable flag')
 
     def test_slide_hand_rail_matches_compiled_rocksmith_export(self):
         from rs_studio.rocksmith import chart
@@ -5027,6 +5141,7 @@ class EndToEndTests(unittest.TestCase):
         self.open_reference_project()
         page = self.page
         self.fretboard_hover_points()
+        initial = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds[0].fret")
         page.locator('#fretboardHandPositions [data-value="7"]').click()
         expect(page.locator('#fretboardHandPositions [data-value="7"]')).to_have_attribute('aria-checked', 'true')
         result = page.evaluate("""async () => {
@@ -5041,13 +5156,14 @@ class EndToEndTests(unittest.TestCase):
         }""")
         self.assertEqual(result['holds'][0]['fret'], 7)
         self.assertEqual(set(result['seats']), {7})
-        self.assertIn('hand-anchor', result['rails'])   # display only: no menu entry, no popup
+        self.assertIn('hand-anchor', result['rails'])
         self.assertNotIn('Add hand anchor', result['menu'])
         self.assertNotIn('anchor', result['kinds'])
         expect(page.locator('#handAnchorPop')).to_have_count(0)
         expect(page.locator('[data-marker-kind="anchor"]')).to_have_count(0)
         page.keyboard.press('Control+z')
-        expect(page.locator('#fretboardHandPositions [data-value="auto"]')).to_have_attribute('aria-checked', 'true')
+        expect(page.locator(f'#fretboardHandPositions [data-value="{initial}"]')).to_have_attribute('aria-checked', 'true')
+        expect(page.locator('#fretboardHandPositions [data-value="auto"]')).to_be_disabled()
         page.keyboard.press('Control+Shift+z')
         expect(page.locator('#fretboardHandPositions [data-value="7"]')).to_have_attribute('aria-checked', 'true')
         page.evaluate("async () => { const p = await import('/project.js'); await p.saveToServer(); p.markSaved(); }")

@@ -1,4 +1,4 @@
-// Marker selection and clipboard: tempo, section, phrase and tone flags.
+// Marker selection and clipboard: tempo, section, phrase, tone and hand flags.
 // Ctrl-click a flag adds or drops it; Shift-click takes every flag on that rail
 // from the last one clicked. While flags are selected, Copy, Cut, Delete act on
 // them, and Paste puts the last copied flags at the playhead, at their distances
@@ -6,7 +6,7 @@
 // Pasted tempo flags change the grid only; notes keep their times.
 
 import { draw } from "./repaint.js";
-import { commitStructure, snapshotEdit } from "./edit-history.js";
+import { commit, commitStructure, snapshotEdit } from "./edit-history.js";
 import { gridOffset, restoreGridState, currentGridState } from "./grid-controls.js";
 import { snap } from "./grid-read.js";
 import { markerKey, markerRails, markerSelection, setMarkerSelection } from "./marker-rails.js";
@@ -21,6 +21,7 @@ import { refreshSaveState } from "./save-state.js";
 import { refreshTabIfOpen } from "./tablature.js";
 import { S, setSelection } from "./store.js";
 import { landMarkers, markerRange } from "./marker-clipboard-core.js";
+import { HAND_ANCHOR_VERSION, nearestHandStart, normalizeHandAnchors } from './hand-anchor-state.js';
 
 let anchor = null;    // the flag a Shift-click counts from
 let clip = null;      // the copied flags, or null when notes were copied last
@@ -94,16 +95,21 @@ function removeSelected(flags) {
     const phrases = gone("phrase"), tones = gone("tone");
     lane.phraseBoundaries = normalizePhraseBoundaries(lane.phraseBoundaries, duration()).filter((m) => !phrases.has(m.id));
     lane.toneMarkers = normalizeToneMarkers(lane.toneMarkers, duration()).filter((m) => !tones.has(m.id));
+    if (!lane.locked) {
+      const hands = gone('hand-anchor'), initial = lane.handHolds?.[0];
+      lane.handHolds = (lane.handHolds || []).filter(h => h === initial || !hands.has(h.id));
+    }
   }
 }
 
 export function deleteMarkers() {
   const flags = selectedFlags();
   if (!flags.length) return false;
+  if (flags.every(f => f.kind === 'hand-anchor' && (f.marker === activeLane()?.handHolds?.[0] || activeLane()?.locked))) return true;
   const prev = snapshotEdit();
   removeSelected(flags);
   setMarkerSelection([]);
-  done(prev);
+  done(prev, flags.some(f => f.kind === 'hand-anchor'));
   return true;
 }
 
@@ -111,19 +117,21 @@ export function cutMarkers() {
   return copyMarkers() && deleteMarkers();
 }
 
-function done(prev) {
+function done(prev, hands = false) {
   sectionMarkersChanged();
-  commitStructure(prev);
+  if (hands) commit(prev, undefined, null, { preserveTiming: true });
+  else commitStructure(prev);
   refreshSaveState(); draw(); refreshTabIfOpen();
 }
 
 export function pasteMarkers(at = playbackTime()) {
   if (!clip?.length || !S.state) return false;
   const lane = activeLane();
-  const laneKinds = clip.some((c) => c.kind === "phrase" || c.kind === "tone");
+  const laneKinds = clip.some((c) => c.kind === "phrase" || c.kind === "tone" || c.kind === 'hand-anchor');
   if (laneKinds && lane?.locked) { toast(`Layer “${lane.name}” is locked — unlock it to edit`); return true; }
   const prev = snapshotEdit(), end = duration(), stamp = Date.now(), keys = [];
-  const placed = landMarkers(clip, snap(Math.max(0, at))).filter((c) => c.t < end);
+  const placed = landMarkers(clip, clip.every(c => c.kind === 'hand-anchor')
+    ? nearestHandStart(lane?.notes || [], at) ?? at : snap(Math.max(0, at))).filter((c) => c.t < end);
   const same = (list, t) => (list || []).filter((m) => Math.abs(+m.t - t) > 1e-4);   // a flag already there is replaced
   for (const [k, c] of placed.entries()) {
     const { kind, ...data } = c;
@@ -147,12 +155,18 @@ export function pasteMarkers(at = playbackTime()) {
       lane.phraseBoundaries = normalizePhraseBoundaries([...same(lane.phraseBoundaries, c.t), { ...data, id }], end);
     } else if (lane && kind === "tone") {
       lane.toneMarkers = normalizeToneMarkers([...same(lane.toneMarkers, c.t), { ...data, id }], end);
+    } else if (lane && kind === 'hand-anchor') {
+      const t = nearestHandStart(lane.notes, c.t);
+      if (t != null) {
+        lane.handHolds = normalizeHandAnchors(lane.notes, [...same(lane.handHolds, t), { id, t, fret: data.fret }]);
+        lane.handAnchorVersion = HAND_ANCHOR_VERSION;
+      }
     }
   }
   S.state.tempoMap?.sort((a, b) => a.t - b.t);
   if (S.selection.size) setSelection(new Set());
   setMarkerSelection(keys);   // the paste stays selected, as pasted notes do
-  done(prev);
+  done(prev, placed.some(c => c.kind === 'hand-anchor'));
   return true;
 }
 

@@ -1215,12 +1215,13 @@ function drawHandPositions(s, X, Y, lane) {
     button.style.left = `${left}px`; button.style.top = `${top}px`;
     button.style.width = `${right - left}px`;
     const allowed = !fret || choices.has(fret), chosen = fret ? !!held && Number(held.fret) + shift === fret : !held;
-    button.disabled = !canEditLane(lane) || !allowed;
-    button.textContent = fret ? String(fret + (fromNut ? capo : 0)) : 'Auto';
-    button.setAttribute('aria-label', fret ? `Hand position ${fret}${allowed ? '' : ', unavailable'}` : 'Automatic hand position');
+    button.disabled = !canEditLane(lane) || !allowed || (!fret && held === lane.handHolds?.[0]);
+    button.textContent = fret ? String(fret + (fromNut ? capo : 0)) : 'Inherit';
+    button.setAttribute('aria-label', fret ? `Hand position ${fret}${allowed ? '' : ', unavailable'}` : 'Use the previous hand position');
     button.setAttribute('aria-checked', String(chosen));
     button.tabIndex = -1;   // pointer only: the editor's keys stay with the editor
-    button.title = fret ? `Hand position ${fret}${allowed ? '' : ' cannot play these notes'}` : 'Use the automatic hand position';
+    button.title = fret ? `Hand position ${fret}${allowed ? '' : ' cannot play these notes'}` : held === lane.handHolds?.[0]
+      ? 'The initial hand position stays at the first note' : 'Remove this change and use the previous hand position';
     button.classList.toggle('is-allowed', !!fret && allowed);
     button.classList.toggle('is-current', fret === seat);
     button.classList.toggle('is-suggested', suggestionVisible() && fret === (suggestion.preview.seat || 0) + shift);
@@ -2124,7 +2125,7 @@ function holdHere(lane) {
 
 // Where a hand for this note or chord is stored: on the one already there, else on its onset.
 function handTimeHere(lane) {
-  return holdHere(lane)?.t ?? handColumnHere(lane)?.column.start ?? beatUnderBoard();
+  return handColumnHere(lane)?.column.start ?? beatUnderBoard();
 }
 
 // Which box the pointer is in, or -1. The boxes are the ones the last frame drew, so

@@ -9,7 +9,7 @@ const { laneFingering, laneFingeringNow, laneFingeringKey } = await mockImport(n
   './song-bars.js': { songBarStarts: timing => timing ? timing.bars : liveBars },
   './timing.js': { onLiveTiming: lane => !lane.timing, timingIdOf: lane => lane.timing,
     timingData: () => ({ bars: ownBars }) },
-  './voicing-core.js': { arrangedNotes: notes => notes, chordColumns, isChosenFinger, voiceNotesFingered: (notes, tuning, limit, options) => {
+  './voicing-core.js': { applyHandAnchors: (notes, found) => found, arrangedNotes: notes => notes, chordColumns, isChosenFinger, voiceNotesFingered: (notes, tuning, limit, options) => {
     solves++;
     return { voiced: new Map(notes.map((note, string) => [note, { string, fret: note.testFret ?? options.bars[1] }])),
       fingers: new Map(notes.map(note => [note, 3])), seats: new Map(notes.map(note => [note, 2])) };

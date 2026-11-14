@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mockImport, mockEditor } from './mock-import.mjs';
-import { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered } from '../../web/voicing-core.js';
+import { applyHandAnchors, arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered } from '../../web/voicing-core.js';
 const noop = () => {};
 const source = { id: 'source', instrument: 'bass', tuning: 'bass4', visible: true, notes: [49, 51, 49, 44].map((pitch, i) => ({
   id: `s${i}`, pitch, start: i, end: i + .9, pos: { string: 1, fret: pitch - 38 },
@@ -19,13 +19,15 @@ try {
   const tab = await mockImport(new URL('../../web/lane-fingering.js', import.meta.url), {
     './store.js': { S }, './song-bars.js': { songBarStarts: () => [0, 4, 8, 12, 16] },
     './timing.js': { onLiveTiming: () => true }, './save-state.js': { withoutDirtying: write => write(noop) },
-    './voicing-core.js': { arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered: (...args) => {
+    './voicing-core.js': { applyHandAnchors, arrangedNotes, chordColumns, isChosenFinger, keepVoicing, voiceNotesFingered: (...args) => {
       solves++; return voiceNotesFingered(...args);
     } },
   }, { './lane-tuning.js': true, './constants.js': true, './tunings.js': true, './util.js': true, './fretboard-cache.js': true });
   const shown = await tab.laneFingering(source), count = solves, before = structuredClone(source);
   assert.ok(source.notes.every(n => n.finger == null));
-  assert.equal(source.handHolds, undefined, 'the visible hand is generated, not authored');
+  assert.equal(source.handAnchorVersion, 1, 'the initially generated hand is captured once');
+  assert.ok(source.handHolds.length && source.handHolds.length < source.notes.length,
+    'only changes in the visible hand are saved');
   const edit = await mockEditor({
     './store.js': { S, setSelection: set => { S.selection = set; } }, './dom.js': { undoMI: null, redoMI: null },
     './lane-fingering.js': tab, './tablature.js': { refreshTabIfOpen: noop },
@@ -52,7 +54,8 @@ try {
     assert.equal(result.fingers.get(pasted[i]), shown.fingers.get(source.notes[i]), 'the re-solved copy displays the same finger');
     assert.equal(result.seats.get(pasted[i]), shown.seats.get(source.notes[i]), 'the re-solved copy displays the same hand');
   }
-  edit.undo(); assert.equal(target.notes.length, 1); assert.deepEqual(target.handHolds, []);
-  edit.redo(); assert.equal(target.notes.length, 5); assert.equal(target.handHolds.length, 4);
+  edit.undo(); assert.equal(target.notes.length, 1); assert.equal(target.handHolds.length, 1);
+  edit.redo(); assert.equal(target.notes.length, 5); assert.equal(target.handHolds.length, 3,
+    'the target initial hand and the pasted changes are saved without duplicate anchors');
 } finally { Object.assign(globalThis, saved); }
 console.log('Clipboard captures the actual displayed automatic fingers and hand, and preserves them after solving the paste');

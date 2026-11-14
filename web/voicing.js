@@ -83,6 +83,7 @@ export function columnAlternatives(note, done) {
     // And where the hand has been put. An offer priced against a hand the player
     // moved is priced against a hand that is not there.
     holds: lane.handHolds,
+    anchorChanges: lane.handAnchorVersion === 1,
   }, (raw) => {
     const ranked = rankArrangements(raw.map(deserializeArrangement));
     // Which notes are muted is a property of the note, not of where it is put, and
@@ -126,7 +127,7 @@ function requestArrangementChoices(payload, done) {
   worker.postMessage(payload);
 }
 
-function recommendationCacheKey({ analysis, columns, focusIdx, tuning, sourcePitches, current, influence, context, bars, instrument, holds }) {
+function recommendationCacheKey({ analysis, columns, focusIdx, tuning, sourcePitches, current, influence, context, bars, instrument, holds, anchorChanges }) {
   const lane = columns.map((c, i) => ({
     t0: c.t0,
     notes: c.notes.map((n) => ({
@@ -139,7 +140,7 @@ function recommendationCacheKey({ analysis, columns, focusIdx, tuning, sourcePit
   }));
   return JSON.stringify([
     analysis?.root, analysis?.pcs, analysis?.fullPcs, tuning, sourcePitches,
-    focusIdx, current, influence, context, bars, instrument, holds, lane,
+    focusIdx, current, influence, context, bars, instrument, holds, anchorChanges, lane,
   ]);
 }
 

@@ -680,6 +680,7 @@ class _Arrangement:
     sections: list                 # S.Section
     end_t: float                   # where the playable part stops
     events: list = field(default_factory=list)   # (time, code): the count-in ticks
+    hand_anchors: list | None = None   # saved hand changes, shared by all difficulties
 
 
 @dataclass
@@ -1258,7 +1259,8 @@ def _phrase_differences(arr: _Arrangement, notes: list, fixes: list) -> None:
             fixes.append(("phrase-differs", pi.start_time))
 
 
-def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, fixes: list) -> list:
+def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, fixes: list,
+                  respect_changes: bool = False) -> list:
     """Rocksmith hand positions from the editor's: (time, fret, width), stamped on each entity.
 
     Every note arrives with the fret the fretboard's index finger stands on
@@ -1272,13 +1274,15 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, f
     A note without a hand (a spec not built by the editor) keeps the current one
     when it reaches, else puts the index on its lowest fret, and is counted in a
     warning: the export does not plan hands of its own.
+    Saved change sequences also govern open strings and are kept across grip shapes.
     """
     floor = capo + 1
     changes: list[tuple[float, int]] = []
     cur = None
     seen_shapes: set = set()
     for e in entities:
-        hands = [int(n["hand"]) for _, f, n in e.notes if f > 0 and isinstance(n.get("hand"), (int, float))]
+        hands = [int(n["hand"]) for _, f, n in e.notes
+                 if (respect_changes or f > 0) and isinstance(n.get("hand"), (int, float))]
         shape = shape_info.get(e.shape_id)
         first_of_shape = shape is not None and e.shape_id not in seen_shapes
         if shape is not None:
@@ -1288,7 +1292,8 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, f
         if shape is not None and not first_of_shape and cur is not None and e.time > shape["start"] + 1e-6:
             if hands and min(max(floor, min(hands) + capo), MAX_FRET - ANCHOR_WIDTH + 1) != cur:
                 fixes.append(("shape-hand", e.time))
-            continue
+            if not respect_changes or not hands or min(max(floor, min(hands) + capo), MAX_FRET - ANCHOR_WIDTH + 1) == cur:
+                continue
         held = shape_info[e.shape_id]["frets"] if e.shape_id in shape_info else [f for _, f, _ in e.notes]
         fretted = [f for f in held if f > 0]
         if hands:
@@ -1917,7 +1922,14 @@ def _level(entities: list, shape_info: dict, templates: list, arr: _Arrangement,
     so what is kept is placed against them; their own shapes, anchors and notes
     are left out.
     """
-    anchors_raw = _hand_anchors(entities, shape_info, capo, arr.pi_times, fixes)
+    anchors_raw = (arr.hand_anchors if arr.hand_anchors is not None
+                   else _hand_anchors(entities, shape_info, capo, arr.pi_times, fixes))
+    if arr.hand_anchors is not None:
+        for entity in entities:
+            active = next((a for a in reversed(anchors_raw) if a[0] <= entity.time + 1e-6),
+                          anchors_raw[0] if anchors_raw else None)
+            if active:
+                entity.anchor_fret, entity.anchor_width = active[1], active[2]
     fingerprints, arpeggios = _handshapes(entities, shape_info, arr.end_t, arr.pi_times)
     _shorten_handshapes(fingerprints, arpeggios, entities, [b[0] for b in arr.beats])
     if keep is not None:
@@ -2034,6 +2046,9 @@ def compile_track(track: dict, grid: dict, song_length: float,
                                   voicing.first_t, voicing.last_end, warnings,
                                   song_end=audio_end if song_end is None else song_end,
                                   obstacles=_phrase_obstacles(entities, voicing.shape_info))
+    if track.get("handAnchorVersion") == 1:
+        arr.hand_anchors = _hand_anchors(entities, voicing.shape_info, capo, arr.pi_times, fixes,
+                                        respect_changes=True)
 
     chord_notes = ([], {})
     level, emitted = _level(entities, voicing.shape_info, voicing.chord_templates, arr, capo,

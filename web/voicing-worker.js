@@ -28,12 +28,13 @@ self.onmessage = (ev) => {
   // Where the player put the fretting hand, in seconds. Times and not notes, so a
   // hold survives retracing the passage under it — see holdsByColumn.
   const holds = ev.data.holds;
+  const anchorChanges = !!ev.data.anchorChanges;
   if (task === "voice") {
     const notes = ev.data.notes || [];
     // The hand rides along with the positions: which finger took each note and which
     // fret it was anchored on. Same pass, so it costs nothing, and the board needs it
     // to say anything about WHY a position was chosen.
-    const { voiced, fingers, seats } = voiceNotesFingered(notes, tuning, Infinity, { bars, instrument, capo, holds });
+    const { voiced, fingers, seats } = voiceNotesFingered(notes, tuning, Infinity, { bars, instrument, capo, holds, anchorChanges });
     self.postMessage({
       task,
       positions: notes.map((note) => voiced.get(note) || null),
@@ -101,7 +102,7 @@ self.onmessage = (ev) => {
   // phrase boundary handed to it. Both stay in the message because they are part of
   // the cache key on the other side.
   const profile = handProfileForTuning(tuning);
-  const priced = scoreShapesAsDecided(pool.map((choice) => choice.shape), columns, focusIdx, tuning, { bars, instrument, capo, holds });
+  const priced = scoreShapesAsDecided(pool.map((choice) => choice.shape), columns, focusIdx, tuning, { bars, instrument, capo, holds, anchorChanges });
   const choices = pool
     .map((choice, i) => ({ choice, priced: priced[i] }))
     .filter((x) => Number.isFinite(x.priced.cost))

@@ -48,9 +48,11 @@ import { songBarStarts } from "./song-bars.js";
 import { S, setSelection } from "./store.js";
 
 import { laneFretCount, laneFretTuning } from "./lane-tuning.js";
+import { laneFingering } from './lane-fingering.js';
 import { refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
 import { hammerPositionGroup, hammerPositionPlan } from './hammer-positions.js';
 import { pasteHandAnchors } from './clipboard-fingering.js';
+import { HAND_ANCHOR_VERSION, changedHandAnchor, initialHandAnchors, movedHandAnchor, normalizeHandAnchors } from './hand-anchor-state.js';
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { modalOpen } from "./modal-focus.js";
@@ -218,6 +220,7 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
     toast('References cannot overlap another reference; paste as a copy instead');
     return;
   }
+  if (lane.notes.length && lane.handAnchorVersion !== HAND_ANCHOR_VERSION) await laneFingering(lane);
   const prev = snapshotEdit();
   // Anchor the paste at the current time: the clipboard's earliest note starts at
   // the playhead, the rest at their beat distance from it (see placeClip).
@@ -634,7 +637,7 @@ function applySelectedPosition(colNotes, shape) {
   if (!canEditLane(lane)) return { handled: true, error: null };
   const tuning = laneFretTuning(lane);
   const voiced = voiceNotes(lane.notes, tuning, Infinity,
-    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
+    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds, anchorChanges: lane.handAnchorVersion === HAND_ANCHOR_VERSION });
   const plan = sharedPositionPlan(lane, S.selection, colNotes, shape, tuning,
     note => voiced.get(note), laneFretCount(lane));
   // Offers are prevalidated for the full selection. A stale offer must be
@@ -771,54 +774,45 @@ function writeAlternative(colNotes, choice, influence) {
   return true;
 }
 
-// WHERE THE FRETTING HAND STANDS ON ONE NOTE OR CHORD, put there by hand: `{ t, fret }`
-// on the lane, belonging to the first note or chord at or after `t`. It fixes that
-// column's hand and nothing else: no note moves for it, and the hand after it is
-// planned on from there. The fretboard only offers hands that can play the column
-// (handChoices); one that no longer can (its notes changed) lapses.
-// Choose Auto (null) to clear it.
+// A change applies from this attack until the next saved change. The initial
+// value is always present; null removes a later change and inherits the previous.
 export function setHandAnchor(lane, t, fret) {
   if (!canEditLane(lane) || !Number.isFinite(t) || (fret !== null && (!Number.isFinite(fret) || fret < 1))) return;
-  // Every hold after the previous column, up to this one, belongs to this column,
-  // and the engine obeys the earliest of them (holdsByColumn). A hold left at a
-  // moved note's old time would otherwise shadow the new one for good, so the new
-  // hand replaces them all, and Auto clears them all.
-  const columns = chordColumns(lane.notes), at = columns.findIndex((c) => c.t0 >= t - 1e-6);
-  const after = at > 0 ? columns[at - 1].t0 : -Infinity, until = at >= 0 ? columns[at].t0 : t;
-  const owned = (h) => Number(h.t) > after + 1e-6 && Number(h.t) <= until + 1e-6;
-  const own = (lane.handHolds || []).filter(owned).sort((a, b) => a.t - b.t), had = own[0];
-  const rest = (lane.handHolds || []).filter((h) => !owned(h));
-  // A hand chosen by hand replaces a fingering chosen for the same notes: the engine
-  // fingers them for the new hand. Picking the hand that is already held still
-  // does that, for fingers that came after it (or with an import).
-  const column = fret === null || at < 0 ? [] : columns[at].notes;
-  const fingered = column.some((n) => n.pos?.finger != null
-    || slideFingerGroup(lane.notes, n, (m) => m.pos).some((m) => m.finger != null));
-  if ((!had && fret === null) || (own.length === 1 && Number(had.fret) === fret && !fingered)) return;
+  if (lane.handAnchorVersion !== HAND_ANCHOR_VERSION) {
+    lane.handHolds = normalizeHandAnchors(lane.notes, lane.handHolds || []);
+    lane.handAnchorVersion = HAND_ANCHOR_VERSION;
+  }
+  const next = changedHandAnchor(lane.notes, lane.handHolds || [], t, fret, `anchor_${nid()}`);
+  if (JSON.stringify(next) === JSON.stringify(lane.handHolds || [])) return;
   const prev = snapshotEdit();
-  lane.handHolds = (fret === null ? rest : [...rest, { id: had?.id || `anchor_${nid()}`, t, fret }]).sort((a, b) => a.t - b.t);
-  dropChosenFingers(lane, column);
-  commit(prev); draw(); refreshTabIfOpen();
+  lane.handHolds = next; lane.handAnchorVersion = HAND_ANCHOR_VERSION;
+  commit(prev, undefined, null, { preserveTiming: true }); draw(); refreshTabIfOpen();
 }
 
-// Both kinds: a fingering picked on the board (pos.finger) and a finger typed or
-// imported onto the note (note.finger, whose index finger would set the hand
-// again). A typed finger is shared along a fretted slide, so it goes there too.
-function dropChosenFingers(lane, notes) {
-  for (const n of notes) {
-    if (n.pos?.finger != null) {
-      const { finger, ...pos } = n.pos;
-      n.pos = pos;
-    }
-    for (const member of slideFingerGroup(lane.notes, n, (m) => m.pos)) delete member.finger;
-  }
+export function moveHandAnchor(lane, id, time) {
+  if (!canEditLane(lane)) return;
+  const next = movedHandAnchor(lane.notes, lane.handHolds || [], id, time);
+  if (JSON.stringify(next) === JSON.stringify(lane.handHolds || [])) return;
+  const prev = snapshotEdit();
+  lane.handHolds = next; lane.handAnchorVersion = HAND_ANCHOR_VERSION;
+  commit(prev, undefined, null, { preserveTiming: true }); draw(); refreshTabIfOpen();
+}
+
+export function recalculateHandAnchors(lane) {
+  if (!canEditLane(lane)) return;
+  const notes = lane.notes.map(n => ({ ...n, ...(n.pos ? { pos: { ...n.pos,
+    ...(n.finger != null ? { finger: n.finger } : {}) } } : {}) }));
+  const found = voiceNotesFingered(notes, laneFretTuning(lane), Infinity,
+    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: [] });
+  const prev = snapshotEdit();
+  lane.handHolds = initialHandAnchors(notes, found.seats, lane.handHolds);
+  lane.handAnchorVersion = HAND_ANCHOR_VERSION;
+  commit(prev, undefined, null, { preserveTiming: true }); draw(); refreshTabIfOpen();
 }
 
 // A FINGERING CHOSEN FOR ONE NOTE OR CHORD: `placed` is the column as the fretboard
 // shows it ({ note, string, fret } each), `fingers` the choice (fingeringChoices).
-// Written onto each note's position override, so it carries on like the position
-// does (guided), and the hand follows from it: a hand anchor on
-// these notes would contradict it and goes.
+// Keep the saved hand range; contradictory fingers are reported as conflicts.
 function setColumnFingers(lane, placed, fingers) {
   if (!canEditLane(lane) || !placed.length || placed.some(({ note }) => !lane.notes.includes(note))) return;
   const prev = snapshotEdit();
@@ -828,10 +822,7 @@ function setColumnFingers(lane, placed, fingers) {
     // Number.isInteger: an open string's finger is null, and null >= 0 is true.
     note.pos = { string, fret, scope: "local", follow, ...(Number.isInteger(finger) && finger >= 0 ? { finger } : {}) };
   }
-  const columns = chordColumns(lane.notes), t0 = Math.min(...placed.map(({ note }) => note.start));
-  const i = columns.findIndex((c) => Math.abs(c.t0 - t0) < 1e-6);
-  const from = i > 0 ? columns[i - 1].t0 : -Infinity;
-  lane.handHolds = (lane.handHolds || []).filter((h) => !(Number(h.t) > from + 1e-6 && Number(h.t) <= t0 + 1e-6));
+  // Explicit fingers may conflict with the active hand; they never erase it.
   commit(prev); draw(); refreshTabIfOpen();
 }
 
@@ -975,7 +966,7 @@ export function addNoteOnBoard(lane, string, fret, start, end) {
 // Resolve current positions before explicitly changing a note on the fretboard.
 function handsBefore(lane) {
   const found = voiceNotesFingered(lane.notes, laneFretTuning(lane), Infinity,
-    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds });
+    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: lane.handHolds, anchorChanges: lane.handAnchorVersion === HAND_ANCHOR_VERSION });
   const byId = new Map();
   for (const n of lane.notes) {
     const pos = found.voiced.get(n);
@@ -1008,7 +999,9 @@ export function clearOverrideAt(lane, colNotes, t) {
   const prev = snapshotEdit();
   let touched = false;
   if (lane?.handHolds?.length && Number.isFinite(t)) {
-    const rest = lane.handHolds.filter((h) => Math.abs(Number(h.t) - t) > 1e-6);
+    const rest = lane.handAnchorVersion === HAND_ANCHOR_VERSION
+      ? changedHandAnchor(lane.notes, lane.handHolds, t, null)
+      : lane.handHolds.filter((h) => Math.abs(Number(h.t) - t) > 1e-6);
     if (rest.length !== lane.handHolds.length) { lane.handHolds = rest; touched = true; }
   }
   if (colNotes?.some((n) => n.pos))

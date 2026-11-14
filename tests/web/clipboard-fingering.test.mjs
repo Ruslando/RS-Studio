@@ -45,15 +45,16 @@ try {
   assert.deepEqual(target.notes.map(n => [n.start, n.finger]), [[10, 0], [10, 3], [11, 2]]);
   assert.deepEqual(target.notes.map(n => n.pos), clip.map(n => n.pos));
   assert.ok(target.notes.every(n => !('handAnchor' in n)), 'anchor metadata stays on the lane, not the pasted notes');
-  assert.deepEqual(target.handHolds.map(h => [h.t, h.fret]), [[2, 3], [10, 5], [11, 7]]);
-  assert.equal(target.handHolds.length, 3, 'a chord receives one hand anchor');
+  assert.deepEqual(target.handHolds.map(h => [h.t, h.fret]), [[10, 5], [11, 7]],
+    'the initial anchor belongs to the first actual note, and equal neighbours are removed');
+  assert.equal(target.handHolds.length, 2, 'a chord receives one hand anchor');
   assert.ok(target.handHolds.slice(1).every(h => !original.handHolds.some(old => old.id === h.id)), 'pasted anchors have independent IDs');
   assert.notEqual(target.notes[0].pos, S.clipboard[0].pos);
   assert.equal(S.undoStack.length, 1);
   edit.undo(); assert.deepEqual(target.notes, []); assert.deepEqual(target.handHolds, [{ id: 'keep', t: 2, fret: 3 }]);
-  edit.redo(); assert.deepEqual(target.handHolds.map(h => h.fret), [3, 5, 7]);
+  edit.redo(); assert.deepEqual(target.handHolds.map(h => h.fret), [5, 7]);
   await edit.doPaste({ mode: 'copy', at: 20 });
-  assert.deepEqual(target.handHolds.map(h => [h.t, h.fret]), [[2, 3], [10, 5], [11, 7], [20, 5], [21, 7]]);
+  assert.deepEqual(target.handHolds.map(h => [h.t, h.fret]), [[10, 5], [11, 7], [20, 5], [21, 7]]);
   const count = target.handHolds.length;
   await edit.doPaste({ mode: 'copy', at: 30, shift: 2 });
   assert.ok(target.notes.slice(-3).every(n => n.finger == null && n.pos == null), 'transposed notes keep the existing re-fingering behavior');

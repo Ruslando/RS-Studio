@@ -47,6 +47,8 @@ import { inferTablatureEnabled, laneScrollSpeed } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
 import { normalizeRepeatGroups } from "./repeats-core.js";
 import { obeyedHolds } from "./hand-anchor-core.js";
+import { HAND_ANCHOR_VERSION, normalizeHandAnchors } from './hand-anchor-state.js';
+import { laneFingering } from './lane-fingering.js';
 import { isValidTuningKey, tuningKeyFor } from "./lane-tuning.js";
 import { parseTuning } from "./util.js";
 import { setView } from "./tablature.js";
@@ -111,6 +113,7 @@ function projectBody() {
     // Where the player put the fretting hand, in seconds. Written only when there is
     // one, so an untouched project gains no field.
     ...(l.handHolds?.length ? { handHolds: l.handHolds.map((h) => ({ id: h.id, t: h.t, fret: h.fret })) } : {}),
+    ...(l.handAnchorVersion === HAND_ANCHOR_VERSION ? { handAnchorVersion: HAND_ANCHOR_VERSION } : {}),
   });
   const song = timingData(SONG);
   return {
@@ -147,6 +150,7 @@ function projectFileName() {
 
 async function projectBundle() {
   if (!S.state) return;
+  await prepareProjectHands();
   const body = projectBody();
   const used = new Set(body.editLanes.flatMap(lane => (lane.toneMarkers || []).map(marker => marker.tone)));
   body.tonePresets = Object.fromEntries(readAvailableSoundPresets().filter(preset => used.has(preset.id)).map(preset => [preset.id, preset.tone]));
@@ -163,11 +167,19 @@ async function projectBundle() {
 // project from the library reflects it.
 export async function saveToServer() {
   if (S.state?.job === "tutorial") throw new Error("The walkthrough project cannot be saved");
+  await prepareProjectHands();
   const res = await fetch(`/api/projects/${S.state.job}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(projectBody()),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
+}
+
+// Capture old and newly generated hands once, including layers not yet viewed.
+async function prepareProjectHands() {
+  await Promise.all((S.state?.editLanes || []).filter(l => l.handAnchorVersion !== HAND_ANCHOR_VERSION
+    || (l.notes.length && !l.handHolds?.length))
+    .map(l => laneFingering(l)));
 }
 
 // Supply lifecycle-owned serialization without making editing features import
@@ -290,7 +302,9 @@ export function mapLane(l, startAt = 0) {
     bassPicked: l.bassPicked === true || undefined,
     // Read back defensively: a bad fret or a bad time is dropped rather than
     // reaching the voicer, where it would move a hand nobody put.
-    handHolds: Array.isArray(l.handHolds)
+    handAnchorVersion: l.handAnchorVersion === HAND_ANCHOR_VERSION ? HAND_ANCHOR_VERSION : undefined,
+    handHolds: l.handAnchorVersion === HAND_ANCHOR_VERSION
+      ? (Array.isArray(l.handHolds) && l.handHolds.length ? normalizeHandAnchors(notes, l.handHolds) : []) : Array.isArray(l.handHolds)
       ? obeyedHolds(notes, l.handHolds
         .map((h) => ({ id: h?.id || `anchor_${h?.t}_${h?.fret}`, t: Number(h?.t), fret: Number(h?.fret) }))
         .filter((h) => Number.isFinite(h.t) && Number.isFinite(h.fret) && h.fret >= 0)
@@ -477,6 +491,7 @@ export async function applyProject(data) {
 
   // 8. the grid, then the stem mixer below it
   restoreLoadedProjectGrid(data);
+  await prepareProjectHands();
 
   renderLoadedProjectWarnings(data, idsRepaired);
 

@@ -1,6 +1,7 @@
 // Undo transactions shared by editing features. Dependencies are supplied by
 // edit.js so this module never imports feature/UI modules back into the graph.
 // Bindings are read when an operation runs, after the application has initialized.
+import { HAND_ANCHOR_VERSION, normalizeHandAnchors } from './hand-anchor-state.js';
 let services;
 export function configureEditHistory(dependencies) {
   services = dependencies;
@@ -69,6 +70,7 @@ export function snapshotEdit() {
     // Where the hand was put. Not a note field, so nothing above captures it, and a
     // hold that undo cannot reach is an edit with no way back.
     snap.holds[l.id] = (l.handHolds || []).map((h) => ({ ...h }));
+    (snap.handVersions ||= {})[l.id] = l.handAnchorVersion;
     // The capo too: moving it rewrites every fret, and those frets are undone above.
     snap.capo[l.id] = Number(l.capo) || 0;
     // Tone and phrase markers: a tempo change re-times them along with the notes.
@@ -121,6 +123,8 @@ function recordUndo(prev, translation = null, preserveTiming = false, invalidate
   // Its locked references may move, but their shapes and contents must match.
   if (S.state && translation == null && !preserveTiming)
     eachTiming(editLanes(), lanes => snapStrayNotes(lanes, prev.lanes));
+  for (const lane of invalidateVoicing ? editLanes() : []) if (lane.handAnchorVersion === HAND_ANCHOR_VERSION)
+    lane.handHolds = normalizeHandAnchors(lane.notes, lane.handHolds || []);
   if (rejectLockedEdit(prev, translation || 0)) return;
   if (invalidateVoicing) S.voicingRevision++;
   S.undoStack.push(prev);
@@ -171,6 +175,7 @@ function restore(snap) {
     if (snap.boxes) l.refBoxes = JSON.parse(JSON.stringify(snap.boxes[l.id] || {}));
     if (snap.repeats) l.repeatGroups = cloneJson(snap.repeats[l.id] || []);
     if (snap.holds) l.handHolds = (snap.holds[l.id] || []).map((h) => ({ ...h }));
+    if (snap.handVersions) l.handAnchorVersion = snap.handVersions[l.id];
     if (snap.capo && snap.capo[l.id] != null) l.capo = snap.capo[l.id];
     if (snap.marks && snap.marks[l.id]) {
       l.toneMarkers = cloneJson(snap.marks[l.id].tone);

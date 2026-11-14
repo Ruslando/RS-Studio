@@ -15,8 +15,8 @@ def _am(kind, shape="shape_1", **extra):
             for k, (s, f, p) in enumerate(grip)]
 
 
-def _compile(notes, phrases=None):
-    track = {"name": "Lead", "tuning": TUNING, "notes": notes}
+def _compile(notes, phrases=None, hand_changes=False):
+    track = {"name": "Lead", "tuning": TUNING, "notes": notes, "handAnchorVersion": 1 if hand_changes else 0}
     return compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0, phrase_boundaries=phrases)
 
 
@@ -129,12 +129,12 @@ class ShapeExportTest(unittest.TestCase):
         frame = next(fp for fp in _compile(notes).sng.levels[0].handshapes if fp.start_time == 1.0)
         self.assertLess(frame.end_time, 2.5)
 
-    def test_the_hand_stays_put_inside_a_shape_and_the_change_is_reported(self):
+    def test_a_saved_hand_change_inside_a_shape_is_kept_and_reported(self):
         notes = _am("handshape")
         notes[3]["hand"] = 3   # a hand anchor (or the fingering) moves the hand mid-shape
-        compiled = _compile(notes)
+        compiled = _compile(notes, hand_changes=True)
         inside = [a for a in compiled.sng.levels[0].anchors if 1.0 < a.start_time < 2.25]
-        self.assertEqual(inside, [])
+        self.assertEqual([(a.start_time, a.fret) for a in inside], [(1.75, 3), (2.0, 1)])
         self.assertIn(("shape-hand", 1.75), compiled.fixes)
         self.assertEqual(len(compiled.sng.levels[0].handshapes), 1, "the shape itself still exports")
 

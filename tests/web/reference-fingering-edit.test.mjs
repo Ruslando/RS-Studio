@@ -6,7 +6,7 @@ import { effectSig, inRefBox, occurrenceBox, shiftOf } from '../../web/reference
 import { referenceHands, referenceHandSig, mirrorReferenceHands } from '../../web/reference-hands.js';
 import { chordColumns, slideFingerGroup } from '../../web/voicing-core.js';
 const noop = () => {};
-const lane = { id: 'test', visible: true, notes: [
+const lane = { id: 'test', visible: true, handAnchorVersion: 1, handHolds: [{ id: 'initial', t: 0, fret: 2 }], notes: [
   { id: 'first', start: 0, end: .8, pitch: 52, finger: 1 },
   { id: 'second', start: 4, end: 4.8, pitch: 52, finger: 1 },
 ], refBoxes: { 1: { rt0: 0, rt1: 1, pLo: 52, pHi: 52, anchors: [0, 4] } } };
@@ -53,23 +53,23 @@ try {
   edit.redo(); assert.deepEqual(lane.notes.map(n => n.finger), [3, 3]);
   edit.undo();
   edit.setHandAnchor(lane, 4, 7);
-  assert.deepEqual(lane.handHolds.map(h => [h.t, h.fret]), [[0, 7], [4, 7]]);
-  assert.ok(lane.notes.every(n => n.finger == null), 'choosing a shared hand clears its shared explicit fingers');
-  edit.undo(); assert.deepEqual(lane.handHolds, []); assert.deepEqual(lane.notes.map(n => n.finger), [1, 1]);
-  edit.redo(); assert.deepEqual(lane.handHolds.map(h => h.fret), [7, 7]);
-  edit.setHandAnchor(lane, 4, null); assert.deepEqual(lane.handHolds, [], 'Auto clears the whole reference');
-  edit.undo(); assert.deepEqual(lane.handHolds.map(h => h.fret), [7, 7]);
+  assert.deepEqual(lane.handHolds.map(h => [h.t, h.fret]), [[0, 7]], 'a shared change mirrors back and equal neighbours disappear');
+  assert.ok(lane.notes.every(n => n.finger === 1), 'explicit fingers remain available for conflict reporting');
+  edit.undo(); assert.deepEqual(lane.handHolds.map(h => h.fret), [2]); assert.deepEqual(lane.notes.map(n => n.finger), [1, 1]);
+  edit.redo(); assert.deepEqual(lane.handHolds.map(h => h.fret), [7]);
+  edit.setHandAnchor(lane, 4, null); assert.deepEqual(lane.handHolds.map(h => h.fret), [7], 'inherited values have no hidden change to delete');
+  edit.setHandAnchor(lane, 0, null); assert.deepEqual(lane.handHolds.map(h => h.fret), [7], 'the initial value cannot be deleted');
   // A hold left at a note's earlier time still belongs to its column, where the
   // earliest hold is obeyed: a new hand must replace it rather than sit behind it.
   const kept = lane.handHolds;
-  lane.handHolds = [{ id: 'stale', t: 3.5, fret: 5 }];
+  lane.handHolds = [{ id: 'initial', t: 0, fret: 2 }, { id: 'stale', t: 3.5, fret: 5 }];
   edit.setHandAnchor(lane, 4, 7);
-  assert.deepEqual(lane.handHolds.map(h => [h.t, h.fret]), [[0, 7], [4, 7]], 'the new hand replaces the stale hold');
-  edit.setHandAnchor(lane, 4, null); assert.deepEqual(lane.handHolds, [], 'Auto clears it as well');
+  assert.deepEqual(lane.handHolds.map(h => [h.t, h.fret]), [[0, 7]], 'the new hand replaces the stale hold and normalizes its shared copy');
+  edit.setHandAnchor(lane, 4, null); assert.deepEqual(lane.handHolds.map(h => h.fret), [7]);
   lane.handHolds = kept;
   lane.refBoxes[1].locked = true;
   const count = S.undoStack.length; edit.setHandAnchor(lane, 4, 9);
-  assert.deepEqual(lane.handHolds.map(h => h.fret), [7, 7], 'locked references protect anchor-only edits too');
+  assert.deepEqual(lane.handHolds.map(h => h.fret), [7], 'locked references protect anchor-only edits too');
   assert.equal(S.undoStack.length, count);
 } finally { Object.assign(globalThis, saved); }
 console.log('Reference fingering and hand edits: mirroring, Auto, locks and undo passed');

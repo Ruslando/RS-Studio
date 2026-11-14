@@ -13,7 +13,7 @@ export function clipOf(notes) {
   return notes.map((n) => {
     const lane = laneOf(n);
     if (lane && !clocks.has(lane)) clocks.set(lane, laneClock(lane));
-    if (lane && !hands.has(lane)) hands.set(lane, noteHandAnchors(lane.notes, lane.handHolds));
+    if (lane && !hands.has(lane)) hands.set(lane, noteHandAnchors(lane.notes, lane.handHolds, lane.handAnchorVersion === 1));
     if (lane && !fingerings.has(lane)) {
       const found = laneFingeringNow(lane);
       fingerings.set(lane, { found, byId: new Map(found.notes.map(note => [note.id, note])) });
