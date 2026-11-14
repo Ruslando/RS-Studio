@@ -3383,6 +3383,32 @@ class EndToEndTests(unittest.TestCase):
         page.click('#settingsModalClose')
         expect(preview).to_have_attribute('data-running', 'false')
 
+    def test_startup_with_fretboard_animations_disabled(self):
+        page = self.page
+        settings = json.dumps({'fretboardAnimations': False})
+        page.evaluate("settings => localStorage.setItem('cw.settings', settings)", settings)
+        self.set_prefs({'cw.settings': settings})
+        page.reload()
+        expect(page.locator('#fretboardAnimations')).not_to_be_checked()
+        # Settings previews run during startup, before the editor controls and
+        # artifact lists are wired. A saved preference must not interrupt boot.
+        self.assertEqual(self.faults, [])
+        page.click('#welcomeSettingsBtn')
+        expect(page.locator('#settingsModalBackdrop')).to_be_visible()
+        page.click('[data-settings-pane="trace"]')
+        page.locator('#fretboardSettingsPreview').hover()
+        page.click('#settingsModalClose')
+        self.open_reference_project()
+        expect(page.locator('#artifactList .artifact-row')).not_to_have_count(0)
+        expect(page.locator('#artifactMarkers .artifact-row')).not_to_have_count(0)
+        page.click('#fretboardToggle')
+        expect(page.locator('#fretboardToggle')).to_have_attribute('aria-expanded', 'true')
+        page.click('#fretboardToggle')
+        expect(page.locator('#fretboardToggle')).to_have_attribute('aria-expanded', 'false')
+        page.click('#settingsMenuBtn')
+        expect(page.locator('#settingsModalBackdrop')).to_be_visible()
+        page.click('#settingsModalClose')
+
     def test_fretboard_settings_preview_matches_the_live_neck(self):
         self.open_reference_project()
         page=self.page

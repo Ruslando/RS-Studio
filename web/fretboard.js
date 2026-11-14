@@ -1572,13 +1572,19 @@ export function drawFretboardSettingsPreview(time = 0) {
   const { scale, X, Y, strung, tunePx } = projection;
   const animate = $("fretboardAnimations").checked;
   const { columns, duration } = fretboardPreviewPhrase(tuning, s.capo || 0, lastFret);
+  // The shared hand painter also reads notes and positions when animations are
+  // off. Keep those in the example phrase, independent of any open project.
+  const contacts = columns.flatMap(column => column.fingers);
+  const previewLane = { ...lane, notes: contacts.map(contact => contact.note) };
   const t = ((time % duration) + duration) % duration;
-  const found = { columns, playableColumns: columns };
+  const found = { columns, playableColumns: columns,
+    voiced: new Map(contacts.map(contact => [contact.note, { string: contact.string, fret: contact.fret }])),
+    fingers: new Map(contacts.map(contact => [contact.note, contact.finger])) };
   const now = { found, t, moving: animate, at: handAt(columns, t, animate ? .25 : 0, s, animate),
     ringing: [], releases: [], preparations: [] };
   const seat = columns[gripIndex(columns, t)]?.seat || 0;
   paintFretboardNeck(ctx, s, scale, X, Y, { lane, now, seat, strung, tunePx, lastFret });
-  drawHand(ctx, s, scale, X, Y, lane, now, null, { onion: true });
+  drawHand(ctx, s, scale, X, Y, previewLane, now, null, { onion: true });
 }
 
 // A quiet, borderless pitch label beside each contact. Open strings follow the

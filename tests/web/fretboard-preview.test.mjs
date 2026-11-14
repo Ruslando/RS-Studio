@@ -26,7 +26,8 @@ try {
     './stage-paint.js': { WASH: .18, UI_PAINT: { chrome: '#111111', ground: '#222222', hint: '#666666', label: '#aaaaaa', ok: '#77aacc', ink: '#000000', paper: '#ffffff', text: '#ffffff' } },
     './util.js': { dpr: () => 1, hexA, noteName },
   }, { './fretboard-core.js': true, './constants.js': true, './articulations.js': true,
-    './fretboard-preview-phrase.js': true, './string-glow.js': true, './string-techniques.js': true, './whammy.js': true });
+    './fretboard-preview-phrase.js': true, './string-glow.js': true, './string-techniques.js': true, './whammy.js': true,
+    './hammer-positions.js': true });
   drawFretboardSettingsPreview(1.5);
   assert.ok(!text.some(item => /Capo|Hand position/.test(item.value)), 'no preview-only captions');
   assert.deepEqual(text.filter(item => item.baseline === 'top').map(item => item.value), ['1','3','5','7','10'],
@@ -50,7 +51,8 @@ try {
   drawFretboardSettingsPreview();
   assert.deepEqual(text.map(item => item.value), ['3', '5', '7', '9', '12', 'E4', 'B3', 'G3', 'D3', 'A2', 'E2'],
     'inlay-fret numbers and tuning remain visible independently of contact label settings');
-  for (const width of [260, 420, 800]) for (const time of [0, 1.5, 3]) {
+  for (const animated of [true, false]) for (const width of [260, 420, 800]) for (const time of [0, 1.5, 3, 6.08]) {
+    controls.fretboardAnimations.checked = animated;
     canvas.clientWidth = width; polygons.length = 0; circles.length = 0; text.length = 0;
     drawFretboardSettingsPreview(time);
     const board = polygons[0].points, left = Math.min(...board.map(p => p[0])), right = Math.max(...board.map(p => p[0]));
