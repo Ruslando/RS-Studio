@@ -298,7 +298,9 @@ def _reassigned_power(y, sr: int, n_frames: int, semitones: int = N_BINS, chunk_
     step = int(chunk_s * sr)
     for start in range(0, len(y), step):
         first = max(0, start - n_fft)
-        with np.errstate(divide="ignore", invalid="ignore"):
+        # librosa divides before masking bins below ref_power; near-silent bins
+        # can overflow during reassignment and are discarded by that mask.
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
             freqs, times, mags = librosa.reassigned_spectrogram(
                 y[first:start + step + n_fft], sr=sr, n_fft=n_fft, hop_length=HOP_LENGTH,
                 ref_power=1e-10, fill_nan=False)
