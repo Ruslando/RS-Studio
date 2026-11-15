@@ -1,6 +1,4 @@
-// The New Project modal: name the project, drop in the full song, then build up
-// its stems — each separated or uploaded (and previewable) independently — before
-// Create finalizes the lot.
+// The New Project modal: upload a full song, fill in its details, and create it.
 //
 // The modal owns the *draft*, and that is the whole reason it can stand alone.
 // A draft is a real project on the server that exists before you press Create:
@@ -16,19 +14,11 @@
 // open — `onClosed`. Same rule as project-library.js and stem-settings.js: the
 // import edge runs one way, project.js → here.
 
-import { $, addStemBtn, fileInput, form, goBtn, modalBackdrop, newProjBtn, npClear, npDrop, npDropSub, npDropTitle, stemBulkBrowseBtn, stemBulkInput, stemsAddEl, stemsListEl, warnEl } from "./dom.js";
+import { $, fileInput, form, goBtn, modalBackdrop, newProjBtn, npClear, npDrop, npDropSub, npDropTitle, warnEl } from "./dom.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
-import { UPLOAD_ARROW_ICON } from "./icons.js";
 import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
-import { toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
-import { operationRequest, uploadRequest } from "./operation-progress.js";
-import { DEFAULT_PART_ORDER, backendLabel, loadSeparators, separators } from "./separators.js";
-import { previewIcon, syncScrub, wireScrub } from "./stem-preview.js";
-import { isAudioFile } from "./util.js";
-
-// The card's own close button; the upload arrow is shared, so it is in icons.js.
-const REMOVE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+import { uploadRequest } from "./operation-progress.js";
 
 // Set by initNewProject. See the module banner: these are the only way out.
 let onProjectCreated = () => {};
@@ -48,40 +38,43 @@ async function ensureDraftJob() {
   return draftJobPromise;
 }
 
-function cleanupOrphanStem(stemId) {
-  // A card was removed while its separate/upload request was still in flight —
-  // the server finished the work after the fact, so drop the now-unwanted stem.
-  if (draftJob) fetch(`/api/projects/${draftJob}/stems/${stemId}`, { method: "DELETE" }).catch(() => {});
-}
-
-let stemSeq = 0;
 const NP_SUB_DEFAULT = npDropSub.textContent;
 const npSongTitleInput = $("npSongTitle"), npArtistInput = $("npArtist");
 const npAlbumInput = $("npAlbum"), npYearInput = $("npYear");
 const npCoverDrop = $("npCoverDrop"), npCoverThumb = $("npCoverThumb");
 const npCoverTitle = $("npCoverTitle"), npCoverSub = $("npCoverSub");
 const npCoverClear = $("npCoverClear"), npCoverInput = $("npCoverInput");
+const npFormFields = $("npFormFields"), npClose = $("npClose");
 let draftMetadata = normalizeMetadata({});
-for (const input of [npSongTitleInput, npArtistInput]) input.addEventListener("input", () => refreshCreateEnabled());
+let autoMetadataValues = { title: "", artist: "", album: "", year: "" };
+let autoCoverArt = "";
+const metadataInputs = { title: npSongTitleInput, artist: npArtistInput, album: npAlbumInput, year: npYearInput };
+for (const [key, input] of Object.entries(metadataInputs)) {
+  input.addEventListener("input", () => {
+    autoMetadataValues[key] = null;
+    if (key === "title" || key === "artist") refreshCreateEnabled();
+  });
+}
 const npLatin = latinFields({ title: "npSongTitle", artist: "npArtist", album: "npAlbum" });
 
 function hasFullSong() { return fileInput.files.length > 0; }
 // True while the full song is still on its way to the server: Create would
 // finalize a draft with no audio in it yet.
 let mainUploading = false;
+let formBusy = false;
 
 function refreshCreateEnabled() {
-  const anyWorking = stemsListEl.querySelector(".stem-card[data-state='working']");
-  const anyReady = stemsListEl.querySelector(".stem-card[data-state='ready']");
   // A project is named after its song, so it cannot be created without one.
   const named = npSongTitleInput.value.trim() && npArtistInput.value.trim();
-  goBtn.disabled = mainUploading || !!anyWorking || !(hasFullSong() || anyReady) || !named;
+  goBtn.disabled = mainUploading || formBusy || !hasFullSong() || !named;
 }
 
-// Cards parked in the "choosing" state render the backend list, so they need a
-// nudge when it arrives (or when the full song appears and separation unlocks).
-export function refreshChoosingCards() {
-  stemsListEl.querySelectorAll(".stem-card[data-state='choosing']").forEach((c) => { if (c._render) c._render(); });
+function setFormBusy(busy) {
+  formBusy = !!busy;
+  npFormFields.inert = formBusy;
+  npFormFields.setAttribute("aria-busy", String(formBusy));
+  npClose.disabled = formBusy;
+  refreshCreateEnabled();
 }
 
 // ---- metadata + cover art ----
@@ -92,6 +85,45 @@ function collectNewProjectMetadata() {
   current.album = (npAlbumInput.value || "").trim();
   current.year = (npYearInput.value || "").trim();
   return npLatin.read(current);
+}
+
+function prepareMetadataForAudio() {
+  for (const [key, input] of Object.entries(metadataInputs)) {
+    const value = input.value.trim();
+    if (!value || value === autoMetadataValues[key]) {
+      input.value = "";
+      autoMetadataValues[key] = input.value;
+    }
+  }
+  npLatin.fill(collectNewProjectMetadata());
+  const current = normalizeMetadata(draftMetadata);
+  if (current.coverArt && current.coverArt === autoCoverArt) {
+    draftMetadata = normalizeMetadata({ ...current, coverArt: null, coverArtName: "", coverArtUpdatedAt: null, coverArtUrl: "" });
+    autoCoverArt = "";
+    renderNewProjectCover();
+  }
+}
+
+function applyAudioMetadata(audioMetadata = {}) {
+  for (const [key, input] of Object.entries(metadataInputs)) {
+    const value = String(audioMetadata[key] || "").trim();
+    if (value && (!input.value.trim() || input.value.trim() === autoMetadataValues[key])) {
+      input.value = value;
+      autoMetadataValues[key] = value;
+    }
+  }
+  const current = normalizeMetadata(draftMetadata);
+  const replaceAutoCover = current.coverArt && current.coverArt === autoCoverArt;
+  if (audioMetadata.coverArt && (!current.coverArt || replaceAutoCover)) {
+    draftMetadata = normalizeMetadata({ ...current, ...audioMetadata });
+    autoCoverArt = audioMetadata.coverArt;
+  } else if (!audioMetadata.coverArt && replaceAutoCover) {
+    draftMetadata = normalizeMetadata({ ...current, coverArt: null, coverArtName: "", coverArtUpdatedAt: null, coverArtUrl: "" });
+    autoCoverArt = "";
+  }
+  npLatin.fill(collectNewProjectMetadata());
+  renderNewProjectCover();
+  refreshCreateEnabled();
 }
 
 function renderNewProjectCover() {
@@ -118,285 +150,37 @@ const setNewProjectCoverFromDrop = (dataTransfer) =>
 // where both progress and errors go.
 async function changeNewProjectCover(run) {
   const before = collectNewProjectMetadata();
-  const meta = await applyCoverChange(before, async () => run(await ensureDraftJob()),
-    coverStatus(npCoverDrop, (message) => { npCoverSub.textContent = message; }), "Uploading...", "Uploaded");
-  draftMetadata = meta || before;
-  renderNewProjectCover();
+  setFormBusy(true);
+  try {
+    const meta = await applyCoverChange(before, async () => run(await ensureDraftJob()),
+      coverStatus(npCoverDrop, (message) => { npCoverSub.textContent = message; }), "Uploading...", "Uploaded");
+    draftMetadata = meta || before;
+    if (meta) autoCoverArt = "";
+    renderNewProjectCover();
+  } finally {
+    setFormBusy(false);
+  }
 }
 
 async function clearNewProjectCover() {
   const current = collectNewProjectMetadata();
-  if (draftJob && draftMetadata.coverArt) {
-    try {
-      const cleared = await clearProjectCover(draftJob);
-      draftMetadata = { ...current, ...cleared, title: current.title, artist: current.artist, album: current.album, year: current.year };
-    } catch {
+  setFormBusy(true);
+  try {
+    if (draftJob && draftMetadata.coverArt) {
+      try {
+        const cleared = await clearProjectCover(draftJob);
+        draftMetadata = { ...current, ...cleared, title: current.title, artist: current.artist, album: current.album, year: current.year };
+      } catch {
+        draftMetadata = { ...current, coverArt: null, coverArtName: "", coverArtUrl: "", coverArtUpdatedAt: null };
+      }
+    } else {
       draftMetadata = { ...current, coverArt: null, coverArtName: "", coverArtUrl: "", coverArtUpdatedAt: null };
     }
-  } else {
-    draftMetadata = { ...current, coverArt: null, coverArtName: "", coverArtUrl: "", coverArtUpdatedAt: null };
+    autoCoverArt = "";
+    renderNewProjectCover();
+  } finally {
+    setFormBusy(false);
   }
-  renderNewProjectCover();
-}
-
-// ---- stem cards ----
-// One stem card: a self-contained state machine (choosing source -> working ->
-// ready) wired to the draft-job endpoints above. Kept as one closure per card
-// (like project.js's per-row builders, e.g. renderStemTabs) rather than a shared
-// render loop — each card's async work (separate/upload) is independent of the
-// others.
-function createStemCard() {
-  stemSeq += 1;
-  const card = document.createElement("div");
-  card.className = "stem-card";
-  card.dataset.state = "choosing";
-  card.dataset.mode = hasFullSong() ? "separate" : "upload";
-  card._n = stemSeq;
-  card._pos = 0; card._duration = NaN; card._playing = false;
-  card._serverStemId = null;
-  card._removed = false;
-
-  function render() {
-    if (!hasFullSong() && card.dataset.mode === "separate") card.dataset.mode = "upload";
-    const state = card.dataset.state;
-    const mode = card.dataset.mode;
-    let body = "";
-    if (state === "choosing") {
-      const avail = separators.filter((s) => s.available);
-      const selectedBackend = avail.find((s) => s.id === card._backend) || avail[0];
-      body = `
-        <div class="view-switch" role="group" aria-label="Audio source">
-          <button type="button" class="mode ${mode === "separate" ? "active" : ""}" data-pick="separate"
-            ${hasFullSong() ? "" : "disabled title='Upload the full song first to separate stems from it'"}>Separate from full song</button>
-          <button type="button" class="mode ${mode === "upload" ? "active" : ""}" data-pick="upload">Upload my own</button>
-        </div>
-        ${mode === "separate" ? `
-          <div class="sc-source-row">
-            <select class="sc-backend">
-              ${separators.map((s) => `<option value="${s.id}" ${s.available ? "" : "disabled"}
-                ${s.id === selectedBackend?.id ? "selected" : ""}>${s.label}${s.available ? "" : ` — ${s.reason || "Missing model files"}`}</option>`).join("")}
-            </select>
-            <select class="sc-part"></select>
-            <button type="button" class="primary sc-go" ${avail.length ? "" : "disabled"}>Separate</button>
-          </div>
-          ${avail.length ? "" : `<p class="sc-error">No separation backend is available.</p>`}
-        ` : `
-          <div class="sc-drop" tabindex="0" role="button" aria-label="Choose or drop an audio file">
-            ${UPLOAD_ARROW_ICON}
-            <span>Drop a stem file here, or click to browse</span>
-            <input type="file" class="sc-file" accept="audio/*" hidden />
-          </div>
-        `}
-        ${card._error ? `<p class="sc-error">${card._error}</p>` : ""}
-      `;
-    } else if (state === "working") {
-      body = `
-        <div class="sc-working busy">
-          <span class="sc-work-copy">
-            <span class="sc-work-label"></span>
-          </span>
-        </div>
-      `;
-    } else if (state === "ready") {
-      body = `
-        <div class="sc-ready">
-          <button type="button" class="sc-preview" aria-label="Play preview">${previewIcon(card._playing ? "pause" : "play")}</button>
-          <div class="sc-ready-main">
-            <input type="text" class="sc-name" />
-            <span class="sc-caption"></span>
-            <div class="sc-scrub-row">
-              <div class="sc-scrub" role="slider" tabindex="0" aria-label="Seek preview" aria-valuemin="0">
-                <span class="sc-scrub-fill"></span>
-                <span class="sc-scrub-handle"></span>
-              </div>
-              <span class="sc-time">0:00 / 0:00</span>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    card.innerHTML = `
-      <div class="stem-card-head">
-        <button type="button" class="sc-remove" aria-label="Remove audio">
-          ${REMOVE_ICON}
-        </button>
-      </div>
-      ${body}
-    `;
-    // Everything above is a fixed shell. User strings — the stem name, the
-    // uploaded file name, the progress label — are written in as text, the same
-    // way buildProjectRow and the Rocksmith arrangement rows do it, so a file
-    // called `<img onerror=...>` stays a file name.
-    setText(".sc-name", card._name, "value");
-    setText(".sc-caption", card._source);
-    setText(".sc-work-label", card._workLabel);
-    wire();
-    if (card.dataset.state === "working") refreshCreateEnabled();
-  }
-
-  function setText(selector, value, prop = "textContent") {
-    const el = card.querySelector(selector);
-    if (el) el[prop] = value || "";
-  }
-
-  function wire() {
-    card.querySelector(".sc-remove").addEventListener("click", () => removeCard());
-
-    if (card.dataset.state === "choosing") {
-      card.querySelectorAll("[data-pick]").forEach((b) =>
-        b.addEventListener("click", () => { card.dataset.mode = b.dataset.pick; card._error = null; render(); }));
-
-      if (card.dataset.mode === "separate") {
-        const backendSel = card.querySelector(".sc-backend");
-        const partSel = card.querySelector(".sc-part");
-        if (backendSel) {
-          card._backend = card._backend || backendSel.value;
-          const fillParts = () => {
-            const b = separators.find((s) => s.id === backendSel.value);
-            const parts = (b && b.stems) || [];
-            const def = DEFAULT_PART_ORDER.find((p) => parts.some((s) => s.id === p)) || (parts[0] && parts[0].id);
-            partSel.innerHTML = parts.map((s) => `<option value="${s.id}" ${s.id === (card._part || def) ? "selected" : ""}>${s.label}</option>`).join("");
-          };
-          fillParts();
-          backendSel.addEventListener("change", () => { card._backend = backendSel.value; card._part = null; fillParts(); });
-          card.querySelector(".sc-go").addEventListener("click", () => {
-            card._backend = backendSel.value;
-            card._part = partSel.value;
-            startSeparation();
-          });
-        }
-      } else {
-        const drop = card.querySelector(".sc-drop");
-        const input = card.querySelector(".sc-file");
-        drop.addEventListener("click", () => input.click());
-        drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
-        input.addEventListener("change", () => { if (input.files[0]) acceptUpload(input.files[0]); });
-        ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
-        ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
-        drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) acceptUpload(f); });
-      }
-    }
-
-    if (card.dataset.state === "ready") {
-      const nameInput = card.querySelector(".sc-name");
-      nameInput.addEventListener("input", () => { card._name = nameInput.value; });
-      card.querySelector(".sc-preview").addEventListener("click", () => togglePlay());
-      wireCardScrub();
-      syncCardScrub();
-    }
-  }
-
-  function removeCard() {
-    card._removed = true;
-    if (card._audioEl) card._audioEl.pause();
-    card.remove();
-    if (card._serverStemId) cleanupOrphanStem(card._serverStemId);
-    refreshCreateEnabled();
-  }
-
-  function setReadyAudio(url) {
-    const a = new Audio(url);
-    card._audioEl = a;
-    card._pos = 0; card._duration = NaN;
-    a.addEventListener("loadedmetadata", () => { card._duration = a.duration; syncCardScrub(); });
-    a.addEventListener("timeupdate", () => { card._pos = a.currentTime; syncCardScrub(); });
-    a.addEventListener("ended", () => { pausePlayback(); card._pos = 0; a.currentTime = 0; syncCardScrub(); });
-  }
-
-  async function startSeparation() {
-    card.dataset.state = "working";
-    card._workLabel = `Separating with ${backendLabel(card._backend)}…`;
-    card._error = null;
-    render();
-    try {
-      const job = await ensureDraftJob();
-      const data = await operationRequest(
-        `/api/projects/${job}/stems/separate`,
-        {backend: card._backend, part: card._part},
-        "Separating audio", `${backendLabel(card._backend)} · ${card._part}`,
-      );
-      if (card._removed) { cleanupOrphanStem(data.stem.id); return; }
-      card._serverStemId = data.stem.id;
-      card._name = data.stem.name;
-      card._source = `Separated · ${backendLabel(card._backend)}`;
-      setReadyAudio(data.stem.audio_url);
-      card.dataset.state = "ready";
-      render();
-      if (data.warning) toast(data.warning, 6000, "warn");
-    } catch (err) {
-      card._error = err.cancelled ? null : err.message;
-      card.dataset.state = "choosing";
-      render();
-    }
-    refreshCreateEnabled();
-  }
-
-  async function acceptUpload(file) {
-    card.dataset.state = "working";
-    card._workLabel = "Uploading…";
-    card._error = null;
-    render();
-    try {
-      const job = await ensureDraftJob();
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("name", file.name.replace(/\.[^.]+$/, ""));
-      const data = await uploadRequest(`/api/projects/${job}/stems/upload`, fd, "Adding audio", file.name);
-      if (card._removed) { cleanupOrphanStem(data.stem.id); return; }
-      card._serverStemId = data.stem.id;
-      card._name = data.stem.name;
-      card._source = `Uploaded · ${file.name}`;
-      setReadyAudio(data.stem.audio_url);
-      card.dataset.state = "ready";
-      render();
-    } catch (err) {
-      card._error = err.message;
-      card.dataset.state = "choosing";
-      render();
-    }
-    refreshCreateEnabled();
-  }
-
-  const syncCardScrub = () => syncScrub(card, card._pos, card._duration);
-
-  function seekFrac(seconds) {
-    card._pos = seconds;
-    if (card._audioEl) card._audioEl.currentTime = card._pos;
-    syncCardScrub();
-  }
-
-  const wireCardScrub = () => wireScrub(card, () => card._duration, () => card._pos, seekFrac);
-
-  function togglePlay() { card._playing ? pausePlayback() : playPreview(); }
-
-  function playPreview() {
-    if (!card._audioEl || !Number.isFinite(card._duration)) return;
-    card._playing = true;
-    const btn = card.querySelector(".sc-preview");
-    if (btn) btn.innerHTML = previewIcon("pause");
-    card._audioEl.currentTime = card._pos;
-    card._audioEl.play();
-  }
-
-  function pausePlayback() {
-    card._playing = false;
-    const btn = card.querySelector(".sc-preview");
-    if (btn) btn.innerHTML = previewIcon("play");
-    if (card._audioEl) card._audioEl.pause();
-  }
-
-  card._render = render;
-  card._acceptUpload = acceptUpload;
-  render();
-  return card;
-}
-
-function bulkAddStemFiles(fileList) {
-  Array.from(fileList || []).filter(isAudioFile).forEach((f) => {
-    const card = createStemCard();
-    stemsListEl.appendChild(card);
-    card._acceptUpload(f);
-  });
 }
 
 // ---- the full song ----
@@ -409,7 +193,6 @@ export async function setMainFile(file) {
     npDropTitle.textContent = "Drop the full song, or click to browse";
     npDropSub.textContent = NP_SUB_DEFAULT;
     npClear.hidden = true;
-    refreshChoosingCards();
     refreshCreateEnabled();
     return;
   }
@@ -419,16 +202,16 @@ export async function setMainFile(file) {
   npDropSub.textContent = "";   // the progress panel says it, with the bytes sent
   npClear.hidden = false;
   npClear.disabled = true;
-  if (npSongTitleInput && !npSongTitleInput.value) npSongTitleInput.value = file.name.replace(/\.[^.]+$/, "");
-  npLatin.sync();   // a programmatic value fires no "change"
+  prepareMetadataForAudio();
   mainUploading = true;
-  refreshCreateEnabled();
+  setFormBusy(true);
   try {
     const job = await ensureDraftJob();
     const fd = new FormData();
     fd.append("audio", file);
     const data = await uploadRequest(`/api/projects/${job}/mix`, fd, "Uploading song", file.name);
     npDropSub.textContent = data.tempo ? `${Math.round(data.tempo)} BPM detected` : "Ready";
+    applyAudioMetadata(data.audioMetadata);
   } catch (err) {
     npDrop.classList.remove("has-file"); npDrop.classList.add("error");
     npDropTitle.textContent = "Upload failed — click to try again";
@@ -437,18 +220,7 @@ export async function setMainFile(file) {
   }
   mainUploading = false;
   npClear.disabled = false;
-  refreshChoosingCards();
-  refreshCreateEnabled();
-}
-
-// Stop any card's preview playback/progress timer before its DOM node is
-// dropped — closures keep them alive otherwise, so audio would keep playing
-// in the background after the modal closes.
-function disposeStemCards() {
-  stemsListEl.querySelectorAll(".stem-card").forEach((c) => {
-    if (c._audioEl) c._audioEl.pause();
-  });
-  stemsListEl.replaceChildren();
+  setFormBusy(false);
 }
 
 // ---- open / close / create ----
@@ -458,12 +230,15 @@ function disposeStemCards() {
 // has to wait for that, and gets nothing when the question was answered "cancel".
 export async function openNewProject() {
   if (!await canLeaveOpenProject()) return false;
-  await loadSeparators();
+  mainUploading = false;
+  setFormBusy(false);
   if (npSongTitleInput) npSongTitleInput.value = "";
   if (npArtistInput) npArtistInput.value = "";
   if (npAlbumInput) npAlbumInput.value = "";
   if (npYearInput) npYearInput.value = "";
   draftMetadata = normalizeMetadata({});
+  autoMetadataValues = { title: "", artist: "", album: "", year: "" };
+  autoCoverArt = "";
   npLatin.fill(draftMetadata);
   renderNewProjectCover();
   fileInput.value = "";
@@ -471,8 +246,6 @@ export async function openNewProject() {
   npDropTitle.textContent = "Drop the full song, or click to browse";
   npDropSub.textContent = NP_SUB_DEFAULT;
   npClear.hidden = true;
-  disposeStemCards();
-  stemSeq = 0;
   draftJob = null; draftJobPromise = null;
   modalBackdrop.hidden = false;
   refreshCreateEnabled();
@@ -485,7 +258,6 @@ export async function openNewProject() {
 // the launcher, which is project.js's call to make, not this module's.
 function closeNewProject() {
   modalBackdrop.hidden = true;
-  disposeStemCards();
   if (draftJob) {
     const abandoned = draftJob;
     draftJob = null; draftJobPromise = null;
@@ -495,29 +267,33 @@ function closeNewProject() {
 }
 
 async function createProject() {
-  if (!hasFullSong() && !stemsListEl.querySelector(".stem-card[data-state='ready']")) return;
+  if (!hasFullSong()) return;
   warnEl.innerHTML = "";   // a previous project's warnings must not survive the wait
   goBtn.disabled = true;
   // The loading screen (design.md 4.17): this ends in the project opening, and
   // nothing can be done until it has. A failure is said there, and Back returns
   // to this window with everything still in it.
-  await loadWithScreen(async () => {
-    const job = await ensureDraftJob();
-    draftMetadata = collectNewProjectMetadata();
-    const res = await fetch(`/api/projects/${job}/finalize`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ metadata: metadataPayload(draftMetadata) }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || "Request failed");
-    }
-    const data = await res.json();
-    draftJob = null; draftJobPromise = null;   // it's a real project now — closeNewProject must not delete it
-    closeNewProject();
-    await onProjectCreated(data);
-  }, { title: "Creating project", failureTitle: "Could not create the project" });
-  refreshCreateEnabled();
+  setFormBusy(true);
+  try {
+    await loadWithScreen(async () => {
+      const job = await ensureDraftJob();
+      draftMetadata = collectNewProjectMetadata();
+      const res = await fetch(`/api/projects/${job}/finalize`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata: metadataPayload(draftMetadata) }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Request failed");
+      }
+      const data = await res.json();
+      draftJob = null; draftJobPromise = null;   // it's a real project now — closeNewProject must not delete it
+      closeNewProject();
+      await onProjectCreated(data);
+    }, { title: "Creating project", failureTitle: "Could not create the project" });
+  } finally {
+    setFormBusy(false);
+  }
 }
 
 /**
@@ -537,6 +313,7 @@ export function initNewProject({ onCreated, onClosed, canLeave }) {
   $("npClose").addEventListener("click", closeNewProject);
   registerEscapeLayer(ESC_DEPTH.modal, () => {
     if (modalBackdrop.hidden) return false;
+    if (formBusy) return false;
     closeNewProject(); return true;
   });
 
@@ -570,10 +347,4 @@ export function initNewProject({ onCreated, onClosed, canLeave }) {
     npCoverDrop.addEventListener("drop", (e) => { setNewProjectCoverFromDrop(e.dataTransfer); });
   }
 
-  addStemBtn.addEventListener("click", () => { stemsListEl.appendChild(createStemCard()); refreshCreateEnabled(); });
-  stemBulkBrowseBtn.addEventListener("click", () => stemBulkInput.click());
-  stemBulkInput.addEventListener("change", () => { bulkAddStemFiles(stemBulkInput.files); stemBulkInput.value = ""; });
-  ["dragenter", "dragover"].forEach((ev) => stemsAddEl.addEventListener(ev, (e) => { e.preventDefault(); stemsAddEl.classList.add("drag"); }));
-  stemsAddEl.addEventListener("dragleave", () => stemsAddEl.classList.remove("drag"));
-  stemsAddEl.addEventListener("drop", (e) => { e.preventDefault(); stemsAddEl.classList.remove("drag"); bulkAddStemFiles(e.dataTransfer.files); });
 }

@@ -977,11 +977,6 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
   .field-pair { flex-wrap: wrap; }
   .field-pair > .field-group.block.is-narrow { flex: 1; }
 }
-.stems-section { border-top: 1px solid var(--line); padding-top: var(--s-group); margin-top: 0; }
-.stems-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-row); }
-.stems-head .hint { text-align: right; }
-.stems-list { display: flex; flex-direction: column; gap: var(--s-sibling); }
-
 .np-drop {
   flex: none; padding: var(--s-row); display: flex; align-items: center; gap: var(--s-row); cursor: default;
 }
@@ -995,8 +990,6 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 .np-drop.error .np-title::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--error); flex: none; }
 
 .stem-card { position: relative; padding: var(--s-row); flex: none; min-width: 0; }
-.stem-card-head { position: absolute; right: var(--s-pair); top: var(--s-pair); display: flex; z-index: 1; }
-
 .sc-source-row { display: flex; gap: var(--s-sibling); margin-top: var(--s-row); }
 .sc-source-row select { flex: 1; min-width: 0; width: 0; }
 .sc-from-row { display: flex; align-items: center; gap: var(--s-sibling); margin-top: var(--s-row); }
@@ -1036,14 +1029,6 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 }
 .sc-scrub:focus-visible { box-shadow: 0 0 0 2px var(--ring); border-radius: var(--r-compact); outline: none; }
 .sc-time { flex: none; font: 400 var(--text-data)/1 var(--font-mono); color: var(--hint); font-variant-numeric: tabular-nums; }
-
-.stems-add {
-  flex: none; padding: var(--s-row);
-  display: flex; flex-direction: column; align-items: center; gap: var(--s-sibling);
-}
-.stems-add-btns { display: flex; gap: var(--s-sibling); width: 100%; }
-.stems-add-btns button { flex: 1; }
-.stems-add .hint { text-align: center; }
 
 #confirmBackdrop, #actionConfirmBackdrop, #pasteBackdrop { z-index: var(--z-window-menu); }
 
@@ -1450,23 +1435,14 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 .dp-run { display: flex; justify-content: center; }
 .np-drop .np-copy { overflow-wrap: anywhere; }
 
-/* Only the additional audio list scrolls when cards are added. */
+/* Keep the project form inside its dialog while the details remain visible. */
 #form { overflow: hidden; }
 .np-audio { min-height: 0; }
-.np-audio > .section-head, .np-audio > .field-group:not(.stems-section) { flex: none; }
-.np-audio .stems-section { flex: 1; min-height: 0; align-items: stretch; width: 100%; }
-.np-audio .stems-head, .np-audio .stems-add { flex: none; }
-.np-audio .stems-list { flex: 1; min-height: 110px; width: 100%; overflow-y: auto; overflow-x: hidden; padding-right: var(--s-pair); scrollbar-gutter: stable; overscroll-behavior: contain; }
+.np-audio > .section-head, .np-audio > .field-group { flex: none; }
 .np-audio .np-drop { width: 100%; }
 .np-audio .np-copy { flex: 1; }
 .np-audio .np-title, .np-audio .np-sub { display: block; }
-.np-audio .stem-card { width: 100%; padding-right: calc(var(--h-compact) + var(--s-group)); }
-.np-audio .sc-name { height: var(--h-compact); border: 0; background: transparent; padding: 0; font-weight: 600; }
-.np-audio .sc-caption { font-family: var(--font-ui); font-size: var(--text-caption); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.np-audio .sc-preview { width: var(--h-control); height: var(--h-control); padding: 0; flex: none; }
-.np-audio .stems-add { padding: var(--s-sibling); }
-.np-audio .view-switch { display: flex; width: 100%; }
-.np-audio .view-switch .mode { flex: 1; min-width: 0; white-space: normal; }
+#npFormFields[aria-busy="true"] { opacity: .62; cursor: progress; }
 .toasts { z-index: var(--z-toast); max-width: calc(100vw - 32px); pointer-events: none; }
 .processing-toast { display: flex; flex-direction: column; align-items: stretch; gap: var(--s-sibling); height: auto; width: var(--w-modal); max-width: 100%; padding: var(--s-row) var(--s-group); white-space: normal; }
 .processing-context, .processing-stage { font-size: var(--text-caption); color: var(--label); overflow-wrap: anywhere; }
@@ -1488,7 +1464,6 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
   .np-details { gap: var(--s-sibling); }
   .project-create-body { gap: var(--s-row); padding: var(--s-row); }
   .np-audio { gap: var(--s-sibling); }
-  .np-audio .stems-section { padding-top: var(--s-sibling); }
 }
 
 /* The project artifact index sits beside the complete editor. */

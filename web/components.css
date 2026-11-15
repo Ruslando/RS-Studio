@@ -106,8 +106,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .field-group { color: var(--label); font: 400 var(--text-control)/1 var(--font-ui); display: inline-flex; flex-direction: row; gap: var(--s-pair); align-items: center; white-space: nowrap; }
 .field-group.block { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-pair); white-space: normal; }
 
-.field-group.block > input[type="text"], .field-group.block > input[type="search"],
-.field-group.block > .stem-card { width: 100%; }
+.field-group.block > input[type="text"], .field-group.block > input[type="search"] { width: 100%; }
 /* A select keeps the width of its longest option, but never more than its column. */
 .field-group.block > select { max-width: 100%; }
 
@@ -404,12 +403,12 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
                     background: var(--accent); flex: none; }
 
 /* Takes a file: dashed, and nothing else in the app is. */
-.droppable, .np-drop, .sc-drop, .stems-add, .cover-picker {
+.droppable, .np-drop, .sc-drop, .cover-picker {
   border: 1px dashed var(--line-mark); border-radius: var(--r-container); background: var(--control);
   transition: border-color var(--dur-state) var(--ease);
 }
 :is(.droppable, .np-drop, .sc-drop, .cover-picker):hover,
-:is(.droppable, .np-drop, .sc-drop, .stems-add, .cover-picker).drag { border-color: var(--accent); }
+:is(.droppable, .np-drop, .sc-drop, .cover-picker).drag { border-color: var(--accent); }
 
 .info             { width: 16px; height: 16px; border-radius: 999px;
                     border: 1px solid var(--line-mark); color: var(--hint);

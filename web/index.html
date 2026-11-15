@@ -1320,7 +1320,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
         <!-- Five groups, so it sections. Identity is what the project is called;
              Audio is what it is made of, and it is second because you name a thing
              before you fill it. -->
-        <div class="dialog-body dialog-body--sectioned project-create-body">
+        <div class="dialog-body dialog-body--sectioned project-create-body" id="npFormFields">
           <div class="section np-details">
           <div class="section-head"><span>Project details</span></div>
 
@@ -1382,21 +1382,6 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             </div>
           </div>
 
-          <div class="field-group block stems-section">
-            <div class="stems-head">
-              <span class="field-label">Additional audio</span>
-
-            </div>
-            <div class="stems-list" id="stemsList"></div>
-            <div class="stems-add" id="stemsAdd">
-              <div class="stems-add-btns">
-                <button type="button" id="addStemBtn">Add audio</button>
-                <button type="button" id="stemBulkBrowseBtn">Upload files…</button>
-              </div>
-
-              <input type="file" id="stemBulkInput" accept="audio/*" multiple hidden />
-            </div>
-          </div>
           </div>
 
         </div>

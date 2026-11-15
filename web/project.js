@@ -26,7 +26,7 @@ import { dedupeIds, syncUidPastLoaded } from "./ids.js";
 import { curStemObj, rebuildLanes, renderLanes } from "./lanes.js";
 import { metadataPayload, normalizeMetadata, projectName } from "./metadata.js";
 import { applyPreservePitch, applyStemGains, disposeSynths, ensureStemMixer, isMasterStem, masterStem, masterStemAudible, pauseTransport, refreshStemAudio, resetStemMixer, warmSynths } from "./playback.js";
-import { initNewProject, openNewProject, refreshChoosingCards, setMainFile } from "./new-project.js";
+import { initNewProject, openNewProject, setMainFile } from "./new-project.js";
 import { hideWelcome, initProjectLibrary, showWelcome } from "./project-library.js";
 import { backendLabel, loadSeparators, separators } from "./separators.js";
 import { closeStemSettings, initStemSettings, openStemSettings } from "./stem-settings.js";
@@ -1195,10 +1195,6 @@ export function init_project() {
   // the desktop shell it would put a second dialog in front of the real one.
   window.addEventListener("beforeunload", (e) => { if (!window.pywebview && isDirty()) e.preventDefault(); });
 
-  // Stem cards parked in the "choosing" state render the backend list, so they
-  // need a nudge once it arrives; loadSeparators itself no longer knows them.
-  loadSeparators().then(refreshChoosingCards);
-  window.addEventListener("models-changed", () => loadSeparators().then(refreshChoosingCards));
   showWelcome();
 }
 import { placeFloating } from "./floating-position.js";

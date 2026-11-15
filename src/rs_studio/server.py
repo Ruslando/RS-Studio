@@ -67,6 +67,7 @@ from pydantic import BaseModel, Field
 from . import __version__, models, pipeline, processing, tab, tutorial, updates
 from .local_security import LocalRequestMiddleware
 from .paths import data_root, resource_root
+from .audio_metadata import extract_audio_metadata
 
 # ---------------------------------------------------------------------------
 # Shared guards for routes that read or write client-supplied project data.
@@ -603,7 +604,7 @@ def _save_upload(src, dest: Path, limit: int = _AUDIO_MAX_BYTES) -> None:
         raise
 
 
-def _ingest_full_song(job: str, m: dict, audio: UploadFile) -> pipeline.StemView:
+def _ingest_full_song(job: str, m: dict, audio: UploadFile, extracted_tags: dict | None = None) -> pipeline.StemView:
     """Store an uploaded full song as the project's source audio and analyze it.
 
     Shared by POST /mix (into a draft) and POST /audio (attaching to a score-only
@@ -622,6 +623,8 @@ def _ingest_full_song(job: str, m: dict, audio: UploadFile) -> pipeline.StemView
     suffix = Path(audio.filename or "input").suffix or ".wav"
     in_path = job_dir / f"input{suffix}"
     _save_upload(audio.file, in_path)
+    if extracted_tags is not None:
+        extracted_tags.update(extract_audio_metadata(in_path))
     for stale in job_dir.glob("input.*"):
         if stale != in_path:
             stale.unlink(missing_ok=True)
@@ -798,7 +801,37 @@ def api_project_mix(job: str, audio: UploadFile) -> JSONResponse:
     the frontend treats stems[0] as the master/audible-by-default source."""
     m = _draft_manifest(job)
     job_dir = _job_dir(job)
-    view = _ingest_full_song(job, m, audio)
+    extracted_tags = {}
+    view = _ingest_full_song(job, m, audio, extracted_tags)
+
+    # Embedded art is staged through the same image validation and centered
+    # square crop as manually selected cover art. Keep a marker in its name so
+    # replacing the source song can replace its automatic cover too.
+    meta = _normalize_metadata(m.get("metadata"))
+    embedded_cover_url = ""
+    old_cover_is_embedded = str(meta.get("coverArtName") or "").startswith("Embedded artwork — ")
+    if old_cover_is_embedded:
+        old_cover = _safe_project_file(job_dir, meta.get("coverArt"))
+        if old_cover:
+            old_cover.unlink(missing_ok=True)
+        meta.update(coverArt=None, coverArtName="", coverArtUpdatedAt=None)
+
+    if extracted_tags.get("cover") and (not meta.get("coverArt") or old_cover_is_embedded):
+        filename = Path(audio.filename or "audio").name
+        try:
+            stored = _store_cover_art(job, m, io.BytesIO(extracted_tags["cover"]),
+                                      f"Embedded artwork — {filename}", draft=True)
+            cover_meta = json.loads(stored.body).get("metadata", {})
+            for key in ("coverArt", "coverArtName", "coverArtUpdatedAt"):
+                meta[key] = cover_meta.get(key)
+            # The draft URL contains the unique generated filename. Use it in
+            # the upload response so the preview cannot reuse an older cover
+            # from the same project when uploads happen within one second.
+            embedded_cover_url = str(cover_meta.get("coverArtUrl") or "")
+        except HTTPException:
+            # Broken or unsupported artwork should not prevent audio upload.
+            pass
+    m["metadata"] = meta
 
     entry = _stem_entry(job_dir, view)
     m["stems"] = [s for s in m["stems"] if s["id"] != "mix"]
@@ -819,9 +852,12 @@ def api_project_mix(job: str, audio: UploadFile) -> JSONResponse:
 
     spec = dict(view.spectrogram)
     spec["url"] = f"/api/spectrogram/{job}/{view.id}.png"
+    audio_metadata = {key: extracted_tags.get(key, "") for key in ("title", "artist", "album", "year")}
+    audio_metadata.update({key: meta.get(key) for key in ("coverArt", "coverArtName", "coverArtUpdatedAt")})
+    audio_metadata["coverArtUrl"] = embedded_cover_url or _metadata_response(m).get("coverArtUrl", "")
     return JSONResponse({
         "stem": {"id": view.id, "name": view.name, "spectrogram": spec, "audio_url": f"/api/audio/{job}/{view.id}"},
-        "tempo": m["tempo"], "duration": m["duration"],
+        "tempo": m["tempo"], "duration": m["duration"], "audioMetadata": audio_metadata,
     })
 
 
@@ -1080,8 +1116,13 @@ def _store_cover_art(job: str, m: dict, source, source_name: str, draft: bool = 
         img = Image.open(source)
         img.load()
         img = ImageOps.exif_transpose(img)
+        width, height = img.size
+        side = min(width, height)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        img = img.crop((left, top, left + side, top + side))
         resampling = getattr(Image, "Resampling", Image).LANCZOS
-        img = ImageOps.fit(img.convert("RGB"), (512, 512), method=resampling)
+        img = img.convert("RGB").resize((512, 512), resampling)
         out_rel = f"cover_draft_{uuid.uuid4().hex}.png" if draft else "cover_art.png"
         out_path = job_dir / out_rel
         img.save(out_path, "PNG", optimize=True)

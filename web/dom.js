@@ -63,8 +63,6 @@ const fileMenuBtn = $("fileMenuBtn");
 const fileMenu = $("fileMenu");
 export const modalBackdrop = $("modalBackdrop");
 export const npDrop = $("npDrop"), npDropTitle = $("npDropTitle"), npDropSub = $("npDropSub"), npClear = $("npClear");
-export const stemsListEl = $("stemsList"), stemsAddEl = $("stemsAdd");
-export const addStemBtn = $("addStemBtn"), stemBulkBrowseBtn = $("stemBulkBrowseBtn"), stemBulkInput = $("stemBulkInput");
 export const stemSettingsBackdrop = $("stemSettingsBackdrop"), stemSettingsClose = $("stemSettingsClose");
 export const stemSettName = $("stemSettName"), stemSettNameInput = $("stemSettNameInput"), stemSettCard = $("stemSettCard");
 export const audio = $("audio"), playBtn = $("play"), seek = $("seek"), timeEl = $("time");
