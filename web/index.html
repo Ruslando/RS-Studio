@@ -200,16 +200,17 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <button class="menu-item" id="attachAudio">Attach audio&hellip;</button>
           <div class="menu-sep"></div>
           <button class="menu-item" id="save" disabled>Save<span class="kbd">Ctrl+S</span></button>
-          <button class="menu-item" id="saveAs" disabled>Export .chart…<span class="kbd">Ctrl+Shift+S</span></button>
           <!-- Title, artist, album: the open file's own fields, so they belong to
                the menu that owns the file and not to app-wide preferences. -->
           <button class="menu-item" id="menuProjectSettings">Project details…</button>
           <button class="menu-item" id="menuDetectTempo">Detect tempo map</button>
           <div class="menu-sep"></div>
-          <button class="menu-item" id="menuPreviewTab">Tablature view</button>
+          <button class="menu-item" id="saveAs" disabled>Export .chart…<span class="kbd">Ctrl+Shift+S</span></button>
           <button class="menu-item" id="menuExportModernGp">Export Guitar Pro (.gp)&hellip;</button>
           <button class="menu-item" id="menuExportTab">Export legacy Guitar Pro (.gp5)…</button>
           <button class="menu-item" id="menuExportRocksmith">Export Rocksmith CDLC (.psarc)…</button>
+          <div class="menu-sep"></div>
+          <button class="menu-item" id="menuPreviewTab">Tablature view</button>
           <div class="menu-sep"></div>
           <button class="menu-item" id="closeProj">Close project</button>
         </div>
