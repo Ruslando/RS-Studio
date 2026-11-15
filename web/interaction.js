@@ -17,7 +17,7 @@ import { commit, snapshotEdit } from "./edit-history.js";
 import { addBendPoint, curveOf, openCanvasMenu, openNoteMenu, openRefMenu, removeBendPoint, EFFECT_START_SETTERS, setBendCurve, setSlideFrets, sliceNoteCuts } from "./edit.js";
 import { cursorTimeAt, pitchAt, pitchAtExact, timeAt, xOf, yOf, zoomAtClientY, zoomBothTo } from "./geometry.js";
 import { displayGridStep, gridAt, gridSegments, minDur, snap, snapFine, snapNote } from "./grid-read.js";
-import { noteLength, hasFreeNoteLength } from './note-length.js';
+import { noteLength, hasFreeNoteLength, isIrregularNoteLength } from './note-length.js';
 import { markerCursorAt, markerMouseDown } from "./markers.js";
 import { commentAt, commentCursorAt, commentMouseDown, openCommentPop } from "./comments.js";
 import { updateProjectStartAt } from "./project-position.js";
@@ -67,7 +67,7 @@ function resizeDrag(note, lane, edge, x, t, free, prev) {
     notes: [...S.selection].filter((n) => lane.notes.includes(n) && !boxOfNote(n)?.group.locked),
     resizeGrab: t - (edge === 'r' ? note.end : note.start),
     lane, resizeLaneNotes: [...lane.notes],
-    orig: new Map(lane.notes.map((n) => [n, { start: n.start, end: n.end }])),
+    orig: new Map(lane.notes.map((n) => [n, { start: n.start, end: n.end, preciseLength: n.preciseLength }])),
   };
 }
 
@@ -229,18 +229,22 @@ function updateNoteResize(x, y) {
   const minimum = resizeMinimum(o, S.drag.edge, S.drag.freeResize);
   const time = timeAt(x) - (S.drag.resizeGrab || 0);
   S.drag.resizeTime = time;
-  const target = S.drag.freeResize ? snapFine(time) : snap(time);
+  const target = S.drag.freeResize || hasFreeNoteLength(o) ? snapFine(time) : snap(time);
   if (S.drag.edge === "r") {
     const dt = Math.max(o.start + minimum, target) - o.end;
     for (const n of S.drag.notes) {
       const oo = S.drag.orig.get(n);
-      n.end = Math.min(S.state.duration, Math.max(oo.start + resizeMinimum(oo, 'r', S.drag.freeResize), oo.end + dt));
+      const min = resizeMinimum(oo, 'r', S.drag.freeResize);
+      const end = Math.min(S.state.duration, Math.max(oo.start + min, oo.end + dt));
+      n.end = end;
     }
   } else {
     const dt = Math.min(o.end - minimum, Math.max(projectStart(S.state), target)) - o.start;
     for (const n of S.drag.notes) {
       const oo = S.drag.orig.get(n);
-      n.start = Math.min(oo.end - resizeMinimum(oo, 'l', S.drag.freeResize), Math.max(projectStart(S.state), oo.start + dt));
+      const min = resizeMinimum(oo, 'l', S.drag.freeResize);
+      const start = Math.min(oo.end - min, Math.max(projectStart(S.state), oo.start + dt));
+      n.start = start;
     }
   }
   if (slide?.knee != null) {
@@ -249,6 +253,11 @@ function updateNoteResize(x, y) {
     if (S.drag.edge === "r") n.end = Math.max(n.end, k + minimum);
     else n.start = Math.min(n.start, k - minimum);
     EFFECT_START_SETTERS.slide(n, (k - n.start) / (n.end - n.start));
+  }
+  for (const n of S.drag.notes) {
+    const precise = S.drag.freeResize ? isIrregularNoteLength(n, gridSegments()) : hasFreeNoteLength(S.drag.orig.get(n));
+    if (precise) n.preciseLength = true;
+    else delete n.preciseLength;
   }
   S.drag.lane.notes = makeResizeRoom(S.drag.resizeLaneNotes, S.drag.notes, S.drag.orig,
     S.drag.edge, minimum, note => !!boxOfNote(note)?.group.locked);
@@ -418,7 +427,7 @@ export function init_interaction() {
       S.drag = {
         mode: "resize", edge: into ? "l" : "r", note: n, notes: [n], prev: snapshotEdit(),
         startX: x, resizeGrab: 0, freeResize: !!e.altKey, lane, resizeLaneNotes: [...lane.notes],
-        orig: new Map(lane.notes.map((m) => [m, { start: m.start, end: m.end }])),
+        orig: new Map(lane.notes.map((m) => [m, { start: m.start, end: m.end, preciseLength: m.preciseLength }])),
         slide: { knee: n.start < knee - 1e-6 ? knee : null },
       };
       beginNoteGesture(S.state, lane, S.drag.notes, "resize");
@@ -496,7 +505,7 @@ export function init_interaction() {
           mode: "move", note: hit.note, startX: x, startY: y, moved: false, prev: snapshotEdit(),
           lane: hit.lane, lastRow: 0,
           notes: [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked),
-          orig: new Map([...S.selection].map((n) => [n, { start: n.start, end: n.end, pitch: n.pitch }])),
+          orig: new Map([...S.selection].map((n) => [n, { start: n.start, end: n.end, pitch: n.pitch, preciseLength: n.preciseLength }])),
         };
       }
       beginNoteGesture(S.state, hit.lane, S.drag.notes, S.drag.mode);

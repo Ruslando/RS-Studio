@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { NoteLengthMemory, lengthInBeats, endAfterBeats, hasFreeNoteLength } from '../../web/note-length.js';
+import { NoteLengthMemory, lengthInBeats, endAfterBeats, hasFreeNoteLength, isIrregularNoteLength } from '../../web/note-length.js';
 
 const grid = [{ t: 0, bpm: 120 }, { t: 4, bpm: 60 }];
 const memory = new NoteLengthMemory(), project = {}, anotherProject = {};
@@ -16,11 +16,15 @@ assert.equal(lengthInBeats(3.5, 5, grid), 2, 'notes crossing a tempo marker coun
 assert.equal(endAfterBeats(3.5, 2, grid), 5, 'insertion crossing a tempo marker preserves beats');
 assert.equal(endAfterBeats(0, 1, []), .5, 'an unset tempo uses 120 BPM');
 const divisions = [{t: 0, bpm: 120, tsDen: 4, subdiv: 8}];
-assert.equal(hasFreeNoteLength({start: 1.031, end: 1.156}, divisions), false, 'free position alone is not a free duration');
-assert.equal(hasFreeNoteLength({start: 1, end: 1.137}, divisions), true);
-assert.equal(hasFreeNoteLength({start: 1, end: 1.125000001}, divisions), false, 'floating point noise has no marker');
-assert.equal(hasFreeNoteLength({start: 1, end: 1.137}, []), false, 'without a grid there is no grid-length distinction');
-assert.equal(hasFreeNoteLength({start: 1.1875, end: 1.23}, [...divisions, {t: 1.23, bpm: 60, subdiv: 8}]), true, 'a truncated boundary cell is marked');
+assert.equal(isIrregularNoteLength({start: 1.031, end: 1.156}, divisions), false, 'free position alone is not a free duration');
+assert.equal(isIrregularNoteLength({start: 1, end: 1.137}, divisions), true);
+assert.equal(isIrregularNoteLength({start: 1, end: 1.125000001}, divisions), false, 'floating point noise has no marker');
+assert.equal(isIrregularNoteLength({start: 1, end: 1.137}, []), false, 'without a grid there is no grid-length distinction');
+assert.equal(isIrregularNoteLength({start: 1.1875, end: 1.23}, [...divisions, {t: 1.23, bpm: 60, subdiv: 8}]), true, 'a truncated boundary cell is marked');
 console.log('note length: remembered rhythm, tempo changes and project isolation passed');
-assert.equal(hasFreeNoteLength({start: 1, end: 1.0625}, [{t: 0, bpm: 120, tsNum: 4, tsDen: 4, subdiv: 4}]), false, 'visible 32nd lengths are regular even on an authored 16th grid');
-assert.equal(hasFreeNoteLength({start: 1, end: 1 + .5 / 3}, [{t: 0, bpm: 120, tsNum: 4, tsDen: 4, subdiv: 3}]), false, 'authored triplet lengths also remain regular');
+assert.equal(isIrregularNoteLength({start: 1, end: 1.0625}, [{t: 0, bpm: 120, tsNum: 4, tsDen: 4, subdiv: 4}]), false, 'visible 32nd lengths are regular even on an authored 16th grid');
+assert.equal(isIrregularNoteLength({start: 1, end: 1 + .5 / 3}, [{t: 0, bpm: 120, tsNum: 4, tsDen: 4, subdiv: 3}]), false, 'authored triplet lengths also remain regular');
+
+assert.equal(hasFreeNoteLength({start: 1, end: 1.137}), false, 'irregular durations do not automatically become precise');
+assert.equal(hasFreeNoteLength({start: 1, end: 1.125, preciseLength: true}), true, 'explicit precise mode survives a regular duration');
+assert.equal(hasFreeNoteLength(JSON.parse(JSON.stringify({start: 1, end: 1.125, preciseLength: true}))), true, 'precise mode survives saving');

@@ -53,7 +53,7 @@ try {
       curveOf: n => n.whammyPoints || [[0, 0], [0.5, -2], [1, 0]], setBendCurve: (n, pts) => { n.whammyPoints = pts; } },
   };
   const real = { './shapes.js': true, './constants.js': true, './util.js': true, './note-length.js': true, './note-merge.js': true, './bend.js': true, './whammy.js': true,
-    './project-position-core.js': true };
+    './project-position-core.js': true, './auto-grid.js': true };
   const hitTesting = await mockImport(new URL('../../web/stage-hit-test.js', import.meta.url), dependencies, real);
   const { init_interaction } = await mockImport(new URL('../../web/interaction.js', import.meta.url), { ...dependencies, './stage-hit-test.js': hitTesting }, real);
   init_interaction();
@@ -75,6 +75,7 @@ try {
   assert.equal(note.end, 2.046875);
   win.emit('mouseup', { clientX: 204, altKey: true });
   assert.equal(note.end, 2.046875, 'mouse release retains the fine-grid placement');
+  delete note.preciseLength;
 
   // A whammy note: its end handle is on the right edge. Sideways it resizes the
   // note, up and down it moves the curve's end.
@@ -104,20 +105,22 @@ try {
     const minimum = grid.displayGridStep(grid.gridAt(1.031));
     for (const altKey of [false, true]) {
       const expectedMinimum = altKey ? Math.min(.05, minimum) : minimum;
-      note.start = 1.031; note.end = 1.5;
+      note.start = 1.031; note.end = 1.5; note.preciseLength = true;
       stage.emit('mousedown', { clientX: 149, altKey });
       win.emit('mousemove', { clientX: 103, altKey });
-      assert.ok(Math.abs(note.end - note.start - expectedMinimum) < 1e-9, 'right edge respects normal or fine minimum');
+      assert.ok(note.end - note.start >= expectedMinimum - 1e-9, 'right edge respects normal or fine minimum');
+      if (!altKey) assert.equal(hasFreeNoteLength(note, grid.gridSegments()), true, 'minimum preserves precise length');
       win.emit('mouseup', { clientX: 103, altKey });
       assert.ok(note.end - note.start >= expectedMinimum - 1e-9, 'release preserves minimum length');
-      note.start = 1.031; note.end = 1.5;
+      note.start = 1.031; note.end = 1.5; note.preciseLength = true;
       stage.emit('mousedown', { clientX: 104, altKey });
       win.emit('mousemove', { clientX: 150, altKey });
-      assert.ok(Math.abs(note.end - note.start - expectedMinimum) < 1e-9, 'left edge respects normal or fine minimum');
+      assert.ok(note.end - note.start >= expectedMinimum - 1e-9, 'left edge respects normal or fine minimum');
+      if (!altKey) assert.equal(hasFreeNoteLength(note, grid.gridSegments()), true, 'left minimum preserves precise length');
       win.emit('mouseup', { clientX: 150, altKey });
     }
   }
-  note.start = 1.031; note.end = 1.5;
+  note.start = 1.031; note.end = 1.5; delete note.preciseLength;
   S.pxPerSec = 100;
 
   const before = { lane: structuredClone(lane.notes) };
@@ -129,7 +132,7 @@ try {
   assert.deepEqual(grid.snapNote(1.2, 1.2625), { start: 1, end: 1.0625 },
     'coarse zoom does not stretch a short note when moving it');
 
-  note.start = 1; note.end = 1.237; S.selection = new Set([note]);
+  note.start = 1; note.end = 1.237; note.preciseLength = true; S.selection = new Set([note]);
   const length = note.end - note.start;
   stage.emit('mousedown', {clientX: 112});
   assert.equal(S.drag.mode, 'move');
@@ -146,7 +149,7 @@ try {
   win.emit('mouseup', {clientX: movedEnd * 100 + 25, altKey: true});
   assert.equal(note.end, 2.03125, 'Alt resizing retains the fine-grid endpoint on release');
 
-  note.start = 1; note.end = 1.25;
+  note.start = 1; note.end = 1.25; delete note.preciseLength;
   stage.emit('mousedown', {clientX: 112});
   win.emit('mousemove', {clientX: 165});
   assert.equal(note.start, 1.5, 'grid-length notes still snap during movement');
@@ -174,8 +177,43 @@ try {
   assert.equal(hasFreeNoteLength(note, grid.gridSegments()), true, 'explicit Alt resizing still permits precise lengths');
   subdivision.value = '8'; S.pxPerSec = 100;
 
+  // Off-grid fixed edges must not change length mode during a normal drag.
+  for (const edge of ['r', 'l']) {
+    note.start = 1.031; note.end = 1.531; delete note.preciseLength; S.selection = new Set([note]);
+    const grab = edge === 'r' ? note.end * 100 - 1 : note.start * 100 + 1;
+    stage.emit('mousedown', {clientX: grab});
+    win.emit('mousemove', {clientX: grab + (edge === 'r' ? 34 : -26)});
+    win.emit('mouseup');
+    assert.equal(hasFreeNoteLength(note, grid.gridSegments()), false, `${edge} drag keeps a regular duration`);
+
+    note.start = 1; note.end = 1.237; note.preciseLength = true;
+    const preciseGrab = edge === 'r' ? note.end * 100 - 1 : note.start * 100 + 1;
+    stage.emit('mousedown', {clientX: preciseGrab});
+    win.emit('mousemove', {clientX: preciseGrab + (edge === 'r' ? 26 : -25)});
+    win.emit('mouseup');
+    assert.equal(hasFreeNoteLength(note, grid.gridSegments()), true, `${edge} drag keeps a precise duration`);
+  }
+  note.start = 1; note.end = 1.237; note.preciseLength = true;
+  stage.emit('mousedown', {clientX: note.end * 100 - 1, altKey: true});
+  win.emit('mousemove', {clientX: 149, altKey: true});
+  win.emit('mouseup', {altKey: true});
+  assert.equal(hasFreeNoteLength(note, grid.gridSegments()), false, 'Alt can return a precise length to regular');
+
+  // Filling a gap trims the following note, even when its remaining duration
+  // is not a grid multiple. That must not turn it into a precise note.
+  note.start = 1; note.end = 1.5; delete note.preciseLength;
+  const next = {id: 'next', start: 1.7, end: 2.23, pitch: 64};
+  lane.notes = [note, next]; S.selection = new Set([note]);
+  stage.emit('mousedown', {clientX: 149});
+  win.emit('mousemove', {clientX: 182});
+  win.emit('mouseup');
+  assert.equal(note.end, 1.875);
+  assert.equal(next.start, note.end, 'filling the gap trims the following note exactly');
+  assert.equal(hasFreeNoteLength(next, grid.gridSegments()), false, 'trimming a neighbor does not enable precision');
+  lane.notes = [note];
+
   // Mixed lengths and off-grid spacing move as one group, even at the bounds.
-  note.start = 1; note.end = 1.237;
+  note.start = 1; note.end = 1.237; note.preciseLength = true;
   const companion = {id: 'companion', start: 2.03, end: 2.28, pitch: 69};
   lane.notes = [note, companion]; S.selection = new Set(lane.notes);
   stage.emit('mousedown', {clientX: 112});

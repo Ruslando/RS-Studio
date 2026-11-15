@@ -8,10 +8,14 @@ const bpmAt = (time, segments) => {
   return Number(segment?.bpm) > 0 ? Number(segment.bpm) : 120;
 };
 
-// Recognize every regular division the visible grid can offer, regardless
-// of the authored subdivision or current zoom.
-// A shortened cell at a tempo boundary also has a nonstandard duration.
-export function hasFreeNoteLength(note, segments) {
+// Precision is an explicit editing choice, not a consequence of trimming a
+// note, changing the tempo, or landing between grid divisions.
+export function hasFreeNoteLength(note) {
+  return note?.preciseLength === true;
+}
+
+// Classify a length only when an explicit precision resize is performed.
+export function isIrregularNoteLength(note, segments) {
   if (!segments.length || !(note.end > note.start)) return false;
   let time = note.start, cells = 0, shortest = Infinity, authoredCells = 0, authoredShortest = Infinity;
   for (const end of [...segments.filter(segment => segment.t > time && segment.t < note.end).map(segment => segment.t), note.end]) {
