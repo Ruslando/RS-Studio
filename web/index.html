@@ -103,6 +103,13 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <input type="search" id="recentSearch" placeholder="Search projects" autocomplete="off" />
             </label>
             <span id="recentCount" class="recent-count" aria-live="polite"></span>
+            <label class="recent-page-size" for="recentPageSize">Per page
+              <select id="recentPageSize" aria-label="Projects per page">
+                <option value="3">3</option>
+                <option value="5">5</option>
+                <option value="10">10</option>
+              </select>
+            </label>
           </div>
           <div id="recentList"></div>
           <nav id="recentPagination" class="recent-pagination" aria-label="Project library pages" hidden>

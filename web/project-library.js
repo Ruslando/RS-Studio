@@ -11,7 +11,7 @@
 // project module without the two of them importing each other.
 
 import { confirmAction } from "./dialog.js";
-import { $, appbar, openProjBackdrop, openProjClose, openProjList, openProjMenuBtn, recentCountEl, recentListEl, recentNextBtn, recentPageEl, recentPaginationEl, recentPrevBtn, recentSearchEl, welcome, welcomeNewBtn, welcomeOpenBtn, welcomeRecent, welcomeVersion } from "./dom.js";
+import { $, appbar, openProjBackdrop, openProjClose, openProjList, openProjMenuBtn, recentCountEl, recentListEl, recentNextBtn, recentPageEl, recentPageSizeSel, recentPaginationEl, recentPrevBtn, recentSearchEl, welcome, welcomeNewBtn, welcomeOpenBtn, welcomeRecent, welcomeVersion } from "./dom.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
 import { toast } from "./notify.js";
 import { projectCardInfo } from "./project-card.js";
@@ -68,14 +68,16 @@ const TRASH_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" s
 
 let recentItems = [];
 let recentPage = 0;
+const RECENT_PAGE_SIZE_KEY = "rs-studio.projects-per-page";
+const RECENT_PAGE_SIZES = [3, 5, 10];
+
+function selectedRecentPageSize() {
+  const value = Number(recentPageSizeSel?.value);
+  return RECENT_PAGE_SIZES.includes(value) ? value : 3;
+}
 
 function recentPageSize() {
-  // Cap the library at three cards, without sizing from its own content-driven
-  // height. Reserve the launcher chrome and paging row on short windows.
-  const css = getComputedStyle(document.documentElement);
-  const row = parseFloat(css.getPropertyValue('--h-list')) * 2 + parseFloat(css.getPropertyValue('--s-sibling'));
-  const chrome = parseFloat(css.getPropertyValue('--h-chrome')) * 2 + parseFloat(css.getPropertyValue('--s-section')) * 4;
-  return Math.min(3, Math.max(1, Math.floor((window.innerHeight - chrome) / (row + parseFloat(css.getPropertyValue('--s-sibling'))))));
+  return selectedRecentPageSize();
 }
 
 function recentMatches(items, query) {
@@ -333,6 +335,17 @@ export function initProjectLibrary({ onNew, onOpenFile, onPick }) {
   welcomeNewBtn.addEventListener("click", () => { hideWelcome(); onNewProject(); });
   welcomeOpenBtn.addEventListener("click", () => onOpenProjectFile());  // the caller hides the launcher on success
   recentSearchEl?.addEventListener("input", () => { recentPage = 0; renderRecents(); });
+  if (recentPageSizeSel) {
+    try {
+      const saved = Number(localStorage.getItem(RECENT_PAGE_SIZE_KEY));
+      if (RECENT_PAGE_SIZES.includes(saved)) recentPageSizeSel.value = String(saved);
+    } catch { /* use the default */ }
+    recentPageSizeSel.addEventListener("change", () => {
+      try { localStorage.setItem(RECENT_PAGE_SIZE_KEY, String(selectedRecentPageSize())); } catch { /* preference is optional */ }
+      recentPage = 0;
+      renderRecents();
+    });
+  }
   recentPrevBtn?.addEventListener("click", () => { recentPage = Math.max(0, recentPage - 1); renderRecents(); });
   recentNextBtn?.addEventListener("click", () => { recentPage += 1; renderRecents(); });
   window.addEventListener("resize", () => { if (!welcome.hidden) renderRecents(); });

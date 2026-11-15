@@ -58,7 +58,7 @@ export const appbar = $("appbar");
 export const projTab = $("projTab"), projTabName = $("projTabName"), projDirtyDot = $("projDirtyDot");
 export const welcome = $("welcome"), welcomeNewBtn = $("welcomeNew"), welcomeOpenBtn = $("welcomeOpen");
 export const welcomeGpBtn = $("welcomeGp");
-export const welcomeRecent = $("welcomeRecent"), recentListEl = $("recentList"), recentSearchEl = $("recentSearch"), recentCountEl = $("recentCount"), recentPaginationEl = $("recentPagination"), recentPrevBtn = $("recentPrev"), recentPageEl = $("recentPage"), recentNextBtn = $("recentNext"), welcomeVersion = $("welcomeVersion");
+export const welcomeRecent = $("welcomeRecent"), recentListEl = $("recentList"), recentSearchEl = $("recentSearch"), recentCountEl = $("recentCount"), recentPageSizeSel = $("recentPageSize"), recentPaginationEl = $("recentPagination"), recentPrevBtn = $("recentPrev"), recentPageEl = $("recentPage"), recentNextBtn = $("recentNext"), welcomeVersion = $("welcomeVersion");
 const fileMenuBtn = $("fileMenuBtn");
 const fileMenu = $("fileMenu");
 export const modalBackdrop = $("modalBackdrop");
