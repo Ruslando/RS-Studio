@@ -75,7 +75,8 @@ function snapshotSettings() {
 }
 function syncSettingsActions() {
   const keys = value => JSON.stringify(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)));
-  const dirty = !!spSnapshot && (inputsDirty(spSnapshot.inputs) || keys(keySnapshot()) !== keys(spSnapshot.keys)
+  const inputs = spSnapshot?.inputs.filter(({ el }) => !["projPitchTarget", "projPitchShiftAudio"].includes(el.id)) || [];
+  const dirty = !!spSnapshot && (inputsDirty(inputs) || keys(keySnapshot()) !== keys(spSnapshot.keys)
     || soundDraftDirty() || tuningDraftDirty() || (projectDraft && projectDraft.state === S.state &&
       ['coverArt', 'coverArtName', 'coverArtUpdatedAt'].some(key => projectDraft.metadata[key] !== S.state.metadata?.[key])));
   const project = spSection === "project";
@@ -206,64 +207,67 @@ function renderProjectCover(meta) {
   });
 }
 
-// Concert pitch: cents from A440 <-> the A4 frequency the field shows.
+// Concert pitch: cents from A440 <-> the integer target A4 frequency.
 const hzOf = (cents) => 440 * 2 ** (cents / 1200);
-const centsOf = (hz) => Math.round(1200 * Math.log2(hz / 440) * 10) / 10;
-const hzText = (cents) => hzOf(cents).toFixed(1);
+const centsOfHz = (hz) => 1200 * Math.log2(hz / 440);
 
-// The field shows 0.1 Hz, coarser than the stored cents: an untouched field keeps
-// the stored value instead of its rounded reading.
-function readTuningFields() {
-  const field = $("projTuningRef").value, hz = parseFloat(field), stored = S.state?.tuning?.reference || 0;
-  const reference = field === hzText(stored) ? stored
-    : Number.isFinite(hz) ? Math.max(-50, Math.min(50, centsOf(hz))) : stored;
-  const mode = $("projTuningAudio").value;
-  const shift = mode === "none" ? 0 : mode === "a440" ? -reference : Number($("projTuningShift").value) || 0;
-  return { reference, shift };
+function desiredProjectTuning() {
+  const tuning = S.state?.tuning || { reference: 0, shift: 0 };
+  const reference = tuning.reference || 0;
+  const target = centsOfHz(Number($("projPitchTarget").value));
+  return { reference, shift: $("projPitchShiftAudio").checked ? target - reference : 0 };
+}
+
+function projectPitchPending() {
+  const current = S.state?.tuning || { reference: 0, shift: 0 };
+  const activeShift = Math.abs(current.shift || 0) >= 0.05;
+  if (!$("projPitchShiftAudio").checked) return activeShift;
+  if (!$("projPitchTarget").checkValidity()) return true;
+  const targetHz = Math.round(Number($("projPitchTarget").value));
+  const currentHz = Math.round(hzOf((current.reference || 0) + (current.shift || 0)));
+  return !activeShift ? targetHz !== Math.round(hzOf(current.reference || 0)) : targetHz !== currentHz;
 }
 
 function renderTuningNotes() {
   const tuning = S.state?.tuning || { estimate: null, reference: 0, shift: 0 };
-  const { reference, shift } = readTuningFields();
   const hasAudio = !!S.state?.stems?.length;
-  $("projTuningDetected").textContent = !hasAudio ? "No audio"
-    : tuning.estimate == null ? "Not measured" : `Detected ${hzText(tuning.estimate)} Hz`;
+  $("projPitchDetected").textContent = !hasAudio || tuning.estimate == null
+    ? "Not detected" : `${Math.round(hzOf(tuning.estimate))} Hz`;
   const tunable = !!S.state && S.state.job !== "tutorial" && hasAudio;
-  $("projTuningUse").disabled = !tunable || tuning.estimate == null || $("projTuningRef").value === hzText(tuning.estimate);
-  $("projTuningRef440").disabled = !tunable || Math.abs(reference) < 0.05;
-  $("projTuningCustom").hidden = $("projTuningAudio").value !== "custom";
-  if ($("projTuningAudio").value !== "custom") $("projTuningShift").value = String(shift);
-  $("projTuningExport").textContent = `${hzText(reference + shift)} Hz`;
-  if ($("projMetaStatus").classList.contains("error")) setProjectMetaStatus("");
+  $("projPitchTarget").disabled = !tunable;
+  $("projPitchShiftAudio").disabled = !tunable;
+  $("projPitchApply").hidden = !tunable || !projectPitchPending();
+  $("projPitchApply").disabled = !tunable;
 }
 
 function fillTuningFields() {
   const tuning = S.state?.tuning || { reference: 0, shift: 0 };
-  $("projTuningRef").value = hzText(tuning.reference);
-  $("projTuningShift").value = String(tuning.shift);
-  $("projTuningAudio").value = Math.abs(tuning.shift) < 0.05 ? "none"
-    : Math.abs(tuning.reference + tuning.shift) < 0.05 ? "a440" : "custom";
+  $("projPitchTarget").value = String(Math.round(hzOf((tuning.reference || 0) + (tuning.shift || 0))));
+  $("projPitchShiftAudio").checked = Math.abs(tuning.shift || 0) >= 0.05;
   renderTuningNotes();
 }
 
-// Set a field the way typing would, so Apply and Cancel see the change.
-function setTuningField(id, value) {
-  $(id).value = value;
-  $(id).dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-async function measureTuning() {
-  if (!S.state) return;
-  $("projTuningMeasure").disabled = true;
-  setProjectMetaStatus("Measuring...");
+async function applyProjectPitchShift() {
+  if (!S.state || !projectPitchPending()) return;
+  if ($("projPitchShiftAudio").checked && !$("projPitchTarget").reportValidity()) return;
+  const state = S.state;
+  const button = $("projPitchApply");
+  $("projPitchTarget").disabled = true;
+  $("projPitchShiftAudio").disabled = true;
+  button.disabled = true;
+  button.textContent = "Applying…";
+  setProjectMetaStatus("Applying pitch shift...");
   try {
-    await setTuning({ measure: true });   // only the estimate changes; the fields keep what is typed
-    setProjectMetaStatus("");
-    renderTuningNotes();
+    await setTuning(desiredProjectTuning());
+    if (S.state !== state) return;
+    fillTuningFields();
+    setProjectMetaStatus("Pitch shift applied");
+    snapshotSettings();
   } catch (err) {
     setProjectMetaStatus(err.message, true);
   } finally {
-    $("projTuningMeasure").disabled = false;
+    button.textContent = "Apply pitch shift";
+    renderTuningNotes();
   }
 }
 
@@ -278,9 +282,6 @@ function renderProjectSettings() {
   fillTuningFields();
   for (const id of ["projTitle", "projArtist", "projAlbum", "projYear", "projCoverDrop", "settingsApply"])
     if ($(id)) $(id).disabled = !on;
-  const tunable = on && !!S.state?.stems?.length;
-  for (const id of ["projTuningRef", "projTuningAudio", "projTuningShift", "projTuningMeasure"])
-    $(id).disabled = !tunable;
   projLatin.fill(meta);
   $("projCoverDrop").setAttribute("aria-disabled", String(!on));
   $("projCoverDrop").tabIndex = on ? 0 : -1;
@@ -290,10 +291,6 @@ function renderProjectSettings() {
 
 async function saveProjectSettings() {
   if (!S.state || S.state.job === "tutorial") return;
-  for (const id of ["projTuningRef", ...($("projTuningAudio").value === "custom" ? ["projTuningShift"] : [])])
-    if (!$(id).disabled && (!$(id).value || !$(id).reportValidity())) {
-      setProjectMetaStatus("Enter a pitch within the field's range.", true); return;
-    }
   const meta = collectProjectSettingsMeta();
   if (!meta.title || !meta.artist) { setProjectMetaStatus("Enter a song title and an artist.", true); return; }
   const state = S.state;
@@ -308,12 +305,6 @@ async function saveProjectSettings() {
     state.metadata = meta;
     if (projectDraft?.state === state) projectDraft.metadata = normalizeMetadata(meta);
     refreshSaveState();   // the project is named after these details
-    const tuning = readTuningFields();
-    if (S.state.stems.length && (Math.abs(tuning.reference - S.state.tuning.reference) >= 0.1 || tuning.shift !== S.state.tuning.shift)) {
-      setProjectMetaStatus(tuning.shift !== S.state.tuning.shift ? "Shifting audio..." : "Saving...");
-      await setTuning(tuning);
-      fillTuningFields();
-    }
     setProjectMetaStatus("Saved");
     snapshotSettings();
   } catch (err) {
@@ -567,10 +558,9 @@ export function init_ui({ doCopy, doCut, doDelete, doPaste, renderLayerSettings 
   });
   $("projCoverClear").addEventListener("click", (e) => { e.stopPropagation(); clearProjectSettingsCover(); });
   $("settingsProjectCancel").addEventListener("click", cancelSettingsModal);
-  for (const id of ["projTuningRef", "projTuningAudio", "projTuningShift"]) $(id).addEventListener("input", renderTuningNotes);
-  $("projTuningUse").addEventListener("click", () => setTuningField("projTuningRef", hzText(S.state.tuning.estimate)));
-  $("projTuningRef440").addEventListener("click", () => setTuningField("projTuningRef", "440.0"));
-  $("projTuningMeasure").addEventListener("click", measureTuning);
+  $("projPitchTarget").addEventListener("input", renderTuningNotes);
+  $("projPitchShiftAudio").addEventListener("change", renderTuningNotes);
+  $("projPitchApply").addEventListener("click", applyProjectPitchShift);
   ["dragenter", "dragover"].forEach((ev) => $("projCoverDrop").addEventListener(ev, (e) => {
     e.preventDefault();
     if (S.state?.job !== "tutorial") $("projCoverDrop").classList.add("drag");

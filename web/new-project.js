@@ -45,9 +45,17 @@ const npCoverDrop = $("npCoverDrop"), npCoverThumb = $("npCoverThumb");
 const npCoverTitle = $("npCoverTitle"), npCoverSub = $("npCoverSub");
 const npCoverClear = $("npCoverClear"), npCoverInput = $("npCoverInput");
 const npFormFields = $("npFormFields"), npClose = $("npClose");
+const npAudioPreviewRow = $("npAudioPreviewRow"), npAudioPreview = $("npAudioPreview");
+const npPitch = $("npPitch"), npTuningRef = $("npTuningRef");
+const npTuningDetected = $("npTuningDetected"), npTuningShiftAudio = $("npTuningShiftAudio");
+const npPitchApply = $("npPitchApply"), npPitchStatus = $("npPitchStatus");
 let draftMetadata = normalizeMetadata({});
 let autoMetadataValues = { title: "", artist: "", album: "", year: "" };
 let autoCoverArt = "";
+let draftTuning = { estimate: null, reference: 0, shift: 0 };
+let draftTargetHz = 440;
+let draftShiftAudio = false;
+let uploadedSong = false;
 const metadataInputs = { title: npSongTitleInput, artist: npArtistInput, album: npAlbumInput, year: npYearInput };
 for (const [key, input] of Object.entries(metadataInputs)) {
   input.addEventListener("input", () => {
@@ -57,7 +65,6 @@ for (const [key, input] of Object.entries(metadataInputs)) {
 }
 const npLatin = latinFields({ title: "npSongTitle", artist: "npArtist", album: "npAlbum" });
 
-function hasFullSong() { return fileInput.files.length > 0; }
 // True while the full song is still on its way to the server: Create would
 // finalize a draft with no audio in it yet.
 let mainUploading = false;
@@ -66,7 +73,8 @@ let formBusy = false;
 function refreshCreateEnabled() {
   // A project is named after its song, so it cannot be created without one.
   const named = npSongTitleInput.value.trim() && npArtistInput.value.trim();
-  goBtn.disabled = mainUploading || formBusy || !hasFullSong() || !named;
+  goBtn.disabled = mainUploading || formBusy || !uploadedSong || !named
+    || !npTuningRef.checkValidity() || draftPitchPending();
 }
 
 function setFormBusy(busy) {
@@ -74,7 +82,101 @@ function setFormBusy(busy) {
   npFormFields.inert = formBusy;
   npFormFields.setAttribute("aria-busy", String(formBusy));
   npClose.disabled = formBusy;
+  npPitchApply.disabled = formBusy || !uploadedSong;
   refreshCreateEnabled();
+}
+
+function setUploadStep(hasAudio) {
+  uploadedSong = !!hasAudio;
+  npFormFields.classList.toggle("has-audio", uploadedSong);
+  $("newProjModal").classList.toggle("audio-step", !uploadedSong);
+  $("newProjModal").classList.toggle("audio-ready", uploadedSong);
+  npAudioPreviewRow.hidden = !uploadedSong;
+  npPitch.hidden = !uploadedSong;
+  if (!uploadedSong) { npPitchStatus.textContent = ""; npPitchStatus.hidden = true; }
+  refreshCreateEnabled();
+}
+
+const hzOf = (cents) => 440 * 2 ** (cents / 1200);
+const centsOfHz = (hz) => 1200 * Math.log2(hz / 440);
+
+function currentDraftTuning() {
+  const reference = draftTuning.reference || 0;
+  const target = centsOfHz(draftTargetHz);
+  return { reference, shift: draftShiftAudio ? target - reference : 0 };
+}
+
+function draftPitchPending() {
+  const activeShift = Math.abs(draftTuning.shift || 0) >= 0.05;
+  if (!draftShiftAudio) return activeShift;
+  if (uploadedSong && !npTuningRef.checkValidity()) return true;
+  const targetHz = Math.round(Number(npTuningRef.value) || draftTargetHz);
+  const currentHz = Math.round(hzOf((draftTuning.reference || 0) + (draftTuning.shift || 0)));
+  return !activeShift ? targetHz !== Math.round(hzOf(draftTuning.reference || 0)) : targetHz !== currentHz;
+}
+
+function refreshDraftPitchAction() {
+  npPitchApply.hidden = !uploadedSong || !draftPitchPending();
+  npPitchApply.disabled = formBusy || !uploadedSong;
+  refreshCreateEnabled();
+}
+
+function renderDraftTuning() {
+  npTuningRef.value = String(draftTargetHz);
+  npTuningShiftAudio.checked = draftShiftAudio;
+  npTuningDetected.textContent = draftTuning.estimate == null
+    ? "Not detected" : `${Math.round(hzOf(draftTuning.estimate))} Hz`;
+  refreshDraftPitchAction();
+}
+
+async function applyDraftPitchShift() {
+  if (!draftJob || !uploadedSong) return;
+  if (draftShiftAudio && !npTuningRef.reportValidity()) return;
+  if (npTuningRef.checkValidity()) draftTargetHz = Math.round(Number(npTuningRef.value));
+  if (!draftPitchPending()) return;
+  const previousShift = draftTuning.shift || 0;
+  setFormBusy(true);
+  npPitchApply.textContent = "Applying…";
+  try {
+    const res = await fetch(`/api/projects/${draftJob}/tuning`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(currentDraftTuning()),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Could not update pitch settings");
+    const data = await res.json();
+    draftTuning = data.tuning;
+    npPitchStatus.textContent = "";
+    npPitchStatus.hidden = true;
+    renderDraftTuning();
+    if (Math.abs(previousShift - (draftTuning.shift || 0)) >= 0.05) {
+      setPreviewSource(`/api/audio/${draftJob}/mix`, true);
+    }
+  } catch (err) {
+    npPitchStatus.textContent = err.message;
+    npPitchStatus.hidden = false;
+  } finally {
+    npPitchApply.textContent = "Apply pitch shift";
+    setFormBusy(false);
+    renderDraftTuning();
+  }
+}
+
+function setPreviewSource(url, cacheBust = false) {
+  if (!url) {
+    npAudioPreview.pause();
+    npAudioPreview.removeAttribute("src");
+    npAudioPreview.load();
+    return;
+  }
+  const playing = !npAudioPreview.paused;
+  const time = Number.isFinite(npAudioPreview.currentTime) ? npAudioPreview.currentTime : 0;
+  const next = cacheBust ? `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}` : url;
+  npAudioPreview.addEventListener("loadedmetadata", () => {
+    npAudioPreview.currentTime = Math.min(time, npAudioPreview.duration || time);
+    if (playing) npAudioPreview.play().catch(() => {});
+  }, { once: true });
+  npAudioPreview.src = next;
+  npAudioPreview.load();
 }
 
 // ---- metadata + cover art ----
@@ -193,6 +295,12 @@ export async function setMainFile(file) {
     npDropTitle.textContent = "Drop the full song, or click to browse";
     npDropSub.textContent = NP_SUB_DEFAULT;
     npClear.hidden = true;
+    setPreviewSource("");
+    draftTuning = { estimate: null, reference: 0, shift: 0 };
+    draftTargetHz = 440;
+    draftShiftAudio = false;
+    setUploadStep(false);
+    renderDraftTuning();
     refreshCreateEnabled();
     return;
   }
@@ -202,6 +310,8 @@ export async function setMainFile(file) {
   npDropSub.textContent = "";   // the progress panel says it, with the bytes sent
   npClear.hidden = false;
   npClear.disabled = true;
+  const firstUpload = !uploadedSong;
+  let uploadSucceeded = false;
   prepareMetadataForAudio();
   mainUploading = true;
   setFormBusy(true);
@@ -210,8 +320,15 @@ export async function setMainFile(file) {
     const fd = new FormData();
     fd.append("audio", file);
     const data = await uploadRequest(`/api/projects/${job}/mix`, fd, "Uploading song", file.name);
-    npDropSub.textContent = data.tempo ? `${Math.round(data.tempo)} BPM detected` : "Ready";
+    npDropSub.textContent = "";
+    draftTuning = { estimate: null, reference: 0, shift: 0, ...(data.tuning || {}) };
+    draftTargetHz = Math.round(hzOf(draftTuning.reference || 0));
+    draftShiftAudio = false;
     applyAudioMetadata(data.audioMetadata);
+    renderDraftTuning();
+    setPreviewSource(data.stem.audio_url);
+    setUploadStep(true);
+    uploadSucceeded = true;
   } catch (err) {
     npDrop.classList.remove("has-file"); npDrop.classList.add("error");
     npDropTitle.textContent = "Upload failed — click to try again";
@@ -221,6 +338,7 @@ export async function setMainFile(file) {
   mainUploading = false;
   npClear.disabled = false;
   setFormBusy(false);
+  if (firstUpload && uploadSucceeded) npSongTitleInput.focus();
 }
 
 // ---- open / close / create ----
@@ -242,6 +360,12 @@ export async function openNewProject() {
   npLatin.fill(draftMetadata);
   renderNewProjectCover();
   fileInput.value = "";
+  setPreviewSource("");
+  draftTuning = { estimate: null, reference: 0, shift: 0 };
+  draftTargetHz = 440;
+  draftShiftAudio = false;
+  setUploadStep(false);
+  renderDraftTuning();
   npDrop.classList.remove("has-file", "error");
   npDropTitle.textContent = "Drop the full song, or click to browse";
   npDropSub.textContent = NP_SUB_DEFAULT;
@@ -249,7 +373,7 @@ export async function openNewProject() {
   draftJob = null; draftJobPromise = null;
   modalBackdrop.hidden = false;
   refreshCreateEnabled();
-  if (npSongTitleInput) npSongTitleInput.focus();
+  if (npDrop) npDrop.focus();
   return true;
 }
 
@@ -258,6 +382,7 @@ export async function openNewProject() {
 // the launcher, which is project.js's call to make, not this module's.
 function closeNewProject() {
   modalBackdrop.hidden = true;
+  npAudioPreview.pause();
   if (draftJob) {
     const abandoned = draftJob;
     draftJob = null; draftJobPromise = null;
@@ -267,7 +392,7 @@ function closeNewProject() {
 }
 
 async function createProject() {
-  if (!hasFullSong()) return;
+  if (!uploadedSong) return;
   warnEl.innerHTML = "";   // a previous project's warnings must not survive the wait
   goBtn.disabled = true;
   // The loading screen (design.md 4.17): this ends in the project opening, and
@@ -323,6 +448,17 @@ export function initNewProject({ onCreated, onClosed, canLeave }) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
   });
   fileInput.addEventListener("change", () => { if (fileInput.files[0]) setMainFile(fileInput.files[0]); });
+  npTuningRef.addEventListener("input", () => {
+    const value = Number(npTuningRef.value);
+    if (Number.isInteger(value) && value >= 427 && value <= 453) draftTargetHz = value;
+    refreshDraftPitchAction();
+  });
+  npTuningRef.addEventListener("change", refreshDraftPitchAction);
+  npTuningShiftAudio.addEventListener("change", () => {
+    draftShiftAudio = npTuningShiftAudio.checked;
+    refreshDraftPitchAction();
+  });
+  npPitchApply.addEventListener("click", applyDraftPitchShift);
   npClear.addEventListener("click", async (e) => {
     e.stopPropagation();
     if (npClear.disabled) return;

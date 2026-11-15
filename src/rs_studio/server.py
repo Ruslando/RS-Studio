@@ -356,13 +356,13 @@ def _metadata_response(m: dict) -> dict:
     return metadata
 
 
-def _cents(value, default: float = 0.0) -> float:
-    """A cent offset within a quarter tone either way, or `default`."""
+def _cents(value, default: float = 0.0, limit: float = 50.0) -> float:
+    """A bounded cent offset, or `default`."""
     try:
         value = float(value)
     except (TypeError, ValueError):
         return default
-    return round(max(-50.0, min(50.0, value)), 1) if math.isfinite(value) else default
+    return round(max(-limit, min(limit, value)), 1) if math.isfinite(value) else default
 
 
 def _tuning(m: dict) -> dict:
@@ -376,7 +376,7 @@ def _tuning(m: dict) -> dict:
     raw = m.get("tuning") if isinstance(m.get("tuning"), dict) else {}
     estimate = raw.get("estimate")
     return {"estimate": None if estimate is None else _cents(estimate),
-            "reference": _cents(raw.get("reference")), "shift": _cents(raw.get("shift"))}
+            "reference": _cents(raw.get("reference")), "shift": _cents(raw.get("shift"), limit=105.0)}
 
 
 def _apply_save_payload(job: str, payload: dict) -> dict:
@@ -858,6 +858,7 @@ def api_project_mix(job: str, audio: UploadFile) -> JSONResponse:
     return JSONResponse({
         "stem": {"id": view.id, "name": view.name, "spectrogram": spec, "audio_url": f"/api/audio/{job}/{view.id}"},
         "tempo": m["tempo"], "duration": m["duration"], "audioMetadata": audio_metadata,
+        "tuning": m.get("tuning", {}),
     })
 
 
@@ -1029,7 +1030,7 @@ def api_project_finalize(job: str, payload: dict = Body(default={})) -> JSONResp
 
 @app.post("/api/projects/{job}/tuning")
 def api_project_tuning(job: str, payload: dict = Body(...)) -> JSONResponse:
-    """Set the concert pitch: {reference, shift} in cents, each within +-50.
+    """Set the concert pitch: reference within +-50 and audio shift within +-105 cents.
     With `measure`, the audio's estimate is (re)measured first.
 
     Renders the shifted playback audio before answering, so the editor's reload
@@ -1053,9 +1054,10 @@ def api_project_tuning(job: str, payload: dict = Body(...)) -> JSONResponse:
     for key in ("reference", "shift"):
         if key in payload:
             value = payload[key]
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not -50 <= value <= 50:
-                raise HTTPException(status_code=400, detail=f"{key} must be between -50 and 50 cents")
-            tuning[key] = _cents(value)
+            limit = 105 if key == "shift" else 50
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not -limit <= value <= limit:
+                raise HTTPException(status_code=400, detail=f"{key} must be between {-limit} and {limit} cents")
+            tuning[key] = _cents(value, limit=limit)
     if tuning["shift"]:
         from .audio_channels import shifted_audio
         job_dir = _job_dir(job)

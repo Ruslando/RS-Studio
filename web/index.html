@@ -1221,35 +1221,19 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <section class="project-section" id="projTuning" aria-labelledby="projPitchHeading">
             <h2 id="projPitchHeading">Pitch</h2>
             <div class="project-pitch-row">
-              <label for="projTuningRef" title="Reference used by the editor and Rocksmith export">A4 reference</label>
-              <div class="project-pitch-controls">
-                <span class="project-pitch-input"><input type="number" id="projTuningRef" min="427.5" max="452.9" step="0.1" aria-describedby="projTuningDetected" /><span>Hz</span></span>
-                <button type="button" id="projTuningRef440" class="btn btn--compact" title="Set the reference to 440 Hz">440 Hz</button>
-              </div>
-            </div>
-            <div class="project-pitch-row project-pitch-estimate">
-              <span></span>
-              <div class="project-pitch-controls">
-                <span id="projTuningDetected"></span>
-                <button type="button" id="projTuningUse" class="btn btn--compact">Use detected</button>
-                <button type="button" id="projTuningMeasure" class="btn btn--compact">Measure</button>
-              </div>
+              <span>Detected pitch</span>
+              <output id="projPitchDetected" class="mono">—</output>
             </div>
             <div class="project-pitch-row">
-              <label for="projTuningAudio">Audio</label>
-              <div class="project-pitch-controls">
-                <select id="projTuningAudio" title="Pitch processing for playback and exported audio">
-                  <option value="none">Unchanged</option>
-                  <option value="a440">Match A440</option>
-                  <option value="custom">Custom shift</option>
-                </select>
-                <label class="project-pitch-input" id="projTuningCustom" hidden>
-                  <input type="number" id="projTuningShift" min="-50" max="50" step="0.1" value="0" aria-label="Audio shift in cents" title="Audio pitch shift, from −50 to +50 cents" /><span>cents</span>
-                </label>
-              </div>
+              <label for="projPitchTarget">Target pitch</label>
+              <span class="project-pitch-input"><input type="number" id="projPitchTarget" min="427" max="453" step="1" value="440" required /><span>Hz</span></span>
             </div>
-            <div class="project-pitch-row project-pitch-result">
-              <span>Export A4</span><output id="projTuningExport" aria-live="polite"></output>
+            <div class="project-pitch-row">
+              <span></span>
+              <label class="chk project-pitch-check"><input type="checkbox" id="projPitchShiftAudio" /> Pitch-shift audio</label>
+            </div>
+            <div class="project-pitch-row project-pitch-action">
+              <span></span><button type="button" id="projPitchApply" class="primary" hidden>Apply pitch shift</button>
             </div>
           </section>
           <p id="projMetaStatus" class="sp-note" role="status" hidden></p>
@@ -1379,6 +1363,31 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 <span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span>
               </button>
               <input type="file" id="file" accept="audio/*" hidden />
+            </div>
+          </div>
+
+          <div class="np-audio-preview" id="npAudioPreviewRow" hidden>
+            <span class="field-label">Preview</span>
+            <audio id="npAudioPreview" controls preload="metadata"></audio>
+          </div>
+
+          <div class="np-pitch" id="npPitch" hidden>
+            <div class="section-head"><span>Pitch</span></div>
+            <div class="np-pitch-row">
+              <span>Detected pitch</span>
+              <output id="npTuningDetected" class="mono">—</output>
+            </div>
+            <div class="np-pitch-row">
+              <label for="npTuningRef">Target pitch</label>
+              <span class="np-pitch-input"><input type="number" id="npTuningRef" min="427" max="453" step="1" value="440" required /><span>Hz</span></span>
+            </div>
+            <div class="np-pitch-row">
+              <span></span>
+              <label class="chk np-pitch-check"><input type="checkbox" id="npTuningShiftAudio" /> Pitch-shift audio</label>
+            </div>
+            <div class="np-pitch-action">
+              <button type="button" id="npPitchApply" class="btn--primary" hidden>Apply pitch shift</button>
+              <span id="npPitchStatus" class="np-pitch-status" role="status" hidden></span>
             </div>
           </div>
 
