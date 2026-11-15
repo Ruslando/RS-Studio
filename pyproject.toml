@@ -46,6 +46,8 @@ dependencies = [
     # Its other dependencies (einops, soxr, rotary-embedding-torch) are already
     # here. The ~81 MB final0 checkpoint ships with the app (pipeline.py).
     "beat-this>=1.1.0",
+    # beat_this's optional DBN beat postprocessor.
+    "madmom",
     # mt3-infer 0.2 supports Transformers 5.10; newer releases remove
     # attention-mask methods still used by its custom T5 model.
     "transformers>=5.10.0,<5.11",
@@ -129,6 +131,8 @@ torchvision = [{ index = "pytorch-cpu", group = "cpu", marker = "sys_platform ==
 torchcodec = [{ index = "pytorch-cpu", group = "cpu", marker = "sys_platform == 'linux'" }, { index = "pytorch-cuda", group = "cuda" }]
 # No releases upstream; this is the commit RS Studio's Linux export was tested with.
 wwise-wem = { git = "https://github.com/rabbit-smith/wem", rev = "c757fe4d2354cbd4d66960179c7715d79b13bae0" }
+# PyPI's madmom release is incompatible with supported Python versions.
+madmom = { git = "https://github.com/CPJKU/madmom", rev = "27f032e8947204902c675e5e341a3faf5dc86dae" }
 
 # The same CUDA build RS Studio Setup installs on Windows (tools/package-bootstrap.py).
 [[tool.uv.index]]

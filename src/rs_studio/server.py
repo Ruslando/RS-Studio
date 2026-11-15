@@ -1081,6 +1081,9 @@ def api_project_tempo_map(job: str, payload: dict = Body(default={})) -> JSONRes
 
     Not saved: the editor applies it as one undoable edit and saves as usual.
     """
+    transition_lambda = (payload or {}).get("transition_lambda", 300)
+    if type(transition_lambda) is not int or transition_lambda not in {100, 300, 500}:
+        raise HTTPException(status_code=422, detail="Tempo-change smoothness must be 100, 300, or 500")
     m = _read_manifest(job)
     job_dir = _job_dir(job)
     try:
@@ -1089,7 +1092,8 @@ def api_project_tempo_map(job: str, payload: dict = Body(default={})) -> JSONRes
         stems = m.get("stems") or [{}]
         source = _project_file_or_404(job, stems[0].get("audio_rel"), "Song audio")
     try:
-        grid = processing.run((payload or {}).get("progress_id"), pipeline.detect_tempo_map, source)
+        grid = processing.run((payload or {}).get("progress_id"), pipeline.detect_tempo_map,
+                              source, transition_lambda)
     except processing.OperationCancelled:
         return JSONResponse(status_code=409, content={"detail": "Operation cancelled", "cancelled": True})
     except Exception as exc:

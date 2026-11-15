@@ -249,6 +249,10 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 
 .dialog-actions { display: flex; gap: var(--s-sibling); margin-left: auto; }
 
+.tempo-smoothness-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--s-sibling); }
+.tempo-smoothness-control label { color: var(--label); font: 500 var(--text-control)/1.3 var(--font-ui); }
+.tempo-smoothness-control output { color: var(--text); font: 500 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+
 
 .toast {
   min-height: var(--h-list); height: auto; padding: var(--s-sibling) var(--s-row); border-radius: var(--r-control);

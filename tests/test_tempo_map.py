@@ -1,7 +1,7 @@
 """Beats + downbeats -> grid (rs_studio/tempo_map.py), on hand-made beat lists."""
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
@@ -93,6 +93,31 @@ class TempoMapTests(unittest.TestCase):
             self.assertAlmostEqual(grid["bpm"], 90, delta=0.1)
 
 
+class BeatThisIntegrationTests(unittest.TestCase):
+    def test_detector_uses_selected_dbn_smoothness(self):
+        from pathlib import Path
+        from types import SimpleNamespace
+
+        from rs_studio import pipeline
+
+        beats = np.arange(32, dtype=float) * 0.5
+        checkpoint = Path("beat_this-final0.ckpt")
+        detector_instance = Mock(return_value=(beats, beats[::4]))
+        detector_instance.frames2beats = SimpleNamespace(fps=50)
+        with patch.object(pipeline, "beat_this_checkpoint", return_value=checkpoint), \
+             patch.object(pipeline, "_select_device", return_value="cpu"), \
+             patch.object(pipeline.processing, "report"), \
+             patch("beat_this.inference.File2Beats", return_value=detector_instance) as detector, \
+             patch("madmom.features.downbeats.DBNDownBeatTrackingProcessor") as dbn:
+            pipeline.detect_tempo_map(Path("song.wav"), transition_lambda=500)
+        detector.assert_called_once_with(checkpoint_path=str(checkpoint), device="cpu", dbn=True)
+        detector_instance.assert_called_once_with(str(Path("song.wav")))
+        dbn.assert_called_once_with(
+            beats_per_bar=[3, 4], min_bpm=55.0, max_bpm=215.0,
+            fps=50, transition_lambda=500,
+        )
+
+
 class TempoRouteTests(unittest.TestCase):
     def test_route_returns_the_detected_grid_unsaved(self):
         from pathlib import Path
@@ -104,10 +129,19 @@ class TempoRouteTests(unittest.TestCase):
              patch.object(server, "_project_input", return_value=Path("input.wav")), \
              patch.object(server, "_write_manifest") as write, \
              patch.object(server.processing, "run", return_value=grid) as run:
-            body = json.loads(server.api_project_tempo_map("tempotest", {}).body)
+            body = json.loads(server.api_project_tempo_map("tempotest", {"transition_lambda": 500}).body)
         self.assertEqual(body, grid)
         self.assertEqual(run.call_args.args[2], Path("input.wav"))
+        self.assertEqual(run.call_args.args[3], 500)
         write.assert_not_called()
+
+    def test_route_rejects_out_of_range_smoothness(self):
+        from fastapi import HTTPException
+
+        from rs_studio import server
+        with self.assertRaises(HTTPException) as raised:
+            server.api_project_tempo_map("tempotest", {"transition_lambda": 400})
+        self.assertEqual(raised.exception.status_code, 422)
 
 
 if __name__ == "__main__":

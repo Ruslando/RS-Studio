@@ -3,6 +3,7 @@
 // edit. Notes ride along like they do when a marker's tempo is edited: each
 // keeps its place between the beats (bars.js beatWarp).
 import { beatLines, beatWarp, warpTimes } from "./bars.js";
+import { confirmChoice } from "./dialog.js";
 import { commitStructure, snapshotEdit } from "./edit-history.js";
 import { currentGridState, gridSubdiv, restoreGridState } from "./grid-controls.js";
 import { gridSegments, minDur } from "./grid-read.js";
@@ -10,6 +11,7 @@ import { editLanes } from "./lanes.js";
 import { projectStart } from "./project-position-core.js";
 import { toast } from "./notify.js";
 import { operationRequest } from "./operation-progress.js";
+import { parameterSlider } from "./parameter-slider.js";
 import { refreshSaveState } from "./save-state.js";
 import { draw } from "./repaint.js";
 import { S } from "./store.js";
@@ -35,9 +37,48 @@ function applyTempoMap(grid) {
 export async function detectTempoMap() {
   const state = S.state;
   if (!state?.stems?.length) { toast("Add the song's audio first."); return; }
+  const control = document.createElement("div");
+  control.className = "tempo-smoothness-control";
+  const smoothness = new Map([[100, "Flexible"], [300, "Balanced"], [500, "Smooth"]]);
+  const label = document.createElement("label");
+  label.textContent = "Tempo-change smoothness";
+  const value = document.createElement("output");
+  value.textContent = "Balanced";
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.id = "tempoSmoothness";
+  slider.min = "100";
+  slider.max = "500";
+  slider.step = "200";
+  slider.setAttribute("aria-label", "Tempo-change smoothness");
+  slider.value = "300";
+  slider.addEventListener("input", () => {
+    value.textContent = smoothness.get(Number(slider.value));
+  });
+  label.htmlFor = slider.id;
+  const row = document.createElement("div");
+  row.className = "tempo-smoothness-heading";
+  row.append(label, value);
+  control.append(row, parameterSlider(slider, {
+    min: 100, max: 500, step: 200, defaultValue: 300,
+    format: (setting) => smoothness.get(setting), showDefault: false,
+    labels: Object.fromEntries(smoothness), snapPoints: [...smoothness.keys()],
+  }));
+  const choice = await confirmChoice({
+    title: "Detect tempo map",
+    message: "",
+    confirmLabel: "Detect",
+    cancelLabel: "Cancel",
+    content: control,
+    onOpen: () => slider.focus(),
+  });
+  if (choice !== "confirm") return;
+
   let grid;
   try {
-    grid = await operationRequest(`/api/projects/${state.job}/tempo-map`, {}, "Detecting tempo map", state.name || "Song");
+    grid = await operationRequest(`/api/projects/${state.job}/tempo-map`, {
+      transition_lambda: Number(slider.value),
+    }, "Detecting tempo map", state.name || "Song");
   } catch { return; }   // operationRequest already said why
   if (S.state !== state) return;
   applyTempoMap(grid);

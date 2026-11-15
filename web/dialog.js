@@ -26,6 +26,7 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
     rememberModalOpener(actionConfirmModal, previousFocus);
     actionConfirmTitle.textContent = title;
     actionConfirmMsg.textContent = message;
+    actionConfirmMsg.hidden = !message;
     actionConfirmAccept.textContent = confirmLabel;
     actionConfirmAccept.disabled = false;
     if (content) actionConfirmMsg.before(content);
@@ -51,6 +52,7 @@ export function confirmChoice({ title, message, confirmLabel, cancelLabel = "Can
       done = true;
       cleanup?.();
       content?.remove();
+      actionConfirmMsg.hidden = false;
       actionConfirmAccept.disabled = false;
       closeActive = null;
       actionConfirmBackdrop.hidden = true;

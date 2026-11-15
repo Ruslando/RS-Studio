@@ -77,7 +77,7 @@ name = "anyio"
 version = "4.14.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
     { name = "idna" },
     { name = "typing-extensions" },
 ]
@@ -112,13 +112,13 @@ dependencies = [
     { name = "librosa" },
     { name = "mir-eval" },
     { name = "numpy" },
-    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'win32') or (python_full_version >= '3.11' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'win32' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' and sys_platform == 'win32'" },
     { name = "pretty-midi" },
     { name = "resampy" },
-    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scikit-learn", version = "1.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d3/68/384dcaa2493497581ef7a0f18c76ce35afa26ea8a8d703f4761bdae632e6/basic_pitch-0.4.0.tar.gz", hash = "sha256:6f48ac4b909c990fd59460622137a03b857c829bb1f3e65c71708da576ab68e5", size = 3715128, upload-time = "2024-08-16T17:17:10.232Z" }
@@ -144,10 +144,10 @@ dependencies = [
     { name = "numpy" },
     { name = "rotary-embedding-torch" },
     { name = "soxr" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
 ]
@@ -179,7 +179,7 @@ name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
 wheels = [
@@ -302,7 +302,7 @@ name = "clr-loader"
 version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "cffi" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e4/46/7eea92b6aa2d68af78e049cbecec5f757f1aad44ecdecdc16bbad7eead51/clr_loader-0.3.1.tar.gz", hash = "sha256:2e073e9aaf49d1ae2f56ecba27987ad5fb68be4bcd9dd34a5bed8f0e4e128366", size = 86805, upload-time = "2026-04-18T17:49:44.287Z" }
 wheels = [
@@ -323,7 +323,7 @@ name = "coloredlogs"
 version = "15.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "humanfriendly", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "humanfriendly" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/c7/eed8f27100517e8c0e6b923d5f0845d0cb99763da6fdee00478f91db7325/coloredlogs-15.0.1.tar.gz", hash = "sha256:7c991aa71a4577af2f82600d8f8f3a89f936baeaf9b50a9c197da014e5bf16b0", size = 278520, upload-time = "2021-06-11T10:22:45.202Z" }
 wheels = [
@@ -339,7 +339,7 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/54/eb9bfc647b19f2009dd5c7f5ec51c4e6ca831725f1aea7a993034f483147/contourpy-1.3.2.tar.gz", hash = "sha256:b6945942715a034c671b7fc54f9588126b0b8bf23db2696e3ca8328f3ff0ab54", size = 13466130, upload-time = "2025-04-15T17:47:53.79Z" }
 wheels = [
@@ -390,7 +390,7 @@ resolution-markers = [
     "python_full_version >= '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/58/01/1253e6698a07380cd31a736d248a3f2a50a7c88779a1813da27503cadc2a/contourpy-1.3.3.tar.gz", hash = "sha256:083e12155b210502d0bca491432bb04d56dc3432f95a979b429f2848c3dbe880", size = 13466174, upload-time = "2025-07-26T12:03:12.549Z" }
 wheels = [
@@ -428,8 +428,8 @@ name = "cryptography"
 version = "50.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9d/af/182eb91b0df3fe75c4d9f26fe70684569566745f6ba7e5c9c73a862c5252/cryptography-50.0.2.tar.gz", hash = "sha256:7b46165bb56eb4704e2eaaf86f3c940d19154535d9b0ca7d6d590b04060e00d5", size = 880623, upload-time = "2026-09-30T15:30:04.884Z" }
 wheels = [
@@ -592,43 +592,43 @@ wheels = [
 
 [package.optional-dependencies]
 cublas = [
-    { name = "nvidia-cublas", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 cudart = [
-    { name = "nvidia-cuda-runtime", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cuda-runtime", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 cufft = [
-    { name = "nvidia-cufft", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cufft", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 cufile = [
-    { name = "nvidia-cufile", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cufile", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 cupti = [
-    { name = "nvidia-cuda-cupti", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cuda-cupti", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 curand = [
-    { name = "nvidia-curand", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-curand", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 cusolver = [
-    { name = "nvidia-cublas", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "nvidia-cusolver", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "nvidia-cusparse", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cusolver", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 cusparse = [
-    { name = "nvidia-cusparse", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 nvjitlink = [
-    { name = "nvidia-nvjitlink", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 nvrtc = [
-    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 nvtx = [
-    { name = "nvidia-nvtx", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'aarch64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "nvidia-nvtx", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 
 [[package]]
@@ -660,10 +660,10 @@ dependencies = [
     { name = "lameenc" },
     { name = "openunmix" },
     { name = "pyyaml" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
     { name = "tqdm" },
@@ -678,7 +678,7 @@ dependencies = [
     { name = "omegaconf" },
     { name = "retrying" },
     { name = "submitit" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
     { name = "treetable" },
@@ -699,7 +699,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -908,11 +908,11 @@ dependencies = [
     { name = "click" },
     { name = "filelock" },
     { name = "fsspec" },
-    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
     { name = "httpx" },
     { name = "packaging" },
     { name = "pyyaml" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
@@ -926,7 +926,7 @@ name = "humanfriendly"
 version = "10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyreadline3", marker = "(python_full_version < '3.11' and sys_platform == 'win32') or (python_full_version >= '3.11' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'win32' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyreadline3", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/3f/2c29224acb2e2df4d2046e4c73ee2662023c58ff5b113c4c1adac0886c43/humanfriendly-10.0.tar.gz", hash = "sha256:6b0b831ce8f15f7300721aa49829fc4e83921a9a301cc7f606be6686a2288ddc", size = 360702, upload-time = "2021-09-17T21:40:43.31Z" }
 wheels = [
@@ -977,7 +977,7 @@ name = "julius"
 version = "0.2.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
 ]
@@ -1109,10 +1109,10 @@ dependencies = [
     { name = "numba" },
     { name = "numpy" },
     { name = "pooch" },
-    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scikit-learn", version = "1.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "soundfile" },
     { name = "soxr" },
     { name = "typing-extensions" },
@@ -1147,11 +1147,22 @@ name = "macholib"
 version = "1.16.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "altgraph", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "altgraph" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/10/2f/97589876ea967487978071c9042518d28b958d87b17dceb7cdc1d881f963/macholib-1.16.4.tar.gz", hash = "sha256:f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362", size = 59427, upload-time = "2025-11-22T08:28:38.373Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/d1/a9f36f8ecdf0fb7c9b1e78c8d7af12b8c8754e74851ac7b94a8305540fc7/macholib-1.16.4-py2.py3-none-any.whl", hash = "sha256:da1a3fa8266e30f0ce7e97c6a54eefaae8edd1e5f86f3eb8b95457cae90265ea", size = 38117, upload-time = "2025-11-22T08:28:36.939Z" },
+]
+
+[[package]]
+name = "madmom"
+version = "0.17.dev0"
+source = { git = "https://github.com/CPJKU/madmom?rev=27f032e8947204902c675e5e341a3faf5dc86dae#27f032e8947204902c675e5e341a3faf5dc86dae" }
+dependencies = [
+    { name = "mido" },
+    { name = "numpy" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [[package]]
@@ -1216,15 +1227,15 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "contourpy", version = "1.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "cycler", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "fonttools", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "kiwisolver", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "numpy", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "packaging", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pillow", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyparsing", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "python-dateutil", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "contourpy", version = "1.3.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "cycler" },
+    { name = "fonttools" },
+    { name = "kiwisolver" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pillow" },
+    { name = "pyparsing" },
+    { name = "python-dateutil" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/63/1b/4be5be87d43d327a0cf4de1a56e86f7f84c89312452406cf122efe2839e6/matplotlib-3.10.9.tar.gz", hash = "sha256:fd66508e8c6877d98e586654b608a0456db8d7e8a546eb1e2600efd957302358", size = 34811233, upload-time = "2026-04-24T00:14:13.539Z" }
 wheels = [
@@ -1265,15 +1276,15 @@ resolution-markers = [
     "python_full_version >= '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "contourpy", version = "1.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "cycler", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "fonttools", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "kiwisolver", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "numpy", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "packaging", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pillow", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyparsing", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "python-dateutil", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "contourpy", version = "1.3.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "cycler" },
+    { name = "fonttools" },
+    { name = "kiwisolver" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pillow" },
+    { name = "pyparsing" },
+    { name = "python-dateutil" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1f/24/080c99d223d158d3a8902769269ab6da5b50f7a0e6e072513907e02b7a6c/matplotlib-3.11.0.tar.gz", hash = "sha256:68c0c7be01b30dcca3638934f7f591df73401235cbdbf0d1ab1c71e7db7f8b57", size = 33251176, upload-time = "2026-06-12T02:29:15.508Z" }
 wheels = [
@@ -1324,8 +1335,8 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "decorator" },
     { name = "numpy" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/28/db/3bf39fc9ab0fb757f297f9a0da7207e823688291f9e61bb67b44fa17bc2f/mir_eval-0.8.2.tar.gz", hash = "sha256:141a3e1193276889fc32e911547e73dcb3e829ee8cfea60f7bbcd633c0792569", size = 117649, upload-time = "2025-02-25T18:09:57.505Z" }
 wheels = [
@@ -1394,17 +1405,17 @@ dependencies = [
     { name = "numpy" },
     { name = "pretty-midi" },
     { name = "pyyaml" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "soundfile" },
     { name = "soxr" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
-    { name = "torchvision", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchvision", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchvision", version = "0.29.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchvision", version = "0.29.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
     { name = "tqdm" },
@@ -1876,12 +1887,12 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "coloredlogs", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "flatbuffers", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "numpy", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "packaging", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "protobuf", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "sympy", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "coloredlogs" },
+    { name = "flatbuffers" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "protobuf" },
+    { name = "sympy" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/35/d6/311b1afea060015b56c742f3531168c1644650767f27ef40062569960587/onnxruntime-1.23.2-cp310-cp310-macosx_13_0_arm64.whl", hash = "sha256:a7730122afe186a784660f6ec5807138bf9d792fa1df76556b27307ea9ebcbe3", size = 17195934, upload-time = "2025-10-27T23:06:14.143Z" },
@@ -1910,11 +1921,11 @@ resolution-markers = [
     "python_full_version >= '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "flatbuffers", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "numpy", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "packaging", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "protobuf", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "sympy", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "flatbuffers" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "protobuf" },
+    { name = "sympy" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/15/41/3253db975a90c3ce1d475e2a230773a21cd7998537f0657947df6fb79861/onnxruntime-1.24.3-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:3e6456801c66b095c5cd68e690ca25db970ea5202bd0c5b84a2c3ef7731c5a3c", size = 17332766, upload-time = "2026-03-05T17:18:59.714Z" },
@@ -1935,10 +1946,10 @@ version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
     { name = "tqdm" },
@@ -1972,8 +1983,8 @@ version = "0.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "librosa" },
-    { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "matplotlib", version = "3.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "matplotlib", version = "3.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "mido" },
     { name = "torchlibrosa" },
 ]
@@ -2231,11 +2242,11 @@ version = "6.21.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "altgraph" },
-    { name = "macholib", marker = "sys_platform == 'darwin' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "macholib", marker = "sys_platform == 'darwin'" },
     { name = "packaging" },
-    { name = "pefile", marker = "sys_platform == 'win32' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pefile", marker = "sys_platform == 'win32'" },
     { name = "pyinstaller-hooks-contrib" },
-    { name = "pywin32-ctypes", marker = "sys_platform == 'win32' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pywin32-ctypes", marker = "sys_platform == 'win32'" },
     { name = "setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d5/4d/ec706c3fcf39e26888c35b39615ff4d5865d184069666c47492cff1fbe50/pyinstaller-6.21.0.tar.gz", hash = "sha256:bb9fab705983e393a2d1cac77d6972513057ad800215fd861dc15ff5272e98fd", size = 4061519, upload-time = "2026-06-13T14:15:06.25Z" }
@@ -2281,7 +2292,7 @@ name = "pyobjc-framework-cocoa"
 version = "12.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyobjc-core" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/51/34/fbe38a204643aa4e1b91391cdce07a34da565a69171ebcad08de7438a556/pyobjc_framework_cocoa-12.2.1.tar.gz", hash = "sha256:b94b37fe5730e5ae1fb0052912cd174e6ec329b0bfba4a012ae5db1014b5864b", size = 3125751, upload-time = "2026-06-19T16:20:05.159Z" }
 wheels = [
@@ -2295,8 +2306,8 @@ name = "pyobjc-framework-quartz"
 version = "12.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-cocoa", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3b/f6/2a8b84dbf1fe7c04dd96ea73d991678d4e09a909f51971ecc51629bb2ab4/pyobjc_framework_quartz-12.2.1.tar.gz", hash = "sha256:b3b8b6f71e66147f8ff9e6213864cc8527e3a0b1ee90835b93ce221f4802d9b0", size = 3215521, upload-time = "2026-06-19T16:21:30.199Z" }
 wheels = [
@@ -2310,8 +2321,8 @@ name = "pyobjc-framework-security"
 version = "12.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-cocoa", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/44/b8/4267b802d8dba6de468e7d0765b05cc4e146fa376ed9f55e0b6461016bef/pyobjc_framework_security-12.2.1.tar.gz", hash = "sha256:d7831b1537f4346892e7f2f0e2b09d79bee98919b0767f4061278d0e03028f2d", size = 181065, upload-time = "2026-06-19T16:21:40.151Z" }
 wheels = [
@@ -2325,8 +2336,8 @@ name = "pyobjc-framework-uniformtypeidentifiers"
 version = "12.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-cocoa", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/74/a1/108fa1e5a3dd8aff626f98fb97de370323b290404b04ffa2ef9420665ed3/pyobjc_framework_uniformtypeidentifiers-12.2.1.tar.gz", hash = "sha256:1fb89d13aa3c2df8e6d6536f6df3493fe5a6caefd2a5adebf17c5af3b29ed4a2", size = 20679, upload-time = "2026-06-19T16:21:55.739Z" }
 wheels = [
@@ -2338,8 +2349,8 @@ name = "pyobjc-framework-webkit"
 version = "12.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-cocoa", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/11/d2/b230c594f70ecb970b4cef67bae2648d1bfa5b381e9b7e3710bf24ec8887/pyobjc_framework_webkit-12.2.1.tar.gz", hash = "sha256:a56acae55b50d549b20dff2921ad1099add8fbc377d0de09ddc2ba50957f7def", size = 332374, upload-time = "2026-06-19T16:22:01.988Z" }
 wheels = [
@@ -2362,16 +2373,13 @@ name = "pyqt6"
 version = "6.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyqt6-qt6", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyqt6-sip", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyqt6-qt6" },
+    { name = "pyqt6-sip" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8b/47/b25c13eca5bebc6505394d0223e46d7ebf0c57dcac2ed908d7d19b18ab6b/pyqt6-6.11.0.tar.gz", hash = "sha256:45dd60aa69976de1918b5ced6b4e7b6a25abd2a919ecef5fd5826ecc76718889", size = 1087430, upload-time = "2026-03-30T09:16:13.543Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/33/44/fcd3dd3f64c83c96bf9bce76ec16cca64bd9b91702c3d08fd8e3dafc73d9/pyqt6-6.11.0-cp310-abi3-macosx_10_14_universal2.whl", hash = "sha256:f7100bc7f72b12581ec479a733f4ad11b8002668e6786e8a445ab6f4d1c743d4", size = 12429735, upload-time = "2026-03-30T09:16:03.713Z" },
     { url = "https://files.pythonhosted.org/packages/c3/a0/bd1399740dfa80c0a94d20b02d89962a31458233dcf70eaa09bfbccf3d0f/pyqt6-6.11.0-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:8555277989fa7d114cb3c3443fd261d566909f7268ceedd41d93a5f02d37ec05", size = 8334632, upload-time = "2026-03-30T09:16:06.066Z" },
     { url = "https://files.pythonhosted.org/packages/d3/db/425b184ac2430ba1978bb507ffd285ec007a872644e2ae5df13332dbcb05/pyqt6-6.11.0-cp310-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:0734959955adde095af9a074213a7f73386d1bbbddfc27346b4c0621641a692e", size = 8321484, upload-time = "2026-03-30T09:16:08.135Z" },
-    { url = "https://files.pythonhosted.org/packages/6f/85/dd9f03d78d87460e109e0121cd6201c5802bdd655656bf2780e964870fea/pyqt6-6.11.0-cp310-abi3-win_amd64.whl", hash = "sha256:bd11b459c54dca068e988a42cf838303334f0d441b9d16d92ae6719fcb5ac6ba", size = 6844358, upload-time = "2026-03-30T09:16:09.766Z" },
-    { url = "https://files.pythonhosted.org/packages/cd/75/970b041bde4372cc6739c5ef9db1de83a6b36e788e4992e598baa35b2255/pyqt6-6.11.0-cp310-abi3-win_arm64.whl", hash = "sha256:b6324e3501b19b4292c7a55b1f22e82d3e80e519e383ce4fe79b4a754c6f0288", size = 5933984, upload-time = "2026-03-30T09:16:11.817Z" },
 ]
 
 [[package]]
@@ -2379,12 +2387,8 @@ name = "pyqt6-qt6"
 version = "6.11.2"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/d2/79c88102ff88efcdae338a0ffbb5fa40b70194e0095db5ddec490106bcc6/pyqt6_qt6-6.11.2-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:6a4372baa674ca91de5caf31f241b0660fd3da90fe27fefed9a7a459e630ea89", size = 70517918, upload-time = "2026-08-23T12:59:34.419Z" },
-    { url = "https://files.pythonhosted.org/packages/a0/72/f49e11b46eaa887e1250658b9c038f13c654ca7478c7c904ada13bb5133e/pyqt6_qt6-6.11.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:4f21ff2ffaacfb8a8df6ab1d619d0da7aa4e808e86f41b6daa1a7bff9c0d6eab", size = 64259572, upload-time = "2026-08-23T12:59:40.759Z" },
     { url = "https://files.pythonhosted.org/packages/69/ef/e34054e814c874f5230326ffc791f602a13b2f5590ca9599ba45b5fc4bc0/pyqt6_qt6-6.11.2-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:da7d747ad917f044d841ff834f17d2c50a0cc5d0e3b16479d8662544207d0567", size = 86012424, upload-time = "2026-08-23T12:59:45.97Z" },
     { url = "https://files.pythonhosted.org/packages/45/01/86f3c30ceee9384d905424a28abbcba6e9489f44ca15b2f4ae74921f079c/pyqt6_qt6-6.11.2-py3-none-manylinux_2_39_aarch64.whl", hash = "sha256:2c38ee8b797c0d7f327afef4cfbb97c73676954ef2d1d503779d62c982bf5a66", size = 85506374, upload-time = "2026-08-23T12:59:51.195Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/56/62457dd9b5738f65b9fb4ac6b3120bc0bfa0bc335857fdd456b94b0a6079/pyqt6_qt6-6.11.2-py3-none-win_amd64.whl", hash = "sha256:4b424ed1babbef07133eb2a4174c56c848d518767bca8e759aca2c8c9c313636", size = 78000994, upload-time = "2026-08-23T12:59:56.429Z" },
-    { url = "https://files.pythonhosted.org/packages/16/bd/3ce7dc9172b798e191b82296d90f7b89fcd94f111dd249b71cf7acaa803b/pyqt6_qt6-6.11.2-py3-none-win_arm64.whl", hash = "sha256:8c49432936681f325f2925f20ceef35b8fb7599e0c3e63e76d6e50397354ee1f", size = 61679846, upload-time = "2026-08-23T13:00:01.138Z" },
 ]
 
 [[package]]
@@ -2393,20 +2397,12 @@ version = "13.13.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/78/35/bed43ff7cf040ced6b62a17b272abecb94914755284b54e8d06844e1ed23/pyqt6_sip-13.13.0.tar.gz", hash = "sha256:2cd55f575cde208c398d6cfdecc5a13394ed2afb54226210c50e3a6df7c3a997", size = 95006, upload-time = "2026-10-04T12:26:46.405Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/3a/6c1e9e25c66463b62d11ec7d518aa822bb75ce6096a6d4ce7fc0909487df/pyqt6_sip-13.13.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:958e4068a95ef36b0758fd62403855ff9d2c7ee5735e9eb92f3c805183acd9e7", size = 112693, upload-time = "2026-10-04T12:26:10.1Z" },
     { url = "https://files.pythonhosted.org/packages/d3/57/b75c2bbdedb832e46869f816aba09e2111c998efc87a5b51df53a228be4b/pyqt6_sip-13.13.0-cp310-cp310-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:0f4329bcf7c4bbfd1f34b51f9fe417f839b18ae5035b6e9de1c7718b821f45aa", size = 282976, upload-time = "2026-10-04T12:26:12.729Z" },
     { url = "https://files.pythonhosted.org/packages/fc/ad/70464efb37a7394c4ead0438e0089beecc30c10832c69c8839ed9bd4d6c7/pyqt6_sip-13.13.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:cf73a187600708ef69225a25be53d71e918fa853f9b992c3720e8dbf657e49bc", size = 306092, upload-time = "2026-10-04T12:26:11.452Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/d8/fb22a6a77f9b53d260fef759211ea720e05931f8b0f1ad83af40c2f0fc73/pyqt6_sip-13.13.0-cp310-cp310-win_amd64.whl", hash = "sha256:9e0303221d2c4f6fbe8f1b9a0dc8eea601647ed22e15e5d1f582a42e732f59e1", size = 54184, upload-time = "2026-10-04T12:26:14.303Z" },
-    { url = "https://files.pythonhosted.org/packages/44/70/549e69eb610f473c85122d57b755cb6411907d73ab0330420488dffa248f/pyqt6_sip-13.13.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:fb51d482483d2b5e78df013e76d5495aa9557c8dbf351d51be9269f1bd26f8cd", size = 112709, upload-time = "2026-10-04T12:26:15.391Z" },
     { url = "https://files.pythonhosted.org/packages/f2/d2/8044d15dd01cff02cd5aa9989e99cea2afe41edf183dca8d8e5ab2a88476/pyqt6_sip-13.13.0-cp311-cp311-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:19044f546ca397ed315e59077b0761e86c5129a23ac95d39166a46b740a6065e", size = 291995, upload-time = "2026-10-04T12:26:18.269Z" },
     { url = "https://files.pythonhosted.org/packages/3a/04/1412b7a12f8a76f6531f1f2a8c589c1d61f463814611c687e2f8998ccba0/pyqt6_sip-13.13.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e30bec75c82886a3846e593570e6e71d7a417743867cc356c99acb849e27bfc2", size = 317510, upload-time = "2026-10-04T12:26:16.965Z" },
-    { url = "https://files.pythonhosted.org/packages/fb/75/d34dd327fbbc4fbd2f22325455e62f33192349b18860df39b51f4e9b1573/pyqt6_sip-13.13.0-cp311-cp311-win_amd64.whl", hash = "sha256:75d02cae78b43330917692cfd5b25c69e30d73e6e22ba8cfd53d7614fbb2774a", size = 54169, upload-time = "2026-10-04T12:26:21.743Z" },
-    { url = "https://files.pythonhosted.org/packages/5e/2e/84d50d40dc3ac2d9a7c70f051965341478d82e27a7689f1308fc90bb125a/pyqt6_sip-13.13.0-cp311-cp311-win_arm64.whl", hash = "sha256:fe966368ecd09319d7b6df31cb3dc484128e2b36177fb814faa5b8b7e6525b37", size = 48540, upload-time = "2026-10-04T12:26:22.792Z" },
-    { url = "https://files.pythonhosted.org/packages/14/75/75c6ba37daabcbd810d2d23248017ee9cfb23c0a2f55eb47447d323cc5a1/pyqt6_sip-13.13.0-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:da1a8e350b927c281d4f155fb3b84859e6e8c04ea36fe159cf9b939ee957d151", size = 113445, upload-time = "2026-10-04T12:26:25.557Z" },
     { url = "https://files.pythonhosted.org/packages/e3/d2/f2c77662be1f4ca6e35a8897d573b51a9e662e6b86a0d42c50afa9d46acf/pyqt6_sip-13.13.0-cp312-cp312-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:7429e63fc8279a0508ed5cbc1b33da76c15a61a06a745825e807a3604fbde4f2", size = 301294, upload-time = "2026-10-04T12:26:28.062Z" },
     { url = "https://files.pythonhosted.org/packages/64/f4/4ce0629bf6780c62d3bb4ebe33dfe1aa9523888baab5a8d0a4b13708c5ab/pyqt6_sip-13.13.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:42544406d4519122ad9ee7a79bc9195cdceba6d777d2e481d346e6ad2801f38a", size = 322837, upload-time = "2026-10-04T12:26:26.802Z" },
-    { url = "https://files.pythonhosted.org/packages/37/d4/ea91156975216008e5fbfb8158478fc6f0b1b4d8c4de63e8819a8a69d6f0/pyqt6_sip-13.13.0-cp312-cp312-win_amd64.whl", hash = "sha256:c6b67d301ef64e13d313c728020616315c952473abb27029b2e5857b44a7b3e6", size = 53464, upload-time = "2026-10-04T12:26:31.563Z" },
-    { url = "https://files.pythonhosted.org/packages/85/de/e9edaf5990240ee608566429447478de2d71311d43d165d966122540565b/pyqt6_sip-13.13.0-cp312-cp312-win_arm64.whl", hash = "sha256:ff5d5bd3920d1e2bc251a931233c7909df08fa12786c2ddbcef935b6105bfb0c", size = 48845, upload-time = "2026-10-04T12:26:32.538Z" },
 ]
 
 [[package]]
@@ -2414,17 +2410,14 @@ name = "pyqt6-webengine"
 version = "6.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyqt6", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyqt6-sip", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyqt6-webengine-qt6", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyqt6" },
+    { name = "pyqt6-sip" },
+    { name = "pyqt6-webengine-qt6" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9a/c6/b4f777c46ff42a759180dc65ad49a207748ea2e83ac4df21e89eaf4834c3/pyqt6_webengine-6.11.0.tar.gz", hash = "sha256:15cf49efbbbd4c6bc87653b2c4ae80d6049f800e31620b336734ae2e37cbedae", size = 37331, upload-time = "2026-03-30T09:18:15.561Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/55/d06c4c1390268ca19a5be6e00e9b394b7bed995ace51b8f10ac19e8770c7/pyqt6_webengine-6.11.0-cp310-abi3-macosx_10_14_universal2.whl", hash = "sha256:dfd6efc1760a8f0a82a41366f44dd1949380be5b7e62ca79165ef67ae6f26456", size = 465113, upload-time = "2026-03-30T09:18:08.896Z" },
     { url = "https://files.pythonhosted.org/packages/02/63/99f0032137dd76d7c401d467887bcee112df4fc9f496cf92b11de6b93551/pyqt6_webengine-6.11.0-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:a9c07d18ab6aa4be95dea5bdbced2690cf0659637634e960bd5cf90c9aa5bc1b", size = 318292, upload-time = "2026-03-30T09:18:10.297Z" },
     { url = "https://files.pythonhosted.org/packages/ac/4a/a262c8828f35acec6dba2bf2f90d1c00b82d91f8b31f8ec830ac2f7c5d6c/pyqt6_webengine-6.11.0-cp310-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:a115d14205b037bf2e8aa52176fc30260c112cf3a252047e69999e5d52f7b868", size = 319166, upload-time = "2026-03-30T09:18:11.515Z" },
-    { url = "https://files.pythonhosted.org/packages/d4/15/27a18e7124f85eeadd48452f96104a5a231f0ad97ab5c10e16d87a319ccb/pyqt6_webengine-6.11.0-cp310-abi3-win_amd64.whl", hash = "sha256:5596ea8f7fd94a6b443c47f3c12dac619bedf5fabb646d2b8b4de1d73ec531cb", size = 257876, upload-time = "2026-03-30T09:18:12.682Z" },
-    { url = "https://files.pythonhosted.org/packages/f3/af/4cf061bfa45b5311ce05a48749afb6d8ee62539f38619875feaa200b6acf/pyqt6_webengine-6.11.0-cp310-abi3-win_arm64.whl", hash = "sha256:06c309fa956dd4f197636d949aa5d125cd905f386178eb8884e231c04c5b577c", size = 235435, upload-time = "2026-03-30T09:18:14.323Z" },
 ]
 
 [[package]]
@@ -2432,12 +2425,8 @@ name = "pyqt6-webengine-qt6"
 version = "6.11.2"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/84/c854045459661355b4d7405fe2cd91c7757e90bd6643df0b03ed1c08e55c/pyqt6_webengine_qt6-6.11.2-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:6ac04c21a299356b4ccb1d03db8a531993eb2aece5389660bc21be746b59eb89", size = 125700835, upload-time = "2026-08-23T12:58:28.202Z" },
-    { url = "https://files.pythonhosted.org/packages/85/8f/eb2f85f0ab69db831a51c4e41121642604eec860f6b793b794519c43e581/pyqt6_webengine_qt6-6.11.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a5893038cb53ffba2bffcbfa8635464969538e72cbcc3963488eece630f9a4b8", size = 112396006, upload-time = "2026-08-23T12:58:34.846Z" },
     { url = "https://files.pythonhosted.org/packages/95/8a/898587477eec44d62aede99040a14aa6197a624bc055b82da0be03f23c88/pyqt6_webengine_qt6-6.11.2-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:764891ae20e81828ed8ba0dc153daffca10f8060c9a9b0303a7d407e3e72ce9b", size = 116332252, upload-time = "2026-08-23T12:58:41.09Z" },
     { url = "https://files.pythonhosted.org/packages/69/bb/671fed81ceb4cb0aba977946468f163005fd5e8da5075f4a94a1ebfdb3aa/pyqt6_webengine_qt6-6.11.2-py3-none-manylinux_2_39_aarch64.whl", hash = "sha256:17796086d6a6fd4aa58d4cd50ba9410d6ab5f1f9597b6e04443a7ee960c341bb", size = 111830458, upload-time = "2026-08-23T12:58:47.367Z" },
-    { url = "https://files.pythonhosted.org/packages/24/db/06ba5859dcee54c77f2e4a547207177bb00747e4db7adcd1b70706db14bc/pyqt6_webengine_qt6-6.11.2-py3-none-win_amd64.whl", hash = "sha256:af13f13e6620de6d904b268343d901caeb7a39b15ead92f5dde8cdd69dac179b", size = 132370879, upload-time = "2026-08-23T12:58:54.323Z" },
-    { url = "https://files.pythonhosted.org/packages/5c/2e/9377cd4aaf9ea8afee276785152335a1e1e68201ad288cab37dd154ad276/pyqt6_webengine_qt6-6.11.2-py3-none-win_arm64.whl", hash = "sha256:6ad83c047b6757bfafc5d44d9c9e448fe9a38f7998748265da0ef9094f4f8d2a", size = 117876281, upload-time = "2026-08-23T12:59:01.181Z" },
 ]
 
 [[package]]
@@ -2484,7 +2473,7 @@ name = "pythonnet"
 version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "clr-loader", marker = "sys_platform != 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "clr-loader" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/05/57/da1992e44663b71365c6e842c8d7fa453d4ec45fb99a68cfee5b7e944d3c/pythonnet-3.1.0.tar.gz", hash = "sha256:7b34c382905d10a371509ffafd64cae0416305c28817738a9cd138336f4e9991", size = 250599, upload-time = "2026-05-23T20:30:21.578Z" }
 wheels = [
@@ -2499,14 +2488,14 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bottle" },
     { name = "proxy-tools" },
-    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-security", marker = "sys_platform == 'darwin' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-uniformtypeidentifiers", marker = "sys_platform == 'darwin' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyobjc-framework-webkit", marker = "sys_platform == 'darwin' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pythonnet", marker = "sys_platform == 'win32' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "qtpy", marker = "sys_platform == 'openbsd6' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-security", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-uniformtypeidentifiers", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-webkit", marker = "sys_platform == 'darwin'" },
+    { name = "pythonnet", marker = "sys_platform == 'win32'" },
+    { name = "qtpy", marker = "sys_platform == 'openbsd6'" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/59/4a/05307135dafba67778669d194bd1a3822a7685ec9ee8a6d7e70856c1a551/pywebview-6.2.1.tar.gz", hash = "sha256:71b7136752e40824655304d938efb62014218d1a90bd8e87e1cbdb1ce9c466af", size = 513126, upload-time = "2026-04-15T09:02:16.595Z" }
@@ -2516,9 +2505,9 @@ wheels = [
 
 [package.optional-dependencies]
 qt = [
-    { name = "pyqt6", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "pyqt6-webengine", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "qtpy", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pyqt6" },
+    { name = "pyqt6-webengine" },
+    { name = "qtpy" },
 ]
 
 [[package]]
@@ -2691,7 +2680,7 @@ version = "0.8.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "einops" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
 ]
@@ -2702,7 +2691,7 @@ wheels = [
 
 [[package]]
 name = "rs-studio"
-version = "0.5.0-rc.3"
+version = "0.5.0rc3"
 source = { editable = "." }
 default-groups = ["cpu", "dev", "encoder"]
 dependencies = [
@@ -2714,31 +2703,32 @@ dependencies = [
     { name = "einops" },
     { name = "fastapi" },
     { name = "librosa" },
+    { name = "madmom" },
     { name = "mt3-infer" },
     { name = "mutagen" },
     { name = "numpy" },
-    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "onnxruntime", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "onnxruntime", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "piano-transcription-inference" },
     { name = "pillow" },
     { name = "pyguitarpro" },
     { name = "python-multipart" },
     { name = "pywebview" },
-    { name = "pywebview", extra = ["qt"], marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pywebview", extra = ["qt"], marker = "sys_platform == 'linux'" },
     { name = "pyyaml" },
     { name = "rotary-embedding-torch" },
     { name = "soundfile" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
-    { name = "torchcodec", version = "0.17.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchcodec", version = "0.17.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchcodec", version = "0.17.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchcodec", version = "0.17.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
     { name = "torchcrepe" },
-    { name = "torchvision", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchvision", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchvision", version = "0.29.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchvision", version = "0.29.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
     { name = "transformers" },
@@ -2768,7 +2758,7 @@ dev = [
     { name = "pyinstaller" },
 ]
 encoder = [
-    { name = "wwise-wem", marker = "sys_platform == 'linux' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "wwise-wem", marker = "sys_platform == 'linux'" },
 ]
 
 [package.metadata]
@@ -2781,6 +2771,7 @@ requires-dist = [
     { name = "einops", specifier = ">=0.8.2" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "librosa", specifier = ">=0.10" },
+    { name = "madmom", git = "https://github.com/CPJKU/madmom?rev=27f032e8947204902c675e5e341a3faf5dc86dae" },
     { name = "mt3-infer", specifier = ">=0.2.0" },
     { name = "mutagen", specifier = ">=1.48.1" },
     { name = "numpy", specifier = ">=1.26,<2" },
@@ -2860,10 +2851,10 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "joblib", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "numpy", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "threadpoolctl", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "joblib" },
+    { name = "numpy" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "threadpoolctl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/98/c2/a7855e41c9d285dfe86dc50b250978105dce513d6e459ea66a6aeb0e1e0c/scikit_learn-1.7.2.tar.gz", hash = "sha256:20e9e49ecd130598f1ca38a1d85090e1a600147b9c02fa6f15d69cb53d968fda", size = 7193136, upload-time = "2025-09-09T08:21:29.075Z" }
 wheels = [
@@ -2893,11 +2884,11 @@ resolution-markers = [
     "python_full_version >= '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "joblib", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "narwhals", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "numpy", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "threadpoolctl", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "joblib" },
+    { name = "narwhals" },
+    { name = "numpy" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "threadpoolctl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fa/6f/37092bdb25f712817231799fc5674d8e704066a8a70c1d2d40517e18b4ab/scikit_learn-1.9.0.tar.gz", hash = "sha256:8833266989d3a5110178a9fae30783675460724d0e1efb13b14901d2c660c557", size = 7750767, upload-time = "2026-06-02T11:54:32.706Z" }
 wheels = [
@@ -2924,7 +2915,7 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0f/37/6964b830433e654ec7485e45a00fc9a27cf868d622838f6b6d9c5ec0d532/scipy-1.15.3.tar.gz", hash = "sha256:eae3cf522bc7df64b42cad3925c876e1b0b6c35c1337c93e12c0f366f55b0eaf", size = 59419214, upload-time = "2025-05-08T16:13:05.955Z" }
 wheels = [
@@ -2966,7 +2957,7 @@ resolution-markers = [
     "python_full_version >= '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
 wheels = [
@@ -3183,19 +3174,19 @@ resolution-markers = [
 dependencies = [
     { name = "cuda-bindings", version = "13.3.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "cuda-toolkit", version = "13.0.3.0", source = { registry = "https://pypi.org/simple" }, extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "filelock", marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
-    { name = "fsspec", marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
-    { name = "jinja2", marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
-    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (python_full_version < '3.11' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (python_full_version >= '3.11' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "filelock", marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "fsspec", marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "jinja2", marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (python_full_version < '3.11' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (python_full_version >= '3.11' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "setuptools", marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
-    { name = "sympy", marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "setuptools", marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "sympy", marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "triton", marker = "(sys_platform == 'linux' and extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "typing-extensions", marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "typing-extensions", marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/45/b0c389051ed02d77227202caf2c2abb1706ca4362781eb79bd6707359970/torch-2.14.1-cp310-cp310-macosx_14_0_arm64.whl", hash = "sha256:e24b9815001d18e73e76eae1ea25f8ef908c6103e857378ad20f8f6cf5c954f5", size = 127249640, upload-time = "2026-09-30T17:43:48.426Z" },
@@ -3224,8 +3215,8 @@ dependencies = [
     { name = "filelock", marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "fsspec", marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "jinja2", marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (python_full_version >= '3.11' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (python_full_version < '3.11' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "setuptools", marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "sympy", marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "typing-extensions", marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
@@ -3425,12 +3416,12 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "librosa" },
     { name = "resampy" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torch", version = "2.14.1+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
     { name = "torchaudio", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'group-9-rs-studio-cuda'" },
     { name = "tqdm" },
@@ -3464,9 +3455,9 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "numpy", marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
-    { name = "pillow", marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-9-rs-studio-cpu') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda')" },
+    { name = "numpy", marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "pillow", marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra != 'group-9-rs-studio-cuda') or (extra != 'group-9-rs-studio-cpu' and extra != 'group-9-rs-studio-cuda') or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5e/cf/3d7e36c7a962692e919de99803005816b7bf45dc3e617198ec28cd7d8000/torchvision-0.29.1-cp310-cp310-macosx_14_0_arm64.whl", hash = "sha256:9ef8de9b4a47b00dbe0a6a35bba22907f86f091adef57a76f1581502dbfc59f8", size = 1813850, upload-time = "2026-09-30T17:56:58.137Z" },
@@ -3540,7 +3531,7 @@ name = "tqdm"
 version = "4.68.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/06/b3/36c8ecf72e8925200671613332db156d84b99b3aee742a41c1938ebb0808/tqdm-4.68.1.tar.gz", hash = "sha256:fc163d96b287bd031e1aa24421ce4411b25559bd0a1be4fe649bdaa4d2c02bf5", size = 171236, upload-time = "2026-06-05T17:23:15.267Z" }
 wheels = [
@@ -3595,7 +3586,7 @@ version = "0.27.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "rich" },
     { name = "shellingham" },
 ]
@@ -3641,7 +3632,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c4/1f/fa18009dea8469069cca78a4e877a008ab78f08b064bfc9ab891579077ff/uvicorn-0.49.0.tar.gz", hash = "sha256:ebf4271aa580d9de97f93192d4595176df6e91f9aae919ca73e4fc07df1e66a3", size = 91284, upload-time = "2026-06-03T22:01:30.448Z" }
 wheels = [
@@ -3650,11 +3641,11 @@ wheels = [
 
 [package.optional-dependencies]
 standard = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "httptools" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "uvloop", marker = "(platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32') or (platform_python_implementation == 'PyPy' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform == 'cygwin' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform == 'win32' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
+    { name = "uvloop", marker = "platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'" },
     { name = "watchfiles" },
     { name = "websockets" },
 ]

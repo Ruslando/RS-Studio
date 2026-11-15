@@ -417,10 +417,12 @@ def compute_spectrogram(audio_path: Path, png_out: Path, with_tempo: bool = Fals
     }
 
 
-def detect_tempo_map(audio_path: Path) -> dict:
+def detect_tempo_map(audio_path: Path, transition_lambda: int = 300) -> dict:
     """The song's grid as {bpm, offset, tsNum, tsDen, tempoMap} (see tempo_map.py).
 
     beat_this finds beats and downbeats, so meter and tempo changes come out.
+    Its DBN postprocessor constrains the beat sequence for greater continuity.
+    `transition_lambda` controls the DBN's preference for a steady tempo.
     When its weights can't be had (a source checkout offline), librosa's beats
     are used and the meter stays 4/4.
     """
@@ -432,9 +434,15 @@ def detect_tempo_map(audio_path: Path) -> dict:
         checkpoint = None
     if checkpoint:
         from beat_this.inference import File2Beats
+        from madmom.features.downbeats import DBNDownBeatTrackingProcessor
 
         processing.report("Finding beats and bars")
-        beats, downbeats = File2Beats(checkpoint_path=str(checkpoint), device=_select_device(), dbn=False)(str(audio_path))
+        detector = File2Beats(checkpoint_path=str(checkpoint), device=_select_device(), dbn=True)
+        detector.frames2beats.dbn = DBNDownBeatTrackingProcessor(
+            beats_per_bar=[3, 4], min_bpm=55.0, max_bpm=215.0,
+            fps=detector.frames2beats.fps, transition_lambda=transition_lambda,
+        )
+        beats, downbeats = detector(str(audio_path))
         return tempo_map(beats, downbeats)
     import librosa
 

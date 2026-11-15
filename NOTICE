@@ -70,6 +70,14 @@ their own licenses:
   models/beat_this-final0.ckpt. See licenses/beat_this-LICENSE.txt.
   https://github.com/CPJKU/beat_this
 
+  madmom (BSD-3-Clause; model/data files are CC BY-NC-SA 4.0)
+  Copyright (c) 2012-2014 Department of Computational Perception,
+  Johannes Kepler University, Linz, Austria and Austrian Research Institute for
+  Artificial Intelligence (OFAI), Vienna, Austria.
+  The tempo-map detector uses madmom's DBN postprocessor. The upstream source
+  dependency includes no model/data files. See licenses/madmom-LICENSE.txt.
+  https://github.com/CPJKU/madmom
+
   FFmpeg (LGPL-3.0)
   Shipped only in the desktop build, under vendor/ffmpeg/, with its own
   LICENSE.txt alongside.

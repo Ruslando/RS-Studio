@@ -83,7 +83,7 @@ if os.path.isdir("vendor/ffmpeg"):
 # automatic analysis tends to miss.
 COLLECT_PKGS = [
     "basic_pitch", "torchcrepe", "piano_transcription_inference",
-    "demucs", "librosa", "soundfile", "soxr", "resampy",
+    "demucs", "librosa", "soundfile", "soxr", "resampy", "madmom",
     "audioread", "pooch", "lazy_loader", "pretty_midi", "mido", "julius",
     "openunmix", "torchaudio", "torchcodec", "einops", "rotary_embedding_torch",
     "onnxruntime",
@@ -136,5 +136,4 @@ exe = EXE(
     disable_windowed_traceback=False,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="RS Studio")
-
 
