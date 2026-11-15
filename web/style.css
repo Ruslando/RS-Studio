@@ -57,7 +57,7 @@
      rather than as a var() fallback, because a missing name is a bug (rule 16). */
   --sidebar-w:300px;
 }
-[data-theme="light"] {
+[data-theme="light"], [data-preview-theme="light"] {
   color-scheme: light;
   --stage-ground: var(--stage);
   --stage-chrome: #eceef2;
@@ -506,14 +506,14 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 #fretboardStage { flex: none; width: 100%; min-width: 0; position: relative; background: var(--stage); border-radius: var(--r-control); overflow: hidden; }
 #fretboardPin { position: absolute; z-index: 2; display: flex; align-items: center; gap: var(--s-pair); padding: var(--s-pair); background: var(--stage-chrome); border: 1px solid var(--stage-line); border-radius: var(--r-control); white-space: nowrap; }
 #fretboardPin[hidden] { display: none; }
-/* Quiet actions follow the board's themed text ladder. Engaged actions retain
-   the shared contrasting foreground, including their hover state. */
+/* Quiet actions follow the board's themed text ladder; on states use the shared
+   selection treatment. */
 #fretboardPin .icon-btn, #fretboardPin .btn:not(.btn--primary) { background: transparent; border-color: transparent; color: var(--stage-hint); }
 #fretboardPin :is(.icon-btn, .btn:not(.btn--primary)):hover:not(:disabled) { background: var(--stage-chrome-hover); color: var(--stage-text); }
 #fretboardAuto { color: var(--stage-text); }
-/* On is the same fill here as everywhere else. */
-#fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
-#fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"]:is(:hover, :active):not(:disabled) { background: var(--accent-hover); color: var(--on-engaged); }
+/* Pressed controls use the same selection treatment as the rest of the app. */
+#fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"] { background: var(--selection); color: var(--text); }
+#fretboardPin :is(.icon-btn, .btn)[aria-pressed="true"]:is(:hover, :active):not(:disabled) { background: var(--selection); color: var(--text); }
 /* Two pairs and the way back: same notes | other notes | reset. */
 #fretboardAuto { margin-left: var(--s-sibling); }
 #fretboardName { padding: 0 var(--s-pair); font: 600 var(--text-body)/1 var(--font-mono); color: var(--stage-text); }
@@ -1329,7 +1329,6 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 
 
 .workspace-controls { flex: none; gap: var(--s-pair); }
-.workspace-controls .icon-btn[aria-expanded="true"] { background: var(--selection); color: var(--text); }
 .workspace-controls .icon-btn[aria-expanded="false"] { background: transparent; color: var(--hint); }
 .workspace-controls .icon-btn:hover:not(:disabled) { background: var(--control-hover); color: var(--text); }
 .settings-layout { display: flex; flex: 1; min-height: 0; }
@@ -1574,7 +1573,7 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #fretboardHandPositions > button.is-current { color: var(--stage-text); font-weight: 600; }
 #fretboardHandPositions > button.is-suggested { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hand-hue) 45%, transparent); }
 #fretboardHandPositions > button:hover:not(:disabled) { background: color-mix(in srgb, var(--hand-hue) 24%, var(--stage)); color: var(--stage-text); }
-#fretboardHandPositions > button[aria-checked="true"] { background: color-mix(in srgb, var(--hand-hue) 32%, var(--stage)); color: var(--stage-text); font-weight: 600; }
+#fretboardHandPositions > button[aria-checked="true"] { background: var(--selection); color: var(--text); font-weight: 600; }
 #fretboardHandPositions > button[data-value="auto"] { font: 400 10px/20px var(--font-ui); }
 #fretboardControls #fretboardPin {
   position: static; flex: 1 0 auto; min-width: max-content; max-width: none; flex-wrap: nowrap;

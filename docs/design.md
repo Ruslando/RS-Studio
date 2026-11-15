@@ -74,8 +74,7 @@ Each surface has one job. Pick by job, not by how dark it looks.
 | `--control` / `--control-hover` | `#202c3b` / `#2a394b` | `#ffffff` / `#e9edf3` | Chips, keys, drop zones; hover fill of ghost controls and rows |
 | `--surface-card` | `= --control` | `= --control` | Cards |
 | `--surface-library` | `#1b2635` | `#ffffff` | Project rows in the library |
-| `--selection` | accent 22 % on panel | accent 12 % on panel | The selected row or navigation item |
-| `--surface-engaged` | `= --accent` | `= --accent` | A toggle that is on |
+| `--selection` | accent 22 % on panel | accent 12 % on panel | Selected navigation items and on/pressed controls |
 | `--stage` | `#101722` | `#f7f8fa` | Fretboard panel ground |
 | `--scrim` | black 48 % | `rgba(24,30,40,.30)` | Behind a window |
 | `--surface-frost`, `--frost-sheen`, `--frost-edge`, `--frost-blur` (6px) | | | Glass over a folded panel. Nowhere else |
@@ -88,7 +87,7 @@ Each surface has one job. Pick by job, not by how dark it looks.
 | `--label` | `#c0c4cc` | `#5c6471` | Field labels, captions, idle icons |
 | `--label-hover` | `#d2d6de` | `#454d59` | |
 | `--hint` | `#a5abb7` | `#69717e` | Secondary lines, placeholders, units, disabled text |
-| `--on-accent`, `--on-engaged` | `#ffffff` | `#ffffff` | Text on accent |
+| `--on-accent` | `#ffffff` | `#ffffff` | Text on primary and destructive accent buttons |
 | `--line` | white 9 % | `rgba(32,40,56,.12)` | Every hairline: borders, separators |
 | `--line-mark` | white 24 % | `rgba(32,40,56,.28)` | Dashed drop zone, the info ring |
 | `--line-soft` | white 4 % | `rgba(32,40,56,.04)` | Border of a library row |
@@ -238,9 +237,10 @@ as a number.
 3. Disabled: `--hint` text on a transparent fill; a disabled primary keeps a
    `--control` fill and a `--line` border. An action that cannot run now is
    **disabled, not removed**, and its tooltip says why.
-4. Selected is `--selection` with a `--selection-line` border. On is
-   `--surface-engaged` with `--on-engaged`. They are different facts and never
-   share a look: selected says "this one of the list", on says "this is active".
+4. Selected items and on/pressed controls share one state treatment:
+   `--selection` fill with `--text` foreground. Selected rows also use a
+   `--selection-line` border. Their meanings differ, but the visual state is
+   consistent across themes and components.
 5. One primary button per view. Its label names the work ("Export", "Create",
    "Import tracks"), not "OK".
 
@@ -340,7 +340,8 @@ has `aria-label` and `title`.
 
 - Window header: 32. Popover header, rows, stage: 24.
 - Close is the `CLOSE_ICON`. A destructive icon button turns `--error` on hover.
-- A toggle carries `aria-pressed`; on is `--surface-engaged`.
+- A toggle carries `aria-pressed`; on uses the shared `--selection` fill and
+  `--text` foreground.
 - Lock and visibility are icons on every kind of row, never words. Mute is
   the volume control (4.18). Solo is the letter S, as on a mixing desk. The
   full song has no solo; its volume stays in the column the others' use.
@@ -523,7 +524,7 @@ transpose actions share the Open strings heading; the preset list stays separate
 |---|---|---|
 | `.list-row` | 44 high, padding `0 12`, radius 6, gap 12; hover `--control-hover`; `data-selected` | A selectable row |
 | `.list-row--fields` | Same, `--page`, `--line` border, no hover | A row that carries its own controls (24 high, radius 4) |
-| `.stem-row`, `.lane-row` | min 44, name 14, second line 12 `--hint`, compact controls right | Layer rows in the sidebar. The active one is selected |
+| `.stem-row`, `.lane-row` | min 44, name 14, second line 12 `--hint`, compact controls right; active row has transparent fill and `--selection-line` outline | Layer rows in the sidebar. The active one is selected |
 | `.navigation-item` | min 32, padding `8 12`, radius 6; current is selected and 600 | Settings navigation, launcher actions |
 | `.card` | `--surface-card`, `--line`, radius 10, padding 16 | A self-contained group |
 | `.recent-item` | Card on `--surface-library`, `--line-soft`, `--e-card`; 52px cover, name 16/600, context 13 `--label`, facts 12 `--hint` | A project in the library |
@@ -606,7 +607,8 @@ pointed at, dragged or focused, the level (mono 11, the number without its
 %) fades in over `--dur-state` in place of the speaker, so nothing in the row
 moves.
 
-- Click mutes. Muted is on: `--surface-engaged`, the struck speaker.
+- Click mutes. Muted is on: the shared `--selection` fill, with the struck
+  speaker in `--text`.
 - A sideways drag sets the level, 200px for 0–100 %, Shift for a fifth of
   that, as the Position field of a marker is scrubbed. Arrow keys step 5 %.
 - Silent because of something else (the bus is muted or at zero, another

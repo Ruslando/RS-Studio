@@ -186,9 +186,9 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 
 .view-switch .mode:hover:not(.active), .tabs .tab:hover:not(.active) { color: var(--text); background: var(--control-hover); }
 
-.pill > [aria-checked="true"], .view-switch .mode.active, .keymap-tab.active, .tabs .tab.active { background: var(--control); color: var(--text); font-weight: 600; box-shadow: var(--e-control); }
+.pill > [aria-checked="true"], .view-switch .mode.active, .keymap-tab.active, .tabs .tab.active { background: var(--selection); color: var(--text); font-weight: 600; box-shadow: var(--e-control); }
 
-.pill > [aria-checked="true"]:hover, .pill > [aria-checked="true"]:active, .view-switch .mode.active:hover, .view-switch .mode.active:active, .keymap-tab.active:hover, .keymap-tab.active:active, .tabs .tab.active:hover, .tabs .tab.active:active { background: var(--control-hover); color: var(--text); }
+.pill > [aria-checked="true"]:hover, .pill > [aria-checked="true"]:active, .view-switch .mode.active:hover, .view-switch .mode.active:active, .keymap-tab.active:hover, .keymap-tab.active:active, .tabs .tab.active:hover, .tabs .tab.active:active { background: var(--selection); color: var(--text); }
 
 .menu-item, .ctxmenu-item {
   height: var(--h-compact); width: 100%; text-align: left;
@@ -306,8 +306,8 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
   background: var(--selection); border-color: var(--selection-line); color: var(--text); font-weight: 600;
 }
 .icon-btn[aria-expanded="true"] { background: var(--selection); color: var(--text); }
-.icon-btn[aria-pressed="true"], .btn[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
-:is(.icon-btn, .btn)[aria-pressed="true"]:is(:hover, :active):not(:disabled) { background: var(--accent-hover); color: var(--on-engaged); }
+.icon-btn[aria-pressed="true"], .btn[aria-pressed="true"] { background: var(--selection); color: var(--text); }
+:is(.icon-btn, .btn)[aria-pressed="true"]:is(:hover, :active):not(:disabled) { background: var(--selection); color: var(--text); }
 
 /* Shared production components. Legacy markup aliases below share these rules. */
 .t-title    { font: 700 var(--text-title)/1.2 var(--font-ui); letter-spacing:-.02em; }
@@ -464,7 +464,7 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .sc-preview { flex: none; width: var(--h-control); height: var(--h-control); padding: 0; }
 
 .stem-row:hover:not(.viewing), .lane-row:hover:not(.active) { background: var(--control-hover); }
-.stem-row.viewing, .lane-row.active { background: var(--selection); border-color: var(--selection-line); }
+.stem-row.viewing, .lane-row.active { background: transparent; border-color: var(--selection-line); }
 
 /* Compact row controls: defaults precede explicit engaged states. */
 .stem-btn, .lane-btn {
@@ -474,7 +474,7 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
   background: transparent; border: 1px solid transparent; color: var(--label);
 }
 .stem-btn.solo.on {
-  background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
+  background: var(--selection); border-color: transparent; color: var(--text);
 }
 .stem-btn.edit { color: var(--hint); }
 .stem-row .stem-btn:is(:hover, :active):not(:disabled),
@@ -482,15 +482,15 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
   background: var(--surface-button-hover); color: var(--text); border-color: transparent;
 }
 .stem-row .stem-btn.solo.on:is(:hover, :active) {
-  background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
+  background: var(--selection); border-color: transparent; color: var(--text);
 }
 .lane-btn:disabled { color: var(--hint); background: transparent; cursor: default; }
 .lane-ctrls .lane-btn.edit-btn { color: var(--hint); }
 .vis-btn.off, .lock-btn.on {
-  background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
+  background: var(--selection); border-color: transparent; color: var(--text);
 }
 .lane-row :is(.vis-btn.off, .lock-btn.on):is(:hover, :active):not(:disabled) {
-  background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
+  background: var(--selection); border-color: transparent; color: var(--text);
 }
 
 /* Volume (design.md 4.18): the speaker and the level. Click mutes, drag sets. */
@@ -510,7 +510,7 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .vol:is(:hover, :active, :focus-visible) .vol-pct { opacity: 1; }
 .vol.dim { color: var(--hint); }
 .vol:is(:hover, :active):not(:disabled) { background: var(--surface-button-hover); color: var(--text); border-color: transparent; }
-.vol.on, .vol.on:is(:hover, :active):not(:disabled) { background: var(--surface-engaged); color: var(--on-engaged); border-color: transparent; }
+.vol.on, .vol.on:is(:hover, :active):not(:disabled) { background: var(--selection); color: var(--text); border-color: transparent; }
 
 .btn--ghost:hover { color: var(--text); background: var(--control-hover); }
 
@@ -572,7 +572,7 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 .edge-toggle svg, .side-chevron { stroke-width: 1.8; }
 .edge-toggle svg { transition: transform var(--dur-panel) var(--ease-panel), opacity var(--dur-state) var(--ease); }
 .metro-toggle:has(input:checked), .metro-toggle:has(input:checked):hover {
-  background: var(--surface-engaged); border-color: transparent; color: var(--on-engaged);
+  background: var(--selection); border-color: transparent; color: var(--text);
 }
 /* Library rows are a content card variant, shared by both project browsers. */
 .recent-item { background: var(--surface-library); border-color: var(--line-soft); box-shadow: var(--e-card); }
@@ -678,10 +678,10 @@ button.keymap-key:hover:not(:disabled) { background: var(--control-hover); }
 .artifact-row-bar { display: flex; align-items: center; gap: var(--s-pair); padding-right: var(--s-pair); }
 .artifact-row-bar .artifact-row-head { flex: 1; min-width: 0; }
 .artifact-transpose[aria-pressed="false"] { background: transparent; color: var(--hint); }
-.artifact-transpose[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
+.artifact-transpose[aria-pressed="true"] { background: var(--selection); color: var(--text); }
 
 .artifact-edit-lock[aria-pressed="false"] { color: var(--hint); }
-.artifact-edit-lock[aria-pressed="true"] { background: var(--surface-engaged); color: var(--on-engaged); }
+.artifact-edit-lock[aria-pressed="true"] { background: var(--selection); color: var(--text); }
 /* Project origin: the panel splitter's grip on a single quiet timeline rule. */
 .timeline-start-gutter {
   flex: none; width: calc(var(--s-row) + var(--s-panel) / 2); background: var(--spectral-ground);

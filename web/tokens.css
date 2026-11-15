@@ -95,8 +95,6 @@
   --e-control: none;
   --surface-button: #243449;
   --surface-button-hover: #30435a;
-  --surface-engaged: var(--accent);
-  --on-engaged: var(--on-accent);
   --slider-track: #3a4c63;
   --h-slider-track: 6px;
   --w-slider-thumb: 4px;
@@ -146,8 +144,6 @@
   --e-control: none;
   --surface-button: #e8ecf2;
   --surface-button-hover: #dce3ed;
-  --surface-engaged: var(--accent);
-  --on-engaged: var(--on-accent);
   --slider-track: #c5ccd6;
   --destructive: #b1435e;
   --destructive-hover: #a43d54;
