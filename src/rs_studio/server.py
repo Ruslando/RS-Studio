@@ -407,6 +407,9 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
                 stem["volume"] = float(volume)
             if setting.get("channel") in ("stereo", "left", "right", "side"):
                 stem["channel"] = setting["channel"]
+        order = {setting["id"]: index for index, setting in enumerate(payload["stemSettings"])
+                 if isinstance(setting, dict) and isinstance(setting.get("id"), str)}
+        m.get("stems", []).sort(key=lambda stem: (stem.get("id") != "mix", order.get(stem.get("id"), len(order))))
     if "grid" in payload:
         m["grid"] = payload["grid"]
     project_start = payload.get("projectStart")
@@ -425,7 +428,7 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
         m["mix"] = payload["mix"]
     if isinstance(payload.get("view"), dict):
         view = payload["view"]
-        m["view"] = {key: view[key] for key in ("stem", "zoomX", "zoomY", "speed", "intensity", "spectrogram", "sharp", "split") if key in view}
+        m["view"] = {key: view[key] for key in ("stem", "zoomX", "zoomY", "left", "top", "time", "activeLane", "speed", "intensity", "spectrogram", "sharp", "split") if key in view}
     if "scoreDuration" in payload:
         try:
             score_duration = float(payload["scoreDuration"])
@@ -522,6 +525,7 @@ def _response_from_manifest(m: dict) -> dict:
         })
     return {
         "job": job,
+        "viewKey": m.get("viewKey") or job,
         "name": m.get("name"),
         "filename": m.get("filename"),
         "duration": m.get("duration"),
@@ -729,7 +733,7 @@ def _blank_manifest(job_id: str) -> dict:
     not drift into being a second, slightly different idea of "a new project".
     """
     return {
-        "job": job_id, "name": "", "filename": None,
+        "job": job_id, "viewKey": job_id, "name": "", "filename": None,
         # Seeds this project's Rocksmith key (rocksmith/builder.py package_key), so
         # two projects of one song never become one song in the game.
         "rocksmithKeySeed": job_id,
@@ -1056,17 +1060,19 @@ def api_project_tempo_map(job: str, payload: dict = Body(default={})) -> JSONRes
 
 
 @app.get("/api/projects/{job}/cover")
-def api_project_cover_get(job: str) -> FileResponse:
+def api_project_cover_get(job: str, draft: str = "") -> FileResponse:
     m = _read_manifest(job)
     job_dir = _job_dir(job)
-    path = _safe_project_file(job_dir, (m.get("metadata") or {}).get("coverArt"))
+    if draft and not re.fullmatch(r"cover_draft_[a-f0-9]{32}\.png", draft):
+        raise HTTPException(status_code=400, detail="Invalid draft cover")
+    path = _safe_project_file(job_dir, draft or (m.get("metadata") or {}).get("coverArt"))
     if path is None or not path.exists():
         raise HTTPException(status_code=404, detail="Cover art missing")
     media_type = _IMAGE_TYPES.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0] or "image/png"
     return FileResponse(path, media_type=media_type)
 
 
-def _store_cover_art(job: str, m: dict, source, source_name: str) -> JSONResponse:
+def _store_cover_art(job: str, m: dict, source, source_name: str, draft: bool = False) -> JSONResponse:
     job_dir = _job_dir(job)
     try:
         from PIL import Image, ImageOps
@@ -1076,7 +1082,7 @@ def _store_cover_art(job: str, m: dict, source, source_name: str) -> JSONRespons
         img = ImageOps.exif_transpose(img)
         resampling = getattr(Image, "Resampling", Image).LANCZOS
         img = ImageOps.fit(img.convert("RGB"), (512, 512), method=resampling)
-        out_rel = "cover_art.png"
+        out_rel = f"cover_draft_{uuid.uuid4().hex}.png" if draft else "cover_art.png"
         out_path = job_dir / out_rel
         img.save(out_path, "PNG", optimize=True)
     except Exception as exc:
@@ -1086,6 +1092,9 @@ def _store_cover_art(job: str, m: dict, source, source_name: str) -> JSONRespons
     meta["coverArt"] = out_rel
     meta["coverArtName"] = _clean_text(source_name or "cover art", 180)
     meta["coverArtUpdatedAt"] = _now()
+    if draft:
+        meta["coverArtUrl"] = f"/api/projects/{job}/cover?draft={out_rel}"
+        return JSONResponse({"metadata": meta})
     m["metadata"] = meta
     m["saved_at"] = _now()
     _write_manifest(job, m)
@@ -1179,24 +1188,24 @@ def _download_cover_url(url: str) -> bytes:
 
 
 @app.post("/api/projects/{job}/cover")
-def api_project_cover_upload(job: str, file: UploadFile) -> JSONResponse:
+def api_project_cover_upload(job: str, file: UploadFile, draft: bool = False) -> JSONResponse:
     m = _read_manifest(job)
     # The URL path has enforced _COVER_MAX_BYTES from the start; this one handed
     # an unbounded stream straight to PIL. Same limit, same message.
     data = file.file.read(_COVER_MAX_BYTES + 1)
     if len(data) > _COVER_MAX_BYTES:
         raise HTTPException(status_code=413, detail="Cover art is larger than 20 MB")
-    return _store_cover_art(job, m, io.BytesIO(data), file.filename or "cover art")
+    return _store_cover_art(job, m, io.BytesIO(data), file.filename or "cover art", draft=draft)
 
 
 @app.post("/api/projects/{job}/cover-url")
-def api_project_cover_url(job: str, payload: dict = Body(...)) -> JSONResponse:
+def api_project_cover_url(job: str, payload: dict = Body(...), draft: bool = False) -> JSONResponse:
     url = _clean_text((payload or {}).get("url"), 4096)
     if not url:
         raise HTTPException(status_code=400, detail="Cover URL is required")
     m = _read_manifest(job)
     data = _download_cover_url(url)
-    return _store_cover_art(job, m, io.BytesIO(data), _cover_name_from_url(url))
+    return _store_cover_art(job, m, io.BytesIO(data), _cover_name_from_url(url), draft=draft)
 
 
 @app.delete("/api/projects/{job}/cover")
@@ -1454,6 +1463,7 @@ def api_project_import(file: UploadFile) -> JSONResponse:
         shutil.rmtree(job_dir, ignore_errors=True)
         raise HTTPException(status_code=400, detail=f"Damaged project file: {exc}") from exc
 
+    m["viewKey"] = m.get("viewKey") or m.get("rocksmithKeySeed") or m.get("job") or job_id
     m["job"] = job_id
     m["saved_at"] = _now()
     _write_manifest(job_id, m)
@@ -1493,6 +1503,7 @@ def api_project_export(job: str, payload: dict = Body(default={})) -> Response:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         portable = {k: v for k, v in m.items() if k != "job"}
+        portable["viewKey"] = m.get("viewKey") or job
         try:
             source = _project_input(job_dir, m)
         except HTTPException:

@@ -271,6 +271,7 @@ export function createLaneRow(lane, { preview = false } = {}) {
 
 export function renderLanes() {
   syncTiming();   // every layer switch ends here
+  window.dispatchEvent(new Event('cw-lanes-rendered'));
   const actions = document.getElementById('noteLayerActions');
   mountBus("notes", "layers", "All note layers", {
     apply: () => editLanes().forEach(applyLaneVolume), rerender: renderLanes, done: refreshSaveState });
@@ -325,8 +326,8 @@ function beginRename(lane, row, nameEl) {
 // needing two clicks for it would be a poor default. The mute is only *implied* —
 // `_autoMuted` marks it as ours, so showing the layer undoes only a mute this
 // function applied, while one you set yourself (mute button / M) survives any
-// number of hide-show cycles. Not persisted: after a reload we can't tell whose
-// mute it was, and leaving it alone is the safe default. Hiding also drops the
+// number of hide-show cycles. The automatic mute is persisted across reloads.
+// Hiding also drops the
 // layer's notes from the selection — a hidden layer can't be edited directly.
 function setLaneVisible(lane, visible) {
   lane.visible = visible;

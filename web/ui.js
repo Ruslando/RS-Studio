@@ -21,7 +21,7 @@ import { beginTuningDraft, dropTuningDraft, saveTuningDraft, tuningDraftOpen, tu
 import { beginSoundDraft, dropSoundDraft, saveSoundDraft, selectToneSound, soundDraftDirty } from "./sound-designer.js";
 import { railScale, railsHidden, setRailScale, setRailsHidden } from "./marker-rails.js";
 import { panelMotion } from "./panel-motion.js";
-import { applyCoverChange, clearProjectCover, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
+import { applyCoverChange, coverStatus, latinFields, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { setTuning } from "./project.js";
 import { refreshSaveState } from "./save-state.js";
 import { renderModels, stopModelPolling } from "./models.js";
@@ -65,6 +65,7 @@ let spSection = "trace";
 // and a backdrop click are all the same key, and all four take this path.
 // The Tunings page keeps its own draft (tuning-editor.js), so it stays out of this.
 let spSnapshot = null;
+let projectDraft = null;
 function snapshotSettings() {
   const elements = new Set([...(spSnapshot?.inputs || []).map(({ el }) => el),
     ...snapshotInputs($("settingsModal")).map(({ el }) => el)]);
@@ -75,7 +76,8 @@ function snapshotSettings() {
 function syncSettingsActions() {
   const keys = value => JSON.stringify(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)));
   const dirty = !!spSnapshot && (inputsDirty(spSnapshot.inputs) || keys(keySnapshot()) !== keys(spSnapshot.keys)
-    || soundDraftDirty() || tuningDraftDirty());
+    || soundDraftDirty() || tuningDraftDirty() || (projectDraft && projectDraft.state === S.state &&
+      ['coverArt', 'coverArtName', 'coverArtUpdatedAt'].some(key => projectDraft.metadata[key] !== S.state.metadata?.[key])));
   const project = spSection === "project";
   $("settingsApply").textContent = project ? "Save changes" : "Apply";
   $("settingsApply").hidden = !project && (!dirty || spSection === "models");
@@ -129,6 +131,7 @@ function showSettingsPane(section) {
 
 let tuningSelect = null;   // the tuning the Tunings page opens on
 export function openSettingsModal(section = "trace", selectTuning = null) {
+  projectDraft = section === 'project' && S.state ? { state: S.state, metadata: normalizeMetadata(S.state.metadata) } : null;
   dropTuningDraft();
   dropSoundDraft();
   tuningSelect = selectTuning;
@@ -161,7 +164,7 @@ function setKeyTab(name) {
 
 // Closing stops the Models poll: a closed window that keeps asking the server
 // every second is a window that never actually closed.
-function cancelSettingsModal() { revertSettings(); dropTuningDraft(); dropSoundDraft(); stopModelPolling(); setTimelineScrollPreviewVisible(false); settingsModalBackdrop.hidden = true; }
+function cancelSettingsModal() { projectDraft = null; revertSettings(); dropTuningDraft(); dropSoundDraft(); stopModelPolling(); setTimelineScrollPreviewVisible(false); settingsModalBackdrop.hidden = true; }
 // Project details is the one pane whose values live on the server, so its
 // primary is the only one that has work left to do when it is pressed.
 async function applySettingsModal() {
@@ -173,8 +176,7 @@ async function applySettingsModal() {
 
 function projectSettingsMeta() {
   if (!S.state) return normalizeMetadata({});
-  S.state.metadata = normalizeMetadata(S.state.metadata || {});
-  return S.state.metadata;
+  return projectDraft?.state === S.state ? projectDraft.metadata : normalizeMetadata(S.state.metadata);
 }
 
 const projLatin = latinFields({ title: "projTitle", artist: "projArtist", album: "projAlbum" });
@@ -294,7 +296,7 @@ async function saveProjectSettings() {
     }
   const meta = collectProjectSettingsMeta();
   if (!meta.title || !meta.artist) { setProjectMetaStatus("Enter a song title and an artist.", true); return; }
-  S.state.metadata = meta;
+  const state = S.state;
   setProjectMetaStatus("Saving...");
   try {
     const res = await fetch(`/api/projects/${S.state.job}`, {
@@ -302,6 +304,9 @@ async function saveProjectSettings() {
       body: JSON.stringify({ metadata: metadataPayload(meta) }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
+    if (S.state !== state) return;
+    state.metadata = meta;
+    if (projectDraft?.state === state) projectDraft.metadata = normalizeMetadata(meta);
     refreshSaveState();   // the project is named after these details
     const tuning = readTuningFields();
     if (S.state.stems.length && (Math.abs(tuning.reference - S.state.tuning.reference) >= 0.1 || tuning.shift !== S.state.tuning.shift)) {
@@ -318,18 +323,20 @@ async function saveProjectSettings() {
 
 async function changeProjectSettingsCover(run, working, done) {
   if (!S.state || S.state.job === "tutorial") return;
+  const draft = projectDraft;
   const meta = await applyCoverChange(collectProjectSettingsMeta(), run, coverStatus($("projCoverDrop"), setProjectMetaStatus), working, done);
-  if (!meta) return;
-  S.state.metadata = meta;
+  if (!meta || !draft || projectDraft !== draft || draft.state !== S.state) return;
+  draft.metadata = meta;
   renderProjectSettings();
+  syncSettingsActions();
 }
 
 const uploadProjectSettingsCover = (file) => file && changeProjectSettingsCover(
-  () => uploadProjectCover(S.state.job, file), "Uploading cover art...", "Cover art uploaded");
+  () => uploadProjectCover(S.state.job, file, { draft: true }), "Uploading cover art...", "Cover art staged");
 const uploadProjectSettingsCoverFromDrop = (dataTransfer) => changeProjectSettingsCover(
-  () => uploadDroppedProjectCover(S.state.job, dataTransfer), "Uploading cover art...", "Cover art uploaded");
+  () => uploadDroppedProjectCover(S.state.job, dataTransfer, { draft: true }), "Uploading cover art...", "Cover art staged");
 const clearProjectSettingsCover = () => changeProjectSettingsCover(
-  () => clearProjectCover(S.state.job), "Removing cover art...", "Cover art removed");
+  () => Promise.resolve({ coverArt: null, coverArtName: '', coverArtUpdatedAt: null, coverArtUrl: '' }), "Removing cover art...", "Cover art removed");
 
 // One row per remappable command: its label + a button showing the bound key.
 // Clicking the button captures the next keypress (Esc cancels); a key already in

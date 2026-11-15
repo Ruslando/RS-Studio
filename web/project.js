@@ -34,14 +34,14 @@ import { downloadProjectBlob, toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
 import { S } from "./store.js";
 import { savedSplitView } from "./split-view.js";
-import { initProjectView, restoreView, savedView } from "./project-view.js";
+import { beginProjectView, currentView, initProjectView, restoreView, savedView } from "./project-view.js";
 import { coverScoreDuration, normalizeScoreBars } from "./score-structure-core.js";
 import { normalizedLaneFields } from "./marker-rails.js";
 import { withStartTone } from "./tone-marker-core.js";
 import { loadPresetFolderData, readAvailableSoundPresets } from "./sound-presets-core.js";
 import { normalizeSectionMarkers, sectionMarkersFromScoreBars, withEndSection } from "./section-marker-core.js";
 import { normalizeComments } from "./comment-core.js";
-import { configureSaveState, isDirty, markSaved, refreshSaveState } from "./save-state.js";
+import { acceptSavedAudio, configureSaveState, isDirty, markSaved, refreshSaveState } from "./save-state.js";
 export { markSaved };
 import { inferTablatureEnabled, laneScrollSpeed } from "./layer-role.js";
 import { migrateMotifs } from "./motifs.js";
@@ -93,6 +93,7 @@ function projectBody() {
   const serialize = (l) => ({
     id: l.id, name: l.name, kind: l.kind, color: l.color, visible: l.visible,
     locked: !!l.locked,
+    autoMuted: !!l._autoMuted,
     instrument: l.instrument, tuning: l.tuning, customTuning: l.customTuning,
     volume: normLayerVolume(l.volume),
     muted: l.muted, active: l.active, tablatureEnabled: l.tablatureEnabled !== false,
@@ -134,7 +135,7 @@ function projectBody() {
     scoreBars: (song.scoreBars || []).map((bar) => ({ ...bar })),
     timings: timingsForSave(),
     scoreDuration: Number(S.state.scoreDuration) || Number(S.state.duration) || 1,
-    view: { intensity: S.state.viewIntensity || [0, 100], spectrogram: S.state.specView || 'fine', sharp: !!S.state.specSharp, stem: S.state.curStem, zoomX: S.zoomX, zoomY: S.zoomY, speed: speedSel.value, split: savedSplitView() },
+    view: { ...currentView(), split: savedSplitView() },
     grid: {
       bpm: song.grid.bpm, offset: song.grid.offset, subdiv: song.grid.subdiv,
       snap: true, showGrid: true,
@@ -151,7 +152,7 @@ function projectFileName() {
 async function projectBundle() {
   if (!S.state) return;
   await prepareProjectHands();
-  const body = projectBody();
+  const state = S.state, body = structuredClone(projectBody());
   const used = new Set(body.editLanes.flatMap(lane => (lane.toneMarkers || []).map(marker => marker.tone)));
   body.tonePresets = Object.fromEntries(readAvailableSoundPresets().filter(preset => used.has(preset.id)).map(preset => [preset.id, preset.tone]));
   const res = await fetch(`/api/projects/${S.state.job}/export`, {
@@ -159,6 +160,7 @@ async function projectBundle() {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
+  if (S.state === state) markSaved(body);
   return { blob: await res.blob(), name: projectFileName() };
 }
 
@@ -168,11 +170,13 @@ async function projectBundle() {
 export async function saveToServer() {
   if (S.state?.job === "tutorial") throw new Error("The walkthrough project cannot be saved");
   await prepareProjectHands();
-  const res = await fetch(`/api/projects/${S.state.job}`, {
+  const state = S.state, body = structuredClone(projectBody());
+  const res = await fetch(`/api/projects/${state.job}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(projectBody()),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
+  if (S.state === state) markSaved(body);
 }
 
 // Capture old and newly generated hands once, including layers not yet viewed.
@@ -222,7 +226,6 @@ export async function saveProject({ saveAs = false } = {}) {
       await saveToServer();
       toast("Saved", 2200, "ok");
     }
-    markSaved();
     return true;
   } catch (e) {
     toast("Couldn't save: " + e.message, 2200, "error");
@@ -239,7 +242,7 @@ async function openProjectFile(file) {
     fd.append("file", file);
     const res = await fetch("/api/projects/import", { method: "POST", body: fd });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Import failed");
-    await applyProject(await res.json());
+    await applyProject(await res.json(), { preferSavedView: false });
     await waitForProjectVisuals();
   });
 }
@@ -254,10 +257,13 @@ export async function openProject() {
 async function attachAudio(file) {
   if (!S.state || S.state.stems.length || !file) return;
   try {
-    await saveToServer();
+    const state = S.state;
     const body = new FormData();
     body.append("audio", file);
-    await applyProject(await uploadRequest(`/api/projects/${S.state.job}/audio`, body, "Attaching audio", file.name));
+    const data = await uploadRequest(`/api/projects/${state.job}/audio`, body, "Attaching audio", file.name);
+    if (S.state !== state) return;
+    await applyProject(data, { retainEdits: true });
+    acceptSavedAudio(projectBody().stemSettings);
     toast("Audio attached", 2200, "ok");
   } catch (error) {
     toast("Couldn't attach the audio: " + error.message, 6000, "error");
@@ -295,6 +301,7 @@ export function mapLane(l, startAt = 0) {
     // silent tone — the lane already has two controls for that — so it migrates to
     // the one the UI can show, rather than becoming a fourth state nothing draws.
     muted: !!l.muted || l.instrument === "none",
+    _autoMuted: l.autoMuted === true,
     tablatureEnabled: inferTablatureEnabled(l),
     rocksmithArrangement: ["none", "lead", "rhythm", "alt_lead", "alt_rhythm", "bonus_lead", "bonus_rhythm", "bass", "alt_bass", "bonus_bass"].includes(l.rocksmithArrangement)
       ? l.rocksmithArrangement : undefined,
@@ -380,7 +387,7 @@ function restoredProjectStructure(data) {
 
 function restoredProjectState(data, { sourceLanes, coveredBars, restoredSections }) {
   return {
-    job: data.job,
+    job: data.job, viewKey: data.viewKey || data.job,
     savedSplitView: data.view?.split,
     name: data.name,
     filename: data.filename,
@@ -412,8 +419,10 @@ function restoredProjectState(data, { sourceLanes, coveredBars, restoredSections
   };
 }
 
-function restoreLoadedProjectView(data) {
-  const v = { ...(data.view || {}), ...(savedView(data.job) || {}) };
+function restoreLoadedProjectView(data, preferSavedView) {
+  const live = data.view?.split?.live;
+  const v = { ...(live ? { ...live, stem: live.stemId, activeLane: live.laneId } : {}),
+    ...(data.view || {}), ...(preferSavedView ? savedView(data.job, data.viewKey) || {} : {}) };
   S.state.viewIntensity = Array.isArray(v.intensity) ? v.intensity : [0, 100];
   S.state.specView = typeof v.spectrogram === 'string' ? v.spectrogram : 'fine';
   S.state.specSharp = !!v.sharp;
@@ -457,7 +466,9 @@ function renderLoadedProjectWarnings(data, idsRepaired) {
   }));
 }
 
-export async function applyProject(data) {
+export async function applyProject(data, { preferSavedView = true, retainEdits = false } = {}) {
+  if (retainEdits) data = { ...data, ...projectBody() };
+  beginProjectView();
   try { await loadPresetFolderData(); }
   catch (error) { console.warn("Tone presets could not be loaded", error); }
   projectVisuals = Promise.resolve();
@@ -470,6 +481,7 @@ export async function applyProject(data) {
 
   // 4. Publish the payload-derived state before repairing ids and restoring views.
   S.state = restoredProjectState(data, structure);
+  S.state.restoreFileView = !preferSavedView;
   // 5. ids
   syncUidPastLoaded();   // bump uid past loaded ids so new notes/lanes never collide
   const idsRepaired = dedupeIds();   // heal duplicate ids baked in by the old uid bug
@@ -481,7 +493,9 @@ export async function applyProject(data) {
 
   // 7. view settings (which stem, zoom, speed) so reload lands where you left off.
   // Where you left it last time, over what the file saved (see project-view.js).
-  const v = restoreLoadedProjectView(data);
+  const v = restoreLoadedProjectView(data, preferSavedView);
+  if (v.activeLane && S.state.editLanes.some(lane => lane.id === v.activeLane))
+    S.state.editLanes.forEach(lane => { lane.active = lane.id === v.activeLane; });
 
   S.selection = new Set();
   S.clipboard = []; S.clipboardRef = null; S.clipboardSrc = [];
@@ -524,8 +538,8 @@ export async function applyProject(data) {
     syncRowHeight(); rebuildLanes(); layout(); renderStemTabs(); renderLanes(); draw();
   }
   if (attachAudioBtn) attachAudioBtn.hidden = S.state.stems.length > 0;
-  markSaved();    // freshly loaded project is the clean baseline; shows the tab, no dot
-  restoreView(savedView(data.job));
+  if (!retainEdits) markSaved();
+  await restoreView(v);
   warmSynths();   // start fetching the guitar samples ahead of first play
   // The editor exists now, which is the only moment its walkthrough can be
   // pointed at anything. An event rather than a call: tour.js reaches into the
@@ -543,6 +557,7 @@ export async function closeProject(options = {}) {
   if (!S.state) return false;
   const discardTutorial = options?.discardTutorial === true && S.state.job === "tutorial";
   if (!discardTutorial && !await confirmLeave()) return false;
+  window.cwSaveProjectView?.();
   // Let transient project UI tear itself down before the launcher becomes visible.
   window.dispatchEvent(new Event("cw-project-closed"));
   pauseTransport();
@@ -668,31 +683,14 @@ function clearStemDropIndicators() {
     .forEach((row) => row.classList.remove("drop-before", "drop-after"));
 }
 
-function persistStemOrder(previousOrder) {
-  const state = S.state;
-  const order = state.stems.map((stem) => stem.id);
-  fetch(`/api/projects/${state.job}/stems/order`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order }),
-  }).then(async (res) => {
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "save failed");
-  }).catch((err) => {
-    // Don't undo a newer drag while the request for an earlier ordering fails.
-    if (S.state !== state || state.stems.map((stem) => stem.id).join("|") !== order.join("|")) return;
-    state.stems = previousOrder;
-    renderStemTabs();
-    toast("Couldn't save stem order: " + err.message, 2200, "error");
-  });
-}
-
 function reorderStem(moving, target, before) {
   if (!moving || !target || moving === target || isMasterStem(moving) || isMasterStem(target)) return;
-  const previousOrder = [...S.state.stems];
   const stems = S.state.stems;
   stems.splice(stems.indexOf(moving), 1);
   const targetIndex = stems.indexOf(target);
   stems.splice(targetIndex + (before ? 0 : 1), 0, moving);
   renderStemTabs();
-  persistStemOrder(previousOrder);
+  refreshSaveState();
 }
 
 function wireStemDrag(row, stem) {
@@ -984,10 +982,7 @@ async function uploadStem(file) {
   const label = file.name.replace(/\.[^.]+$/, "") || "Stem";
   startPendingStem(label);
   try {
-    // The stem lands in the project on the server, so what is on screen has to
-    // be on disk first — otherwise the load that follows a reopen has a stem the
-    // manifest knows about and edits it does not.
-    await saveToServer();
+    // Persist the audio asset independently of unsaved note edits.
     const body = new FormData();
     body.append("file", file);
     body.append("name", label);
@@ -997,6 +992,7 @@ async function uploadStem(file) {
       id: s.id, name: s.name, spec: s.spectrogram, audioUrl: s.audio_url,
       muted: false, solo: false,
     });
+    acceptSavedAudio(projectBody().stemSettings);
     ensureStemMixer();
     stopPendingStem();
     renderStemTabs();
@@ -1084,6 +1080,7 @@ export async function removeStem(stem) {
     const wasMaster = isMasterStem(stem);
     const wasViewing = state.curStem === stem.id;
     state.stems = state.stems.filter((item) => item !== stem);
+    if (S.state === state) acceptSavedAudio(projectBody().stemSettings);
     resetStemMixer();
 
     if (state.stems.length) {
@@ -1185,7 +1182,13 @@ export function init_project() {
   // dirty flag over — the page is the only thing that knows, and a mirror that goes
   // stale loses work silently.
   window.cwQuitRequested = () => {
-    confirmLeave().then((ok) => { if (ok) window.pywebview.api.quit(); });
+    confirmLeave().then(async (ok) => {
+      if (!ok) return;
+      window.cwSaveProjectView?.();
+      try { await window.cwFlushPreferences?.(); }
+      catch (error) { toast(error.message, 5000, 'error'); return; }
+      window.pywebview.api.quit();
+    });
   };
   // A browser has no such hook: `beforeunload` buys nothing but its own native
   // prompt, which is all a tab will ever show. It stays for that case only — in

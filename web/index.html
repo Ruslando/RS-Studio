@@ -17,12 +17,13 @@
        module reads them, then every change is written back. -->
   <script>(()=>{try{const ls=localStorage,x=new XMLHttpRequest();x.open("GET","/api/prefs",false);x.send();
 const saved=x.status===200?JSON.parse(x.responseText):null;if(saved)for(const k in saved)if(typeof saved[k]==="string")ls.setItem(k,saved[k]);
-const P=Storage.prototype,set=P.setItem,del=P.removeItem,clr=P.clear;let t=0;
-const save=(keepalive)=>{t=0;const all={};for(let i=0;i<ls.length;i++){const k=ls.key(i);all[k]=ls.getItem(k);}
-fetch("/api/prefs",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(all),keepalive}).catch(()=>{});};
-const later=s=>{if(s===ls){clearTimeout(t);t=setTimeout(save,400,false);}};
+const P=Storage.prototype,set=P.setItem,del=P.removeItem,clr=P.clear;let t=0,pending=Promise.resolve();
+const save=(keepalive)=>{clearTimeout(t);t=0;const all={};for(let i=0;i<ls.length;i++){const k=ls.key(i);all[k]=ls.getItem(k);}
+pending=pending.catch(()=>{}).then(async()=>{const r=await fetch("/api/prefs",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(all),keepalive});if(!r.ok)throw new Error(`Could not save preferences (${r.status})`);});return pending;};
+window.cwFlushPreferences=()=>{window.cwSaveProjectView?.();window.cwSaveSplitView?.();return save(false);};
+const later=s=>{if(s===ls){clearTimeout(t);t=setTimeout(()=>save(false).catch(()=>{}),400);}};
 P.setItem=function(k,v){set.call(this,k,v);later(this);};P.removeItem=function(k){del.call(this,k);later(this);};P.clear=function(){clr.call(this);later(this);};
-addEventListener("pagehide",()=>{if(t){clearTimeout(t);save(true);}});
+addEventListener("pagehide",()=>{window.cwSaveProjectView?.();window.cwSaveSplitView?.();if(t)save(true).catch(()=>{});});
 if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</script>
   <script>try{if(localStorage.getItem("cw.theme")==="light")document.documentElement.dataset.theme="light";}catch(e){}</script>
   <!-- Self-hosted: the app is a local tool and must render as designed with no

@@ -283,7 +283,7 @@ function resizeBoards(value) {
 // ---- kept per project, in the preferences like project-view.js's view ----
 // Whether the split is open, its settings, and where the other pane was. The
 // live pane is the editor's own view, which project-view.js already keeps.
-const storeKey = () => (S.state?.job && S.state.job !== "tutorial" ? `cw.split.${S.state.job}` : null);
+const storeKey = () => (S.state?.job && S.state.job !== "tutorial" ? `cw.split.${S.state.viewKey || S.state.job}` : null);
 let lastOther = null, saveTimer = 0;
 function remember() {
   if (other) lastOther = { stemId: other.loading ?? other.stemId, laneId: other.laneId, zoomX: other.zoomX, zoomY: other.zoomY,
@@ -308,7 +308,7 @@ const later = () => { if (!saveTimer) saveTimer = setTimeout(save, 500); };
 function restore() {
   close({ keep: false });
   let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(storeKey())); } catch { /* none kept */ }
+  try { if (!S.state?.restoreFileView) saved = JSON.parse(localStorage.getItem(storeKey())); } catch { /* none kept */ }
   saved ||= S.state?.savedSplitView;
   layoutSel.value = saved?.layout === "rows" ? "rows" : "columns";
   mode = modeSel.value = ["link", "sync"].includes(saved?.mode) ? saved.mode : "free";
@@ -318,7 +318,8 @@ function restore() {
   lastOther = saved?.other && typeof saved.other === "object" ? saved.other : null;
   clearTimeout(saveTimer); saveTimer = 0;   // nothing changed yet
   if (saved?.open) open();
-  if (saved?.live) showLive(saved.live);
+  // The main project view owns the live editor. This snapshot may predate a
+  // later zoom/layer change, even when the split was closed in the meantime.
   restoreRepeatReview(saved?.review);
 }
 
@@ -380,6 +381,7 @@ export function init_split_view() {
   });
   toggle.addEventListener("click", () => (other ? close() : open()));
   window.addEventListener("cw-project-opened", restore);
+  window.cwSaveSplitView = save;
   // Fired while the project is still there: keep where the split was, then go.
   window.addEventListener("cw-project-closed", () => { save(); close({ keep: false }); });
   window.addEventListener("pagehide", save);

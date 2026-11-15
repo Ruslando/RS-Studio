@@ -75,7 +75,7 @@ export function snapshotEdit() {
     snap.capo[l.id] = Number(l.capo) || 0;
     // Tone and phrase markers: a tempo change re-times them along with the notes.
     snap.marks[l.id] = { tone: cloneJson(l.toneMarkers), phrase: cloneJson(l.phraseBoundaries), crowd: cloneJson(l.crowdEvents || []) };
-    snap.ui[l.id] = { visible: l.visible, muted: l.muted, locked: l.locked,
+    snap.ui[l.id] = { visible: l.visible, muted: l.muted, _autoMuted: !!l._autoMuted, locked: l.locked,
       tablatureEnabled: l.tablatureEnabled !== false, volume: normLayerVolume(l.volume) };
   }
   return snap;
@@ -185,6 +185,7 @@ function restore(snap) {
     const ui = snap.ui && snap.ui[l.id];
     if (ui) {
       l.visible = ui.visible; l.muted = ui.muted;
+      l._autoMuted = !!ui._autoMuted;
       if (ui.locked != null) l.locked = ui.locked;
       if (ui.tablatureEnabled != null) l.tablatureEnabled = ui.tablatureEnabled;
       if (ui.volume != null) { l.volume = normLayerVolume(ui.volume); applyLaneVolume(l); }

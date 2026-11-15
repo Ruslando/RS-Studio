@@ -156,7 +156,13 @@ const kept = JSON.parse(store['cw.split.song']);
 assert.deepEqual([kept.open, kept.layout, kept.mode, kept.syncView, kept.other.laneId], [true, 'rows', 'sync', true, otherLane]);
 assert.equal($('splitPane').hidden, true, 'a closed project closes the split');
 $('splitLayout').value = 'columns'; $('splitMode').value = 'free';   // as another project would leave them
+S.zoomX = 7; S.zoomY = 3;
+const currentLane = lanes.find(l => !l.active);
+lanes.forEach(l => { l.active = l === currentLane; });
 window.dispatchEvent(new Event('cw-project-opened'));
+assert.equal(S.zoomX, 7, 'a stale split snapshot cannot replace the restored project zoom');
+assert.equal(S.zoomY, 3);
+assert.equal(activeLane(), currentLane, 'the restored project layer wins over an older split snapshot');
 assert.equal($('splitPane').hidden, false, 'reopening the project reopens the split');
 assert.ok(editorEl.classList.contains('rows')); assert.equal($('splitMode').value, 'sync'); assert.equal($('splitSyncView').checked, true);
 split.paintSplitPane(() => { painted = activeLane().id; }, true);

@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
 
 from rs_studio import server
@@ -113,6 +113,25 @@ class ProjectAudioTests(unittest.TestCase):
                 job = imported.json()["job"]
                 source = server._project_input(self.root / job, server._read_manifest(job))
                 self.assertEqual(source.read_bytes(), b"original recording")
+
+    def test_reimport_keeps_the_project_view_identity(self):
+        with patch.object(server, "RUNS_DIR", self.root):
+            original = "original-project"
+            manifest = {**self.manifest, "job": original}
+            (self.root / original).mkdir()
+            server._write_manifest(original, manifest)
+            for _ in range(2):
+                exported = server.api_project_export(manifest["job"], {})
+                chart = io.BytesIO(exported.body)
+                with zipfile.ZipFile(chart) as archive:
+                    portable = json.loads(archive.read("project.json"))
+                    self.assertNotIn("job", portable)
+                    self.assertEqual(portable["viewKey"], original)
+                chart.seek(0)
+                imported = json.loads(server.api_project_import(UploadFile(file=chart, filename="song.chart")).body)
+                self.assertNotEqual(imported["job"], original)
+                self.assertEqual(imported["viewKey"], original)
+                manifest = server._read_manifest(imported["job"])
 
     def test_export_reports_how_to_restore_missing_full_song(self):
         with patch.object(server, "RUNS_DIR", self.root), TestClient(

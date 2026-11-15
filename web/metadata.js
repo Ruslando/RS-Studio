@@ -160,10 +160,10 @@ export async function applyCoverChange(textMeta, run, status, working, done) {
   }
 }
 
-export async function uploadProjectCover(job, file) {
+export async function uploadProjectCover(job, file, { draft = false } = {}) {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(`/api/projects/${job}/cover`, { method: "POST", body: fd });
+  const res = await fetch(`/api/projects/${job}/cover${draft ? '?draft=true' : ''}`, { method: "POST", body: fd });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Cover upload failed");
   const data = await res.json();
   return normalizeMetadata(data.metadata);
@@ -224,13 +224,13 @@ function coverUrlFromDrop(dataTransfer) {
   return normalizeCoverUrl(dataTransfer.getData("text/plain"));
 }
 
-async function uploadProjectCoverUrl(job, url) {
+async function uploadProjectCoverUrl(job, url, options = {}) {
   if (url.startsWith("data:image/")) {
     const blob = await fetch(url).then((r) => r.blob());
     const file = new File([blob], "dropped-cover.png", { type: blob.type || "image/png" });
-    return uploadProjectCover(job, file);
+    return uploadProjectCover(job, file, options);
   }
-  const res = await fetch(`/api/projects/${job}/cover-url`, {
+  const res = await fetch(`/api/projects/${job}/cover-url${options.draft ? '?draft=true' : ''}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
@@ -240,13 +240,13 @@ async function uploadProjectCoverUrl(job, url) {
   return normalizeMetadata(data.metadata);
 }
 
-export async function uploadDroppedProjectCover(job, dataTransfer) {
+export async function uploadDroppedProjectCover(job, dataTransfer, options = {}) {
   const file = imageFileFromDrop(dataTransfer);
-  if (file) return uploadProjectCover(job, file);
+  if (file) return uploadProjectCover(job, file, options);
   const url = coverUrlFromDrop(dataTransfer);
-  if (url) return uploadProjectCoverUrl(job, url);
+  if (url) return uploadProjectCoverUrl(job, url, options);
   const fallbackFile = fallbackFileFromDrop(dataTransfer);
-  if (fallbackFile) return uploadProjectCover(job, fallbackFile);
+  if (fallbackFile) return uploadProjectCover(job, fallbackFile, options);
   throw new Error("Drop an image file or an image from a web page.");
 }
 

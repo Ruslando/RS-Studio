@@ -173,6 +173,7 @@ function setZoomX(z) {
   layout();              // spacer width follows songWidth()
   updateZoomLabels();
   draw();                // layout only resizes; the frame is what repaints
+  window.dispatchEvent(new Event('cw-zoom-changed'));
 }
 
 function setZoomY(z) {
@@ -181,6 +182,7 @@ function setZoomY(z) {
   layout();              // spacer height follows contentH()
   updateZoomLabels();
   draw();
+  window.dispatchEvent(new Event('cw-zoom-changed'));
 }
 
 function zoomAtClientX(clientX, factor) {
