@@ -19,6 +19,7 @@ const S = { pxPerSec: 100, toolMode: 'pan', state: { projectStart: 0, duration: 
   matches: [], selection: new Set(), detectRegion: null };
 S.state.spec = {midi_low: 0, midi_high: 127};
 const noop = () => {}, commits = [];
+let curveOverride = null, effectHandles = [], referenceEdge = null, regionHandle = null;
 // A dip's end handles sit on the note's edges, on its row (y 100).
 const endHandles = n => n.whammy ? [{ i: 0, kind: 'whammy', note: n, x: n.start * 100, y: 100 }, { i: 2, kind: 'whammy', note: n, x: n.end * 100, y: 100 },
   { i: 1, kind: 'whammy', note: n, x: (n.start + n.end) * 50, y: 300 }] : [];
@@ -44,8 +45,9 @@ try {
     './geometry.js': { timeAt: x => x / 100, xOf: t => t * 100, pitchAt: () => 64, pitchAtExact: () => 64, yOf: () => 100 },
     './markers.js': { markerMouseDown: () => false, markerCursorAt: () => null }, './comments.js': { commentMouseDown: () => false, commentAt: () => null }, './marker-rails.js': { markerRails: () => [] },
     './ids.js': { nid: () => 'new-boundary-note' },
-    './note-render.js': { regionEdgeAt: () => null, noteRibbon: () => null, slideFretsHandle: () => null, curveHandles: endHandles }, './grace.js': { graceBefore: () => null },
-    './references.js': { boxOfNote: () => null, refLockAt: () => null, refBadgeAt: () => null, refBoxEdgeAt: () => null },
+    './note-render.js': { regionEdgeAt: () => regionHandle, noteRibbon: () => null, slideFretsHandle: () => null,
+      effectStartHandles: () => effectHandles, curveHandles: n => curveOverride || endHandles(n) }, './grace.js': { graceBefore: () => null },
+    './references.js': { boxOfNote: () => null, refLockAt: () => null, refBadgeAt: () => null, refBoxEdgeAt: () => referenceEdge },
     './playback.js': { auditionNote: noop },
     './note-motion.js': { beginNoteGesture: noop, updateNoteGesture: noop, finishNoteGesture: noop },
     './edit-history.js': { snapshotEdit: () => structuredClone(lane.notes), commit: (...args) => commits.push(args) },
@@ -232,6 +234,62 @@ try {
   assert.ok(Math.abs(note.end - note.start - .237) < 1e-9, 'group release preserves each duration');
   assert.ok(Math.abs(companion.start - note.start - 1.03) < 1e-9, 'group release preserves spacing');
   lane.notes = [note]; S.selection = new Set([note]); S.state.duration = 10;
+
+  // Edge hit testing extends outside the note and wins over enclosing borders.
+  delete note.preciseLength;
+  for (const tool of ['pan', 'select', 'trace']) {
+    S.toolMode = tool;
+    for (const edge of ['l', 'r']) {
+      note.start = 1; note.end = 1.5;
+      referenceEdge = { lane, ref: 'box', i: 0, edge };
+      regionHandle = edge;
+      const x = edge === 'l' ? 98 : 152;
+      stage.emit('mousedown', { clientX: x });
+      assert.equal(S.drag.mode, 'resize', `${tool}: the ${edge} note edge beats enclosure borders`);
+      assert.equal(S.drag.edge, edge);
+      win.emit('mousemove', { clientX: x + (edge === 'r' ? 25 : -25) });
+      win.emit('mouseup');
+      assert.equal(edge === 'r' ? note.end : note.start, edge === 'r' ? 1.75 : .75);
+    }
+  }
+  regionHandle = null;
+  stage.emit('mousedown', { clientX: 220 });
+  assert.equal(S.drag.mode, 'refBox', 'an exposed enclosure border still resizes the box');
+  S.drag = null; referenceEdge = null; S.toolMode = 'pan';
+
+  // A curve's internal point may sit inside the edge grab zone too. Sideways
+  // must resize, while vertical dragging still shapes the curve.
+  for (const kind of ['bend', 'whammy']) {
+    note.start = 1; note.end = 1.5; note[kind] = 'release';
+    curveOverride = [{ note, kind, i: 1, x: 149, y: 100 }];
+    stage.emit('mousedown', { clientX: 149 });
+    win.emit('mousemove', { clientX: 180 });
+    assert.equal(S.drag.mode, 'resize', `${kind}: an internal point cannot swallow an edge resize`);
+    assert.equal(note.end, 1.75);
+    win.emit('mouseup');
+    note.start = 1; note.end = 1.5;
+    stage.emit('mousedown', { clientX: 149 });
+    win.emit('mousemove', { clientX: 149, clientY: 120 });
+    assert.equal(S.drag.mode, 'bendPoint', `${kind}: vertical point editing stays available`);
+    assert.equal(note.end, 1.5);
+    win.emit('mouseup');
+    delete note[kind]; delete note.whammyPoints;
+  }
+  curveOverride = null;
+
+  // Slide/vibrato timing handles have their own exposed area outside the bar.
+  for (const kind of ['slide', 'vibrato', 'vibratoEnd']) {
+    note.start = 1; note.end = 1.5; note.slide = 'outUp'; note.fx = { vibrato: true };
+    effectHandles = [{ note, kind, x: 150, y: 100 }];
+    stage.emit('mousedown', { clientX: 149 });
+    assert.equal(S.drag.mode, 'resize', `${kind}: a timing handle does not block the sustain edge`);
+    win.emit('mousemove', { clientX: 180 }); win.emit('mouseup');
+    effectHandles = [{ note, kind, x: 130, y: 80 }];
+    stage.emit('mousedown', { clientX: 130, clientY: 80 });
+    assert.equal(S.drag.mode, 'effectStart', `${kind}: an exposed timing handle stays usable`);
+    S.drag = null;
+  }
+  delete note.slide; delete note.fx; effectHandles = [];
 
   // A tempo marker between old-grid lines ends a shortened final cell.
   S.pxPerSec = 2000;

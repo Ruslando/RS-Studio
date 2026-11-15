@@ -1,4 +1,4 @@
-import { clientToCanvas, localXY, pickNote } from "./stage-hit-test.js";
+import { clientToCanvas, localXY, pickNote, pickNoteEdge } from "./stage-hit-test.js";
 import { diagnosticMarksAt } from './diagnostic-marks.js';
 import { openIssueMenu } from './issue-state.js';
 import { makeResizeRoom } from "./note-merge.js";
@@ -72,8 +72,8 @@ function resizeDrag(note, lane, edge, x, t, free, prev) {
 }
 
 export function edgeOf(note, x) {
-  if (Math.abs(x - xOf(note.start)) <= EDGE_PX) return "l";
-  if (Math.abs(x - xOf(note.end)) <= EDGE_PX) return "r";
+  const left = Math.abs(x - xOf(note.start)), right = Math.abs(x - xOf(note.end));
+  if (Math.min(left, right) <= EDGE_PX) return left <= right ? 'l' : 'r';
   return null;
 }
 
@@ -90,9 +90,10 @@ function notesNear(x, grab) {
   return [...S.selection, ...lanes.flatMap((lane) => lane.notes.filter((n) => n.start <= t1 && n.end >= t0))];
 }
 
-function bendHandleAt(x, y) {
+function bendHandleAt(x, y, only = null) {
   const grab = BEND_HANDLE_R + 3;
   for (const n of notesNear(x, grab)) {
+    if (only && n !== only) continue;
     if (!(n.bend || n.whammy) || !canEditLane(laneOf(n)) || boxOfNote(n)?.group.locked) continue;
     for (const h of curveHandles(n)) {
       if (Math.abs(x - h.x) <= grab && Math.abs(y - h.y) <= grab) return h;
@@ -115,9 +116,10 @@ function effectStartAt(x, y) {
 }
 
 // The far end of a selected note's slide into or out of it, under the cursor.
-function slideFretsAt(x, y) {
+function slideFretsAt(x, y, only = null) {
   const grab = BEND_HANDLE_R + 3;
   for (const n of S.selection) {
+    if (only && n !== only) continue;
     const lane = laneOf(n);
     if (!canEditLane(lane) || boxOfNote(n)?.group.locked) continue;
     const h = slideFretsHandle(n, lane);
@@ -185,9 +187,9 @@ function updateBendPoint(x, y) {
   const kind = S.drag.kind || "bend", other = kind === "whammy" ? bendCurve(S.drag.note) : whammyCurve(S.drag.note);
   const n = S.drag.note, rowH = S.state.rowH, pts = curveOf(n, kind).map((p) => [...p]);
   const i = S.drag.i, dur = Math.max(1e-6, n.end - n.start);
-  // An end point sits on the note's edge and only moves in pitch: dragged
-  // sideways it is that edge, and resizes the note.
-  const edge = i === 0 ? "l" : i === pts.length - 1 ? "r" : null;
+  // Endpoints and internal points inside an edge's grab zone share that edge:
+  // horizontal movement resizes, vertical movement shapes the curve.
+  const edge = S.drag.resizeEdge || (i === 0 ? "l" : i === pts.length - 1 ? "r" : null);
   if (edge && !S.drag.axis) {
     const dx = Math.abs(x - S.drag.x0), dy = Math.abs(y - S.drag.y0);
     if (Math.max(dx, dy) < 4) return;
@@ -405,14 +407,15 @@ export function init_interaction() {
     if (!S.drag) stage.style.cursor = "default";
     draw();
   });
-  function startEffectGesture(e, x, y) {
-    const handle = bendHandleAt(x, y);
+  function startEffectGesture(e, x, y, edgeHit = null) {
+    const handle = bendHandleAt(x, y, edgeHit?.note);
     if (handle) {
       if (!S.selection.has(handle.note)) setSelection(new Set([handle.note]));
-      S.drag = { mode: "bendPoint", note: handle.note, i: handle.i, kind: handle.kind, free: e.altKey, prev: snapshotEdit(), x0: x, y0: y };
+      S.drag = { mode: "bendPoint", note: handle.note, i: handle.i, kind: handle.kind, free: e.altKey,
+        resizeEdge: edgeHit?.edge || edgeOf(handle.note, x), prev: snapshotEdit(), x0: x, y0: y };
       return true;
     }
-    const start = effectStartAt(x, y);
+    const start = !edgeHit && effectStartAt(x, y);
     if (start) {
       S.drag = { mode: "effectStart", note: start.note, kind: start.kind, free: e.altKey, prev: snapshotEdit() };
       return true;
@@ -420,7 +423,7 @@ export function init_interaction() {
     // The far end of a slide into or out of a note: up and down sets how many
     // frets it spans, left and right moves that edge of the note. Where the
     // slide starts (out) or lands (in) stays put.
-    const far = slideFretsAt(x, y);
+    const far = slideFretsAt(x, y, edgeHit?.note);
     if (far) {
       const n = far.note, lane = laneOf(n), into = SLIDE_IN.has(n.slide), dur = n.end - n.start;
       const knee = n.start + dur * (into ? slideEndOf(n, dur, 30 / (gridAt(n.start)?.bpm || 120)) : slideStartOf(n));
@@ -496,7 +499,7 @@ export function init_interaction() {
       // this gesture so a follow-up vertical drag can play landing pitches).
       auditionNote(hit.note, hit.lane);
       if (boxOfNote(hit.note)?.group.locked) { draw(); return; }
-      const edge = hit.grace ? null : edgeOf(hit.note, x);
+      const edge = hit.grace ? null : hit.edge || edgeOf(hit.note, x);
       if (edge) {
         S.drag = resizeDrag(hit.note, hit.lane, edge, x, t, e.altKey, snapshotEdit());
         S.lastPointerX = e.clientX; S.lastPointerY = e.clientY;
@@ -548,17 +551,18 @@ export function init_interaction() {
     const defaultTrace = noMod && S.toolMode === "trace";
     const wantTrace = tool === "trace";
     const wantMarquee = e.shiftKey || tool === "marquee";
-    const altHit = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey ? pickNote(t, pitch, pitchAtExact(y)) : null;
+    const edgeHit = !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+      (e.altKey || ['pan', 'select', 'trace'].includes(S.toolMode)) ? pickNoteEdge(x, y) : null;
+    const altHit = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey ? edgeHit || pickNote(t, pitch, pitchAtExact(y)) : null;
     const altResize = altHit && !altHit.grace && edgeOf(altHit.note, x)
       && canEditLane(altHit.lane) && !boxOfNote(altHit.note)?.group.locked;
     const wantFrame = (e.altKey && !altResize) || tool === "frame";
     const wantSlice = sliceHeld && noMod;
     const plainSelect = altResize || (noMod && (["select", "pan"].includes(S.toolMode) || defaultTrace));
-    const noteHit = plainSelect ? pickNote(t, pitch, pitchAtExact(y)) : null;
+    const noteHit = plainSelect ? edgeHit || pickNote(t, pitch, pitchAtExact(y)) : null;
 
-    // Existing range edges stay grabbable in every tool, including the default
-    // Trace tool, and take priority over notes and reference boxes behind them.
-    if (!e.altKey && !e.shiftKey && !wantSlice) {
+    // Range edges stay grabbable in every tool, except on an actual note edge.
+    if (!e.altKey && !e.shiftKey && !wantSlice && !edgeHit) {
       const edge = regionEdgeAt(x);
       if (edge) {
         e.preventDefault();
@@ -568,11 +572,15 @@ export function init_interaction() {
     }
   
     // A selected note's bend curve is edited right on the spectrogram: drag a
-    // control point onto what the audio actually shows. Checked before every
-    // other gesture so a handle floating above its note stays grabbable — but
-    // only in the Select tool with no Ctrl/Shift, so trace and marquee are never
-    // blocked. Alt still reaches here (it means "place freely", not "frame").
-    if (plainSelect && startEffectGesture(e, x, y)) return;
+    // control point onto what the audio actually shows. A coincident note edge
+    // shares the handle by drag direction; unrelated handles cannot steal it.
+    if (plainSelect && !wantSlice && edgeHit && edgeHit.lane !== activeLane()) {
+      startNotePointerGesture(e, x, y, t, edgeHit); return;
+    }
+    if (plainSelect && !wantSlice && startEffectGesture(e, x, y, edgeHit)) return;
+    // A note's actual resize edge wins over surrounding reference/shape boxes
+    // and effect-start handles. Their exposed borders/handles remain usable.
+    if (plainSelect && !wantSlice && edgeHit) { startNotePointerGesture(e, x, y, t, edgeHit); return; }
     // Similar-passage suggestions on screen: placing goes through the buttons
     // beside the focused match; a click outside every match dismisses them. Either
     // way the click falls through to normal editing.
@@ -758,6 +766,10 @@ export function init_interaction() {
     const [x, y] = localXY(e);
     const markerCursor = markerCursorAt(x, y) || commentCursorAt(x, y) || markerRails().map(rail => rail.cursorAt?.(x, y)).find(Boolean);
     if (markerCursor) { stage.style.cursor = markerCursor; return; }
+    const edgeHit = !e.ctrlKey && !e.metaKey && !e.shiftKey && pickNoteEdge(x, y);
+    if (edgeHit) {
+      stage.style.cursor = edgeHit.lane === activeLane() ? 'ew-resize' : 'pointer'; return;
+    }
     if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && regionEdgeAt(x)) {
       stage.style.cursor = "ew-resize"; return;
     }

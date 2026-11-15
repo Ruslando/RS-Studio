@@ -29,7 +29,7 @@ import { syncProjectStartHandle } from "./project-position.js";
 import { markerRails, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, pitchAtExact, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
 import { edgeOf } from "./interaction.js";
-import { hoveredStageNote, localXY, pickNote } from "./stage-hit-test.js";
+import { hoveredStageNote, localXY, pickNote, pickNoteEdge } from "./stage-hit-test.js";
 import { activeLane, canEditLane, laneOf } from "./lanes.js";
 import { auditionNote, playbackTime, transportPlaying } from "./playback.js";
 import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } from "./references.js";
@@ -911,7 +911,9 @@ export function init_draw() {
     if (S.drag || !S.state) return;
     const [x, y] = localXY(e);
     const t = timeAt(x), pitch = pitchAt(y);
-    const hit = pickNote(t, pitch, pitchAtExact(y));
+    const edgeHit = !e.ctrlKey && !e.metaKey && !e.shiftKey && !S.sliceHeld &&
+      (e.altKey || ['pan', 'select', 'trace'].includes(S.toolMode)) ? pickNoteEdge(x, y) : null;
+    const hit = edgeHit || pickNote(t, pitch, pitchAtExact(y));
     const mi = S.matches.length && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey ? matchAt(x, y) : -1;
     const prevMatchHover = S.matchHover;
     S.matchHover = mi;
@@ -928,6 +930,7 @@ export function init_draw() {
     mkCur = mkCur || markerCursorAt(x, y) || commentCursorAt(x, y);
     if (e.ctrlKey || e.metaKey) cur = "crosshair";           // Ctrl/Cmd-drag draws; click toggles selection
     else if (mkCur) cur = mkCur;                             // over a timing or section flag
+    else if (edgeHit) cur = edgeHit.lane === activeLane() ? 'ew-resize' : 'pointer';
     else if (!e.shiftKey && !S.sliceHeld && regionEdgeAt(x)) cur = "ew-resize";
     else if (mi >= 0) cur = "pointer";                       // hovering a suggestion
     else if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && refLockAt(x, y)) cur = "pointer";   // pitch lock toggle
@@ -952,7 +955,7 @@ export function init_draw() {
     } : tip);
     showTooltip(blocks, e.clientX, e.clientY);
     S.refEdgeHover = rbe && canEditLane(rbe.lane) ? rbe : null;
-    S.refLockHover = refLockAt(x, y);
+    S.refLockHover = edgeHit ? null : refLockAt(x, y);
     S.mouseX = x;
     S.mouseY = y;
     S.hoverNote = hit ? hit.note : null;

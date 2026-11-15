@@ -5,7 +5,8 @@ import { easedCurveAt } from "./bend.js";
 import { noteRibbon } from "./note-render.js";
 import { scroll, stage } from "./dom.js";
 import { withMemo } from "./paint-memo.js";
-import { timeAt, pitchAt, pitchAtExact } from "./geometry.js";
+import { timeAt, pitchAt, pitchAtExact, xOf } from "./geometry.js";
+import { EDGE_PX } from './constants.js';
 import { gridAt } from "./grid-read.js";
 import { activeLane } from "./lanes.js";
 import { boxOfNote } from "./references.js";
@@ -33,6 +34,32 @@ function noteAt(lane, t, pitch, exact = pitch) {
 }
 
 export const pickNote = (t, pitch, exact = pitch) => withMemo(() => pickNoteNow(t, pitch, exact));
+
+// An edge has a grab zone on both sides of the rendered note, including when
+// its bend/whammy/slide has moved it away from the note's original pitch row.
+export const pickNoteEdge = (x, y) => withMemo(() => {
+  if (!S.state) return null;
+  const active = activeLane(), exact = pitchAtExact(y);
+  for (const lane of [active, ...S.state.lanes.filter(lane => lane !== active)]) {
+    if (!lane?.visible || lane.locked) continue;
+    let best = null;
+    for (let i = lane.notes.length - 1; i >= 0; i--) {
+      const note = lane.notes[i];
+      const left = Math.abs(x - xOf(note.start)), right = Math.abs(x - xOf(note.end));
+      if (Math.min(left, right) > EDGE_PX || boxOfNote(note)?.group.locked) continue;
+      const edge = left <= right ? 'l' : 'r', time = edge === 'l' ? note.start : note.end;
+      const ribbon = noteRibbon(lane, note), curve = pitchCurve(note) || ribbon?.points;
+      const end = !pitchCurve(note) && ribbon ? ribbon.end : note.end;
+      const pitch = note.pitch + (curve ? easedCurveAt(curve, (time - note.start) / Math.max(1e-6, end - note.start)) : 0);
+      if (Math.abs(exact - pitch) > .5) continue;
+      const distance = Math.min(left, right);
+      if (!best || distance < best.distance || (distance === best.distance && S.selection.has(note) && !S.selection.has(best.note)))
+        best = { lane, note, edge, distance };
+    }
+    if (best) return best;
+  }
+  return null;
+});
 
 function pickNoteNow(t, pitch, exact) {
   const order = [activeLane(), ...S.state.lanes.filter((l) => l !== activeLane())];
