@@ -20,7 +20,10 @@ const notes = () => [45, 52, 57, 60, 64].map((pitch, i) => ({ id: `n${i}`, pitch
   assert.ok(markShape(all.slice(0, 2), "shape_2", "handshape"));
   assert.equal(shapeGroups(all).get("shape_2").length, 2);
   assert.equal(shapeGroups(all).get("shape_1").length, 3);
-  assert.equal(shapeLabel(all.slice(0, 2)), "A5", "a handshape carries the plain grip name");
+  assert.equal(shapeLabel(all.slice(0, 2)), "Handshape", "the frame type does not duplicate the chord name above it");
+  renameShape(all, 'shape_2', 'A5');
+  assert.equal(shapeLabel(all.slice(0, 2)), 'Handshape', 'stored grip names do not reintroduce the duplicate chord label');
+  assert.equal(shapeChord(all.slice(0, 2)), 'A5', 'the exported grip name is independent of the frame label');
 
   // A shape down to one note (all others moved, deleted or sent away) is no shape.
   assert.ok(markShape(all.slice(2, 4), "shape_3", "handshape"));

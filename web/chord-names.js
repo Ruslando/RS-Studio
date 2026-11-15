@@ -32,7 +32,7 @@ function chordsOf(notes) {
 const cache = new WeakMap();
 export function laneChords(lane) {
   if (!lane?.notes?.length) return [];
-  const signature = JSON.stringify(lane.notes.map((n) => [n.id, n.start, n.pitch, !!n.fx?.dead,
+  const signature = JSON.stringify(lane.notes.map((n) => [n.id, n.start, n.end, n.pitch, !!n.fx?.dead,
     n.chordName, n.chordNameFor, n.arrangement?.notes?.map((a) => a.pitch)]));
   const hit = cache.get(lane);
   // The same notes, not only alike ones: undo puts back copies with the same ids, and
@@ -57,6 +57,10 @@ export const chordOfNote = (lane, note) => laneChords(lane).find((c) => c.notes.
 
 // Give a chord a name, or "" (or the engine's own) to return it to the engine's.
 export function setChordName(chord, text) {
+  if (chord.chords) {
+    for (const member of chord.chords) setChordName(member, text);
+    return;
+  }
   const name = text.trim();
   for (const n of chord.notes) {
     if (name && name !== chord.auto) { n.chordName = name; n.chordNameFor = chord.key; }

@@ -53,7 +53,8 @@ let renderRepeatMirror = null;
 // What the pane paints with besides the project. Pointer and gesture state is
 // the live pane's alone, so the other pane paints without it.
 const SWAPPED = ["zoomX", "zoomY", "pxPerSec", "stageHeight", "spectImg", "spectPixels", "mouseX", "mouseY",
-  "hoverNote", "drag", "marquee", "matchHover", "refEdgeHover", "refLockHover", "rulerHover"];
+  "hoverNote", "drag", "marquee", "matchHover", "refEdgeHover", "refLockHover", "rulerHover",
+  "motifLabels", "shapeLabels", "chordLabels", "refBadges", "refBoxRects", "refLocks"];
 const IDLE = { spectPixels: null, mouseX: null, mouseY: null, hoverNote: null, drag: null, marquee: null,
   matchHover: -1, refEdgeHover: null, refLockHover: null, rulerHover: null };
 

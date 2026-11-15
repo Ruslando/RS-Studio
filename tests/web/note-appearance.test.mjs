@@ -43,11 +43,9 @@ try {
   assert.equal(painted[0].text, 'E4 S2:F7 PM', 'one shared capo preference changes spectrogram fret labels');
   S.hoverNote = null;
   S.state.rowH = 10; painted.length = 0; drawNoteFx();
-  assert.equal(parseFloat(painted[0].font.match(/[\d.]+(?=px)/)[0]), 7.5,
-    'vertical zoom reduces label size with note height');
+  assert.equal(painted.length, 0, 'short rows omit labels instead of shrinking them');
   S.state.rowH = 20; note.end = 1.12; painted.length = 0; drawNoteFx();
-  assert.ok(parseFloat(painted[0].font.match(/[\d.]+(?=px)/)[0]) < 12,
-    'short notes shrink labels to fit their width');
+  assert.equal(painted.length, 0, 'short notes omit labels instead of shrinking them to fit');
   note.end = 1.03; painted.length = 0; drawNoteFx();
   assert.equal(painted.length, 0, 'tiny note bodies remain visible without oversized labels');
   note.end = 2; S.state.rowH = 5; painted.length = 0; drawNoteFx();
@@ -56,9 +54,9 @@ try {
   for (const id of ['spectrogramNoteNames', 'spectrogramPositions', 'spectrogramEffects']) controls[id].value = 'off';
   painted.length = 0; drawNoteFx();
   assert.equal(painted.length, 0, 'Off hides every label including slide glyphs');
-  delete note.slide; note.end = 1.13; strokes = 0; drawNoteFx();
+  delete note.slide; note.end = 1.13; note.preciseLength = true; strokes = 0; drawNoteFx();
   assert.equal(strokes, 1, 'a free-length note retains its hollow tail marker with labels off');
-  note.end = 1.125; strokes = 0; drawNoteFx();
+  note.end = 1.125; delete note.preciseLength; strokes = 0; drawNoteFx();
   assert.equal(strokes, 0, 'a regular grid duration has no free-length marker');
   controls.spectrogramNoteNames.value = 'always'; note.end = 2; lane.active = true;
   painted.length = 0; transforms.length = 0; ctx.globalAlpha = 1;

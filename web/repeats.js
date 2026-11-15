@@ -23,6 +23,8 @@ import { hideTooltip } from './tooltip.js';
 import { noteRibbon } from './note-render.js';
 import { paintNoteGlow } from './canvas-components.js';
 import { modalOpen } from './modal-focus.js';
+import { paintZoneFrame, paintZoneLabel, zoneFrameEdge, ZONE_PADDING } from './zone-frame.js';
+import { railsBottom } from './marker-rails.js';
 import { nid } from './ids.js';
 import { renderRepeatPicker } from './repeat-picker.js';
 import { playbackTime, seekPlayback, setPlaybackZone, transportPlaying } from './playback.js';
@@ -691,17 +693,15 @@ export function drawRepeats() {
   sctx.save(); sctx.font = stageUi(11, 700); sctx.textAlign = 'left'; sctx.textBaseline = 'bottom';
   group.copies.forEach((copy, i) => {
     const bounds = repeatCopyBounds(state, copy);
-    const x0 = xOf(bounds.t0) - 6, x1 = xOf(bounds.t1) + 6;
+    const x0 = xOf(bounds.t0) - ZONE_PADDING, x1 = xOf(bounds.t1) + ZONE_PADDING;
     if (x0 > right || x1 < left) return;
-    const y0 = yOf(bounds.pHi) - 21, y1 = yOf(bounds.pLo) + S.state.rowH + 7;
+    const y0 = yOf(bounds.pHi) - ZONE_PADDING, y1 = yOf(bounds.pLo) + S.state.rowH + ZONE_PADDING;
     const active = copy === focused;
-    sctx.globalAlpha = active ? 1 : 0.5;
-    sctx.strokeStyle = PAINT.trace; sctx.lineWidth = active ? 2 : 1; sctx.setLineDash(active ? [] : [5, 3]);
-    sctx.strokeRect(x0, y0, Math.max(1, x1 - x0), y1 - y0); sctx.setLineDash([]);
-    // Only the shown instance keeps its label in view; another's scrolls off with its frame.
-    const label = `${group.name} · instance ${originalIndex(state, copy)}`, labelX = active ? Math.max(left + 3, x0 + 3) : x0 + 3;
-    sctx.strokeStyle = halo(); sctx.lineWidth = 3; sctx.strokeText(label, labelX, y0 - 2);
-    sctx.fillStyle = PAINT.trace; sctx.fillText(label, labelX, y0 - 2);
+    const hovered = !!zoneFrameEdge({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, S.mouseX, S.mouseY);
+    sctx.globalAlpha = hovered || active ? 1 : 0.5;
+    paintZoneFrame(sctx, { x: x0, y: y0, width: x1 - x0, height: y1 - y0, color: PAINT.trace, emphasized: hovered });
+    paintZoneLabel(sctx, { title: `${group.name} · instance ${originalIndex(state, copy)}`,
+      x0, x1, y0, left, right, top: scroll.scrollTop + railsBottom() + 2, color: PAINT.trace, halo: halo() });
   });
   sctx.globalAlpha = 1;
   for (const note of comparedHere(state)) {

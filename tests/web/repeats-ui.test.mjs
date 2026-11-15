@@ -75,11 +75,12 @@ try {
 
     './escape-stack.js': { ESC_DEPTH: { transient: 20, popover: 100 }, registerEscapeLayer() {} },
     './tracing.js': { clearMatches() {} },
+    './marker-rails.js': { railsBottom: () => 0 },
     './floating-position.js': { placeFloatingAvoiding: (...args) => anchors.push(args) }, './tooltip.js': { hideTooltip() {} },
     './ids.js': { nid: () => `new${++noteUid}` },
     './note-render.js': { noteRibbon: () => null }, './canvas-components.js': { paintNoteGlow(context, level) { glows.push({ ...context.path, level }); } }, './constants.js': { stageUi: () => '11px sans-serif' },
     './stage-paint.js': { PAINT: { trace: 'blue', warn: 'orange', error: 'pink', accent: 'cyan', ok: 'green' }, halo: () => 'black' },
-  }, { './repeat-picker.js': true, './repeats-core.js': true, './util.js': true, './repeat-change-details.js': true, './whammy.js': true, './note-effects.js': true });
+  }, { './zone-frame.js': true, './repeat-picker.js': true, './repeats-core.js': true, './util.js': true, './repeat-change-details.js': true, './whammy.js': true, './note-effects.js': true });
   module.init_repeats({ ...{ setHandAnchor(lane, t, fret) { lane.handHolds = (lane.handHolds || []).filter(h => h.t !== t); if (fret != null) lane.handHolds.push({t, fret}); commit(); } }, ...{ setFretboardVisible: on => { assert.equal(on, true); fretboardOpens++; } } });
   const changePosition = () => controls.repeatChangePosition.children.find(option => option.value === controls.repeatChangePosition.value)?.textContent.split(' · ')[0];
   const before = structuredClone(lane.notes);

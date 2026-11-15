@@ -15,13 +15,12 @@ export function paintNoteLabel(ctx, text, x, width, y, height = Infinity, availa
   const preferred = noteLabelSize();
   ctx.font = stageUi(preferred, 600);
   const measured = ctx.measureText(text).width;
-  const size = Math.min(preferred, height * 0.75,
-    availableWidth > 0 ? preferred * Math.max(0, availableWidth - 4) / measured : preferred);
-  // At overview scales, leave the note body visible instead of drawing tiny text.
-  if (size < 6) { ctx.restore(); return; }
-  ctx.font = stageUi(size, 600);
+  // A note name has one configured, readable size. It either fits within the
+  // note body or is omitted; scaling it down makes neighboring names look like
+  // a different kind of annotation and is harder to read than no label.
+  if (height < preferred + 4 || availableWidth < measured + 6) { ctx.restore(); return; }
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = 2.5 * size / preferred; ctx.strokeStyle = halo(); ctx.fillStyle = PAINT.text;
+  ctx.lineWidth = 2.5; ctx.strokeStyle = halo(); ctx.fillStyle = PAINT.text;
   ctx.strokeText(text, x + width / 2, y);
   ctx.fillText(text, x + width / 2, y);
   ctx.restore();

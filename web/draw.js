@@ -36,6 +36,8 @@ import { drawReferences, refBadgeAt, refBoxEdgeAt, refEdgeCursor, refLockAt } fr
 import { motifGroups, motifName } from "./motifs.js";
 import { shapeGroups, shapeLabel, shapeLabelAt } from "./shapes.js";
 import { laneChords } from "./chord-names.js";
+import { chordNameRanges, layoutChordName } from './chord-name-ranges.js';
+import { beginZoneLabels, paintZoneFrame, paintZoneLabel, reserveZoneLabels, zoneFrameEdge, zoneLabelAt, ZONE_PADDING } from './zone-frame.js';
 import { PAINT, WASH, halo, veil, wash } from "./stage-paint.js";
 import { S } from "./store.js";
 import { laneFretCount, laneFretTuning } from "./lane-tuning.js";
@@ -44,7 +46,7 @@ import { cancelHoverPreview, drawHeatThresholdOverlay, drawMatches, drawTracePat
 import { dpr, grayHex, hexA } from "./util.js";
 import { moveViewportTo, followViewportTo } from "./viewport-motion.js";
 import { addedArrangementNotes, omittedArrangementNotes, outOfFretboardRange } from "./voicing-core.js";
-import { displayGridStep, gridSegments, segBarSec } from "./grid-read.js";
+import { displayGridStep, gridAt, gridSegments, segBarSec, segBeatSec } from "./grid-read.js";
 import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from "./spectrogram-labels.js";
 
 const omittedArrangementCache = new WeakMap();
@@ -237,33 +239,26 @@ function drawMotifs(vx0, vx1) {
       return { id, notes, t0, t1, pLo, pHi };
     }).sort((a, b) => a.t0 - b.t0);
     groups.forEach(({ id, t0, t1, pLo, pHi }) => {
-      const x0 = xOf(t0) - 4;
-      const x1 = xOf(t1) + 4;
+      const x0 = xOf(t0) - ZONE_PADDING;
+      const x1 = xOf(t1) + ZONE_PADDING;
       if (x0 > vx1 || x1 < vx0) return;
       // yOf grows downward, so the highest pitch gives the smallest y.
-      const y0 = yOf(pHi) - 5;
-      const y1 = yOf(pLo) + S.state.rowH + 5;
+      const y0 = yOf(pHi) - ZONE_PADDING;
+      const y1 = yOf(pLo) + S.state.rowH + ZONE_PADDING;
+      const hovered = !!zoneFrameEdge({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, S.mouseX, S.mouseY);
       sctx.save();
-      sctx.globalAlpha = lane === active ? 0.95 : 0.55;
-      sctx.strokeStyle = PAINT.motif; sctx.lineWidth = 1.5;
-      sctx.setLineDash([6, 4]);
-      sctx.strokeRect(x0, y0, Math.max(1, x1 - x0), y1 - y0);
-      sctx.setLineDash([]);
-      const label = motifName(lane.notes, id);
-      // Drawn above the box, not inside it, so nothing clips it — free-floating 11.
-      sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
-      const labelX = Math.max(x0 + 3, vx0 + 3), labelY = y0 - 2;
-      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(label, labelX, labelY);
-      sctx.lineWidth = 1; sctx.fillStyle = PAINT.motif; sctx.fillText(label, labelX, labelY);
-      S.motifLabels.push({ lane, id, x: labelX - 3, y: labelY - 13, w: sctx.measureText(label).width + 6, h: 14 });
+      sctx.globalAlpha = hovered ? 1 : lane === active ? 0.95 : 0.55;
+      paintZoneFrame(sctx, { x: x0, y: y0, width: x1 - x0, height: y1 - y0, color: PAINT.motif, emphasized: hovered });
+      const label = paintZoneLabel(sctx, { title: motifName(lane.notes, id), x0, x1, y0, left: vx0, right: vx1,
+        top: scroll.scrollTop + railsBottom() + 2, color: PAINT.motif, halo: halo() });
+      if (label) S.motifLabels.push({ lane, id, ...label });
       sctx.restore();
     });
   }
 }
 
-// Rocksmith grip frames (shapes.js): a solid box for a handshape, dashed for an
-// arpeggio, as the game draws them, with the grip's name underneath so it does
-// not collide with motif and chord labels above the notes. A shape the export has
+// Rocksmith grip zones use the shared frame, with their type above the chord.
+// A shape the export has
 // a problem with (rocksmith-check.js) is framed in the warning colour, and its
 // label says when it goes out as plain notes; the problem itself is listed under
 // Warnings. The labels are kept for clicks: select the shape, double-click renames.
@@ -275,70 +270,79 @@ function drawShapes(vx0, vx1) {
     const problems = rocksmithShapeProblems(lane);
     for (const [id, notes] of shapeGroups(lane.notes)) {
       const problem = problems.get(id);
-      const color = problem ? PAINT.warn : PAINT.shape;
+      const color = problem ? PAINT.warn : notes[0].shapeKind === 'arpeggio' ? PAINT.arpeggio : PAINT.shape;
       let t0 = Infinity, t1 = -Infinity, pLo = Infinity, pHi = -Infinity;
       for (const n of notes) {
         t0 = Math.min(t0, n.start); t1 = Math.max(t1, n.end);
         pLo = Math.min(pLo, n.pitch); pHi = Math.max(pHi, n.pitch);
       }
-      const x0 = xOf(t0) - 7, x1 = xOf(t1) + 7;
+      const x0 = xOf(t0) - ZONE_PADDING, x1 = xOf(t1) + ZONE_PADDING;
       if (x0 > vx1 || x1 < vx0) continue;
-      const y0 = yOf(pHi) - 8, y1 = yOf(pLo) + S.state.rowH + 8;
+      const y0 = yOf(pHi) - ZONE_PADDING, y1 = yOf(pLo) + S.state.rowH + ZONE_PADDING;
+      const hovered = !!zoneFrameEdge({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, S.mouseX, S.mouseY);
       sctx.save();
-      sctx.globalAlpha = lane === active ? 0.95 : 0.55;
-      sctx.strokeStyle = color; sctx.lineWidth = 2;
-      if (notes[0].shapeKind === "arpeggio") sctx.setLineDash([3, 3]);
-      sctx.strokeRect(x0, y0, Math.max(1, x1 - x0), y1 - y0);
-      sctx.setLineDash([]);
-      const label = shapeLabel(notes) + (problem?.plain ? " · exported as plain notes" : problem ? " · check hand" : "");
-      sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "top";
-      const labelX = Math.max(x0 + 3, vx0 + 3), labelY = y1 + 2;
-      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(label, labelX, labelY);
-      sctx.lineWidth = 1; sctx.fillStyle = color; sctx.fillText(label, labelX, labelY);
-      S.shapeLabels.push({ lane, id, x: labelX - 3, y: labelY - 1, w: sctx.measureText(label).width + 6, h: 14 });
+      sctx.globalAlpha = hovered ? 1 : lane === active ? 0.95 : 0.55;
+      paintZoneFrame(sctx, { x: x0, y: y0, width: x1 - x0, height: y1 - y0, color, emphasized: hovered });
+      const title = shapeLabel(notes) + (problem?.plain ? " · exported as plain notes" : problem ? " · check hand" : "");
+      const label = paintZoneLabel(sctx, { title, x0, x1, y0, left: vx0, right: vx1,
+        top: scroll.scrollTop + railsBottom() + 2, color, halo: halo() });
+      if (label) S.shapeLabels.push({ lane, id, ...label });
       sctx.restore();
     }
   }
 }
 
-// Each chord's name at its top left, in its layer's hue (rule 24), as chord
-// charts write a name above the chord. Drawn after the warning marks and the
-// motif and reference labels that sit in the same corner, and moved right past
-// them. A name that would run into the one before it is left out, as a note label
-// too wide for its note is.
+// Consecutive repetitions share a name and a time bracket. Text stays inside
+// its visible range, including when its beginning is outside the viewport.
 const CHORD_NAME_PX = 11;
 function drawChordNames(vx0, vx1) {
   S.chordLabels = [];
   const active = activeLane();
   const taken = [
     ...warningMarks.map((m) => ({ x: m.x0, y: m.y0, w: m.x1 - m.x0, h: m.y1 - m.y0 })),
-    ...S.motifLabels, ...(S.shapeLabels || []), ...(S.refBadges || []),
   ];
-  const hits = (r) => taken.find((o) => r.x < o.x + o.w && o.x < r.x + r.w && r.y < o.y + o.h && o.y < r.y + r.h);
+  beginZoneLabels(sctx, taken);
   sctx.save();
   sctx.font = stageUi(CHORD_NAME_PX, 600); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
   sctx.lineJoin = "round";
   for (const lane of S.state.lanes) {
     if (!lane.visible || !lane.notes?.length) continue;
-    let lastRight = -Infinity;
-    for (const chord of laneChords(lane)) {
-      if (!chord.name) continue;
-      const w = sctx.measureText(chord.name).width;
-      let x = xOf(chord.t0);
-      if (x > vx1) break;
-      if (x + w < vx0) continue;
-      // Clear of the selection's outline, which sits 3 px around the notes.
-      const y = yOf(Math.max(...chord.notes.map((n) => n.pitch))) - 6;
-      const box = { x: x - 2, y: y - CHORD_NAME_PX - 2, w: w + 4, h: CHORD_NAME_PX + 3 };
-      for (let o = hits(box), n = 0; o && n < 4; o = hits(box), n++) box.x = o.x + o.w + 2;
-      x = box.x + 2;
-      if (x < lastRight + 6) continue;
+    const chords = laneChords(lane);
+    for (const chord of chordNameRanges(chords, lane.notes, time => segBeatSec(gridAt(time)) / 2)) {
+      const start = xOf(chord.t0), end = xOf(chord.t1);
+      if (start > vx1) break;
+      if (end < vx0) continue;
+      const left = Math.max(start, vx0), rangeRight = Math.min(end, vx1);
+      if (rangeRight <= left) continue;
+      // A lone chord name may use the quiet timeline until the next attack.
+      // Its frame (for repeated chords) remains tied to its musical range.
+      const next = chords.find(candidate => candidate.t0 > chord.t0 + 1e-6);
+      const right = chord.chords.length === 1
+        ? Math.max(rangeRight, Math.min(next ? xOf(next.t0) - 3 : vx1, vx1))
+        : rangeRight;
+      const placement = layoutChordName(chord, {
+        left, right, y: yOf(Math.max(...chord.notes.map(note => note.pitch))) - 5,
+        top: scroll.scrollTop + railsBottom() + 2, rangeRight,
+      }, text => sctx.measureText(text).width, taken);
+      if (!placement) continue;
+      const { name, labelBox, rangeBox, bracketY, x, y } = placement;
       sctx.globalAlpha = lane === active ? 1 : 0.55;
-      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(chord.name, x, y);
-      sctx.fillStyle = lane.color; sctx.fillText(chord.name, x, y);
-      S.chordLabels.push({ lane, chord, ...box });
-      taken.push(box);
-      lastRight = x + w;
+      if (rangeBox) {
+        sctx.strokeStyle = lane.color; sctx.lineWidth = 1;
+        sctx.beginPath();
+        sctx.moveTo(left, bracketY); sctx.lineTo(rangeRight, bracketY);
+        if (start >= vx0) { sctx.moveTo(start, bracketY); sctx.lineTo(start, bracketY + 3); }
+        if (end <= vx1) { sctx.moveTo(rangeRight, bracketY); sctx.lineTo(rangeRight, bracketY + 3); }
+        sctx.stroke();
+      }
+      if (name) {
+        sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(name, x, y);
+        sctx.fillStyle = lane.color; sctx.fillText(name, x, y);
+      }
+      S.chordLabels.push({ lane, chord, rangeBox, ...(labelBox || rangeBox) });
+      if (labelBox) taken.push(labelBox);
+      if (rangeBox) taken.push(rangeBox);
+      reserveZoneLabels(sctx, [labelBox, rangeBox]);
     }
   }
   sctx.restore();
@@ -800,8 +804,6 @@ function paintStage() {
   paintMotionGhosts(vx0, vx1);
   sctx.globalAlpha = 1;
   sctx.textBaseline = "alphabetic";
-  drawMotifs(vx0, vx1);
-  drawShapes(vx0, vx1);
   drawDropPreview();
   drawNoteFx();
   drawBendHandles(vx0, vx1);   // over the names, which would hide them
@@ -811,8 +813,10 @@ function paintStage() {
   drawStackBadges(stackBadges, vx0, vx1);
   paintDiagnosticMarks(vx0, vx1, frameIssues);
   drawGhostNotes(ghostNotes);
-  drawReferences();
   drawChordNames(vx0, vx1);
+  drawMotifs(vx0, vx1);
+  drawShapes(vx0, vx1);
+  drawReferences();
   drawMatches();
   drawRepeats();
 
@@ -949,7 +953,10 @@ export function init_draw() {
     const tips = warningMarks.filter(m => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1).map(m => m.tip)
       .sort((a, b) => (b.tone === "error") - (a.tone === "error"));
     const railTip = !tips.length && markerRails().map(rail => rail.tipAt?.(x, y)).find(Boolean);
-    const blocks = (railTip ? [railTip] : tips).map(tip => tip.diagnostic ? {
+    const chordTip = !tips.length && !railTip && S.chordLabels.find(label =>
+      [label, label.rangeBox].some(box => box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h));
+    const zoneTip = !tips.length && !railTip && !chordTip && zoneLabelAt(sctx, x, y);
+    const blocks = (railTip ? [railTip] : chordTip ? [{ title: chordTip.chord.name }] : zoneTip ? [{ title: zoneTip.title }] : tips).map(tip => tip.diagnostic ? {
       ...tip, actionKey: issueInstanceKey(tip.diagnostic.lane, tip.diagnostic.issue),
       actions: issueIgnoreActions(tip.diagnostic.lane, tip.diagnostic.issue),
     } : tip);

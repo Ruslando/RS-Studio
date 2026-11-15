@@ -22,6 +22,8 @@ import { PAINT, WASH, halo } from "./stage-paint.js";
 import { S } from "./store.js";
 import { projectStart } from "./project-position-core.js";
 import { clamp, hexA } from "./util.js";
+import { paintZoneFrame, paintZoneLabel, reserveZoneLabels, zoneFrameEdge } from './zone-frame.js';
+import { railsBottom } from './marker-rails.js';
 
 // What a note carries for its own occurrence only: motif and grip-shape marks.
 const OCCURRENCE_FIELDS = ["motifId", "motifName", "shapeId", "shapeKind", "shapeName"];
@@ -593,16 +595,15 @@ export function drawReferences() {
       if (x0 > vx1 || x1 < vx0) continue;   // off-screen
       const y0 = yOf(box.pHi), y1 = yOf(box.pLo) + S.state.rowH;   // y0 = top (high pitch)
       const lit = edge && edge.lane === lane && edge.ref === ref && edge.i === i;
-      if (lit) { sctx.fillStyle = hexA(REF_ACCENT, WASH); sctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
-      sctx.lineWidth = on || lit ? 2 : 1;
-      sctx.strokeStyle = on || lit ? REF_ACCENT : hexA(REF_ACCENT, 0.5);
-      sctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0, y1 - y0);
+      paintZoneFrame(sctx, { x: x0, y: y0, width: x1 - x0, height: y1 - y0,
+        color: on || lit ? REF_ACCENT : hexA(REF_ACCENT, 0.5), fill: lit ? hexA(REF_ACCENT, WASH) : null,
+        emphasized: on || lit });
       S.refBoxRects.push({ ref, lane, i, x0, y0, x1, y1 });
-      // Above the box, as a motif's label: free-floating 11, haloed.
-      const lx = Math.max(x0 + 3, vx0 + 3), ly = clamp(y0 - 2, vy0 + 14, vy0 + S.stageHeight - 1);
-      const tw = sctx.measureText(label).width;
-      sctx.lineWidth = 3; sctx.strokeStyle = halo(); sctx.strokeText(label, lx, ly);
-      sctx.fillStyle = on || lit ? REF_ACCENT : hexA(REF_ACCENT, 0.85); sctx.fillText(label, lx, ly);
+      const caption = paintZoneLabel(sctx, { title: label, x0, x1, y0, left: vx0, right: vx1,
+        top: vy0 + railsBottom() + 2, color: REF_ACCENT, halo: halo(), reserveRight: 2 * TRANSPOSE_PX + 12 });
+      const lx = caption ? caption.x + 2 : Math.max(x0 + 6, vx0 + 6);
+      const ly = caption?.baseline ?? clamp(y0 - 4, vy0 + 14, vy0 + S.stageHeight - 1);
+      const tw = caption ? caption.w - 4 : 0;
       // Transposition sits at the box's right end, above it like the label (never
       // over the label on a narrow box). Its state is said in words only while it
       // is pointed at, or for a moment after it was flipped.
@@ -615,6 +616,7 @@ export function drawReferences() {
       for (const image of [stageIcon(group.locked ? "lock" : "unlock", halo(), 5, draw), stageIcon(group.locked ? "lock" : "unlock", editColor, 2, draw)])
         if (image.complete) sctx.drawImage(image, editX, ly - TRANSPOSE_PX, TRANSPOSE_PX, TRANSPOSE_PX);
       S.refLocks.push({ x: editX - 2, y: ly - TRANSPOSE_PX - 2, w: TRANSPOSE_PX + 4, h: TRANSPOSE_PX + 4, lane, ref, i, kind: "edit" });
+      reserveZoneLabels(sctx, S.refLocks.slice(-2));
       const hovered = S.refLockHover && S.refLockHover.lane === lane && S.refLockHover.ref === ref && S.refLockHover.i === i;
       const flashed = S.refLockFlash && S.refLockFlash.lane === lane && S.refLockFlash.ref === ref && performance.now() < S.refLockFlash.until;
       if (hovered || flashed) {
@@ -627,7 +629,7 @@ export function drawReferences() {
         sctx.fillStyle = color; sctx.fillText(words, wx, ly);
         sctx.restore();
       }
-      S.refBadges.push({ x: lx - 3, y: ly - 13, w: tw + 6, h: 14, lane, box, ref, i });   // click selects, drag moves, double-click renames
+      if (caption) S.refBadges.push({ ...caption, lane, box, ref, i });   // click selects, drag moves, double-click renames
     }
   });
   sctx.restore();
@@ -659,11 +661,8 @@ export function refBadgeAt(x, y) {
 // A reference box edge or corner under a world-space point: { ref, lane, i, edge }
 // where edge holds "t"/"b" (pitch) and/or "l"/"r" (time), e.g. "tl"; or null.
 export function refBoxEdgeAt(x, y) {
-  const T = REF_BOX_EDGE_TOL;
   for (const b of S.refBoxRects) {
-    if (x < b.x0 - T || x > b.x1 + T || y < b.y0 - T || y > b.y1 + T) continue;
-    const e = (Math.abs(y - b.y0) <= T ? "t" : Math.abs(y - b.y1) <= T ? "b" : "")
-            + (Math.abs(x - b.x0) <= T ? "l" : Math.abs(x - b.x1) <= T ? "r" : "");
+    const e = zoneFrameEdge({ x: b.x0, y: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0 }, x, y, REF_BOX_EDGE_TOL);
     if (e) return { ref: b.ref, lane: b.lane, i: b.i, edge: e };
   }
   return null;

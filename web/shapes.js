@@ -27,10 +27,12 @@ export function shapeGroups(notes) {
 export const shapeChord = (notes) =>
   notes.find((n) => n.shapeName)?.shapeName || detectChord([...new Set(notes.map((n) => n.pitch))]);
 
-// The name the stage shows. An arpeggio reads "Am arp", as the game marks it.
+// Chord names already appear above the notes. A handshape only needs its type
+// below the frame, independently of the grip name kept for export.
 export function shapeLabel(notes) {
-  const kind = notes[0]?.shapeKind, chord = shapeChord(notes);
-  return kind === "arpeggio" ? `${chord || "Arpeggio"} arp` : chord || "Handshape";
+  if (notes[0]?.shapeKind === 'handshape') return 'Handshape';
+  const chord = shapeChord(notes);
+  return `${chord || "Arpeggio"} arp`;
 }
 
 // What the name field offers before the user types: the automatic chord name.
