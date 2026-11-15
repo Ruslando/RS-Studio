@@ -215,63 +215,67 @@ function wireLaneDrag(row, lane) {
   });
 }
 
+// Construct the same layer row for the editor and its inert appearance preview.
+export function createLaneRow(lane, { preview = false } = {}) {
+  const row = document.createElement("div");
+  row.dataset.lane = lane.id;
+  row.className = "lane-row arriving" + (lane.active ? " active" : "") + (lane.locked ? " locked" : "")
+    + (lane.muted ? " muted" : "") + (lane.visible ? "" : " hiddenLane");
+  // Clicking the row (anywhere but a control) makes it the active edit target.
+  row.addEventListener("click", () => activateLane(lane));
+
+  const dot = document.createElement("span");
+  dot.className = "lane-dot"; dot.style.background = lane.color;
+
+  const name = document.createElement("span");
+  name.className = "lane-name"; name.textContent = lane.name;
+  name.addEventListener("dblclick", (e) => { e.stopPropagation(); beginRename(lane, row, name); });
+
+  const count = document.createElement("span");
+  count.className = "count";
+  if (preview) count.textContent = lane.previewDescription;
+  else lane._count = count;   // filled by refreshCounts below
+
+  // An eye, struck through (via CSS) when the layer is hidden.
+  const vis = laneBtn("lane-btn vis-btn" + (lane.visible ? "" : " off"), ICON.eye,
+    lane.visible ? "Hide note layer (also mutes it)" : "Show note layer in the editor",
+    () => setLaneVisible(lane, !lane.visible));
+  vis.setAttribute("aria-pressed", String(lane.visible));
+
+  // Lock = visible but read-only: you can still see (and hear) the layer, but
+  // its notes can't be selected, moved, traced, or deleted.
+  const lock = laneBtn("lane-btn lock-btn" + (lane.locked ? " on" : ""), lane.locked ? ICON.lock : ICON.unlock,
+    lane.locked ? "Locked — click to allow editing" : "Lock note layer (view-only)",
+    () => toggleLaneLock(lane));
+  lock.setAttribute("aria-pressed", String(lane.locked));
+
+  const vol = volumeControl(lane, { name: lane.name,
+    onChange: () => applyLaneVolume(lane),
+    onMute: () => toggleLaneMute(lane), onDone: refreshSaveState });
+  if (!preview && !busLevel("notes")) vol.classList.add("dim");   // silent by the bus
+
+  // Edit opens this layer's name, color, instrument, tuning, tablature role,
+  // and volume panel.
+  const edit = laneBtn("lane-btn edit-btn", ICON.edit, "Edit note layer settings",
+    () => { activateLane(lane); openLayerSettings(); });
+
+  const ctrls = document.createElement("div");
+  ctrls.className = "lane-ctrls";
+  // Fixed action column: note counts never change the buttons' position.
+  ctrls.append(edit, lock, vis, vol);
+
+  row.append(dot, name, count, ctrls);
+  if (!preview) wireLaneDrag(row, lane);
+  return row;
+}
+
 export function renderLanes() {
   syncTiming();   // every layer switch ends here
   const actions = document.getElementById('noteLayerActions');
   mountBus("notes", "layers", "All note layers", {
     apply: () => editLanes().forEach(applyLaneVolume), rerender: renderLanes, done: refreshSaveState });
   lanesEl.innerHTML = "";
-  for (const lane of editLanes()) {
-    const row = document.createElement("div");
-    row.dataset.lane = lane.id;
-    row.className = "lane-row arriving" + (lane.active ? " active" : "") + (lane.locked ? " locked" : "")
-      + (lane.muted ? " muted" : "") + (lane.visible ? "" : " hiddenLane");
-    // Clicking the row (anywhere but a control) makes it the active edit target.
-    row.addEventListener("click", () => activateLane(lane));
-
-    const dot = document.createElement("span");
-    dot.className = "lane-dot"; dot.style.background = lane.color;
-
-    const name = document.createElement("span");
-    name.className = "lane-name"; name.textContent = lane.name;
-    name.addEventListener("dblclick", (e) => { e.stopPropagation(); beginRename(lane, row, name); });
-
-    const count = document.createElement("span");
-    count.className = "count";
-    lane._count = count;   // filled by refreshCounts below
-
-    // An eye, struck through (via CSS) when the layer is hidden.
-    const vis = laneBtn("lane-btn vis-btn" + (lane.visible ? "" : " off"), ICON.eye,
-      lane.visible ? "Hide note layer (also mutes it)" : "Show note layer in the editor",
-      () => setLaneVisible(lane, !lane.visible));
-    vis.setAttribute("aria-pressed", String(lane.visible));
-
-    // Lock = visible but read-only: you can still see (and hear) the layer, but
-    // its notes can't be selected, moved, traced, or deleted.
-    const lock = laneBtn("lane-btn lock-btn" + (lane.locked ? " on" : ""), lane.locked ? ICON.lock : ICON.unlock,
-      lane.locked ? "Locked — click to allow editing" : "Lock note layer (view-only)",
-      () => toggleLaneLock(lane));
-    lock.setAttribute("aria-pressed", String(lane.locked));
-
-    const vol = volumeControl(lane, { name: lane.name,
-      onChange: () => applyLaneVolume(lane),
-      onMute: () => toggleLaneMute(lane), onDone: refreshSaveState });
-    if (!busLevel("notes")) vol.classList.add("dim");   // silent by the bus
-
-    // Edit opens this layer's name, color, instrument, tuning, tablature role,
-    // and volume panel.
-    const edit = laneBtn("lane-btn edit-btn", ICON.edit, "Edit note layer settings",
-      () => { activateLane(lane); openLayerSettings(); });
-
-    const ctrls = document.createElement("div");
-    ctrls.className = "lane-ctrls";
-    // Fixed action column: note counts never change the buttons' position.
-    ctrls.append(edit, lock, vis, vol);
-
-    row.append(dot, name, count, ctrls);
-    wireLaneDrag(row, lane);
-    lanesEl.append(row);
-  }
+  for (const lane of editLanes()) lanesEl.append(createLaneRow(lane));
 
   const add = document.createElement("button");
   add.id = "addLane"; add.className = 'icon-btn icon-btn--compact layer-add';

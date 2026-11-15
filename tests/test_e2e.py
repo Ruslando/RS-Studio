@@ -627,6 +627,42 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#actionConfirmAccept')).to_be_enabled()
         page.keyboard.press('Escape')
 
+    def test_appearance_previews_use_sample_layers_instead_of_project_data(self):
+        page = self.page
+        page.add_init_script('''(() => {
+            const attach = Element.prototype.attachShadow;
+            window.previewRoots = [];
+            Element.prototype.attachShadow = function(options) {
+                const root = attach.call(this, options);
+                if (this.classList.contains('theme-preview-surface')) window.previewRoots.push(root);
+                return root;
+            };
+        })()''')
+        page.reload()
+        self.open_reference_project()
+        page.evaluate('''async () => {
+            const lane = (await import('/store.js')).S.state.editLanes[0];
+            lane.name = 'Private project layer';
+            lane.color = '#123456';
+            (await import('/lanes.js')).renderLanes();
+            (await import('/ui.js')).openSettingsModal('appearance');
+        }''')
+        page.wait_for_function('window.previewRoots.length === 2 && window.previewRoots.every(root => root.querySelectorAll(".lane-row").length === 3)')
+        previews = page.evaluate('''() => window.previewRoots.map(root => ({
+            names: [...root.querySelectorAll('.lane-name')].map(el => el.textContent),
+            descriptions: [...root.querySelectorAll('.lane-row .count')].map(el => el.textContent),
+            color: root.querySelector('.lane-dot').style.background,
+            projectName: root.querySelector('#projTabs')?.textContent || '',
+            canvas: root.querySelector('canvas').toDataURL(),
+        }))''')
+        self.assertEqual(previews[0], previews[1])
+        self.assertEqual(previews[0]['names'], ['Lead guitar', 'Rhythm guitar', 'Bass'])
+        self.assertEqual(previews[0]['descriptions'], [
+            'Lead · E Standard · 128 notes', 'Rhythm · E Standard · 96 notes',
+            'Bass · E Standard · 64 notes'])
+        self.assertNotEqual(previews[0]['color'], 'rgb(18, 52, 86)')
+        self.assertNotIn('Private project layer', str(previews))
+
     def test_appearance_previews_keep_their_theme_when_app_theme_changes(self):
         page = self.page
         page.click('#welcomeSettingsBtn')

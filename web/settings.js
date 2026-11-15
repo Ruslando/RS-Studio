@@ -14,6 +14,8 @@ import { initTimelineScrollPreview, refreshTimelineScrollPreview } from "./timel
 import { initEditorPreviews, refreshEditorPreviews } from "./editor-previews.js";
 import { migrateNoteAppearanceSettings } from "./spectrogram-labels.js";
 import { normalizeTraceRange } from './drawing-options.js';
+import { createLaneRow } from './lanes.js';
+import { icon } from './icons.js';
 
 const KEY = "cw.settings";
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
@@ -60,15 +62,35 @@ function setTheme(t) {
 }
 
 // The theme previews show a slice of the editor built from its real parts: the
-// toolbar and the note layer section are clones of the live ones, the stage strip
+// toolbar and note layer section use the editor's real markup and row renderer;
+// their content is fixed example data, never the open project's. The stage strip
 // is painted by the stage's own painters (its colours are the spectral palette,
 // which is the same in both themes). The clones live in a closed shadow root with
 // the app's stylesheets, so they keep their ids, and with them their real styling,
-// without clashing with the app's. Rebuilt whenever the pane shows, so they are the
-// current ones; laid out at a fixed natural width and zoomed to fit.
+// without clashing with the app's. They are laid out at a fixed natural width
+// and zoomed to fit.
 // The sidebar keeps its real 300px; padding and gap are --s-sibling (8px) each.
 const STAGE_W = 520, STAGE_H = 150, PREVIEW_W = 300 + STAGE_W + 3 * 8;
 const previewRoots = new WeakMap();
+const PREVIEW_LAYERS = [
+  { name: 'Lead guitar', color: EDIT_PALETTE[0], active: true, previewDescription: 'Lead · E Standard · 128 notes' },
+  { name: 'Rhythm guitar', color: EDIT_PALETTE[1], previewDescription: 'Rhythm · E Standard · 96 notes' },
+  { name: 'Bass', color: EDIT_PALETTE[2], previewDescription: 'Bass · E Standard · 64 notes' },
+];
+
+function previewToolbar() {
+  const toolbar = $('transport').cloneNode(true);
+  // These sections can contain the current project's name or status.
+  toolbar.querySelector('#appbar')?.remove();
+  toolbar.querySelector('#projTabs')?.remove();
+  const time = toolbar.querySelector('#time');
+  time.textContent = '0:00 / 0:00'; time.hidden = true;
+  toolbar.querySelector('#speed').value = '1';
+  toolbar.querySelector('#metro').checked = false;
+  toolbar.querySelector('#seek').value = '0';
+  toolbar.querySelector('#play').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  return toolbar;
+}
 
 function paintPreviewStage(canvas, color) {
   const dp = dpr();
@@ -86,7 +108,6 @@ function paintPreviewStage(canvas, color) {
 }
 
 function renderThemePreviews() {
-  const active = document.querySelector('#lanes .lane-row.active');
   const sheets = [...document.querySelectorAll('link[rel="stylesheet"]')];
   for (const surface of document.querySelectorAll('.theme-preview-surface')) {
     let root = previewRoots.get(surface);
@@ -98,16 +119,28 @@ function renderThemePreviews() {
     content.style.zoom = String(surface.clientWidth / PREVIEW_W);
     const side = document.createElement('aside');
     side.id = 'sidebar';
-    side.append($('layersSection').cloneNode(true));
+    const section = $('layersSection').cloneNode(true);
+    // The header may contain the live project's bus-volume control.
+    section.querySelector('.side-header').replaceChildren(section.querySelector('.side-label'));
+    const lanes = section.querySelector('#lanes');
+    lanes.replaceChildren(...PREVIEW_LAYERS.map((sample, index) => createLaneRow({
+      ...sample, id: `preview-${index}`, visible: true, locked: false, muted: false, volume: 1,
+    }, { preview: true })));
+    const actions = document.createElement('div');
+    actions.id = 'noteLayerActions'; actions.className = 'layer-actions';
+    const add = document.createElement('button');
+    add.id = 'addLane'; add.className = 'icon-btn icon-btn--compact layer-add';
+    add.innerHTML = icon('plus', 16);
+    actions.append(add); lanes.append(actions); side.append(section);
     const stage = document.createElement('canvas');
     stage.className = 'theme-preview-stage';
     stage.style.width = STAGE_W + 'px'; stage.style.height = STAGE_H + 'px';
     const editor = document.createElement('div');
     editor.className = 'theme-preview-editor';
     editor.append(side, stage);
-    content.append($('transport').cloneNode(true), editor);
+    content.append(previewToolbar(), editor);
     root.replaceChildren(...sheets.map(link => link.cloneNode()), content);
-    paintPreviewStage(stage, active?.querySelector('.lane-dot')?.style.background || EDIT_PALETTE[0]);
+    paintPreviewStage(stage, PREVIEW_LAYERS[0].color);
   }
 }
 
