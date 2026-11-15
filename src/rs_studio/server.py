@@ -5,7 +5,7 @@ manifest into a job folder alongside the heavy artifacts (spectrogram PNG,
 playback audio), so the editor can serve them over HTTP without recomputing.
 
 Projects are saved/loaded as a self-contained `.chart` file (a ZIP bundling the
-manifest + the spectrogram and playback assets it references). Opening a `.chart`
+manifest + source audio, spectrogram and playback assets). Opening a `.chart`
 extracts it into a fresh cache dir; clearing the cache wipes `.runs/` but leaves
 your saved `.chart` files untouched.
 
@@ -91,8 +91,8 @@ from .paths import data_root, resource_root
 #       shutil.copyfileobj will fill the disk instead.
 #
 #   The project's source audio  -> _project_input()
-#       Reads the recorded `inputRel`. Globbing for `input.*` picks
-#       alphabetically, which is not "the audio this project uses".
+#       Reads `inputRel`, or the full-song playback in older portable projects.
+#       Only projects without a recorded source may discover legacy `input.*`.
 #
 #   Fetching a client URL       -> _require_public_url()
 #       Applied to the URL AND to every redirect hop; otherwise the server is an
@@ -261,7 +261,7 @@ def _find_stem(m: dict, stem: str) -> dict:
 
 
 def _project_assets(m: dict) -> list[str]:
-    """Job-dir-relative paths of the files a manifest needs to render & play."""
+    """Job-relative assets needed for playback, analysis and export."""
     rels: list[str] = []
     for st in m.get("stems", []):
         img = st.get("spectrogram", {}).get("image")
@@ -276,7 +276,10 @@ def _project_assets(m: dict) -> list[str]:
     cover = (m.get("metadata") or {}).get("coverArt")
     if cover:
         rels.append(cover)
-    return rels
+    source = m.get("inputRel")
+    if source:
+        rels.append(source)
+    return list(dict.fromkeys(rels))
 
 
 def _clean_text(value, limit: int = 160) -> str:
@@ -635,17 +638,24 @@ def _ingest_full_song(job: str, m: dict, audio: UploadFile) -> pipeline.StemView
 
 
 def _project_input(job_dir: Path, m: dict, missing: str = "Original audio missing") -> Path:
-    """The audio this project was built from, for the separators to work on."""
+    """The full song: prefer its upload, then the portable playback copy."""
     recorded = _safe_project_file(job_dir, m.get("inputRel"))
-    if recorded and recorded.exists():
+    if recorded and recorded.is_file():
         return recorded
-    # Projects created before `inputRel` existed: newest wins. Not exact, but it
-    # is at least the file uploaded last, where alphabetical order was picking
-    # `.mp3` over the `.wav` that replaced it.
-    candidates = sorted(job_dir.glob("input.*"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not candidates:
-        raise HTTPException(status_code=404, detail=missing)
-    return candidates[0]
+    # Discover uploads only for projects created before inputRel existed. A
+    # missing recorded source must not select an unrelated, superseded upload.
+    if not m.get("inputRel"):
+        candidates = sorted((p for p in job_dir.glob("input.*") if p.is_file()),
+                            key=lambda p: p.stat().st_mtime, reverse=True)
+        if candidates:
+            return candidates[0]
+    # Older .chart bundles contain playback assets, not the original uploads.
+    # Select the full song explicitly: another stem may be first or soloed.
+    mix = next((st for st in m.get("stems", []) if st.get("id") == "mix"), {})
+    playback = _safe_project_file(job_dir, mix.get("audio_rel"))
+    if playback and playback.is_file():
+        return playback
+    raise HTTPException(status_code=404, detail=missing)
 
 
 def _drop_separation_cache(job_dir: Path, m: dict) -> None:
@@ -1474,14 +1484,21 @@ def api_project_delete(job: str) -> JSONResponse:
 def api_project_export(job: str, payload: dict = Body(default={})) -> Response:
     """Persist the editor state, then return a self-contained `.chart` bundle.
 
-    The bundle is a ZIP holding the manifest (with the job id stripped, so it's
-    portable) plus every spectrogram/playback asset the manifest references.
+    The bundle includes the full-song source as well as playback/spectrogram
+    assets. Its inputRel always refers to the bundled source, including when an
+    older project has only its full-song playback copy left.
     """
     m = _apply_save_payload(job, payload or {})
     job_dir = _job_dir(job)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         portable = {k: v for k, v in m.items() if k != "job"}
+        try:
+            source = _project_input(job_dir, m)
+        except HTTPException:
+            portable.pop("inputRel", None)  # score-only or genuinely missing audio
+        else:
+            portable["inputRel"] = source.resolve().relative_to(job_dir.resolve()).as_posix()
         from .sound_presets import portable_tone_lanes
         definitions = payload.get("tonePresets") or {}
         if not isinstance(definitions, dict):
@@ -1491,7 +1508,7 @@ def api_project_export(job: str, payload: dict = Body(default={})) -> Response:
         except (ValueError, TypeError, AttributeError) as exc:
             raise HTTPException(status_code=400, detail=f"Invalid tone preset: {exc}") from exc
         zf.writestr("project.json", json.dumps(portable, indent=2))
-        for rel in _project_assets(m):
+        for rel in _project_assets(portable):
             asset = _safe_project_file(job_dir, rel)
             if asset and asset.exists():
                 zf.write(asset, rel)
@@ -1784,7 +1801,9 @@ def api_stem_replace(job: str, stem_id: str, file: UploadFile) -> JSONResponse:
         # The new full song is what "separate from full song" means from now on.
         # It used to keep pointing at the first upload.
         old = _safe_project_file(job_dir, m.get("inputRel"))
-        if old and old != src_path.resolve():
+        # Older portable projects may use playback_mix.opus as their source.
+        # Ingest has just regenerated that same path for the replacement.
+        if old and old not in (src_path.resolve(), view.audio_path.resolve()):
             old.unlink(missing_ok=True)
         m["inputRel"] = src_path.name
         m["filename"] = file.filename or m.get("filename")
@@ -1965,7 +1984,8 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
     """
     job_dir = _job_dir(job)
     m = _read_manifest(job)
-    source_audio = _project_input(job_dir, m, "Song audio missing")
+    source_audio = _project_input(
+        job_dir, m, "Full song audio is unavailable. Upload or replace the Full song audio, then export again.")
     from .rocksmith import builder as rs_builder  # lazy: pulls in cryptography/PIL
 
     cover_path = _safe_project_file(job_dir, (m.get("metadata") or {}).get("coverArt"))

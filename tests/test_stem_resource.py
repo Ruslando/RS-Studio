@@ -13,6 +13,29 @@ from rs_studio import pipeline, server
 class ReplacedFullSongTests(unittest.TestCase):
     """Replacing the full song must make it the separation source (it kept the old one)."""
 
+    def test_replace_portable_source_keeps_regenerated_playback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = Path(tmp)
+            playback = job_dir / "playback_mix.opus"
+            playback.write_bytes(b"old playback")
+            m = {"inputRel": playback.name, "stems": [
+                {"id": "mix", "name": "Full song", "audio_rel": playback.name, "spectrogram": {}}]}
+
+            def ingest(*args):
+                playback.write_bytes(b"new playback")
+                return pipeline.StemView("mix", "Full song", playback, {"duration": 2.0})
+
+            with patch.object(server, "_read_manifest", return_value=m), \
+                 patch.object(server, "_write_manifest"), \
+                 patch.object(server, "_job_dir", return_value=job_dir), \
+                 patch.object(server, "_cache_busted", return_value=({}, "u")), \
+                 patch.object(server.pipeline, "ingest_stem", side_effect=ingest):
+                server.api_stem_replace("j", "mix", UploadFile(io.BytesIO(b"new source"), filename="song.wav"))
+
+            self.assertEqual(playback.read_bytes(), b"new playback")
+            self.assertEqual(m["inputRel"], "upload_mix.wav")
+            self.assertEqual(server._project_input(job_dir, m).read_bytes(), b"new source")
+
     def test_replace_full_song_then_separate_uses_new_file_and_records_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             job_dir = Path(tmp)
