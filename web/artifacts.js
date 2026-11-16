@@ -1,7 +1,6 @@
 // Project references, indexed directly from their persisted capture boxes.
 import { $, audio, scroll } from "./dom.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
-import { snap } from "./grid-read.js";
 import { localXY } from "./stage-hit-test.js";
 import { activateLane, activeLane, canEditLane, renderLanes } from "./lanes.js";
 import { seekPlayback } from "./playback.js";
@@ -26,8 +25,8 @@ import { initRocksmithIssues, renderRocksmithIssues, scheduleCheck } from './roc
 import { PAINT } from './stage-paint.js';
 
 const rows = new Map();
-let dragged = null;
-const NO_DRAG_IMAGE = Object.assign(new Image(), { src: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });   // 1px transparent   // the reference or motif being dragged onto the stage
+let dragged = null;   // the reference or motif being dragged onto the stage
+let pressed = null;   // a row pressed but not yet moved far enough to drag
 const collapsedArtifacts = new Set();
 const disclosureIcon = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
@@ -188,18 +187,14 @@ export function renderArtifacts() {
       occurrences.querySelector('.artifact-jump').click();
     });
     // Drag onto the spectrogram to place another copy where it is dropped.
-    row.draggable = true;
-    row.addEventListener('dragstart', event => {
-      if (kind === 'reference' && S.state?.editLanes.find(item => item.id === lane.id)?.refBoxes?.[ref]?.locked) {
-        event.preventDefault(); return;
-      }
-      dragged = {kind, laneId: lane.id, ref, position: Number(occurrences.dataset.instance || 1) - 1};
-      event.dataTransfer.effectAllowed = 'copy';
-      // The stage preview is the feedback; no ghost of the row follows the pointer.
-      event.dataTransfer.setDragImage(NO_DRAG_IMAGE, 0, 0);
-      event.dataTransfer.setData('text/plain', name.textContent);
+    // Pointer events, not native drag and drop: in the desktop shell (Qt WebEngine
+    // on Wayland) a native drag showed "no drop" and the drop never arrived.
+    row.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || event.target.closest('button:not(.artifact-reference-toggle), input')) return;
+      if (kind === 'reference' && S.state?.editLanes.find(item => item.id === lane.id)?.refBoxes?.[ref]?.locked) return;
+      pressed = {x: event.clientX, y: event.clientY,
+        item: {kind, laneId: lane.id, ref, position: Number(occurrences.dataset.instance || 1) - 1}};
     });
-    row.addEventListener('dragend', () => { dragged = null; clearDropPreview(); });
     row.append(occurrences); rows.set(rowKey, row); syncPitchLock(row, lane, ref);
     list.insertBefore(row, list.children[order] || null);
   }
@@ -213,7 +208,6 @@ function syncPitchLock(row, lane, ref) {
   const transpose = row.querySelector('.artifact-transpose');
   if (!transpose) return;
   const group = lane.refBoxes?.[ref], free = !!group?.transposable, locked = !!group?.locked;
-  row.draggable = !locked;
   row.toggleAttribute('data-locked', locked);
   transpose.disabled = locked;
   if (transpose.dataset.free !== String(free)) {
@@ -239,8 +233,11 @@ function artifactNotes({kind, lane, ref, position}) {
   const group = lane.refBoxes?.[ref];
   if (!group?.anchors?.length) return {notes: [], shift: 0};
   const order = group.anchors.map((a, i) => i).sort((p, q) => group.anchors[p] - group.anchors[q]);
-  const index = order[Math.min(position, order.length - 1)];
-  return {notes: notesInBox(occurrenceBox(group, index, laneClock(lane)), lane.notes), shift: shiftOf(group, index)};
+  const index = order[Math.min(position, order.length - 1)], clock = laneClock(lane);
+  const notes = notesInBox(occurrenceBox(group, index, clock), lane.notes);
+  // Beats from the first note to the anchor, kept by the paste (edit.js pasteAnchor).
+  const lead = notes.length ? clock.beatAt(group.anchors[index]) - clock.beatAt(Math.min(...notes.map(n => n.start))) : 0;
+  return {notes, shift: shiftOf(group, index), lead};
 }
 
 // A drop at world (x, y) puts the first note under the pointer. A motif keeps
@@ -248,29 +245,33 @@ function artifactNotes({kind, lane, ref, position}) {
 // is not locked.
 function dropPlacement(item, notes, x, y, lane) {
   const first = [...notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch)[0];
-  const t = timeAt(x), dt = snap(Math.max(0, t));   // where the first note lands: the preview's key
-  if (item.kind !== 'motif' && !lane.refBoxes?.[item.ref]?.transposable) return { t, dt, shift: 0 };
+  const t = timeAt(x);
+  if (item.kind !== 'motif' && !lane.refBoxes?.[item.ref]?.transposable) return { t, shift: 0 };
   const spec = S.state.spec, lo = Math.min(...notes.map(n => n.pitch)), hi = Math.max(...notes.map(n => n.pitch));
   const shift = Math.max(spec.midi_low - lo, Math.min(spec.midi_high - hi, Math.round(pitchAt(y)) - first.pitch));
-  return { t, dt, shift };
+  return { t, shift };
 }
 
 // Where the drop would put the notes, worked out exactly as doPaste does:
 // a reference keeps its shape, a copy snaps each note onto the grid.
 function showDropPreview(item, x, y) {
   const lane = S.state?.editLanes.find(l => l.id === item.laneId);
-  const { notes, shift: base } = lane ? artifactNotes({...item, lane}) : {};
+  // The dragged notes and their clip do not change during a drag; clipOf fingers
+  // the whole lane, far too slow to repeat on every dragover.
+  item.source ??= lane ? artifactNotes({...item, lane}) : {};
+  const { notes, shift: base } = item.source;
   if (!notes?.length) return;
-  const { dt, shift } = dropPlacement(item, notes, x, y, lane);
-  const key = `${item.kind}:${item.laneId}:${item.ref}:${item.position}:${dt}:${shift}`;
-  if (S.dropPreview?.key === key) return;
+  const { t, shift } = dropPlacement(item, notes, x, y, lane);
   // Exactly as doPaste will place them: in beats on this layer's grid.
-  const placed = placeClip(clipOf(notes), lane, dropPlacement(item, notes, x, y, lane).t);
+  item.source.clip ??= clipOf(notes);
+  const placed = placeClip(item.source.clip, lane, t);
+  const key = `${item.kind}:${item.laneId}:${item.ref}:${item.position}:${placed[0]?.start}:${shift}`;
+  if (S.dropPreview?.key === key) return;
   const moved = notes.map((n, k) => ({ start: placed[k].start, end: placed[k].end, pitch: n.pitch + shift }));
-  // A reference's new box is anchored at its earliest note, as linkPasteAsReference does.
-  const group = item.kind === 'reference' && lane.refBoxes?.[item.ref];
-  const at = group && Math.min(...moved.map(n => n.start));
-  const box = group ? { ...spanAt(group, at, laneClock(lane)), pLo: group.pLo + base + shift, pHi: group.pHi + base + shift } : null;
+  // A reference's new box is anchored as linkPasteAsReference does it.
+  const group = item.kind === 'reference' && lane.refBoxes?.[item.ref], clock = laneClock(lane);
+  const at = group && clock.timeAt(clock.beatAt(Math.min(...moved.map(n => n.start))) + item.source.lead);
+  const box = group ? { ...spanAt(group, at, clock), pLo: group.pLo + base + shift, pHi: group.pHi + base + shift } : null;
   S.dropPreview = { key, kind: item.kind, color: lane.color, notes: moved, box,
     blocked: overlapsRefBox(lane, box || noteBounds(moved)) };
   draw();
@@ -296,23 +297,32 @@ async function dropArtifact(item, x, y) {
 }
 
 export function init_artifacts() {
-  // On the scroller, not the canvas: overlays above the canvas receive the events.
-  scroll.addEventListener('dragover', event => {
+  // Anything inside the scroller counts: overlays above the canvas are under the pointer.
+  const overStage = event => scroll.contains(document.elementFromPoint(event.clientX, event.clientY));
+  const endDrag = () => {
+    pressed = dragged = null; clearDropPreview();
+    document.body.classList.remove('artifact-dragging', 'artifact-drop-blocked');
+  };
+  window.addEventListener('pointermove', event => {
+    if (pressed && !dragged && Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 4) {
+      dragged = pressed.item; stopArtifactPreview();
+      getSelection()?.removeAllRanges(); document.body.classList.add('artifact-dragging');
+    }
     if (!dragged) return;
-    event.preventDefault();
-    showDropPreview(dragged, ...localXY(event));
-    event.dataTransfer.dropEffect = S.dropPreview?.blocked ? 'none' : 'copy';
+    if (overStage(event)) showDropPreview(dragged, ...localXY(event)); else clearDropPreview();
+    document.body.classList.toggle('artifact-drop-blocked', !S.dropPreview || !!S.dropPreview.blocked);
   });
-  scroll.addEventListener('dragleave', event => {
-    if (dragged && !scroll.contains(event.relatedTarget)) clearDropPreview();
-  });
-  scroll.addEventListener('drop', event => {
-    if (!dragged) return;
-    event.preventDefault();
-    const item = dragged, blocked = S.dropPreview?.blocked; dragged = null; clearDropPreview();
+  window.addEventListener('pointerup', event => {
+    const item = dragged, blocked = S.dropPreview?.blocked, over = item && overStage(event);
+    endDrag();
+    if (!over) return;
+    // Keys go back to the editor, not the row's button the drag started on.
+    if (document.activeElement?.closest?.('.artifact-row')) document.activeElement.blur();
     if (blocked) { toast('A reference cannot sit inside another reference'); return; }
     dropArtifact(item, ...localXY(event));
   });
+  window.addEventListener('pointercancel', endDrag);
+  window.addEventListener('blur', endDrag);
   initArtifactsPanel();
   initMarkerArtifacts();
   initRocksmithIssues();

@@ -372,6 +372,8 @@ body.col-resizing { cursor: col-resize; user-select: none; }
 /* Whatever height was stored, the notes below always keep a header and a row. */
 #stemsSection { max-height: calc(100% - 96px); }
 body.row-resizing { cursor: row-resize; user-select: none; }
+body.artifact-dragging, body.artifact-dragging * { cursor: copy !important; user-select: none; }
+body.artifact-drop-blocked, body.artifact-drop-blocked * { cursor: no-drop !important; }
 
 .stem-row, .lane-row { padding-left: var(--s-row); }
 .lane-row:not(#addLane) {

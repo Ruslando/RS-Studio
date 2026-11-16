@@ -4377,12 +4377,12 @@ class EndToEndTests(unittest.TestCase):
             const { S } = await import('/store.js');
             const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
             const at = { clientX: r.left + xOf(17) - scroll.scrollLeft + 2, clientY: r.top + 100 };
-            const dataTransfer = new DataTransfer();
-            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
-            const row = document.querySelector('.artifact-row[data-reference="1"]');
-            fire(row, 'dragstart'); fire(scroll, 'dragover', at);
+            const fire = (el, type, extra = {}) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, ...extra }));
+            const row = document.querySelector('.artifact-row[data-reference="1"] .artifact-name');
+            const from = row.getBoundingClientRect();
+            fire(row, 'pointerdown', { clientX: from.left + 2, clientY: from.top + 2 }); fire(window, 'pointermove', at);
             const blocked = S.dropPreview.blocked;
-            fire(scroll, 'drop', at); fire(row, 'dragend');
+            fire(window, 'pointerup', at);
             return blocked;
         }""")
         self.assertTrue(blocked)
