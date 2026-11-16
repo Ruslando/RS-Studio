@@ -139,13 +139,16 @@ const issue = (kind, tone, text, notes, time = notes[0].start) => {
 };
 
 // Whether `time` misses the grid: `grid` is [{ t, step }], one per tempo segment.
+// Within a millisecond counts as on it: the Rocksmith export keeps milliseconds,
+// and a grid line moved by a fraction of one (a tempo marker typed with three
+// decimals) must not flag every note that sat on the old line.
 export function offGrid(time, grid) {
   if (!grid?.length) return false;
   let segment = grid[0];
   for (let i = 1; i < grid.length && grid[i].t <= time + 1e-6; i++) segment = grid[i];
   if (!(segment.step > 0)) return false;
   const cell = (time - segment.t) / segment.step;
-  return Math.abs(cell - Math.round(cell)) * segment.step >= 1e-4;
+  return Math.abs(cell - Math.round(cell)) * segment.step >= 1e-3;
 }
 
 export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, revision = 0, grid = null) {

@@ -16,6 +16,10 @@ assert.deepEqual(laneIssues({ notes: [note(1, 2.25, 40)] }, BASS, 20, 0, grid)
   'an off-grid end is flagged even when the start is on a grid line');
 assert.deepEqual(laneIssues({ notes: [note(1, 2, 40), note(2, 2.5, 41)] }, BASS, 20, 0, grid), [],
   'grid lines follow the active segment subdivision');
+assert.deepEqual(laneIssues({ notes: [note(1.0002, 2.0002, 40)] }, BASS, 20, 0, grid), [],
+  'a fraction of a millisecond off a line is on it');
+assert.deepEqual(laneIssues({ notes: [note(1.002, 2.002, 40)] }, BASS, 20, 0, grid)
+  .map(({ kind }) => kind), ['offGrid'], 'two milliseconds is not');
 assert.deepEqual(laneIssues({ notes: [note(1.25, 2.25, 40, { preciseLength: true })] }, BASS, 20, 0, grid), [],
   'precise-length notes are exempt from the grid-fit warning');
 const stretched = note(0, 1, 48, { pos: { string: 0, fret: 5 } });
