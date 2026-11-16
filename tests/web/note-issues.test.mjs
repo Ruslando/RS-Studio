@@ -5,8 +5,17 @@ import { laneIssues, stackClusters } from '../../web/note-issues.js';
 const BASS = [43, 38, 33, 28];
 const note = (start, end, pitch, more = {}) => ({ id: `n${start}${pitch}`, start, end, pitch, ...more });
 const kinds = (notes) => laneIssues({ notes }, BASS, 20).map((i) => [i.kind, i.tone]);
+const grid = [{ t: 0, step: 1 }, { t: 2, step: 0.5 }];
 
 assert.deepEqual(kinds([note(0, 1, 33, { fx: { dead: true } }), note(1, 2, 44)]), [], 'playable notes are fine');
+assert.deepEqual(laneIssues({ notes: [note(1.25, 2.25, 40)] }, BASS, 20, 0, grid)
+  .map(({ kind, tone }) => [kind, tone]), [['offGrid', 'warning']],
+  'a grid-sized note shifted between grid lines is flagged');
+assert.deepEqual(laneIssues({ notes: [note(1, 2.25, 40)] }, BASS, 20, 0, grid)
+  .map(({ kind, tone }) => [kind, tone]), [['offGrid', 'warning']],
+  'an off-grid end is flagged even when the start is on a grid line');
+assert.deepEqual(laneIssues({ notes: [note(1, 2, 40), note(2, 2.5, 41)] }, BASS, 20, 0, grid), [],
+  'grid lines follow the active segment subdivision');
 const stretched = note(0, 1, 48, { pos: { string: 0, fret: 5 } });
 assert.deepEqual(laneIssues({ notes: [stretched], handHolds: [{ t: 0, fret: 1 }] }, BASS, 20)
   .map(({ kind, tone }) => [kind, tone]), [['handStretch', 'warning']], 'more than four frets is a soft-limit warning');

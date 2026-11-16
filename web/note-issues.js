@@ -15,6 +15,7 @@ import { paintMemo } from "./paint-memo.js";
 
 export const ISSUE_TEXT = {
   outOfRange: ["Note is outside the fret range", "No string can play this pitch within the selected fret range. Change the pitch, tuning, or fret range."],
+  offGrid: ["Note does not fit the grid", "The note starts or ends between lines of the current grid. Move its timing to a grid line or adjust the grid."],
   stack: ["Notes with the same pitch overlap", "Notes with the same pitch overlap on the same string or have no separate string positions. Remove the overlap or place them on different strings."],
   bendStack: ["Rocksmith: Bend points have the same time", "Rocksmith keeps only the first bend point at this time. Move or remove the other points."],
   // Positions stay where they are set, so a technique or a shape that no longer fits
@@ -137,10 +138,18 @@ const issue = (kind, tone, text, notes, time = notes[0].start) => {
   return { id: `editor.${group}.${kind}`, kind, tone, title, help, time, notes };
 };
 
-export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, revision = 0) {
+export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, revision = 0, grid = null) {
   if (!lane?.notes?.length) return [];
   const out = [];
   const outside = (n) => outOfFretboardRange(n.pitch, tuning, maxFret);
+  const offGrid = (time) => {
+    if (!grid?.length) return false;
+    let segment = grid[0];
+    for (let i = 1; i < grid.length && grid[i].t <= time + 1e-6; i++) segment = grid[i];
+    if (!(segment.step > 0)) return false;
+    const cell = (time - segment.t) / segment.step;
+    return Math.abs(cell - Math.round(cell)) * segment.step >= 1e-4;
+  };
   const byBeat = new Map();
   // A position the note's technique cannot be played at, said with the reason. A
   // slide is said once, at the note it starts on.
@@ -167,6 +176,7 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
   for (const { notes, kind } of chordWarnings(lane, tuning, maxFret, revision)) if (!notes.some(outside) && !notes.some((n) => misplaced.has(n)))
     out.push({ ...issue("shape", kind === "stretch" ? "note" : "warning", SHAPE_WARNINGS[kind], notes), id: `editor.shape.${kind}` });
   for (const n of lane.notes) {
+    if (offGrid(n.start) || offGrid(n.end)) out.push(issue("offGrid", "warning", ISSUE_TEXT.offGrid, [n]));
     if (outside(n)) out.push(issue("outOfRange", "warning", ISSUE_TEXT.outOfRange, [n]));
     for (const b of stackedBends(n)) out.push(issue("bendStack", "warning", ISSUE_TEXT.bendStack, [n], b.time));
     const adapted = [n.slide?.startsWith("pick") && "pickSlide", n.fx?.ghost && "ghost", n.trill && "trill",

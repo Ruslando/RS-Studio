@@ -18,6 +18,8 @@ import { openDiagnosticMenu } from './editor-menu.js';
 import { buildSpecForLanesAsync } from "./tablature.js";
 import { laneFretCount, laneFretTuning, laneTuning } from "./lane-tuning.js";
 import { laneIssues } from './note-issues.js';
+import { timingData, timingIdOf } from './timing.js';
+import { segStep, timingSegments } from './grid-read.js';
 import { RS_KIND_OPTIONS, isTablatureLane } from './layer-role.js';
 import { rsLeadIn } from './rocksmith-preferences.js';
 import { seekPlayback } from './playback.js';
@@ -154,8 +156,11 @@ export function rowsFor(lane) {
   if (found?.warningIssues) for (const issue of found.warningIssues) rows.push({ ...issue, key: issue.id });
   else for (const text of found?.warnings || []) rows.push({ key: issueId(text), title: text.startsWith('Rocksmith: ') ? text : `Rocksmith: ${text}`, help: '', tone: 'warning', time: null });
   for (const issue of found?.issues || []) rows.push({ ...issue, tone: issueTone(issue), key: issue.id || issueId(issue.code) });
-  if (lane) for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision))
-    rows.push({ ...issue, id: issue.id, key: issue.id, title: issue.title, help: issue.help, tone: issue.tone, time: issue.time, notes: issue.notes });
+  if (lane) {
+    const grid = timingSegments(timingData(timingIdOf(lane))).map(segment => ({ t: segment.t, step: segStep(segment) }));
+    for (const issue of laneIssues(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision, grid))
+      rows.push({ ...issue, id: issue.id, key: issue.id, title: issue.title, help: issue.help, tone: issue.tone, time: issue.time, notes: issue.notes });
+  }
   for (const entry of markerArtifacts(lane)) if (entry.issue && entry.lane === lane)
     rows.push({ id: entry.issue.id, key: entry.issue.id, title: entry.issue.title, help: entry.issue.help, tone: entry.issue.tone, time: entry.t, target: entry.key });
   const slots = new Map();

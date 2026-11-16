@@ -38,6 +38,8 @@ const env = vm.createContext({checkResults: () => env.results || new Map(), S, i
   snapshotEdit: () => structuredClone(S.state.metadata),
   commitDiagnostics: previous => {snapshots.push(previous); commits++;},
   openDiagnosticMenu: (x, y, entries) => {actions = entries;}, draw: noop,
+  timingIdOf: () => 'song', timingData: () => ({grid: {offset: 0, bpm: 60, tsDen: 4, subdiv: 1}, tempoMap: []}),
+  timingSegments: () => [{t: 0}], segStep: () => 1,
   markerArtifacts: () => [], laneFretTuning: () => [64, 59, 55, 50, 45, 40], laneFretCount: () => 24,
   rsLeadIn: () => 0, isTablatureLane: () => false, RS_KIND_OPTIONS: [], icon: () => '', shapeGroups: () => new Map(),
   scroll: {clientWidth: 100, scrollTop: 0}, xOf: t => t, seekPlayback: time => {jumpedTo = time;}, moveViewportTo: noop, stopViewportMotion: noop, stopArtifactPreview: noop,
