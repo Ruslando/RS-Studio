@@ -21,9 +21,9 @@ import { $, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopy
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
 import { currentGridState, gridOffset, restoreGridState } from "./grid-controls.js";
-import { minDur, snapStrayNotes } from "./grid-read.js";
+import { displayGridStep, minDur, snapStrayNotes, timingSegments } from "./grid-read.js";
 import { nid, motifId, shapeId } from "./ids.js";
-import { eachTiming, restoreTimingSnapshot, timingSnapshot } from "./timing.js";
+import { eachTiming, restoreTimingSnapshot, timingData, timingIdOf, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
 import { addCommentAt } from "./comments.js";
 import { addMarkerAtTime } from "./markers.js";
@@ -62,6 +62,7 @@ import { navigateMarker } from "./marker-artifacts.js";
 import { clearMarkerSelection, copyMarkers, cutMarkers, deleteMarkers, forgetMarkerClip, hasMarkerClip, hasMarkerSelection, pasteMarkers } from "./marker-clipboard.js";
 import { normLayerVolume } from "./util.js";
 import { slideFingerGroup, chordColumns, normalizeOverrideInfluence, overrideFlow, placeNote, shapeFault, stepColumnFocus, stepVoiceFocus, voiceNotes, voiceNotesFingered, writeColumnOverride } from "./voicing.js";
+import { hasFreeNoteLength, nearestGridEnd } from "./note-length.js";
 
 // Preserve the editor API for existing integrations. Features use edit-history directly.
 export { snapshotEdit, commit, commitStructure, commitDiagnostics, restoreEditSnapshot, undo, redo, updateUndoButtons } from "./edit-history.js";
@@ -1093,6 +1094,26 @@ function placeNoteMenuBySelection(m, fallbackX, fallbackY) {
   placeCtxMenu(m, x, topY);
 }
 
+function setSelectedNotePrecision() {
+  const notes = [...S.selection].filter((n) => laneOf(n) && canEditLane(laneOf(n)));
+  if (!notes.length) return;
+  const makePrecise = !notes.every(hasFreeNoteLength);
+  const grids = new Map();
+  const prev = snapshotEdit();
+  for (const note of notes) {
+    if (makePrecise) note.preciseLength = true;
+    else {
+      const lane = laneOf(note);
+      if (!grids.has(lane)) grids.set(lane, timingSegments(timingData(timingIdOf(lane))));
+      const end = nearestGridEnd(note.start, note.end, grids.get(lane), displayGridStep);
+      if (end != null) note.end = end;
+      delete note.preciseLength;
+    }
+  }
+  commit(prev, undefined, null, { preserveTiming: true });
+  draw(); refreshTabIfOpen();
+}
+
 // Empty-spectrogram right-click: detection + paste live here (not in the sidebar).
 // atTime = the song time under the cursor, so "Add marker" drops it right there.
 export function openCanvasMenu(clientX, clientY, atTime) {
@@ -1230,6 +1251,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     ? placeNoteMenuBySelection(m, clientX, clientY)
     : placeCtxMenu(m, clientX, clientY);
   const sel = [...S.selection].filter((n) => laneOf(n));
+  const precisionSelection = sel.filter((n) => canEditLane(laneOf(n)));
   // 2+ selected notes = a chord: chord-level Strum becomes available and the
   // single-pitch ornaments (Grace, Trill) drop out; one note is the reverse.
   // (Gates on selection size — a strum across a non-simultaneous run is possible
@@ -1395,6 +1417,10 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // note, whoever set its position.
   const columnActions = [
     ...chordEntry,
+    ...(precisionSelection.length
+      ? [{ label: `${precisionSelection.every(hasFreeNoteLength) ? "✓ " : ""}Precise note length`,
+        kw: "free exact fine duration timing grid alt resize", fn: setSelectedNotePrecision }]
+      : []),
     ...(sel.some((n) => canEditLane(laneOf(n)) && isTablatureLane(laneOf(n)))
       ? [{ label: "Recalculate positions", kw: "revoice refinger reset unpin return automatic fingering position voicing hand",
         fn: revoiceSelection }]

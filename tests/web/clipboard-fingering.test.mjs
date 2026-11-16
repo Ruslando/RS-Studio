@@ -4,7 +4,7 @@ import { noteHandAnchors } from '../../web/clipboard-fingering.js';
 const noop = () => {};
 const source = { id: 'source', visible: true, notes: [
   { id: 'a', pitch: 52, start: 1, end: 1.8, finger: 0, pos: { string: 3, fret: 2 } },
-  { id: 'chord', pitch: 55, start: 1, end: 1.8, finger: 3, pos: { string: 2, fret: 0 } },
+  { id: 'chord', pitch: 55, start: 1, end: 1.8, finger: 3, pos: { string: 2, fret: 0 }, preciseLength: true },
   { id: 'b', pitch: 54, start: 3, end: 3.8, finger: 2, pos: { string: 3, fret: 4 } },
   { id: 'outside', pitch: 57, start: 5, end: 5.8, finger: 4 },
 ], handHolds: [{ id: 'first', t: .9, fret: 5 }, { id: 'second', t: 2.8, fret: 7 }, { id: 'outside', t: 4.9, fret: 9 }] };
@@ -38,12 +38,14 @@ try {
   edit.doCopy();
   const clip = structuredClone(S.clipboard), original = structuredClone(source);
   assert.deepEqual(clip.map(n => n.finger), [0, 3, 2], 'thumb and explicit finger numbers enter the clipboard');
+  assert.deepEqual(clip.map(n => n.preciseLength), [undefined, true, undefined], 'precise-length preference enters the clipboard');
   assert.deepEqual(clip.map(n => n.handAnchor), [5, 5, 7], 'anchors in the preceding gap belong to their copied attack');
   // The clipboard is a snapshot, even if the original fingering changes later.
   source.notes[0].finger = 4; source.handHolds[0].fret = 11;
   await edit.doPaste({ mode: 'copy', at: 10 });
   assert.deepEqual(target.notes.map(n => [n.start, n.finger]), [[10, 0], [10, 3], [11, 2]]);
   assert.deepEqual(target.notes.map(n => n.pos), clip.map(n => n.pos));
+  assert.deepEqual(target.notes.map(n => n.preciseLength), [undefined, true, undefined], 'pasted notes retain precise-length preference');
   assert.ok(target.notes.every(n => !('handAnchor' in n)), 'anchor metadata stays on the lane, not the pasted notes');
   assert.deepEqual(target.handHolds.map(h => [h.t, h.fret]), [[10, 5], [11, 7]],
     'the initial anchor belongs to the first actual note, and equal neighbours are removed');

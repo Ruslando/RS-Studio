@@ -151,6 +151,7 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
     return Math.abs(cell - Math.round(cell)) * segment.step >= 1e-4;
   };
   const byBeat = new Map();
+  const precise = (n) => n.preciseLength === true;
   // A position the note's technique cannot be played at, said with the reason. A
   // slide is said once, at the note it starts on.
   const misplaced = new Set(), columns = chordColumns(lane.notes);
@@ -176,7 +177,8 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
   for (const { notes, kind } of chordWarnings(lane, tuning, maxFret, revision)) if (!notes.some(outside) && !notes.some((n) => misplaced.has(n)))
     out.push({ ...issue("shape", kind === "stretch" ? "note" : "warning", SHAPE_WARNINGS[kind], notes), id: `editor.shape.${kind}` });
   for (const n of lane.notes) {
-    if (offGrid(n.start) || offGrid(n.end)) out.push(issue("offGrid", "warning", ISSUE_TEXT.offGrid, [n]));
+    if (!precise(n) && (offGrid(n.start) || offGrid(n.end)))
+      out.push(issue("offGrid", "warning", ISSUE_TEXT.offGrid, [n]));
     if (outside(n)) out.push(issue("outOfRange", "warning", ISSUE_TEXT.outOfRange, [n]));
     for (const b of stackedBends(n)) out.push(issue("bendStack", "warning", ISSUE_TEXT.bendStack, [n], b.time));
     const adapted = [n.slide?.startsWith("pick") && "pickSlide", n.fx?.ghost && "ghost", n.trill && "trill",

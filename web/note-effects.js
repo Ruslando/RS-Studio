@@ -14,6 +14,9 @@ export const EFFECT_FIELDS = [
   // such thing, so changing them must not take a note off the source-preserving
   // Guitar Pro path.
   "chordDisplay", "ignore", "fingerless", "gripOnly",
+  // Editor-only snap preference. It is copied with the note but is not a
+  // Guitar Pro effect and must not affect source-preserving signatures.
+  "preciseLength",
 ];
 
 // The subset that goes into a change-detection signature — EFFECT_FIELDS minus

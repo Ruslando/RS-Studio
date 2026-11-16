@@ -14,6 +14,23 @@ export function hasFreeNoteLength(note) {
   return note?.preciseLength === true;
 }
 
+// Returning a note to normal length keeps its onset and moves only the end.
+// Tempo markers are grid lines too, even when they truncate a regular cell.
+export function nearestGridEnd(start, end, segments, stepAt) {
+  if (!(end > start) || !segments?.length) return null;
+  const candidates = segments.map(segment => segment.t).filter(time => time > start + 1e-6);
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i], step = stepAt(segment), boundary = segments[i + 1]?.t;
+    if (!(step > 0)) continue;
+    const center = Math.round((end - segment.t) / step);
+    for (let k = center - 1; k <= center + 1; k++) {
+      const time = segment.t + k * step;
+      if (time > start + 1e-6 && (boundary == null || time < boundary - 1e-6)) candidates.push(time);
+    }
+  }
+  return candidates.sort((a, b) => Math.abs(a - end) - Math.abs(b - end) || a - b)[0] ?? null;
+}
+
 // Classify a length only when an explicit precision resize is performed.
 export function isIrregularNoteLength(note, segments) {
   if (!segments.length || !(note.end > note.start)) return false;
