@@ -131,6 +131,12 @@ try {
   S.pxPerSec = 30;
   assert.equal(grid.displayGridStep(grid.gridAt(0)), .5);
   assert.equal(note.start, 1.031, 'zooming never modifies note data');
+  // A stray note pulled onto the grid takes its reference's anchor along.
+  lane.refBoxes = { 1: { anchors: [1.031], rt0: 0, rt1: .5, pLo: 64, pHi: 64 } };
+  grid.snapStrayNotes([lane]);
+  assert.notEqual(note.start, 1.031);
+  assert.deepEqual(lane.refBoxes[1].anchors, [note.start], 'the anchor follows its snapped first note');
+  delete lane.refBoxes;
   assert.deepEqual(grid.snapNote(1.2, 1.2625), { start: 1, end: 1.0625 },
     'coarse zoom does not stretch a short note when moving it');
 

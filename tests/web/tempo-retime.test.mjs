@@ -3,7 +3,7 @@
 // up to the next tempo marker; nothing outside that stretch moves.
 import assert from "node:assert/strict";
 import { beatClock, retimeSpan } from "../../web/bars.js";
-import { beatShape, spanAt } from "../../web/reference-core.js";
+import { alignAnchors, beatShape, spanAt } from "../../web/reference-core.js";
 
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} != ${b}`);
 
@@ -51,6 +51,19 @@ const fresh = () => ({
   retimeSpan([l], sections, 60, 0.125, 20, Infinity, 120, 60);
   close(l.notes[0].start, 8, "before the marker nothing moves");
   close(l.notes[2].start, 20 + 5 * 2, "five seconds after the marker becomes ten");
+}
+{
+  // A box whose anchor was left 7 ms after its first note (an older project) gets
+  // its anchor on the box's start; the box itself does not move.
+  const clock = { beatAt: t => t / 0.75, timeAt: b => b * 0.75 };   // 80 BPM
+  const group = { anchors: [270.4112, 280], rt0: -0.0072, rt1: 2.9928, rb0: -0.0096, rb1: 3.9904 };
+  const before = group.anchors.map((a) => spanAt(group, a, clock));
+  assert.equal(alignAnchors(group, clock), true);
+  close(group.anchors[0], 270.404, "the anchor sits on the box's start");
+  assert.deepEqual(beatShape(group, clock).map(b => +b.toFixed(9)), [0, 4]);
+  group.anchors.forEach((a, i) => { const box = spanAt(group, a, clock);
+    close(box.t0, before[i].t0, "box start"); close(box.t1, before[i].t1, "box end"); });
+  assert.equal(alignAnchors(group, clock), false, "an aligned group is left alone");
 }
 console.log("tempo-retime: ok");
 

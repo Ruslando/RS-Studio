@@ -12,6 +12,8 @@
 //   stem-settings.js     the stem panel (its buttons call the ops below)
 
 import { loadNotePositions } from "./voicing-core.js";
+import { laneClock } from "./reference-clock.js";
+import { alignAnchors } from "./reference-core.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { INSTRUMENTS, PX_PER_SEC, ZOOM_MAX_X, ZOOM_MAX_Y, ZOOM_MIN_X, ZOOM_MIN_Y, instrKey } from "./constants.js";
 import { confirmChoice } from "./dialog.js";
@@ -505,6 +507,8 @@ export async function applyProject(data, { preferSavedView = true, retainEdits =
 
   // 8. the grid, then the stem mixer below it
   restoreLoadedProjectGrid(data);
+  // Needs the grid: anchors drifted off their notes in older projects (reference-core.js).
+  for (const lane of S.state.editLanes) for (const group of Object.values(lane.refBoxes)) alignAnchors(group, laneClock(lane));
   await prepareProjectHands();
 
   renderLoadedProjectWarnings(data, idsRepaired);

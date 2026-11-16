@@ -178,6 +178,17 @@ function confirmPasteMode({ signal } = {}) {
   });
 }
 
+// Where a pasted occurrence's anchor goes, from its first note `t0`: as far from it
+// (in beats) as the copied occurrence's anchor is from its own first note. Usually
+// the same time; one whose notes were moved without it (older projects, see
+// snapStrayNotes) keeps its box around the notes exactly as the original does.
+function pasteAnchor(lane, t0) {
+  const src = S.clipboardSrc, hit = src.length ? boxOfNote(src[0]) : null;
+  if (!hit || hit.lane !== lane) return t0;
+  const clock = laneClock(lane), first = Math.min(...src.map((n) => n.start));
+  return clock.timeAt(clock.beatAt(t0) + clock.beatAt(hit.group.anchors[hit.i]) - clock.beatAt(first));
+}
+
 function pasteHitsReference(lane, at, shift, asReference = false, refShift = 0) {
   if (!lane || !Object.keys(lane.refBoxes || {}).length) return false;
   const placed = placeClip(S.clipboard, lane, at);
@@ -185,7 +196,7 @@ function pasteHitsReference(lane, at, shift, asReference = false, refShift = 0) 
   const source = S.clipboardRef;
   const group = asReference && source?.lane === lane && lane.refBoxes[source.ref];
   if (group) {
-    bounds = { ...spanAt(group, bounds.t0, laneClock(lane)), pLo: group.pLo + refShift, pHi: group.pHi + refShift };
+    bounds = { ...spanAt(group, pasteAnchor(lane, bounds.t0), laneClock(lane)), pLo: group.pLo + refShift, pHi: group.pHi + refShift };
   }
   return overlapsRefBox(lane, bounds);
 }
@@ -258,7 +269,7 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
 // the copied group. If the source wasn't a reference, form a fresh group from the
 // still-present source notes + the paste. Returns the group number, or null.
 function linkPasteAsReference(added, lane, refShift = 0) {
-  const anchorNew = noteBounds(added).t0;
+  const anchorNew = pasteAnchor(lane, noteBounds(added).t0);
   if (S.clipboardRef && S.clipboardRef.lane === lane && lane.refBoxes && lane.refBoxes[S.clipboardRef.ref]) {
     const group = lane.refBoxes[S.clipboardRef.ref];
     group.anchors.push(anchorNew);

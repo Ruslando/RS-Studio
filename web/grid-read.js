@@ -155,7 +155,8 @@ export function snapNote(start, end, { adaptive = true, preserveDuration = false
 // moved the lines under it — is pulled back on exactly as touching it would. A
 // start on a 1/24-of-a-quarter line counts as on-grid: that holds 1/32 and the
 // 1/8 and 1/16 triplets, so detected notes and imported tuplets keep their rhythm.
-// Hand holds on a snapped note's start follow it. Returns how many notes moved.
+// Hand holds and reference anchors on a snapped note's start follow it: an anchor
+// left behind put its box off the notes it frames. Returns how many notes moved.
 // ponytail: start-only check, a note whose end alone is off is left as it is
 export function snapStrayNotes(lanes, previous = {}) {
   const on = (t, seg, step) => { const k = (t - seg.t) / step; return Math.abs(k - Math.round(k)) * step < 1e-4; };
@@ -169,6 +170,8 @@ export function snapStrayNotes(lanes, previous = {}) {
       if (n.start >= projectStart(S.state) && (!seg.bpm || on(n.start, seg, segStep(seg)) || on(n.start, seg, 60 / seg.bpm / 24))) continue;
       const q = snapNote(n.start, n.end, { adaptive: false, preserveDuration: true });
       for (const h of lane.handHolds || []) if (Math.abs(+h.t - n.start) < 1e-6) h.t = q.start;
+      for (const g of Object.values(lane.refBoxes || {}))
+        g?.anchors?.forEach((a, i) => { if (Math.abs(a - n.start) < 1e-6) g.anchors[i] = q.start; });
       n.start = q.start; n.end = q.end;
       moved++;
     }

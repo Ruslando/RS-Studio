@@ -63,6 +63,21 @@ export function spanAt(group, anchor, clock = null) {
   return { t0: clock.timeAt(b + r0), t1: clock.timeAt(b + r1) };
 }
 
+// Put a group's anchors where its boxes start, so its shape starts at 0. Older
+// projects pulled notes onto the grid without their anchor (snapStrayNotes), which
+// left the anchor a hair after the first note it belongs on. The boxes stay exactly
+// where they are, in beats. Returns whether anything changed.
+export function alignAnchors(group, clock) {
+  if (!group?.anchors?.length) return false;
+  const [r0, r1] = beatShape(group, clock);
+  if (Math.abs(r0) < 1e-9) return false;
+  group.anchors = group.anchors.map((a) => clock.timeAt(clock.beatAt(a) + r0));
+  group.rb0 = 0; group.rb1 = r1 - r0;
+  const a = group.anchors[0], { t0, t1 } = spanAt(group, a, clock);
+  group.rt0 = t0 - a; group.rt1 = t1 - a;
+  return true;
+}
+
 // Occurrence i's box, unclamped: its anchor's span at its own pitch.
 export function occurrenceBox(group, i, clock = null) {
   const s = shiftOf(group, i);
