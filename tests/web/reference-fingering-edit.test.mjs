@@ -22,10 +22,11 @@ const functions = ['relPattern', 'boxSig', 'mirrorBox', 'reconcileRefGroup', 're
 }).join('\n');
 const constants = ['lockShape', 'lockNotes', 'OCCURRENCE_FIELDS'].map(name => source.match(new RegExp(`const ${name} = [^\\n]+`))[0]).join('\n');
 const refs = new Function('deps', `const { EFFECT_FIELDS, copyEffects, effectSig, shiftOf, laneClock, boxRect, notesInBox,
-  noteOrder, dropFingering, nid, referenceHands, referenceHandSig, mirrorReferenceHands, boxMinIn, eachRefGroup, editLanes } = deps;
+  noteOrder, dropFingering, nid, referenceHands, referenceHandSig, mirrorReferenceHands, boxMinIn, eachRefGroup, editLanes, gridFit, laneGrid } = deps;
   ${constants}\n${functions}
   return { reconcileReferences, lockedReferenceSnapshot, lockedReferenceFault };`)({
   EFFECT_FIELDS, copyEffects, effectSig, shiftOf, referenceHands, referenceHandSig, mirrorReferenceHands,
+  gridFit: () => (from, t) => t, laneGrid: () => [],
   laneClock: () => clock, boxRect: occurrenceBox, notesInBox: (box, notes) => notes.filter(n => inRefBox(n, box, .1)),
   noteOrder: (a, b) => a.start - b.start || a.pitch - b.pitch,
   dropFingering: n => { delete n.pos; delete n.arrangement; delete n.finger; }, nid: () => `n${++uid}`, boxMinIn: () => .1,

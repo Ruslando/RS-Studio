@@ -17,10 +17,11 @@ const clock = { beatAt: t => t, timeAt: t => t };
 const OCCURRENCE_FIELDS = JSON.parse(source.match(/const OCCURRENCE_FIELDS = (\[[^\]]*\]);/)[1]);
 const api = new Function('deps', `const { EFFECT_FIELDS, copyEffects, effectSig, shiftOf,
   laneClock, boxRect, notesInBox, noteOrder, dropFingering, nid, OCCURRENCE_FIELDS,
-  referenceHands, referenceHandSig, mirrorReferenceHands, boxMinIn } = deps;
+  referenceHands, referenceHandSig, mirrorReferenceHands, boxMinIn, gridFit, laneGrid } = deps;
   ${functions}
   return { previewPositionReferences, reconcileRefGroup };`)({
   EFFECT_FIELDS, copyEffects, effectSig, shiftOf, laneClock: () => clock,
+  gridFit: () => (from, t) => t, laneGrid: () => [],
   referenceHands, referenceHandSig, mirrorReferenceHands, boxMinIn: () => .1,
   boxRect: occurrenceBox, notesInBox: (box, notes) => notes.filter(n => inRefBox(n, box, .1)),
   noteOrder: (a, b) => a.start - b.start || a.pitch - b.pitch,
@@ -151,4 +152,29 @@ console.log('reference position preview: commit propagation, transposition and i
   assert.equal(wholeBoxOf(lane.notes.slice(0, 2))?.ref, 'a', 'every note of the box is that box');
   assert.equal(wholeBoxOf(lane.notes.slice(0, 1)), null, 'part of a box is not');
   assert.equal(wholeBoxOf(lane.notes), null, 'notes beyond the box are not');
+}
+
+{
+  // A copy whose last cell a tempo marker cuts short (marker at 7.9, a cell is 1):
+  // its last note ends on the marker. Mirrored in beats into the other copy, that
+  // end would miss the bar line by 0.1; it lands on it. On load, a group already
+  // mirrored that way is settled from the copy that fits its grid.
+  const { gridLine, offGrid } = await import('../../web/note-issues.js');
+  const grid = [{ t: 0, step: 1 }, { t: 7.9, step: 0.5 }];
+  const names = ['relPattern', 'mirrorBox', 'settleRefGrid'];
+  const code = names.map(name => { const at = source.indexOf(`function ${name}(`); return source.slice(at, source.indexOf('\n}', at) + 2); }).join('\n');
+  const { settleRefGrid } = new Function('deps', `const { EFFECT_FIELDS, copyEffects, shiftOf, laneClock, notesInBox,
+    noteOrder, dropFingering, nid, OCCURRENCE_FIELDS, laneGrid, gridLine, offGrid, occurrenceBox } = deps;
+    ${source.match(/const gridFit = [^\n]+/)[0]}\n${code}
+    return { settleRefGrid };`)({ EFFECT_FIELDS, copyEffects, shiftOf, laneClock: () => clock,
+    notesInBox: (box, notes) => notes.filter(n => inRefBox(n, box, .1)), noteOrder: (a, b) => a.start - b.start || a.pitch - b.pitch,
+    dropFingering: () => {}, nid: () => `settle-${++uid}`, OCCURRENCE_FIELDS, laneGrid: () => grid, gridLine, offGrid, occurrenceBox });
+  const lane = { notes: [{ id: 'a1', start: 0, end: 1, pitch: 40 }, { id: 'a2', start: 1, end: 1.9, pitch: 40 },
+    { id: 'b1', start: 6, end: 7, pitch: 40 }, { id: 'b2', start: 7, end: 7.9, pitch: 40 }],
+  refBoxes: { 1: { rt0: 0, rt1: 2, rb0: 0, rb1: 2, pLo: 40, pHi: 40, anchors: [0, 6] } } };
+  settleRefGrid(lane);
+  assert.deepEqual(lane.notes.map(n => [n.id, n.start, n.end]), [['a1', 0, 1], ['a2', 1, 2], ['b1', 6, 7], ['b2', 7, 7.9]],
+    'the copy ends on its bar line, the one at the marker keeps the marker');
+  settleRefGrid(lane);
+  assert.equal(lane.notes[1].end, 2, 'settled groups stay as they are');
 }

@@ -143,12 +143,18 @@ const issue = (kind, tone, text, notes, time = notes[0].start) => {
 // and a grid line moved by a fraction of one (a tempo marker typed with three
 // decimals) must not flag every note that sat on the old line.
 export function offGrid(time, grid) {
-  if (!grid?.length) return false;
-  let segment = grid[0];
-  for (let i = 1; i < grid.length && grid[i].t <= time + 1e-6; i++) segment = grid[i];
-  if (!(segment.step > 0)) return false;
-  const cell = (time - segment.t) / segment.step;
-  return Math.abs(cell - Math.round(cell)) * segment.step >= 1e-3;
+  return !!grid?.length && Math.abs(gridLine(time, grid) - time) >= 1e-3;
+}
+
+// The line of `grid` nearest `time`. A tempo marker is one too, also where it
+// cuts the cell before it short.
+export function gridLine(time, grid) {
+  let i = 0;
+  while (i + 1 < grid.length && grid[i + 1].t <= time + 1e-6) i++;
+  const segment = grid[i], next = grid[i + 1]?.t;
+  if (!(segment.step > 0)) return time;
+  const line = segment.t + Math.round((time - segment.t) / segment.step) * segment.step;
+  return next != null && Math.abs(next - time) < Math.abs(line - time) ? next : line;
 }
 
 export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, revision = 0, grid = null) {

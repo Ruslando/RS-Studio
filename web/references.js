@@ -9,7 +9,9 @@ import { draw } from "./repaint.js";
 import { stageIcon } from "./icons.js";
 import { commit, commitStructure, snapshotEdit } from "./edit-history.js";
 import { pitchAt, timeAt, xOf, yOf } from "./geometry.js";
-import { snap } from "./grid-read.js";
+import { segStep, snap, timingSegments } from "./grid-read.js";
+import { timingData, timingIdOf } from "./timing.js";
+import { gridLine, offGrid } from "./note-issues.js";
 import { nid } from "./ids.js";
 import { editLanes, laneOf, refreshCounts } from "./lanes.js";
 import { EFFECT_FIELDS, copyEffects } from "./note-effects.js";
@@ -487,7 +489,17 @@ export function deleteRefGroup(lane, ref) {
 // Replay `pattern` (relative to its source anchor) into the box at `anchor`,
 // overwriting whatever was there. Reuses existing note objects by order so identity
 // (selection / undo) survives where the counts allow.
-function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock, mintId = nid) {
+// The grid a lane's notes are checked against (rocksmith-check.js), as [{ t, step }].
+function laneGrid(lane) {
+  return timingSegments(timingData(timingIdOf(lane))).map((segment) => ({ t: segment.t, step: segStep(segment) }));
+}
+
+// An edge on the grid in the source lands on the grid in every copy. Copied in
+// beats it can miss: an occurrence whose last cell a tempo marker cuts short ends
+// a hair before the bar line the other copies end on. Off-grid edges copy as they are.
+const gridFit = (grid) => (from, t) => (grid.length && !offGrid(from, grid) ? gridLine(t, grid) : t);
+
+function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock, mintId = nid, fit = (from, t) => t) {
   const ordered = [...oldNotes].sort(noteOrder), b = clock.beatAt(anchor);
   // Motifs and grip shapes belong to this occurrence, not to the reference: the
   // mirror never copies them. They stay on the note at the same beat and pitch, so
@@ -499,7 +511,10 @@ function mirrorBox(lane, anchor, oldNotes, pattern, shift, srcShift, clock, mint
     const p = pattern[k];
     let nn = ordered[k];
     if (!nn) { nn = { id: mintId() }; lane.notes.push(nn); }
-    nn.start = clock.timeAt(b + p.dt); nn.end = clock.timeAt(b + p.dt + p.dur); nn.pitch = p.pitch + shift;
+    nn.start = fit(p.src.start, clock.timeAt(b + p.dt));
+    const end = fit(p.src.end, clock.timeAt(b + p.dt + p.dur));
+    nn.end = end > nn.start + 1e-6 ? end : clock.timeAt(b + p.dt + p.dur);
+    nn.pitch = p.pitch + shift;
     for (const f of EFFECT_FIELDS) delete nn[f];
     copyEffects(p.src, nn);
     delete nn.finger;
@@ -540,14 +555,36 @@ function reconcileRefGroup(lane, ref, group, prevNotes, prevGroup, mirrorSource,
   if (src < 0) return;
   const srcShift = shiftOf(group, src);
   const pattern = relPattern(contents[src], group.anchors[src], srcShift, clock);
-  const handPattern = hands(lane.notes, lane.handHolds, group, src);
+  const handPattern = hands(lane.notes, lane.handHolds, group, src), fit = gridFit(laneGrid(lane));
   for (let j = 0; j < group.anchors.length; j++) {
     if (j === src) continue;
     const shift = shiftOf(group, j), same = shift === srcShift;
     const previousHands = same ? hands(lane.notes, lane.handHolds, group, j) : null;
     if (boxSig(contents[j], group.anchors[j], shift, same, clock) !== boxSig(contents[src], group.anchors[src], srcShift, same, clock))
-      mirrorBox(lane, group.anchors[j], contents[j], pattern, shift, srcShift, clock, mintId);
+      mirrorBox(lane, group.anchors[j], contents[j], pattern, shift, srcShift, clock, mintId, fit);
     if (same) mirrorReferenceHands(lane, group, j, handPattern, clock, boxMinIn(boxRect(group, j, clock).t0), mintId, previousHands);
+  }
+}
+
+// Older projects: a mirror copied an edge that sat on a short last cell into
+// copies where it misses the grid. Each group whose copies miss it unevenly is
+// mirrored again from the copy that misses it least, now landing on the grid.
+// Only groups whose copies hold the same number of notes: anything else is left.
+export function settleRefGrid(lane) {
+  const grid = laneGrid(lane), clock = laneClock(lane), fit = gridFit(grid);
+  if (!grid.length) return;
+  for (const group of Object.values(lane.refBoxes || {})) {
+    if (!(group?.anchors?.length > 1) || group.locked) continue;
+    // Unclamped: this runs while a project opens, before the pitch range exists.
+    const contents = group.anchors.map((a, i) => notesInBox(occurrenceBox(group, i, clock), lane.notes));
+    if (contents.some((notes) => notes.length !== contents[0].length)) continue;
+    const misses = contents.map((notes) => notes.filter((n) => offGrid(n.start, grid) || offGrid(n.end, grid)).length);
+    const src = misses.indexOf(Math.min(...misses));
+    if (misses.every((m) => m === misses[src])) continue;
+    const pattern = relPattern(contents[src], group.anchors[src], shiftOf(group, src), clock);
+    contents.forEach((notes, j) => {
+      if (j !== src) mirrorBox(lane, group.anchors[j], notes, pattern, shiftOf(group, j), shiftOf(group, src), clock, nid, fit);
+    });
   }
 }
 

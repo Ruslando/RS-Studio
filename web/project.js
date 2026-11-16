@@ -14,6 +14,7 @@
 import { loadNotePositions } from "./voicing-core.js";
 import { laneClock } from "./reference-clock.js";
 import { alignAnchors } from "./reference-core.js";
+import { settleRefGrid } from "./references.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { INSTRUMENTS, PX_PER_SEC, ZOOM_MAX_X, ZOOM_MAX_Y, ZOOM_MIN_X, ZOOM_MIN_Y, instrKey } from "./constants.js";
 import { confirmChoice } from "./dialog.js";
@@ -57,7 +58,7 @@ import { setView } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
 import { clamp, normLayerVolume } from "./util.js";
 import { busLevel, mountBus, normMix, volumeControl } from "./volume.js";
-import { SONG, loadTimings, timingData, timingIdOf, timingsForSave } from "./timing.js";
+import { SONG, loadTimings, timingData, timingIdOf, timingsForSave, withTiming } from "./timing.js";
 
 // Mute a stem in the mixer. No argument (Shift+M) targets the viewed stem.
 export function toggleStemMute(stem) {
@@ -508,7 +509,10 @@ export async function applyProject(data, { preferSavedView = true, retainEdits =
   // 8. the grid, then the stem mixer below it
   restoreLoadedProjectGrid(data);
   // Needs the grid: anchors drifted off their notes in older projects (reference-core.js).
-  for (const lane of S.state.editLanes) for (const group of Object.values(lane.refBoxes)) alignAnchors(group, laneClock(lane));
+  for (const lane of S.state.editLanes) {
+    for (const group of Object.values(lane.refBoxes)) alignAnchors(group, laneClock(lane));
+    withTiming(timingIdOf(lane), () => settleRefGrid(lane));   // its own grid cells decide box membership
+  }
   await prepareProjectHands();
 
   renderLoadedProjectWarnings(data, idsRepaired);
