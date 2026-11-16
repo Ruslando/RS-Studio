@@ -7,6 +7,11 @@ const note = (start, end, pitch, more = {}) => ({ id: `n${start}${pitch}`, start
 const kinds = (notes) => laneIssues({ notes }, BASS, 20).map((i) => [i.kind, i.tone]);
 
 assert.deepEqual(kinds([note(0, 1, 33, { fx: { dead: true } }), note(1, 2, 44)]), [], 'playable notes are fine');
+const stretched = note(0, 1, 48, { pos: { string: 0, fret: 5 } });
+assert.deepEqual(laneIssues({ notes: [stretched], handHolds: [{ t: 0, fret: 1 }] }, BASS, 20)
+  .map(({ kind, tone }) => [kind, tone]), [['handStretch', 'warning']], 'more than four frets is a soft-limit warning');
+assert.deepEqual(laneIssues({ notes: [stretched], handHolds: [{ t: 0, fret: 2 }] }, BASS, 20), [],
+  'a four-fret hand span is within the soft limit');
 assert.deepEqual(kinds([note(0, 1, 20)]), [['outOfRange', 'warning']], 'said once, not also as a shape');
 assert.deepEqual(kinds([note(0, 1, 40), note(0.5, 1.5, 40)]), [['stack', 'warning']]);
 assert.deepEqual(kinds([note(0, 1, 40), note(1, 2, 40)]), [], 'touching notes are not a stack');

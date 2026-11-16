@@ -540,7 +540,7 @@ function handAtStart(shape, seat, profile, required, fixedSeat) {
   // when the hand is on its fret. Out of reach, the hand comes to the note.
   if (contacts.length === 1) {
     const [note, pos] = contacts[0];
-    const reached = Number.isFinite(seat) && seat >= 1 && pos.fret - seat >= 0 && pos.fret - seat < handReach(profile);
+    const reached = Number.isFinite(seat) && seat >= 1 && pos.fret - seat >= 0;
     // A finger asked for (the same slide played before) puts the hand under it,
     // unless the player fixed the hand.
     const asked = required.get(note);
@@ -580,7 +580,7 @@ export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infi
   let seats;
   if (contacts.length === 1) {
     const fret = contacts[0][1].fret;
-    seats = Array.from({ length: Math.min(fret, handReach(profile)) }, (_, k) => fret - k);
+    seats = Array.from({ length: fret }, (_, k) => fret - k);
   } else {
     let poses = fingeringOptions(shape, profile);
     if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));

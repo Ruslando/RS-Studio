@@ -40,6 +40,12 @@ const unreachable = changedHandAnchor(notes, anchors, .13, 15);
 const invalid = solve(unreachable);
 assert.deepEqual(notes.map(n => invalid.seats.get(n)), [15, 15, 5], 'an unreachable hand cannot silently choose another anchor');
 assert.equal(invalid.handConflicts.size, 2);
+const longReach = { ...notes[0], pitch: tuning[0] + 10, pos: { string: 0, fret: 10 } };
+const extended = voiceNotesFingered([longReach], tuning, Infinity, {
+  holds: [{ t: longReach.start, fret: 1 }], anchorChanges: true,
+});
+assert.equal(extended.seats.get(longReach), 1, 'a reach beyond six frets preserves the chosen hand');
+assert.equal(extended.handConflicts.size, 0, 'long reaches are no longer rejected by the six-fret policy');
 notes[0].finger = 1;
 const typed = solve(changed);
 assert.equal(typed.seats.get(notes[0]), 4);

@@ -135,8 +135,10 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   const far = [5, 10].map((fret, i) => note(i * 0.5, bass[2] + fret, { pos: pin(2, fret, off) }));
   const gotFar = voiceNotesFingered(far, bass, Infinity, { bars: [0, 4], instrument: "bass" });
   assert.notEqual(gotFar.seats.get(far[1]), 5, "six frets is past a bass hand");
-  assert.deepEqual(handChoices(new Map([[far[1], { string: 2, fret: 10 }]]), BASS_HAND_PROFILE), [6, 7, 8, 9, 10]);
-  assert.deepEqual(handChoices(new Map([[far[1], { string: 2, fret: 10 }]])), [5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(handChoices(new Map([[far[1], { string: 2, fret: 10 }]]), BASS_HAND_PROFILE),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(handChoices(new Map([[far[1], { string: 2, fret: 10 }]])),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   // Three outside is not: 5 5 12 5 moves there and back.
   reachy[2].pitch = bass[2] + 12; reachy[2].pos = pin(2, 12, off);
   const moved = voiceNotesFingered(reachy, bass, Infinity, { bars: [0, 4], instrument: "bass" });

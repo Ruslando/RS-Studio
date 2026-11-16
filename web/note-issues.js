@@ -9,6 +9,7 @@ import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
 import { chordColumns, outOfFretboardRange, placementFault, placementLimits, shapeGripFault } from "./voicing-core.js";
 import { SHAPE_KINDS, shapeGroups } from "./shapes.js";
 import { bendCurve } from "./bend.js";
+import { handAnchorAt } from "./hand-anchor-state.js";
 import { OVERLAP_EPS } from "./constants.js";
 import { paintMemo } from "./paint-memo.js";
 
@@ -20,6 +21,7 @@ export const ISSUE_TEXT = {
   // them is said here; the help names what does not fit.
   position: ["Position does not fit the technique", "Select the note and choose Recalculate positions, or place it on the fretboard."],
   shapeGrip: ["Shape notes are not one grip", "Select the shape and choose Recalculate positions to find a grip that holds them."],
+  handStretch: ["Hand position exceeds 4-fret soft limit", "This note is more than four frets above the hand position. The hand can stay here, but this reach is outside the four-fret soft limit."],
 };
 const because = (text, fault) => `${fault}. ${text[1]}`;
 
@@ -152,6 +154,14 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
       out.push({ ...issue("position", "warning", ISSUE_TEXT.position, [n]), help: because(ISSUE_TEXT.position, fault) });
     }
   });
+  if (lane.handHolds?.length) for (const column of columns) {
+    const active = handAnchorAt(lane.handHolds, column.t0);
+    if (!active) continue;
+    for (const n of column.notes) {
+      if (n.pos?.fret > 0 && n.pos.fret - active.fret > 3)
+        out.push(issue("handStretch", "warning", ISSUE_TEXT.handStretch, [n]));
+    }
+  }
   // A chord with a note no fret reaches is that note's problem, said once, below; one
   // with a misplaced note is said above.
   for (const { notes, kind } of chordWarnings(lane, tuning, maxFret, revision)) if (!notes.some(outside) && !notes.some((n) => misplaced.has(n)))

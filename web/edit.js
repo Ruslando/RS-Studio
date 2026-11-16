@@ -52,7 +52,7 @@ import { laneFingering } from './lane-fingering.js';
 import { refreshTabIfOpen, setView, tabViewOn } from "./tablature.js";
 import { hammerPositionGroup, hammerPositionPlan } from './hammer-positions.js';
 import { pasteHandAnchors } from './clipboard-fingering.js';
-import { HAND_ANCHOR_VERSION, changedHandAnchor, initialHandAnchors, movedHandAnchor, normalizeHandAnchors } from './hand-anchor-state.js';
+import { HAND_ANCHOR_VERSION, changedHandAnchor, movedHandAnchor, normalizeHandAnchors } from './hand-anchor-state.js';
 import { acceptAllMatches, acceptMatch, clearMatches, focusAdjacentMatch, previewFocusedMatch, runFindSimilar } from "./tracing.js";
 import { ESC_DEPTH, closeTopmost, registerEscapeLayer } from "./escape-stack.js";
 import { modalOpen } from "./modal-focus.js";
@@ -795,18 +795,6 @@ export function moveHandAnchor(lane, id, time) {
   if (JSON.stringify(next) === JSON.stringify(lane.handHolds || [])) return;
   const prev = snapshotEdit();
   lane.handHolds = next; lane.handAnchorVersion = HAND_ANCHOR_VERSION;
-  commit(prev, undefined, null, { preserveTiming: true }); draw(); refreshTabIfOpen();
-}
-
-export function recalculateHandAnchors(lane) {
-  if (!canEditLane(lane)) return;
-  const notes = lane.notes.map(n => ({ ...n, ...(n.pos ? { pos: { ...n.pos,
-    ...(n.finger != null ? { finger: n.finger } : {}) } } : {}) }));
-  const found = voiceNotesFingered(notes, laneFretTuning(lane), Infinity,
-    { bars: songBarStarts(), instrument: lane.instrument, capo: lane.capo, holds: [] });
-  const prev = snapshotEdit();
-  lane.handHolds = initialHandAnchors(notes, found.seats, lane.handHolds);
-  lane.handAnchorVersion = HAND_ANCHOR_VERSION;
   commit(prev, undefined, null, { preserveTiming: true }); draw(); refreshTabIfOpen();
 }
 

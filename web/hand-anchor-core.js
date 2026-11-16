@@ -33,6 +33,27 @@ export function obeyedHolds(notes, holds) {
   });
 }
 
+// Slide travel is displayed on the anchor rail without becoming a saved change.
+export function slideHandChanges(notes, seats, voiced = new Map(), eighthAt = () => .25) {
+  const events = [];
+  for (const column of chordColumns(notes)) {
+    if (column.notes.length !== 1) continue;
+    const note = column.notes[0], seat = seats.get(note);
+    if (!Number.isFinite(seat)) continue;
+    const kind = slideInOf(note), pos = voiced.get(note) || note.pos;
+    const offset = kind && pos ? edgeSlideSpan(note, pos.fret, kind) : 0;
+    if (!offset) continue;
+    const id = note.id || note.start;
+    events.push({ id: `slide_${id}_start`, t: note.start, fret: Math.max(1, seat + offset) });
+    events.push({
+      id: `slide_${id}_end`,
+      t: note.start + (note.end - note.start) * slideEndOf(note, note.end - note.start, eighthAt(note.start)),
+      fret: seat,
+    });
+  }
+  return events;
+}
+
 // Only where the hand moves: { t, fret } at the first note on a new seat. Notes
 // without a seat (open strings) keep the hand where it was.
 export function seatChanges(notes, seats, voiced = new Map(), eighthAt = () => .25) {
@@ -41,16 +62,9 @@ export function seatChanges(notes, seats, voiced = new Map(), eighthAt = () => .
     const note = column.notes.find(n => Number.isFinite(seats.get(n)));
     if (!note) continue;
     const seat = seats.get(note);
-    const kind = slideInOf(note), pos = voiced.get(note) || note.pos;
-    // Seats describe the landing. A single sliding finger starts elsewhere;
-    // the marker rail must describe both ends, just like the moving fretboard.
-    const offset = column.notes.length === 1 && kind && pos
-      ? edgeSlideSpan(note, pos.fret, kind) : 0;
-    events.push({ t: note.start, fret: Math.max(1, seat + offset) });
-    if (offset) events.push({
-      t: note.start + (note.end - note.start) * slideEndOf(note, note.end - note.start, eighthAt(note.start)),
-      fret: seat,
-    });
+    const slideEvents = column.notes.length === 1
+      ? slideHandChanges(column.notes, seats, voiced, eighthAt).map(({ t, fret }) => ({ t, fret })) : [];
+    events.push(...(slideEvents.length ? slideEvents : [{ t: note.start, fret: seat }]));
   }
   events.sort((a, b) => a.t - b.t);
   const out = [];

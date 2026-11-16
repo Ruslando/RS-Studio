@@ -5095,7 +5095,7 @@ class EndToEndTests(unittest.TestCase):
         expect(root.locator('.artifact-name').filter(has_text='Layer solo')).to_have_count(1)
         expect(root.locator('.artifact-name').filter(has_text='Song verse')).to_have_count(0)
 
-    def test_slide_in_has_one_editable_anchor_and_derived_hand_motion(self):
+    def test_slide_in_shows_derived_hand_anchors_at_both_ends(self):
         self.open_reference_project()
         page = self.page
         page.evaluate("""async () => {
@@ -5118,8 +5118,9 @@ class EndToEndTests(unittest.TestCase):
             };
             (await import('/repaint.js')).draw();
         }""")
-        page.wait_for_function("window.slideHandPaint.includes('9')")
-        self.assertNotIn('5', page.evaluate('window.slideHandPaint'), 'slide travel does not create a second editable flag')
+        page.wait_for_function("window.slideHandPaint.includes('5') && window.slideHandPaint.includes('9')")
+        self.assertIn('5', page.evaluate('window.slideHandPaint'), 'the rail shows the hand at the slide start')
+        self.assertIn('9', page.evaluate('window.slideHandPaint'), 'the rail shows the hand at the slide landing')
 
     def test_slide_hand_rail_matches_compiled_rocksmith_export(self):
         from rs_studio.rocksmith import chart
