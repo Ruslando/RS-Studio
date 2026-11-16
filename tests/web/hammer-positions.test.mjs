@@ -29,6 +29,12 @@ test('authored destination-only hammer toggles also move their unmarked source',
   const plan = hammerPositionPlan({ notes }, new Map([[notes[1], { string: 0, fret: 8 }]]), tuning, n => n.pos);
   assert.equal(plan.error, null); assert.equal(plan.changes.length, 2);
 });
+test('removing an imported destination effect leaves its origin unlinked', () => {
+  const notes = pair();
+  delete notes[1].fx;
+  assert.deepEqual(hammerPositionGroup(notes, notes[0]), [notes[0]]);
+  assert.deepEqual(hammerPositionPreview(notes, [notes[0]]), []);
+});
 test('chains include incoming hammer-ons and pull-offs but do not absorb a picked note or cross a rest', () => {
   const notes = pair();
   const pull = { id: 'pull', pitch: 49, start: 2, end: 3, pos: { string: 1, fret: 11 }, fx: { hammer: 'dest' } };

@@ -11,7 +11,7 @@ export function hammerLink(a, b) {
   if (!a || !b || a.fx?.dead || b.fx?.dead || b.slap === "tap"
       || Math.abs(b.start - a.end) >= 0.03 || b.start <= a.start) return false;
   const from = a.fx?.hammer, to = b.fx?.hammer;
-  return to === true || to === "dest" || to === "both" || from === "origin" || from === "both";
+  return to === true || to === "dest" || to === "both" || from === true;
 }
 
 // Imported notes carry origin/destination roles; authored ones use the shared
