@@ -18,4 +18,11 @@ for (const pixels of [3, 12, 30, 120, 500]) {
   assert.ok(step * pixels >= 12, 'grid cells remain visibly separated');
   assert.ok(step >= .0625, 'meter does not create finer than 1/32');
 }
+// The marker's division is the finest line; coarser lines are made of its cells.
+assert.equal(autoGridStep({ ...segment, subdiv: 4 }, 5000), .125, 'a 1/16 grid stays 1/16 zoomed in');
+assert.equal(autoGridStep({ ...segment, subdiv: 4 }, 30), .5, 'zooming out still coarsens it');
+assert.equal(autoGridStep({ ...segment, subdiv: 8 }, 5000), .0625);
+assert.equal(autoGridStep({ ...segment, subdiv: 3 }, 5000), 1 / 6, 'triplets show triplet lines');
+assert.equal(autoGridStep({ ...segment, subdiv: 3 }, 30), .5, 'and coarsen to whole beats, never halves');
+assert.equal(autoGridStep({ ...segment, subdiv: 16 }, 5000), .0625, 'never finer than 1/32');
 console.log('auto grid: zoom, meter, subdivisions and visible labels passed');

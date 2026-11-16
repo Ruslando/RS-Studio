@@ -165,19 +165,19 @@ try {
   assert.equal(note.start, 1.5);
   assert.equal(note.end, 1.75);
 
-  // Zoom can display divisions finer than the authored grid. Normal resizing
-  // must not turn a regular note into a precise/free-length one.
+  // Zooming in never shows lines finer than the authored grid, so a normal
+  // resize stays on it and keeps the note a regular one.
   subdivision.value = '4'; S.pxPerSec = 2000;
   note.start = 1; note.end = 1.5;
   stage.emit('mousedown', {clientX: 149});
   win.emit('mousemove', {clientX: 156});
   win.emit('mouseup', {clientX: 156});
-  assert.equal(note.end, 1.5625, 'normal resize reaches visible 32nd divisions');
+  assert.equal(note.end, 1.625, 'a 1/16 grid zoomed in still snaps to sixteenths');
   assert.equal(hasFreeNoteLength(note, grid.gridSegments()), false, 'ordinary resize keeps the regular-length classification');
   stage.emit('mousedown', {clientX: 120});
   win.emit('mousemove', {clientX: 174});
   win.emit('mouseup', {clientX: 174});
-  assert.equal(note.start, 1.5625, 'subsequent movement follows the visible grid');
+  assert.equal(note.start, 1.5, 'subsequent movement follows the visible grid');
   assert.equal(hasFreeNoteLength(note, grid.gridSegments()), false);
   stage.emit('mousedown', {clientX: note.end * 100 - 1, altKey: true});
   win.emit('mousemove', {clientX: note.end * 100 + 9, altKey: true});
