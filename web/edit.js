@@ -17,11 +17,12 @@ import { MAX_POINTS, SLIDE_END_MIN, SLIDE_IN, SLIDE_OUT, SLIDES_TO_NEXT, SLIDE_S
 import { openDetectPanel, updateDetectStatus } from "./detect.js";
 import { conflictsWith } from "./effects.js";
 
-import { $, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopyBtn, redoMI, scroll, stage, undoMI } from "./dom.js";
+import { $, actionConfirmAccept, offsetInput, pasteAsRefBtn, pasteBackdrop, pasteCancelBtn, pasteCopyBtn, redoMI, scroll, stage, undoMI } from "./dom.js";
 import { draw } from "./repaint.js";
 import { resetZoom, xOf, yOf } from "./geometry.js";
 import { currentGridState, gridOffset, restoreGridState } from "./grid-controls.js";
-import { displayGridStep, minDur, snapStrayNotes, timingSegments } from "./grid-read.js";
+import { displayGridStep, minDur, segStep, snapStrayNotes, timingSegments } from "./grid-read.js";
+import { offGrid } from "./note-issues.js";
 import { nid, motifId, shapeId } from "./ids.js";
 import { eachTiming, restoreTimingSnapshot, timingData, timingIdOf, timingSnapshot } from "./timing.js";
 import { railMenuItems, railsHidden } from "./marker-rails.js";
@@ -31,6 +32,7 @@ import { activeLane, applyLaneVolume, canEditLane, confirmRemoveLane, editLanes,
 import { FX_KEYS, FX_LABELS, copyEffects, fxOn, fxValue } from "./note-effects.js";
 import { ensureTone, isMasterStem, playbackTime, previewNotes, togglePlay } from "./playback.js";
 import { toast } from "./notify.js";
+import { confirmChoice } from "./dialog.js";
 import { openNewProject } from "./new-project.js";
 import { confirmStemRemoval } from "./stem-settings.js";
 import { openProject, saveProject, selectStem, toggleStemMute } from "./project.js";
@@ -42,7 +44,8 @@ import { SHAPE_KINDS, markShape, remintShapes, shapeGroups, unmarkShape } from "
 import { beginArtifactRename } from "./artifact-names.js";
 import { beginChordRename } from "./chord-rename.js";
 import { chordOfNote } from "./chord-names.js";
-import { splitNote } from "./slice.js";
+import { splitEvenly, splitNote } from "./slice.js";
+import { MIN_DUR } from "./constants.js";
 import { animateNoteChanges, clearNoteMotion } from "./note-motion.js";
 import { songBarStarts } from "./song-bars.js";
 import { S, setSelection } from "./store.js";
@@ -134,6 +137,49 @@ export function sliceNoteCuts(cuts) {
   refreshCounts(); refreshTabIfOpen(); draw();
   toast(`Sliced ${split.length} note${split.length === 1 ? "" : "s"}`);
   return split;
+}
+
+// Split each selected note into `count` equal parts, exactly rather than on the
+// grid a slice snaps to: a note in three gives triplets. A part off the grid is
+// marked precise, as the off-grid check reads it (rocksmith-check.js). One undo step.
+function splitSelectionEvenly(count) {
+  const prev = snapshotEdit(), pieces = [];
+  for (const note of [...S.selection]) {
+    const lane = laneOf(note);
+    if (!lane || !canEditLane(lane)) continue;
+    const parts = splitEvenly(note, count, laneClock(lane), MIN_DUR, nid);
+    if (!parts) continue;
+    const grid = timingSegments(timingData(timingIdOf(lane))).map((segment) => ({ t: segment.t, step: segStep(segment) }));
+    for (const part of parts) if (offGrid(part.start, grid) || offGrid(part.end, grid)) part.preciseLength = true;
+    lane.notes.splice(lane.notes.indexOf(note), 1, ...parts);
+    pieces.push(parts);
+  }
+  if (!pieces.length) { toast(`Too short to split into ${count}`); return; }
+  setSelection(new Set(pieces.flat()));
+  commit(prev, undefined, new Set(pieces.flatMap((parts) => parts.slice(1).map((n) => n.id))), { preserveTiming: true });
+  refreshCounts(); refreshTabIfOpen(); draw();
+}
+
+// Ask how many parts, then split. The last count is offered again.
+let splitCount = 3;
+async function askSplitCount() {
+  const content = document.createElement("label");
+  content.className = "field-group block";
+  const label = document.createElement("span");
+  label.className = "field-label"; label.textContent = "Parts";
+  const input = Object.assign(document.createElement("input"), { type: "number", min: 2, max: 32, step: 1, value: splitCount });
+  content.append(label, input);
+  const valid = () => Number.isInteger(+input.value) && +input.value >= 2 && +input.value <= 32;
+  const choice = await confirmChoice({ title: "Split notes", message: "", confirmLabel: "Split", content,
+    onOpen: ({ update }) => {
+      const sync = () => update({ confirmDisabled: !valid() });
+      const enter = (e) => { if (e.key === "Enter" && valid()) { e.preventDefault(); actionConfirmAccept.click(); } };
+      input.addEventListener("input", sync); input.addEventListener("keydown", enter);
+      input.focus(); input.select();
+    } });
+  if (choice !== "confirm" || !valid()) return;
+  splitCount = +input.value;
+  splitSelectionEvenly(splitCount);
 }
 
 // ---- clipboard / delete ----
@@ -1417,6 +1463,9 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
   // note, whoever set its position.
   const columnActions = [
     ...chordEntry,
+    ...(precisionSelection.length
+      ? [{ label: "Split…", kw: "slice cut divide equal parts triplet", fn: askSplitCount }]
+      : []),
     ...(precisionSelection.length
       ? [{ label: `${precisionSelection.every(hasFreeNoteLength) ? "✓ " : ""}Precise note length`,
         kw: "free exact fine duration timing grid alt resize", fn: setSelectedNotePrecision }]

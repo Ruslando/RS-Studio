@@ -108,3 +108,17 @@ export function splitNote(note, at, minDuration, newId) {
   }
   return { left, right };
 }
+
+// Cut a note into `count` parts of equal length in beats on `clock`, so three
+// parts of a quarter are exact triplet eighths, also across a tempo change. Null
+// when a part would be shorter than `minDuration`.
+export function splitEvenly(note, count, clock, minDuration, newId) {
+  const b0 = clock.beatAt(note.start), b1 = clock.beatAt(note.end), parts = [];
+  let rest = note;
+  for (let k = 1; k < count; k++) {
+    const cut = splitNote(rest, clock.timeAt(b0 + (b1 - b0) * k / count), minDuration, newId);
+    if (!cut) return null;
+    parts.push(cut.left); rest = cut.right;
+  }
+  return [...parts, rest];
+}

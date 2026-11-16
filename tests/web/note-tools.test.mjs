@@ -5,7 +5,7 @@ import { BEND_PRESETS, bendAt, bendCurve, bendPeak, bendShape, normalizeCurve } 
 import { analyzeChord, detectChord } from "../../web/chords.js";
 import { effectSig, refOccurrences } from "../../web/reference-core.js";
 import { markMotif, migrateMotifs, motifGroups, unmarkMotif, normalizeMotifIds, motifLabel, motifToExtend } from "../../web/motifs.js";
-import { lineXAtRow, splitNote } from "../../web/slice.js";
+import { lineXAtRow, splitEvenly, splitNote } from "../../web/slice.js";
 
 // ---- slicing --------------------------------------------------------------
 {
@@ -27,6 +27,15 @@ import { lineXAtRow, splitNote } from "../../web/slice.js";
   assert.equal(splitNote(note, 0.95, 0.1, () => 2), null);
   assert.ok(splitNote(note, 0.1, 0.1, () => 2), "exactly one cell is enough");
   assert.equal(splitNote(note, NaN, 0.1, () => 2), null);
+
+  // Equal parts in beats: a half-second quarter at 120 BPM in three is triplet
+  // eighths, and over a tempo change the parts stay equal in beats, not seconds.
+  let id = 10;
+  const thirds = splitEvenly({ id: 1, start: 1, end: 1.5, pitch: 50 }, 3, { beatAt: t => t * 2, timeAt: b => b / 2 }, 0.05, () => ++id);
+  assert.deepEqual(thirds.map(n => [n.id, +n.start.toFixed(9), +n.end.toFixed(9)]), [[1, 1, 1.166666667], [11, 1.166666667, 1.333333333], [12, 1.333333333, 1.5]]);
+  const slower = { beatAt: t => t < 1 ? t * 2 : 2 + (t - 1), timeAt: b => b < 2 ? b / 2 : 1 + (b - 2) };   // 120, then 60 BPM from 1 s
+  assert.deepEqual(splitEvenly({ id: 1, start: 0, end: 2, pitch: 50 }, 3, slower, 0.05, () => ++id).map(n => n.start), [0, 0.5, 1]);
+  assert.equal(splitEvenly({ id: 1, start: 0, end: 0.1, pitch: 50 }, 3, slower, 0.05, () => ++id), null, "no part shorter than the minimum");
 
   // Where a drawn line crosses a note's row.
   const diagonal = { x0: 0, y0: 0, x1: 10, y1: 10 };
