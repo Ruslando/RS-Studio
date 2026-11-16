@@ -175,9 +175,10 @@ function spanRiders(seg) {
       const { start, end } = n;
       if (inSpan(start)) riders.push((d) => { n.start = clamp(start + d); n.end = clamp(end + d); });
     }
+    // Each box with its own notes: one in another flag's span stays with those.
     for (const g of Object.values(lane.refBoxes || {})) {
       const anchors = g?.anchors;
-      if (Array.isArray(anchors) && inSpan(anchors[0])) riders.push((d) => { g.anchors = anchors.map((a) => a + d); });
+      if (Array.isArray(anchors) && anchors.some(inSpan)) riders.push((d) => { g.anchors = anchors.map((a) => inSpan(a) ? a + d : a); });
     }
   }
   return riders;
@@ -196,7 +197,9 @@ export function markerMouseDown(e) {
   e.preventDefault();
   const seg = hit.seg;
   const grabDT = timeAt(x) - seg.t;
-  const dragGrid = gridSegments().map(segment => ({ ...segment }));
+  // Without the flag's own span, which moves with it: the flag lands on a line of
+  // the tempo before it, so that tempo's last bar stays whole.
+  const dragGrid = gridSegments().filter(segment => seg.seg0 || segment.ref !== seg.ref).map(segment => ({ ...segment }));
   let moved = null;   // the pre-drag snapshot, taken lazily: a click must not pay for one
   let riders = null;  // (delta) => void, one per thing inside this tempo span: it moves with the flag
   // This flag's popover is open: the drag is that session typing into its
@@ -208,7 +211,7 @@ export function markerMouseDown(e) {
     if (viaPop) {
       moved = true;
       markerTime.value = Math.max(0, nt).toFixed(3);
-      applyMarkerTime(); syncReverts();
+      applyMarkerTime(Math.max(0, nt)); syncReverts();
       return;
     }
     if (!moved) {
@@ -316,7 +319,7 @@ function revertField(k) {
   if (k === "bpm") markerBpm.value = String(seg.bpm);
   if (k === "ts") { markerTsNum.value = seg.tsNum; markerTsDen.value = seg.tsDen; }
   if (k === "subdiv") setSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap, seg.subdiv || 1);
-  if (k === "time") { markerTime.value = String(+seg.t.toFixed(3)); applyMarkerTime(); }
+  if (k === "time") { markerTime.value = String(+seg.t.toFixed(3)); applyMarkerTime(seg.t); }
   else applyPop();
   syncReverts();
 }
@@ -360,9 +363,10 @@ function applyPop() {
 // Set a marker's exact time from the popover — the same move as dragging its flag:
 // what sits in its span rides along (spanRiders), live while typing. Every value
 // is measured from where the session began, so "1" on the way to "1.5" is harmless.
-function applyMarkerTime() {
+// `exact`: the time itself when the field only shows it rounded (a drag, a revert).
+function applyMarkerTime(exact) {
   if (!editSeg) return;
-  const t = parseFloat(markerTime.value);
+  const t = Number.isFinite(exact) ? exact : parseFloat(markerTime.value);
   if (!Number.isFinite(t)) return;
   beginPopEdit();
   if (!popRiders) popRiders = spanRiders(editSeg);
@@ -417,7 +421,7 @@ export function init_markers() {
   [markerBpm, markerTsNum, markerTsDen].forEach((el) => el.addEventListener("input", inEditTiming(applyPop)));
   markerSubdiv.addEventListener("change", inEditTiming(() => { syncSubdivControls(markerSubdiv, markerSubdivCustom, markerSubdivCustomWrap); applyPop(); }));
   markerSubdivCustom.addEventListener("input", inEditTiming(applyPop));
-  markerTime.addEventListener("input", inEditTiming(applyMarkerTime));
+  markerTime.addEventListener("input", inEditTiming(() => applyMarkerTime()));
   scrubField(markerTime, inEditTiming(() => { applyMarkerTime(); syncReverts(); }));
   scrubField(markerBpm, inEditTiming(() => { applyPop(); syncReverts(); }),
     { step: 0.1, min: 20, max: 320, decimals: 2 });
