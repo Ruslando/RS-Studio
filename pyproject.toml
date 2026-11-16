@@ -132,7 +132,12 @@ torchcodec = [{ index = "pytorch-cpu", group = "cpu", marker = "sys_platform == 
 # No releases upstream; this is the commit RS Studio's Linux export was tested with.
 wwise-wem = { git = "https://github.com/rabbit-smith/wem", rev = "c757fe4d2354cbd4d66960179c7715d79b13bae0" }
 # PyPI's madmom release is incompatible with supported Python versions.
-madmom = { git = "https://github.com/CPJKU/madmom", rev = "27f032e8947204902c675e5e341a3faf5dc86dae" }
+# Windows/3.12 uses a prebuilt wheel (built from this commit without the
+# CC BY-NC-SA model files) so users need no C compiler; everything else builds from git.
+madmom = [
+    { path = "wheels/madmom-0.17.dev0-cp312-cp312-win_amd64.whl", marker = "sys_platform == 'win32' and python_version == '3.12'" },
+    { git = "https://github.com/CPJKU/madmom", rev = "27f032e8947204902c675e5e341a3faf5dc86dae", marker = "sys_platform != 'win32' or python_version != '3.12'" },
+]
 
 # The same CUDA build RS Studio Setup installs on Windows (tools/package-bootstrap.py).
 [[tool.uv.index]]
