@@ -2220,7 +2220,11 @@ function planShifts(tuning, cols, span, seats, maxFret, price) {
   // before `until` only.
   const hand = new Array(n);
   const plan = (a, until) => {
-    let cost = frets.map((g, gi) => own(a, gi, until) + (a ? step(a, hand[a - 1], gi) : 0));
+    // A fret that cannot hold column a is never stepped into (as in the loop below).
+    let cost = frets.map((g, gi) => {
+      const o = own(a, gi, until);
+      return a && o < Infinity ? o + step(a, hand[a - 1], gi) : o;
+    });
     const back = [];
     for (let i = a + 1; i < n; i++) {
       const next = [], from = [];

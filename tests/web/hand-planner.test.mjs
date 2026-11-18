@@ -62,3 +62,14 @@ const at = (got, n) => `${'GDAE'[got.voiced.get(n).string]}${got.voiced.get(n).f
 }
 
 console.log('hand planner: hand changes, staying, the four-fret window and open strings passed');
+
+// A hand change right after a slide: frets that cannot hold the landing note are
+// never stepped into (this used to throw reading a placement that does not exist).
+{
+  const notes = [
+    { id: 'a', pitch: 77, start: 0, end: .5, slide: 'legato' },   // F5, high on the neck
+    { id: 'b', pitch: 79, start: .5, end: 1 },                     // G5: no hand near fret 3 holds it
+  ];
+  const got = voiceNotesFingered(notes, GUITAR, Infinity, { instrument: 'electric', holds: [{ id: 'h', t: .5, fret: 3 }], anchorChanges: true });
+  assert.ok(notes.every(n => got.voiced.get(n)), 'both notes are placed');
+}
