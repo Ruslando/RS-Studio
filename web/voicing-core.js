@@ -2216,8 +2216,21 @@ function planShifts(tuning, cols, span, seats, maxFret, price) {
   };
   const step = (i, hi, gi) => (hi === gi ? 0 : SHIFT * shiftEase(cols[i - 1], cols[i], at[i - 1][hi].strings, tuning)
     + TIE_MOVE * Math.abs(frets[hi] - frets[gi])) + linkCost(cols[i - 1], cols[i], at[i - 1][hi], at[i][gi], tuning);
-  // Plan columns a.. to the end from the hand before a, seeing the hand changes
-  // before `until` only.
+  // A hand change reaches forward only: columns before it are planned without it, but
+  // still seeing the notes after it. A hand change is in force from its column on.
+  const starts = [0];
+  for (let i = 1; i < n; i++) if (cols[i].anchor != null && cols[i].anchor !== cols[i - 1].anchor) starts.push(i);
+  // What columns i.. cost from hand gi at i, seeing no hand changes: what every
+  // segment sees past its end. Worked out once, backwards, from the first change on.
+  const rest = new Array(n);
+  for (let i = n - 1; i >= (starts[1] ?? n); i--) rest[i] = frets.map((g, gi) => {
+    const o = own(i, gi, 0);
+    if (o === Infinity || i === n - 1) return o;
+    let best = Infinity;
+    frets.forEach((h, k) => { if (rest[i + 1][k] < Infinity) best = Math.min(best, step(i + 1, gi, k) + rest[i + 1][k]); });
+    return o + best;
+  });
+  // Plan columns a..until-1 from the hand before a, with what follows priced in.
   const hand = new Array(n);
   const plan = (a, until) => {
     // A fret that cannot hold column a is never stepped into (as in the loop below).
@@ -2226,7 +2239,7 @@ function planShifts(tuning, cols, span, seats, maxFret, price) {
       return a && o < Infinity ? o + step(a, hand[a - 1], gi) : o;
     });
     const back = [];
-    for (let i = a + 1; i < n; i++) {
+    for (let i = a + 1; i < until; i++) {
       const next = [], from = [];
       frets.forEach((g, gi) => {
         const o = own(i, gi, until);
@@ -2240,15 +2253,15 @@ function planShifts(tuning, cols, span, seats, maxFret, price) {
       });
       back.push(from); cost = next;
     }
-    hand[n - 1] = cost.reduce((best, v, gi) => (v < cost[best] ? gi : best), 0);
-    for (let i = n - 1; i > a; i--) hand[i - 1] = back[i - 1 - a][hand[i]];
+    if (until < n) cost = cost.map((v, hi) => {
+      if (v === Infinity) return v;
+      let best = Infinity;
+      frets.forEach((g, gi) => { if (rest[until][gi] < Infinity) best = Math.min(best, step(until, hi, gi) + rest[until][gi]); });
+      return v + best;
+    });
+    hand[until - 1] = cost.reduce((best, v, gi) => (v < cost[best] ? gi : best), 0);
+    for (let i = until - 1; i > a; i--) hand[i - 1] = back[i - 1 - a][hand[i]];
   };
-  // A hand change reaches forward only. The plan is made without it, and again from
-  // it on with it; what comes before it never depends on it.
-  // ponytail: one pass per hand change (changes x columns x frets^2); carry the
-  // prefix's states forward if a lane with hundreds of changes gets slow.
-  const starts = [0];
-  for (let i = 1; i < n; i++) if (cols[i].anchor != null && cols[i].anchor !== cols[i - 1].anchor) starts.push(i);
   starts.forEach((a, k) => plan(a, starts[k + 1] ?? n));
   if (seats) hand.forEach((gi, i) => { seats[i] = frets[gi]; });
   if (price && cols[price.index]) {
