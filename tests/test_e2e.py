@@ -3049,7 +3049,8 @@ class EndToEndTests(unittest.TestCase):
             const lane = S.state.editLanes[0];
             lane.notes = [{id:'a',start:0,end:1,pitch:52,pos:{string:3,fret:2}},
                 {id:'b',start:1,end:2,pitch:58,pos:{string:3,fret:8}}];
-            lane.refBoxes = {}; S.voicingRevision++;
+            // No saved hand changes: they are fixed points the planner keeps the hand at.
+            lane.refBoxes = {}; lane.handHolds = []; S.voicingRevision++;
             (await import('/store.js')).setSelection(new Set());
             setFretboardEdit(false);  // sample the transport, without a held alternative-edit column
             (await import('/playback.js')).seekPlayback(.75);
@@ -3347,23 +3348,28 @@ class EndToEndTests(unittest.TestCase):
             expect(page.locator('#fretboardShowAnyway')).to_be_visible()
             expect(page.locator('#fretboardPanel')).to_have_attribute('data-edit-blocked', '')
             count_script = """async () => {
-                const ctx = document.querySelector('#fretboard').getContext('2d'), original = ctx.fillText;
-                let digits = 0; const strings = [];
+                const ctx = document.querySelector('#fretboard').getContext('2d'), original = ctx.fillText, stroke = ctx.stroke;
+                let digits = 0, marks = 0; const strings = [];
+                ctx.stroke = function(...args) { marks++; return stroke.apply(this, args); };
                 ctx.fillText = function(text,...args) {
                     if (/^[1-4]$/.test(String(text)) && this.textBaseline === 'middle') digits++;
                     if (['E2','E4'].includes(String(text))) strings.push(args[1]);
                     return original.call(this,text,...args);
                 };
-                try { (await import('/fretboard.js')).drawFretboard(); } finally { ctx.fillText = original; }
-                return {digits,strings};
+                try { (await import('/fretboard.js')).drawFretboard(); } finally { ctx.fillText = original; ctx.stroke = stroke; }
+                return {digits,marks,strings};
             }"""
             count = page.evaluate(count_script)
             self.assertEqual(count['digits'], 0, 'invalid shape is hidden initially')
+            hidden = count
             page.locator('#fretboardShowAnyway').click()
             expect(page.locator('#fretboardShowAnyway')).to_be_hidden()
             expect(page.locator('#fretboardPanel')).not_to_have_attribute('data-edit-blocked', '')
             count = page.evaluate(count_script)
-            self.assertGreater(count['digits'], 0, 'Show anyway reveals the available fingering')
+            # The shape is drawn now; an open string needs no finger, so a chord of open
+            # strings shows its marks without digits.
+            self.assertGreater(count['marks'] + count['digits'], hidden['marks'] + hidden['digits'],
+                               'Show anyway reveals the available fingering')
             expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count','0')
         warning = page.locator('#fretboardWarning').bounding_box()
         board = page.locator('#fretboard').bounding_box()
@@ -3455,18 +3461,27 @@ class EndToEndTests(unittest.TestCase):
         page.get_by_label('Show suggestion', exact=True).check()
         expect(page.locator('#fretboardResetStatus')).to_contain_text('Suggested hand:')
         self.assertFalse(self.faults, self.faults)
+        pinned = page.evaluate("""async () => (await import('/store.js')).S.state.editLanes[0].notes
+            .filter(n => n.start === 80).map(n => [n.pos.scope, n.pos.string, n.pos.fret]).sort()""")
         page.locator('#fretboardAuto').click()
         expect(page.locator('#fretboardResetStatus')).to_be_hidden()
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
-        positions = page.evaluate("""async () => {
+        # Recalculate position drops the chord's pin: it takes the planner's answer,
+        # whatever that is, stored in the background (keepVoicing).
+        chord = page.evaluate("""async () => {
             const lane = (await import('/store.js')).S.state.editLanes[0];
-            // Reset leaves the chord to the automatic fingering, stored in the background.
-            await (await import('/lane-fingering.js')).laneFingering(lane);
-            return lane.notes.filter(n => n.start === 80).map(n => [n.pos.string, n.pos.fret]).sort();
+            const found = await (await import('/lane-fingering.js')).laneFingering(lane);
+            const notes = lane.notes.filter(n => n.start === 80), at = p => [p.string, p.fret];
+            return { pinned: notes.some(n => n.pos?.scope === 'local'),
+                stored: notes.map(n => at(n.pos)).sort(), planned: notes.map(n => at(found.voiced.get(n))).sort() };
         }""")
-        self.assertEqual(positions, [[2, 5], [3, 5], [5, 5]])
+        self.assertFalse(chord['pinned'], 'the chord is no longer pinned')
+        self.assertEqual(chord['stored'], chord['planned'], 'it is played where the planner puts it')
+        # Undo brings the chord back pinned as it was.
         page.keyboard.press('Control+z')
-        self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes.some(n => n.start === 80 && n.written)"))
+        self.assertEqual(page.evaluate("""async () => (await import('/store.js')).S.state.editLanes[0].notes
+            .filter(n => n.start === 80).map(n => [n.pos.scope, n.pos.string, n.pos.fret]).sort()"""), pinned)
+        self.assertTrue(all(scope == 'local' for scope, *_ in pinned))
 
     def test_fretboard_redesigned_controls(self):
         self.open_reference_project()
@@ -3478,9 +3493,17 @@ class EndToEndTests(unittest.TestCase):
         expect(page.get_by_label('Show grips', exact=True)).to_be_visible()
         row = page.locator('#fretboardHandPositions')
         expect(row).to_be_visible()
-        expect(row.locator('button.is-allowed')).to_have_text(['2','3','4','5','6','7'])
-        expect(row.locator('[data-value="1"]')).to_be_disabled()
-        expect(row.locator('[data-value="8"]')).to_be_disabled()
+        # Which hands are allowed is the planner's business (fewest shifts, a 4-fret
+        # window, stretches only warned): the row offers exactly those, with the
+        # current one among them and checked.
+        frets = row.locator('button[data-value]:not([data-value=""])')
+        buttons = frets.evaluate_all("""bs => bs.map(b => ({ value: b.dataset.value, allowed: b.classList.contains('is-allowed'),
+            disabled: b.disabled, current: b.classList.contains('is-current'), checked: b.getAttribute('aria-checked') === 'true' }))""")
+        self.assertTrue(any(b['allowed'] for b in buttons) and any(not b['allowed'] for b in buttons), buttons)
+        self.assertTrue(all(b['disabled'] != b['allowed'] for b in buttons), 'only allowed hands can be chosen')
+        current = [b for b in buttons if b['current']]
+        self.assertEqual(len(current), 1, buttons)
+        self.assertTrue(current[0]['allowed'] and current[0]['checked'])
         expect(page.locator('#layerCapo')).to_have_count(1)
         defaults = page.evaluate("async () => (await import('/voicing-core.js')).defaultPinFlags()")
         self.assertEqual(defaults, {"follow": "guided"})
@@ -5261,8 +5284,8 @@ class EndToEndTests(unittest.TestCase):
         # The saved 9 on the slide's note is drawn at the landing, after the start flag.
         paints = dict(page.evaluate("window.slideHandPaint"))
         self.assertGreater(paints['9'], paints['5'])
-        self.assertIn('5', page.evaluate('window.slideHandPaint'), 'the rail shows the hand at the slide start')
-        self.assertIn('9', page.evaluate('window.slideHandPaint'), 'the rail shows the hand at the slide landing')
+        self.assertIn('5', paints, 'the rail shows the hand at the slide start')
+        self.assertIn('9', paints, 'the rail shows the hand at the slide landing')
 
     def test_shift_slide_landing_paints_an_implicit_hand_flag(self):
         self.open_reference_project()
