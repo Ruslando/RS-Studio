@@ -132,7 +132,11 @@ export const tempoFlags = () => markerRects.map((r) => ({ ...r, kind: "tempo", k
 
 function markerAt(x, y) {
   if (railsHidden() || railScale() < 1) return null;
-  for (const r of markerRects) if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return r;
+  // A later flag is painted over an earlier one it overlaps: the one on top is hit.
+  for (let i = markerRects.length - 1; i >= 0; i--) {
+    const r = markerRects[i];
+    if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return r;
+  }
   return null;
 }
 
