@@ -46,7 +46,7 @@ const GUITAR_HAND_PROFILE = Object.freeze({
   id: "guitar6", stringCount: 6, scaleLengthMm: 648, stringSpacingMm: 7,
 });
 
-// A bass fret is a third wider, so its stretch stops a fret sooner (handReach).
+// A bass fret is a third wider, so its stretch stops a fret sooner.
 export const BASS_HAND_PROFILE = Object.freeze({
   id: "bass4", stringCount: 4, scaleLengthMm: 864, stringSpacingMm: 9, maxReach: 5,
 });
@@ -99,7 +99,6 @@ const seatOffsetUnits = (fret, seat, profile) =>
 // ============================================================================
 
 const CHORD_GAP = 0.06;   // s; onset spread that still counts as one chord
-
 
 // STACKED NOTES ARE ONE NOTE. Two notes of one pitch sounding over each other — a
 // doubled detection, a paste onto itself — are one string struck once, and nothing
@@ -167,7 +166,6 @@ export const needsFret = (note) => !!(note.slide || note.bend || note.harmonic |
 // fretted because the left hand sounds its target. Neither can change strings.
 // Only these two kinds link to a following note ("in"/"out" slides do not):
 // SLIDE_TO_NEXT, imported from bend.js, which plays and draws them.
-
 
 // Finite fallback cost for source data with no physically satisfiable edge.
 // Whenever any legal edge exists, dpSegment removes illegal edges entirely
@@ -332,7 +330,6 @@ function fingerGroups(shape) {
   if (!choices.length) return groupsAtEachFret(shape).flatMap((x) => x[0] || []);
   return choices.reduce((best, x) => !best || x.length < best.length ? x : best, null) || [];
 }
-
 
 // Explicit state for every string. MIDI cannot tell us whether an unused string
 // was skipped or muted, so the model records its cheapest plausible method and
@@ -685,7 +682,6 @@ function handString(shape) {
   return fretted.reduce((sum, v) => sum + v.string, 0) / fretted.length;
 }
 
-
 // Notes held on the exact same string+fret across two shapes — a pivot finger
 // the player keeps down, which makes the transition easier (rewarded below).
 // How much a move is amplified/discounted by the time available for it: fast
@@ -823,7 +819,6 @@ function transitionCostBreakdown(prevShape, prevFingering, curShape, curFingerin
   profile = GUITAR_HAND_PROFILE, dt, refIoi) {
   return transitionResult(prevShape, prevFingering, curShape, curFingering, profile, dt, refIoi, true);
 }
-
 
 // Left-hand fingers (1=index … 4=pinky, -1 open) for a shape. Same-fret notes
 // share a number only when fingerGroups proves that a real barre can connect
@@ -1212,7 +1207,6 @@ function chordArrangementChoices(pcs, root, count, tuning, sourcePitches = [], c
   return out;
 }
 
-
 // Match a candidate's voices against the notes already written in the column.
 // Pairing is a pitch multiset, so a shape that keeps one of two unisons keeps a
 // note that is already there rather than deleting one and writing another.
@@ -1422,45 +1416,6 @@ function greedyShape(notes, tuning) {
   return placed;
 }
 
-// Median inter-onset interval of a column-onset list (seconds) — the reference
-// tempo timeFactor scales against. 1 (neutral) when timing is missing/degenerate.
-function medianIoi(times) {
-  const d = [];
-  for (let i = 1; i < times.length; i++) { const x = times[i] - times[i - 1]; if (x > 0) d.push(x); }
-  if (!d.length) return 1;
-  d.sort((a, b) => a - b);
-  // Lower median deliberately resists one long rest in a short local window;
-  // that rest is what phraseBreaks is trying to detect, not the local tempo.
-  return d[(d.length - 1) >> 1];
-}
-
-// A rolling reference follows tempo/grid changes and is not distorted by a
-// sparse intro or a dense passage elsewhere in the lane.
-function localIois(times, radius = 3) {
-  return times.map((_, i) => {
-    const lo = Math.max(0, i - radius), hi = Math.min(times.length, i + radius + 1);
-    return medianIoi(times.slice(lo, hi));
-  });
-}
-
-// Both sides of this comparison are durations derived from the same onsets by
-// different routes, so an exact tie arrives as a float discrepancy rather than as
-// equality: a gap of 5/6 s measured 0.8333333333333339 against a threshold of
-// 0.8333333333333321 and became a phrase break by 1.8e-15 seconds. A break
-// discards every motif window that crosses it, so that decided the fingering of a
-// whole figure. Compare with a relative tolerance — a rest either clears four
-// times the local pulse or it does not, and no rest is decided in the last digit.
-const BREAK_EPSILON = 1e-9;
-
-function phraseBreaks(times, refs = localIois(times)) {
-  return times.map((t, i) => {
-    if (i === 0) return false;
-    const limit = 4 * Math.max(refs[i], refs[i - 1]);
-    return t - times[i - 1] > limit * (1 + BREAK_EPSILON);
-  });
-}
-
-
 // Motif discovery is musical rather than mechanical. A slide, bend, or other
 // technique can constrain an occurrence's eventual fingering, but it must not
 // make the same pitch phrase disappear from the repetition count. Rhythm is
@@ -1498,9 +1453,6 @@ function cloneRealization(shape, targetColumn, shift = 0) {
   return out;
 }
 
-
-
-
 // Voice a list of columns → the chosen shape per column. New overrides carry
 // independent previous/next influence flags. Legacy forward pins retain their
 // old asymmetric, decaying pull into the following run.
@@ -1510,7 +1462,6 @@ function cloneRealization(shape, targetColumn, shift = 0) {
 // candidates and a plan. voiceNotes is the one-shot form; voiceColumns is for
 // callers that already have columns.
 // ============================================================================
-
 
 // What a note's written technique says about where it can be played. Audited
 // against thirteen human transcriptions in a corpus audit, and every rule here
@@ -1579,14 +1530,14 @@ function effectRule(note, next) {
   const into = slideInOf(note), out = SLIDE_OUT.has(note.slide) ? note.slide : null;
   if (into || out) rule.edge = (fret) => fret > 0
     && ((into && slideReach(into, fret) < edgeSlideFrets(note, into)) || (out && slideReach(out, fret) === 0));
-  if (SLIDE_TO_NEXT.has(note.slide)) rule.link = note.slide === "legato" ? "fretted" : "any";
+  if (SLIDE_TO_NEXT.has(note.slide)) { rule.link = note.slide === "legato" ? "fretted" : "any"; rule.slide = true; }
   // "any" and not "fretted": a pull-off onto an open string is ordinary playing.
   else if (hammerOrigin(note) && next.some(hammerDest)) rule.link = "any";
   return Object.keys(rule).length ? rule : null;
 }
 
 // WHERE A NOTE'S TECHNIQUE LETS IT BE PUT BY HAND. The voicer has always kept these
-// rules for itself (fitColumn, the carry in voiceRegister); the neck's offers did
+// rules for itself (placeInHand); the neck's offers did
 // not, so a slid note was offered its open string and a slide's target a string the
 // slide does not run along. Every offer the board makes — a ring, a box, a step of
 // the shape walk — asks here first, off the same effectRule the voicer reads, so a
@@ -1796,7 +1747,7 @@ function registerColumns(columns, tuning, options = {}) {
   const low = order.map((i) => tuning[i]);
   const seat = new Map(order.map((appIndex, leanIndex) => [appIndex, leanIndex]));
 
-  const holds = holdsByColumn(columns, options.holds, options.anchorChanges);
+  const holds = holdsByColumn(columns, options.anchorChanges ? handAnchorsInForce(columns, options.holds) : options.holds, options.anchorChanges);
   const frets = fretboardFor(options.instrument).frets - (Number(options.capo) || 0);
   // A column that is all inside arpeggios or handshapes is pinned to their grip
   // (shapeGrips), which keeps any position its notes have.
@@ -1815,59 +1766,33 @@ function registerColumns(columns, tuning, options = {}) {
     const authored = pins[i];
     const locked = authored;
     const chosen = authored ? chosenFingers(notes, notes) : new Map();
-    // The grip's fingers, where the player chose none, and its hand: one for the whole shape.
-    let gripSeat = null;
+    // The grip's fingers, where the player chose none: one hand for the whole shape.
     if (gripped[i]) for (const n of notes) {
       const g = grips.get(n);
       if (!chosen.has(n) && Number.isInteger(g.finger) && notes.length > 1) chosen.set(n, g.finger);
-      if (Number.isFinite(g.seat)) gripSeat = g.seat;
     }
     return {
-      // Saved changes supply the active hand at every column in their range.
-      // Positions stay fixed; explicit fingers that disagree are reported later.
-      handAt: holds[i]?.fret ?? gripSeat ?? (chosen.size ? handOfFingers(locked, chosen, handProfileForTuning(tuning)) : null),
+      // The hand change in force here: the planner keeps the hand on it while the notes
+      // allow. Placed notes stay put; explicit fingers that disagree are reported later.
+      anchor: holds[i]?.fret ?? null,
       fingers: chosen,
       pitches: notes.map((n) => n.pitch),
-      // Onset and release. Lean decides the register once per bar and charges
-      // less to change it across a rest, so it needs both — without them the
-      // whole lane collapses to one block, which still works and is just coarser.
+      // Onset and release: a shift is cheaper across a rest or after a long note.
       t0,
       end: notes.reduce((t, n) => Math.max(t, Number(n.end) || t0 || 0), t0 || 0),
-      // A pin bypasses fitColumn entirely, so it also bypasses the rules below —
-      // which is the behaviour the full engine already documents: an explicit pin
-      // wins even when it contradicts the note's own technique. The user asked.
+      // A placed column keeps its strings even against its notes' technique.
       fixed: locked ? notes.map((n) => seat.get(locked.get(n).string)) : null,
       pinned: partial ? notes.map((n) => partial.has(n) ? seat.get(partial.get(n).string) : null) : null,
-      // Explicit positions guide later placements; saved positions stay fixed.
-      steer: !!pins[i],
-      decided: locked ? notes.map(n => seat.get(locked.get(n).string)) : null,
-      guided: !!pins[i],
       rules,
-      // Muted notes, for the hand walk only (planHand): see `reach` in voiceRegister.
-      // A chord muted whole is no scratch: it is held like the chord (looseIn).
+      // Muted notes are not held by the hand. A chord muted whole is held like the chord.
       dead: notes.some((n) => n.fx?.dead) && !notes.every((n) => n.fx?.dead) ? notes.map((n) => !!n.fx?.dead) : null,
     };
   });
 
-  // The register walk supplies passage context for each column. It is not the
-  // final index-finger anchor: handForShape selects that together with actual
-  // finger contacts after the strings and frets have been decided. Single notes
-  // can stay in the passage's hand position when a physical stretch permits it.
-  // How long the neck is, off the same measurements the fretboard draws — an
-  // acoustic has 20 frets and an electric 22, and the engine inventing its own
-  // number is how the voicer and the board come to disagree about the instrument
-  // they are both describing. An unknown instrument gets the electric, which is
-  // what fretboardFor already does for the drawing.
-  //
-  // And what the fretboard's other positions cost. The engine has no cost model in the
-  // full engine's sense, but it has the one number that decided the column — how far
-  // each note sits from its bar's register, plus the continuity term — and that is
-  // the number the board's boxes have to carry, or they argue with the hand using
-  // someone else's arithmetic. Priced inside the same walk, at the register the
-  // column is decided in; see priceAssignment.
-  //
-  // Without it every offer came back unplayable and the worker filtered the whole
-  // list away, so `Show other positions` drew nothing on a column with six of them.
+  // The planner decides strings and frets with a hand per column; handForShape then
+  // picks the actual finger contacts and index fret. It also prices the fretboard's
+  // other positions for one column (`price`), so the board's offers and the hand
+  // agree; without it `Show other positions` drew nothing.
   const priceAt = options.priceAt, sink = Array.isArray(options.priced) ? options.priced : null;
   const price = priceAt && sink && columns[priceAt.index] ? {
     index: priceAt.index, out: [],
@@ -1880,9 +1805,8 @@ function registerColumns(columns, tuning, options = {}) {
   } : null;
 
   const seats = [];
-  let voiced = null;
   const fingerMemory = new Map();   // grip -> string -> finger, in time order (see the hands below)
-  voiced ||= voiceRegister(low, input, undefined, seats, options.bars, frets, price);
+  const voiced = voiceRegister(low, input, undefined, seats, frets, price);
   // One entry per offered shape, in order: that is the contract scoreShapesAsDecided
   // reads back. `fingers` is empty because the engine has none to give — the board falls
   // back to assignFingers, which is the same function the exported tab asks.
@@ -1912,7 +1836,7 @@ function registerColumns(columns, tuning, options = {}) {
         !!holds[i] || input[i].fingers.size > 0 || !!gripped[i]);
       options.hands[i] = hand;
       // A finger the player typed onto a note is what the next same grip remembers.
-      if (remembers && !input[i].aside)
+      if (remembers)
         fingerMemory.set(key, new Map([...shape].map(([note, p]) => [p.string,
           isChosenFinger(note.finger) && p.fret > 0 ? note.finger : hand.fingers.get(note)])));
     }
@@ -1931,22 +1855,9 @@ function chosenFingers(notes, source) {
   return out;
 }
 
-// Where the hand stands for a chosen fingering: a single note's finger is
-// fret − hand + 1, a chord's fingering is one of its poses.
-function handOfFingers(shape, fingers, profile) {
-  const loose = looseIn(shape), contacts = [...shape].filter(([note, p]) => p.fret > 0 && !loose(note));
-  if (contacts.length === 1) {
-    const [note, p] = contacts[0], finger = fingers.get(note);
-    return finger >= 1 ? Math.max(1, p.fret - finger + 1) : null;
-  }
-  let poses = posesFor(shape, profile, fingers);
-  const pose = poses.find((pose) => [...fingers].every(([note, f]) => pose.fingers.get(note) === f));
-  return pose?.seat ?? null;
-}
-
 // Every entry point below goes through here, so this is the one place the engine
-// is named. `registerColumns` is that engine: a register per bar, and each note on
-// the string that lands nearest it. See its section at the foot of this file.
+// is named. `registerColumns` is that engine: the hand planner (planShifts) moves
+// the hand as few times as it can and puts each note where that hand reaches it. See its section at the foot of this file.
 function voiceColumns(columns, tuning, options = {}) {
   const grips = shapeGrips(columns, tuning, options);
   return registerColumns(columns, tuning, grips ? { ...options, grips } : options);
@@ -2041,9 +1952,45 @@ export function voiceNotesFingered(notes, tuning, cap = Infinity, options = {}) 
 
 // A saved change owns the whole following range. Keep its value even when a
 // note or an explicitly chosen finger cannot reach it; report that conflict.
+// IMPLICIT HAND ANCHORS. A slide that leaves the hand elsewhere sets it for the next
+// column exactly like a saved anchor; the only difference is that nobody edits it.
+// A pitched slide-out (outDown/outUp) leaves it where the slide ends, a shift/legato
+// slide moves it by the frets its finger travels. A saved anchor on that column wins.
+// Pick slides are the picking hand's; the fretting hand stays.
+// Everything that asks where the hand is reads this list, never handHolds alone.
+export function slideLanding(note, next, fret, posOf) {
+  const at = posOf(note);
+  if (note.slide === 'outDown' || note.slide === 'outUp')
+    return Math.max(1, fret + edgeSlideSpan(note, at?.fret || fret));
+  if (!SLIDE_TO_NEXT.has(note.slide) || !(at?.fret > 0) || !next) return null;
+  const land = next.notes.map(posOf).find(p => p?.string === at.string && p.fret > 0);
+  return land ? Math.max(1, fret + land.fret - at.fret) : null;
+}
+
+export function handAnchorsInForce(columns, holds = [], posOf = (n) => n.pos) {
+  const ordered = (Array.isArray(holds) ? holds : []).filter(h => Number.isFinite(Number(h?.t)))
+    .sort((a, b) => Number(a.t) - Number(b.t));
+  const out = [...ordered];
+  let j = 0, fret = null, landing = null, slid = null;
+  columns.forEach((column, i) => {
+    let saved = null;
+    while (j < ordered.length && Number(ordered[j].t) <= column.t0 + 1e-6) saved = ordered[j++];
+    if (saved) fret = Number(saved.fret);
+    else if (landing != null && landing !== fret) {
+      fret = landing;
+      // The rail's id for this landing (slideOutHandChanges), so a conflict flags it.
+      out.push({ id: `slide_${slid.id || slid.start}_to`, t: column.t0, fret, implicit: true });
+    }
+    slid = column.notes.length === 1 ? column.notes[0] : null;
+    landing = slid && fret != null ? slideLanding(slid, columns[i + 1], fret, posOf) : null;
+  });
+  return out.sort((a, b) => Number(a.t) - Number(b.t));
+}
+
 export function applyHandAnchors(notes, found, tuning, holds = []) {
   const profile = handProfileForTuning(tuning), conflicts = new Map();
-  const ordered = [...holds].sort((a, b) => a.t - b.t);
+  // Stored positions, as registerColumns and note-issues read them, so all agree.
+  const ordered = handAnchorsInForce(chordColumns(notes), holds);
   let i = 0, active = null;
   for (const column of chordColumns(notes)) {
     while (i < ordered.length && ordered[i].t <= column.t0 + 1e-6) active = ordered[i++];
@@ -2064,6 +2011,7 @@ export function applyHandAnchors(notes, found, tuning, holds = []) {
     }
   }
   found.handConflicts = conflicts;
+  found.handAnchors = ordered;
   return found;
 }
 
@@ -2101,375 +2049,36 @@ function carrySlideFingers(chosen, fingers, seats, profile) {
   }
 }
 
-// MIDI -> tab, in one idea: the fretting hand is a four-fret window, and inside
-// that window a note takes the lowest string that reaches it.
-//
-// Measured against six hand-made Guitar Pro transcriptions (36 fretted lanes,
-// 42,071 notes — Stairway, Hotel California, Master of Puppets, Nothing Else
-// Matters, Teen Spirit, Do I Wanna Know):
-//
-//   * the window + lowest-string rule can *express* 99.7% of the fingerings
-//     those six transcribers actually wrote. The representation is not the
-//     bottleneck.
-//   * told the right window, the rule reproduces 97.2% of their string choices
-//     with no cost function at all — 100% on bass.
-//   * so the only real decision is where the window sits, and that is what the
-//     Viterbi below picks.
-//
-// No tunable cost is used for register bias, string-crossing cost, finger-stretch
-// cost or travel minimisation; measured variants landed inside 74–79%. Open
-// strings follow a separate rule: automatic voicing uses them only when no
-// fretted placement is available. See
-// docs/voicing-engine.md for the numbers and what they mean.
+// MIDI -> tab: where the fretting hand is decides where every note goes. The hand
+// planner below picks the hand for each column; inside it a note has one place.
 
-const SPAN = 4;          // the hand covers four frets. Corpus: 99.9% of chords fit three.
-const MAX_REACH = 6;   // with a stretch: the pinky reaches two frets past the four
-const handReach = (profile) => profile?.maxReach ?? MAX_REACH;
+const SPAN = 4;   // the hand covers four frets from the index
 
 // HOW MANY FRETS THERE ARE IS A FACT ABOUT THE INSTRUMENT, so the caller states
 // it and this is only the default for a caller that cannot. `web/fretboard-core.js`
-// measures all three off named production models — electric 22, acoustic 20 (a
-// 14-fret body join leaves 20 on the board), bass 20 — and the lane carries the
-// `instrument` that selects one; registerColumns reads it from there, so the engine
-// and the drawn neck cannot disagree about how long the neck is.
-//
-// It was a hardcoded 22 for every instrument, which was a fourth answer to a
-// question the codebase already answered twice. Latent rather than live — over
-// the thirteen transcriptions nothing lands above fret 20 on any lane, because
-// the register keeps the hand low, and the writers exceed their own instrument
-// 0.00% of the time on acoustic and bass — but an acoustic has no fret 21 to put
-// a note on, whatever the corpus happens to ask for.
+// measures all three off named production models (electric 22, acoustic 20, bass 20)
+// and the lane carries the `instrument` that selects one; registerColumns reads it
+// from there, so the engine and the drawn neck cannot disagree.
 const DEFAULT_NECK_FRETS = 22;   // an electric; callers pass the real count
 
 // The highest fret the index can stand on with a full grip still on the neck.
-// Derived, so it follows the instrument instead of being a third number to keep
-// in step.
 const handCeiling = (maxFret) => maxFret - SPAN + 1;
 
-// WHAT THE WINDOW MODEL NEEDED, AND WHY NONE OF IT IS HERE. Walking a four-fret
-// window column by column needed a cost per move (flat, because the corpus says
-// distance stops mattering once the hand commits), a smaller one for a one-fret
-// nudge, a standing pull toward the nut to break the ties a flat cost leaves, and
-// a large finite penalty for breaking a slide's string. All four are gone with
-// the walk they served — the register decides position now, and it is decided per
-// bar. The sweeps that produced them were real and are logged in
-// docs/voicing-engine.md; they are history, not settings, and leaving them declared
-// here would be four numbers a reader would reasonably think the engine reads.
-
-
 // A note whose written technique restricts where it can be played. Everything the
-// engine knows about effects arrives here; the caller derives it (see registerColumns)
-// so this file stays ignorant of the app's note shape.
+// engine knows about effects arrives here; the caller derives it (see effectRule)
+// so this file's planner stays ignorant of the app's note shape.
 //
-//   fretted  cannot be played on an open string — a slide slides a finger, a bend
+//   fretted  cannot be played on an open string: a slide slides a finger, a bend
 //            pushes a fretted note, fretting-hand vibrato needs something to shake.
-//   free     not held by the fretting hand at all, so the window does not apply.
-//            A tapped note is the picking hand reaching wherever it likes: measured
-//            over the corpus the transcribers put one outside the fretting hand 80%
-//            of the time, which is the entire point of tapping, and the engine was
-//            cramming 93% of them inside it.
-//   reach    the hand must also cover this many frets ABOVE the note — a trill
+//   free     not held by the fretting hand at all (a tapped note), so the window
+//            does not apply.
+//   reach    the hand must also cover this many frets ABOVE the note: a trill
 //            alternates with a fret one or two up and both are held by one hand.
+//   edge     a slide in or out needs room on the string: frets it cannot start on.
 //   link     this note continues onto the SAME STRING in the next column: "any" for
 //            a shift slide or a hammer/pull pair, "fretted" for a legato slide,
 //            whose target is sounded by the left hand and so cannot be open.
-
-/**
- * One column, one hand position. Walks the notes lowest pitch first and gives
- * each the lowest string that can reach it — open, or inside [hand, hand+SPAN).
- * Returns a string index per pitch, or null if the column will not fit.
- * `rules` is optional and parallel to `pitches`; see above.
- */
-function fitColumn(tuning, pitches, hand, span = SPAN, rules = null, maxFret = DEFAULT_NECK_FRETS) {
-  const used = new Array(tuning.length).fill(false);
-  const out = [];
-  for (let i = 0; i < pitches.length; i++) {
-    const p = pitches[i];
-    const rule = rules ? rules[i] : null;
-    let got = -1;
-    for (let s = 0; s < tuning.length; s++) {
-      if (used[s]) continue;
-      const f = p - tuning[s];
-      if (f < 0 || f > maxFret) continue;
-      if (f === 0 && rule && rule.fretted) continue;
-      if (rule?.edge?.(f)) continue;
-      if (f !== 0 && !(rule && rule.free)
-        && (f < hand || f + (rule ? rule.reach || 0 : 0) >= hand + span)) continue;
-      got = s;
-      break;
-    }
-    if (got < 0) return null;
-    used[got] = true;
-    out.push(got);
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// THE REGISTER. Measured over all thirteen transcriptions (77 lanes, 128k notes),
-// and it replaced the per-column hand Viterbi that used
-// to live here because it is a different and much larger idea:
-//
-//   * a lane lives in two or three places. Median 2 positions cover 80% of its
-//     notes, and 83% of hand-position holds return to one it has used before.
-//   * so the decision is not "where is the hand in column i". One preferred fret
-//     per BAR, with the hand never moving inside it, reproduces 95.1% of the
-//     writers' string choices; one per lane already reproduces 81.1%. Deciding
-//     per bar instead of per lane is worth 14-19 points, and it is the single
-//     biggest lever in the problem.
-//   * a note then takes the string that lands it NEAREST that fret — not the
-//     fattest inside a window. Worth another 4.7 points at bar granularity. The
-//     writers take the fattest reachable string only 17% of the time; the modal
-//     choice is the second fattest, and "fattest that reaches" was only ever
-//     right because a window forced it.
-//
-// The old window model is still here and still doing work — fitColumn expresses
-// what a hand can HOLD, which is what the effect rules need — it just no longer
-// decides where the hand goes. Peek-free this scores 73.2% against the window
-// model's 66.2% on identical lanes.
-//
-// TRIED AND FAILED, so nobody builds them twice. An asymmetric cost, cheap
-// reaching up from the index and dear reaching below it, which is true of a real
-// hand: 62.6% against the symmetric 72.7%. A hard four-fret window as the cost
-// instead of a point: 65.5%. Squared distance: 65.8%. The register is not the
-// index finger, it is the fret a bar's notes cluster around, and a robust
-// centroid beats a hand model here. Also: aligning the blocks to the last eighth
-// of the bar, where the writers demonstrably shift more than mid-bar — no effect
-// at all (95.1% -> 95.3% oracle), because those are single pickup notes and a
-// soft register does not notice one note.
-const TOPT = 18;         // registers considered: fret 0 to 17
-
-// What changing register costs, in the same unit as the rest: one note sitting
-// one fret away from where the hand is. 12 is not the value that maximises
-// agreement — 4 is, by 1.5 points — and it is chosen anyway, because agreement
-// cannot see what it buys. Two registers a couple of frets apart usually put the
-// same notes on the same strings, so the percentage is nearly blind to WHEN the
-// hand moves, and at 4 the model moved 1438 times against the writers' 719 and
-// changed register at 13.5% of bar seams where the pitch had not moved at all.
-// At 12: 698 shifts and 1.7% churn, against their 719 and 1.3%. See the "judge
-// the tab by playing it" rule — this is the case it was written for.
-const LAMBDA = 12;
-
-// How hard each bar is pulled toward the lane's own home register. Bars land a
-// whole string away from the writer in about a quarter of cases, and locally
-// each of those is defensible — the same shape one string over — so the tie has
-// to be broken from outside the bar. Knowing the home is worth +9.6 points
-// (72.7 -> 82.8 with the oracle's), which is far more than anything else left on
-// the table, and no estimator tried gets close to knowing it.
-const MU = 1;
-
-// A shift is cheaper where the music makes room for it and dearer where it does
-// not. Read off the corpus rather than fitted: against a 3.5% base rate, the
-// writers move the hand at 0.2% of seams where the pitch did not change and at
-// ~20% after a rest of a quarter second. The flat cost had this exactly
-// backwards — it churned on repeated material and sat still through the rests
-// where a player repositions.
-//
-// 5-7 semitones is deliberately NOT cheap: that is the interval between two
-// adjacent strings, so the hand crosses instead of moving, and the writers' own
-// shift rate dips there in the middle of an otherwise rising curve.
-// A HAND DOES NOT TELEPORT INSIDE A BAR. The register says where the hand lives,
-// not where it was a moment ago, so each note seeks the register independently
-// and two consecutive ones can land far apart when their options are spaced
-// differently — a note only reachable at the 12th followed by one whose nearest
-// option is the 3rd. Measured: 71% of the engine's jumps of five frets or more happened
-// INSIDE one bar, where the register never changed, so they were never shifts at
-// all. The window model got this free, because a window is continuity.
-//
-// Charged only BEYOND a hand's own reach, which is what makes it a constraint
-// rather than a tax on movement. Taxing every fret of movement instead helped
-// the gated corpus and cost 2.5 points overall, all of it Free Bird — a lane of
-// wide arpeggios where crossing strings is the part. With the dead band, both
-// improve: 76.0% -> 77.8% overall and two fewer gate failures.
-//
-// 16 is on a plateau (8 -> 77.7%, 16 and 32 -> 77.8%), which is the tell that it
-// is not a weight being tuned: past a point it simply means "not unless there is
-// no alternative", and the alternatives are what decide.
-const STICK = 16;
-
-const seamFactor = (silence, jump) =>
-  (silence >= 0.25 ? 0.25 : 1) * (jump === 0 ? 4 : jump > 12 ? 0.5 : 1);
-
-// Chord open strings need no fretting-hand movement and carry no register cost.
-// Single notes retain their existing preference for a fretted placement.
-const registerDistance = (pitches, fret, register) =>
-  fret === 0 && pitches.length > 1 ? 0 : Math.abs(fret - register);
-
-// WHAT ONE ALREADY-DECIDED ASSIGNMENT COSTS at register T — the same two terms
-// gripAt charges, with the strings handed in instead of searched for. It exists for
-// the fretboard's candidate boxes: the board offers every other place a column could
-// be played and writes what each would cost, and that number only means something if
-// it is the number the column was actually decided with. Pricing an offer any other
-// way puts a second model's opinion on the neck.
-//
-// A shape wider than one hand is charged, not refused. gripAt could hold it at no g
-// and fitAtRegister would fall back to its loose grip; refusing here would delete the
-// offer from the board instead, which is what "no other positions" looked like.
-// Limitation: the effect rules are not re-checked — the offers come from the full
-// engine's enumeration and the board is answering "where else", not "is this legal".
-function priceAssignment(tuning, pitches, strings, T, prev, span, maxFret) {
-  let cost = 0, lo = Infinity, hi = -Infinity;
-  for (let i = 0; i < pitches.length; i++) {
-    const st = strings[i];
-    if (st == null || st < 0) return null;
-    const f = pitches[i] - tuning[st];
-    if (f < 0 || f > maxFret) return null;      // not on this instrument's neck
-    let d = registerDistance(pitches, f, T);
-    if (prev != null && f > 0) d += STICK * Math.max(0, Math.abs(f - prev) - SPAN);
-    cost += d;
-    if (f > 0) { if (f < lo) lo = f; if (f > hi) hi = f; }
-  }
-  if (hi > lo) cost += STICK * Math.max(0, hi - lo - (span - 1));
-  // Where the index would stand to take it, read off the shape the same way the walk
-  // reads it off the bar: the lowest fretted fret. Per shape and not per bar, because
-  // an offer is a question about where the hand WOULD go. Nothing fretted, no hand.
-  return { cost, seat: Number.isFinite(lo) ? lo : null };
-}
-
-/**
- * Where a note goes when the hand is at register `T`: the string that lands it
- * nearest that fret. The fattest string wins a tie, which is all that survives
- * of "take the lowest string that reaches" — a tie-break, not the decision.
- *
- * A column still has to be a shape one hand can hold, which the register on its
- * own does not say: it is a point the notes are drawn toward, and nothing stops
- * a chord being drawn to it from twelve frets apart. So the fretted notes of a
- * column must all sit inside one four-fret grip, and the grip is whichever one
- * lands the column nearest the register. The corpus says this costs nothing —
- * 99.8% of the writers' columns already span four frets or fewer, and 69.8% of
- * them span none at all — but without it a chromatic run produced chords no hand
- * could take.
- *
- * `forced` names a string a note must keep (a slide or hammer continuing onto
- * it) and is exempt from the grip, because the previous column already committed
- * the finger and the rest of the hand follows it. `rules` is as documented above
- * fitColumn.
- */
-function fitAtRegister(tuning, pitches, T, o = {}) {
-  const span = o.span || SPAN, maxFret = o.maxFret || DEFAULT_NECK_FRETS;
-  // A grip the player named is not searched for at all @@ see gripRun, which voiceRegister()
-  // uses instead of this whenever a hold is in force. This function answers the free
-  // question: where does the hand go when nobody said.
-  let best = null;
-  for (let g = 1; g <= handCeiling(maxFret); g++) {
-    const got = gripAt(tuning, pitches, T, o, g, span, maxFret);
-    if (got && (!best || got.cost < best.cost)) best = got;
-  }
-  // Nothing one hand can hold: seat it as near the register as possible anyway
-  // and let the caller see the stretch. A transcription can ask for a chord no
-  // hand takes, and saying so beats refusing to answer. Dropping the look-ahead
-  // too, because a column that cannot be held at all cannot also be held to a
-  // promise about the next one.
-  const placed = best || gripAt(tuning, pitches, T, o, 1, maxFret + 1, maxFret)
-    || gripAt(tuning, pitches, T, { ...o, rules: o.rules }, 1, maxFret + 1, maxFret, true);
-  // Single notes avoid open strings when a fretted placement exists. Chords
-  // may use open strings freely unless a written technique requires a fret.
-  return (placed || { out: new Array(pitches.length).fill(-1) }).out;
-}
-
-// A HAND THE PLAYER PUT SOMEWHERE, WALKED FORWARD. It plays from `g` for as long as
-// `g` can hold the notes; the first column it cannot hold is a SHIFT, and the hand
-// goes to the nearest grip that can — up or down, whichever is closer, and the cheaper
-// of the two against the register when both are the same distance away.
-//
-// The shift is the point. This used to fall straight through to the free search the
-// moment one column did not fit, which silently threw the whole hold away: a hand held
-// at 3 through a line containing one note that only exists at fret 2 or fret 7 came
-// back voiced as though nothing had been asked for. A player who picks a position and
-// is quietly overruled has no way to tell that from the feature not working — and it
-// is not what a player does either, which is to hold the position until the music
-// leaves it and then move.
-//
-// Returns the assignment and the grip it was taken at, or null when no grip anywhere
-// can hold the column, which is the caller's cue to fall back to the free search.
-function gripRun(tuning, pitches, T, o, g, span, maxFret) {
-  const at = gripAt(tuning, pitches, T, o, g, span, maxFret);
-  if (at) return { out: at.out, g };
-  const ceiling = handCeiling(maxFret);
-  for (let d = 1; d <= ceiling; d++) {
-    let best = null;
-    for (const cand of [g - d, g + d]) {
-      if (cand < 1 || cand > ceiling) continue;
-      const got = gripAt(tuning, pitches, T, o, cand, span, maxFret);
-      if (got && (!best || got.cost < best.cost)) best = { out: got.out, g: cand };
-    }
-    if (best) return best;
-  }
-  return null;
-}
-
-// One column, one grip: every fretted note inside [g, g + span). Returns the
-// assignment and what it cost in frets away from the register, or null if some
-// note has nowhere to go.
-function gripAt(tuning, pitches, T, o, g, span, maxFret, loose = false) {
-  const rules = o.rules, forced = o.forced;
-  const next = loose ? null : o.next, prev = loose ? null : o.prev;
-  const used = new Array(tuning.length).fill(false);
-  const out = new Array(pitches.length).fill(-1);
-  let cost = 0;
-  // Pinned notes are seated as given, before anything is searched: no grip, no rule
-  // and no cost applies to them, and no other note may take their string.
-  if (o.pinned) o.pinned.forEach((s, i) => { if (s != null) { used[s] = true; out[i] = s; } });
-  const fretOn = (i, s, free) => {
-    const f = pitches[i] - tuning[s];
-    const rule = rules ? rules[i] : null;
-    const reach = (rule && rule.reach) || 0;
-    if (f < 0 || f + reach > maxFret) return -1;
-    if (f === 0 && rule && rule.fretted) return -1;
-    if (rule?.edge?.(f)) return -1;
-    if (pitches.length === 1 && f === 0 && hasFrettedPlacement(pitches[i], tuning, maxFret, reach)) return -1;
-    // A note that continues onto this string has to be able to LEAVE on it: a
-    // slide slides along one string, so a source seated where its target is open
-    // (or off the neck) is not a legal seat for the source, however near the
-    // register it is. Greedy placement cannot discover that after the fact —
-    // the old window model priced the break in its transition, and this is where
-    // that check has to live now.
-    if (f !== 0 || !rule || !rule.fretted) { /* fall through */ }
-    if (rule && rule.link && next && next.length) {
-      const ok = next.some((q) => {
-        const nf = q - tuning[s];
-        return nf >= 0 && nf <= maxFret && !(rule.link === "fretted" && nf === 0);
-      });
-      if (!ok) return -1;
-    }
-    if (f === 0) return 0;
-    // An open string is available from any grip; a fretted one is not. `free` is
-    // a note the last column already committed to this string.
-    if (!free && !(rule && rule.free) && (f < g || f + reach >= g + span)) return -1;
-    return f;
-  };
-  if (forced) {
-    for (let i = 0; i < pitches.length; i++) {
-      const s = forced[i];
-      if (s == null || s < 0 || used[s] || out[i] >= 0) continue;
-      const f = fretOn(i, s, true);
-      if (f < 0) continue;
-      used[s] = true; out[i] = s; cost += registerDistance(pitches, f, T);
-    }
-  }
-  for (let i = 0; i < pitches.length; i++) {
-    if (out[i] >= 0) continue;
-    const rule = rules ? rules[i] : null;
-    const reach = (rule && rule.reach) || 0;
-    let bestS = -1, bestD = Infinity, bestRank = Infinity;
-    for (let s = 0; s < tuning.length; s++) {          // fattest first, so it takes ties
-      if (used[s]) continue;
-      const f = fretOn(i, s, false);
-      if (f < 0) continue;
-      // A trill is held by one hand together with its own target, so the string
-      // has to suit both frets; everywhere else reach is 0 and this is |f - T|.
-      // The iteration order makes the fattest string win an exact tie.
-      let d = f === 0 && pitches.length > 1 ? 0
-        : Math.max(Math.abs(f - T), Math.abs(f + reach - T));
-      if (prev != null && f > 0) d += STICK * Math.max(0, Math.abs(f - prev) - SPAN);
-      const rank = d - (o.recall?.(i, s) || 0) / MEMORY_REGISTER_WEIGHT;
-      if (rank < bestRank) { bestRank = rank; bestD = d; bestS = s; }
-    }
-    if (bestS < 0) return null;
-    used[bestS] = true; out[i] = bestS; cost += bestD;
-  }
-  return { out, cost };
-}
+//   slide    the note slides into the next one, which carries the hand with it.
 
 // Whether a single note has a fretted alternative to an open string.
 function hasFrettedPlacement(pitch, tuning, maxFret, reach = 0) {
@@ -2479,534 +2088,189 @@ function hasFrettedPlacement(pitch, tuning, maxFret, reach = 0) {
   });
 }
 
-function blockCost(tuning, cols, T, maxFret, counts = () => false) {
-  let cost = 0;
-  for (const c of cols) {
-    // Keep every pitch in the register estimate, even when its position is
-    // pinned. A positional override must not erase context before its onset.
-    // A decided column (see `decided` in registerColumns) counts where it IS
-    // played, not where it would fit best, when `counts` allows it: the player's
-    // own choice is the best evidence of where the hand lives. Counted by pitch
-    // alone, a Bb5 pinned at the 3rd still pulled its bar to the 15th.
-    const used = new Array(tuning.length).fill(false);
-    const decided = counts(c) && c.decided ? c.decided : c.pitches.map(() => null);
-    decided.forEach((s, i) => {
-      if (s == null || s < 0) return;
-      const f = c.pitches[i] - tuning[s];
-      used[s] = true; cost += f === 0 ? 0 : Math.abs(f - T);
-    });
-    for (let i = 0; i < c.pitches.length; i++) {
-      if (decided[i] != null && decided[i] >= 0) continue;
-      let best = Infinity, bs = -1;
-      for (let s = 0; s < tuning.length; s++) {
-        if (used[s]) continue;
-        const f = c.pitches[i] - tuning[s];
-        if (f < 0 || f > maxFret) continue;
-        if (c.pitches.length === 1 && f === 0 && hasFrettedPlacement(c.pitches[i], tuning, maxFret)) continue;
-        const d = f === 0 ? 0 : Math.abs(f - T);
-        if (d < best) { best = d; bs = s; }
-      }
-      if (bs < 0) { cost += 6; continue; }    // unreachable: no register helps
-      used[bs] = true; cost += best;
-    }
-  }
-  return cost;
-}
-
-// Group columns by bar. With no bar lines the whole lane is one block, which is
-// not a fallback to some other engine — it is the same model at its coarsest,
-// and that is still worth 81.1% against the writers.
-//
-// A COLUMN THE PLAYER HAS PUT A HAND ON also starts a block, wherever it falls (and
-// so does a `cut`, which is where an implied hold is told to stop — see registerColumns). The
-// bar is the granularity the engine chooses at, because that is what measured best;
-// it is not the granularity a person is allowed to decide at, and a decision cannot
-// start in the middle of a block that was already decided. So a hold cuts the bar it
-// lands in, and the beats before it keep whatever they had.
-//
-// Walked in order rather than bucketed by bar index, because a hold has to split a
-// bucket the bar line would have kept whole. Columns arrive time-sorted (chordColumns
-// sorts them); out of order this makes more, smaller blocks rather than wrong ones.
-function blocksOf(columns, bars, ignoreHolds = false) {
-  const graded = bars && bars.length >= 2;
-  const blocks = [], bar = [];
-  let last = -1;
-  columns.forEach((c, i) => {
-    let b = 0;
-    if (graded && typeof c.t0 === "number") { while (b + 1 < bars.length && bars[b + 1] <= c.t0 + 1e-6) b++; }
-    if (!blocks.length || b !== last || (!ignoreHolds && (c.hold != null || c.cut || c.steer))) { blocks.push([]); bar.push(b); }
-    blocks[blocks.length - 1].push(i);
-    last = b;
-  });
-  return blocks.length ? { blocks, bar } : { blocks: [columns.map((_, i) => i)], bar: [0] };
-}
-
-// WHAT A BLOCK IS SCORED ON. Its own columns — except for the first half of a bar a
-// hold cut in two, which is scored on the WHOLE bar. That half is *before* the edit,
-// and answering its register from the two notes it has left instead of from the bar
-// it came from is how placing a hold changed the notes in front of it: not the
-// Viterbi, which the runs below already wall off, but the cut itself shrinking the
-// question. Scored on the bar, the run sees exactly the cost it saw before the cut
-// and returns exactly the register it returned before.
-function scoringOf(blocks, bar) {
-  return blocks.map((idx, b) => {
-    let out = idx;
-    for (let k = b + 1; k < blocks.length && bar[k] === bar[b]; k++) out = out.concat(blocks[k]);
-    return out;
-  });
-}
-
-// Viterbi over BARS, not over columns. That is the whole difference from the
-// window model this replaced: the decision is made once for a bar's worth of
-// notes, so it cannot drift a fret at a time.
-function solveRegisters(tuning, columns, blocks, bar, mu, home, maxFret, bare = false) {
-  const nb = blocks.length;
-  const score = scoringOf(blocks, bar);
-  // `bare` is the home estimate asking what this lane would do with nobody's hand on
-  // it. Where the lane LIVES is a fact about the music; a hold is the player
-  // overriding that fact for a bar, and letting it back into the estimate is a second
-  // way for one hold to reach backwards — a quiet one, because it moves `home` for
-  // the whole lane rather than any one block. It was the only leak the run-splitting
-  // below did not close.
-  const held = bare ? blocks.map(() => null) : blocks.map((idx) => holdOf(columns, idx));
-  const cost = blocks.map((idx, bi) => {
-    const cols = score[bi].map((i) => columns[i]);
-    // A HELD BLOCK IS NOT SCORED, IT IS TOLD. The player put the hand somewhere, so
-    // that block has one legal state and neither the music's opinion of it nor the
-    // pull toward the lane's home enters. Read off `held` above and NOT by asking
-    // holdOf again: an inner `const held` here shadowed that array, which quietly
-    // undid `bare` and let the home estimate see the holds after all.
-    if (held[bi]) return Array.from({ length: TOPT }, (_, T) => (T === held[bi].T ? 0 : Infinity));
-    // Kept placements count where they are. A steering pin and the copies it hands
-    // on count only inside their own block, never in the bar's earlier half that is
-    // scored with them, and not at all in the home estimate (`bare`): what was
-    // decided before a pin must stay as it was.
-    const own = new Set(idx.map((i) => columns[i]));
-    const counts = (c) => !(c.steer || c.soft) || (!bare && own.has(c));
-    return Array.from({ length: TOPT }, (_, T) => blockCost(tuning, cols, T, maxFret, counts) + mu * Math.abs(T - home));
-  });
-  // What the seam between two blocks says about whether a hand would move there.
-  const seam = [0];
-  for (let b = 1; b < nb; b++) {
-    const a = columns[blocks[b - 1][blocks[b - 1].length - 1]];
-    const c = columns[blocks[b][0]];
-    const silence = typeof a.end === "number" && typeof c.t0 === "number" ? Math.max(0, c.t0 - a.end) : 0;
-    const jump = Math.abs(Math.min(...c.pitches) - Math.min(...a.pitches));
-    seam.push(LAMBDA * seamFactor(silence, jump));
-  }
-  // A HOLD IS A WALL, AND THE SOLVE STOPS AT IT. Left as one run the DP is a
-  // Viterbi, and a forced state at bar 30 changes which predecessor is cheapest at
-  // bar 29, 28, 27 — so putting the hand somewhere re-fingered the approach to it.
-  // That is a defensible model of a player (nobody teleports into a position) and it
-  // is the wrong contract for an edit: an edit that rewrites what you already
-  // listened to is an edit you cannot make one at a time. So the lane is solved in
-  // runs that END at each hold, and each run is decided knowing nothing about the
-  // holds after it. Forward is untouched — a held block is the first block of the
-  // next run, and the seam out of it charges LAMBDA like any other, which is what
-  // makes one hold carry a phrase.
-  const out = new Array(nb);
-  let start = 0;
-  for (let b = 1; b <= nb; b++) {
-    if (b < nb && !held[b] && !columns[blocks[b][0]].steer) continue;
-    solveRun(cost, seam, start, b, out);
-    start = b;
-  }
-  return out;
-}
-
-// One run of the Viterbi over blocks [lo, hi). The flat-penalty trick: the cheapest
-// predecessor is either yourself or the globally cheapest state, so this is
-// O(blocks x TOPT) rather than O(blocks x TOPT^2).
-function solveRun(cost, seam, lo, hi, out) {
-  if (hi <= lo) return;
-  let dp = cost[lo].slice();
-  const back = [];
-  for (let b = lo + 1; b < hi; b++) {
-    let bi = 0;
-    for (let T = 1; T < TOPT; T++) if (dp[T] < dp[bi]) bi = T;
-    const nd = new Array(TOPT), bk = new Array(TOPT);
-    for (let T = 0; T < TOPT; T++) {
-      let v = dp[T], p = T;
-      if (dp[bi] + seam[b] < v) { v = dp[bi] + seam[b]; p = bi; }
-      nd[T] = v + cost[b][T]; bk[T] = p;
-    }
-    back.push(bk); dp = nd;
-  }
-  let k = 0;
-  for (let T = 1; T < TOPT; T++) if (dp[T] < dp[k]) k = T;
-  for (let b = hi - 1; b >= lo; b--) { out[b] = k; if (b > lo) k = back[b - 1 - lo][k]; }
-}
-
-// What the player asked for in this block: the fret the hand stands on. `grip` pins
-// the hand there and `T` is the register the notes are pulled toward, which is the
-// MIDDLE of the hand's own four frets — the hand covers [g, g + span), so pulling to
-// g alone would ask every note to sit under the index.
-//
-// It carried a second number for a while: a fret already inside the hand's reach was
-// read as a request for the NOTE rather than for a shift, so the grip stayed and only
-// the pull moved. That guess is gone. A hand override is a hand override, and asking
-// for a note somewhere else is now the neck's own gesture (a ring, not a click on
-// bare wood).
-//
-// The first hold in a block wins: two can only land on the same column, and there is
-// no order in which both are true.
-function holdOf(columns, idx) {
-  for (const i of idx) {
-    const h = columns[i].hold;
-    if (h == null) continue;
-    const fret = Number(Number.isFinite(h) ? h : h.fret);
-    if (!Number.isFinite(fret)) continue;
-    const grip = Math.max(1, Math.round(fret));
-    return { grip, T: Math.max(0, Math.min(TOPT - 1, grip + ((SPAN - 1) >> 1))) };
-  }
-  return null;
-}
-
-// Cheapest register for the lane with nothing pulling it, which is the first
-// pass's answer and half of the home estimate. The other half is the lane's
-// 5th-percentile pitch measured on the fattest string — a part's low notes can
-// only be played low, so it is anchored to something the model cannot talk
-// itself out of. Both are weak on their own (27.6% and 13.2% exact); they are
-// averaged because they are wrong in different directions.
-function homeRegister(tuning, columns, blocks, bar, maxFret) {
-  const pitches = columns.flatMap((c) => c.pitches).sort((a, b) => a - b);
-  if (!pitches.length) return 0;
-  const clamp = (v) => Math.max(0, Math.min(TOPT - 1, Math.round(v)));
-  // How high the part sits: its 5th-percentile pitch measured against the SECOND
-  // fattest string. Two honest caveats. It saturates — 46 of the corpus's 76
-  // lanes clamp at 17 — so for most lanes this half of the blend is a constant
-  // and only the other half varies. And a plain constant gets close: 8 scores
-  // 75.3% against this term's 75.9%, so most of what it buys is simply "the
-  // model crowds the nut, pull it up". The 0.6 that is left is real per-lane
-  // signal, from the lanes that do not clamp.
-  //
-  // Measured against the alternatives, all with everything else fixed: against
-  // the fattest string 75.2%, against the string that would actually carry the
-  // note 72.4%, halved 75.3%, this 75.9%. The most principled reading is the
-  // worst one, which is worth knowing and not worth pretending otherwise. It is
-  // a default in any case — knowing a lane's true home is worth +9.6 points over
-  // any of these, and that is a number a player can simply look at a part and
-  // say.
-  const floorNote = pitches[Math.floor(pitches.length * 0.05)];
-  // Capped at the 12th and not at the neck's end. Above the 12th you are in a
-  // register a player would state rather than one a default should guess at, and
-  // the corpus is flat about it: 8, 10, 12 and 17 score 75.8 / 75.8 / 76.0 /
-  // 76.1, so the cap costs a tenth of a point and stops a lead line whose lowest
-  // note is an E4 defaulting to the 17th fret.
-  const low = Math.max(0, Math.min(12, Math.round(floorNote - tuning[Math.min(1, tuning.length - 1)])));
-  return clamp((low + medianOfFlat(tuning, columns, blocks, bar, maxFret)) / 2);
-}
-
-function medianOfFlat(tuning, columns, blocks, bar, maxFret) {
-  const flat = solveRegisters(tuning, columns, blocks, bar, 0, 0, maxFret, true);
-  const seen = [];
-  blocks.forEach((idx, b) => { for (const i of idx) for (let k = 0; k < columns[i].pitches.length; k++) seen.push(flat[b]); });
-  seen.sort((a, b) => a - b);
-  return seen.length ? seen[seen.length >> 1] : 0;
-}
-
-// Memory is rebuilt once, chronologically, per solve. Speculative lookahead
-// never trains it, so optimizer iterations cannot amplify their own guesses.
-const MEMORY_LOOKAHEAD = 8;
-const MEMORY_BEAM = 12;
-const MEMORY_REGISTER_WEIGHT = 0.25;
-const MEMORY_SHIFT = 5;
-const MEMORY_STRENGTH = 4;
-const GUIDED_WEIGHT = 3;   // a guided override's bonus (≈8) outweighs a hand shift (5)
-const memoryShiftCost = (from, to) => from == null || from === to ? 0
-  : MEMORY_SHIFT + .1 * Math.abs(from - to);
-
-const memoryEntries = c => [
-  ...c.pitches.map((pitch, k) => [`n:${pitch}`, k]),
-  ...(c.pitches.length > 1 ? [[`c:${c.pitches.join(",")}`, -1]] : []),
-];
-
-function rememberedBonus(memory, c, out) {
-  let bonus = 0;
-  for (const [key, k] of memoryEntries(c)) {
-    if (k >= 0 && (c.rules?.[k]?.free || c.dead?.[k] || out[k] < 0)) continue;
-    const entry = memory.get(key);
-    const count = entry?.counts.get(k < 0 ? out.join(",") : String(out[k])) || 0;
-    if (count) bonus += MEMORY_STRENGTH * Math.log2(1 + count)
-      * count / entry.total * (k < 0 ? 1.5 : 1 / c.pitches.length);
-  }
-  return bonus;
-}
-
-function learnPlacement(memory, c, out, weight) {
-  for (const [key, k] of memoryEntries(c)) {
-    if (k >= 0 && (c.rules?.[k]?.free || c.dead?.[k] || out[k] < 0)) continue;
-    if (k < 0 && out.some(s => s < 0)) continue;
-    let entry = memory.get(key);
-    if (!entry) memory.set(key, entry = { counts: new Map(), total: 0 });
-    const position = k < 0 ? out.join(",") : String(out[k]);
-    entry.counts.set(position, (entry.counts.get(position) || 0) + weight);
-    entry.total += weight;
-  }
-}
-
-function linkedStrings(tuning, c, got, next, maxFret) {
-  if (!next || !c.rules) return null;
-  let carry = null;
-  c.rules.forEach((rule, k) => {
-    if (!rule?.link || got[k] < 0) return;
-    carry ||= new Array(next.pitches.length).fill(null);
-    for (let j = 0; j < next.pitches.length; j++) {
-      const fret = next.pitches[j] - tuning[got[k]];
-      if (carry[j] != null || fret < 0 || fret > maxFret || (rule.link === "fretted" && fret === 0)) continue;
-      carry[j] = got[k]; break;
-    }
-  });
-  return carry;
-}
-
-// Choose one legal hand placement, comparing whole remembered chord shapes
-// with the normal assignment. The caller owns beam state and accumulation order.
-function rememberedPlacement(tuning, c, g, context) {
-  const { T, state, opts, memory, fixed, span, maxFret } = context;
-  let placed;
-  if (fixed) {
-    const frets = c.fixed.map((s, k) => c.pitches[k] - tuning[s]).filter(f => f > 0);
-    if (frets.some(f => f < g || f >= g + span)) return null;
-    placed = { out: c.fixed.slice(), cost: priceAssignment(tuning, c.pitches, c.fixed, T, null, span, maxFret)?.cost || 0 };
-  } else placed = gripAt(tuning, c.pitches, T, opts, g, span, maxFret);
-  // Whole chord memories compete as whole shapes, not as independently
-  // chosen voices. Revalidate every technique and occupied string here.
-  if (!fixed && c.pitches.length > 1) {
-    const known = memory.get(`c:${c.pitches.join(",")}`);
-    for (const key of known?.counts.keys() || []) {
-      const given = key.split(",").map(Number);
-      if (given.some((s, k) => (state.carry?.[k] != null && state.carry[k] !== s)
-        || (c.pinned?.[k] != null && c.pinned[k] !== s)
-        || (!c.rules?.[k]?.free && c.pitches[k] - tuning[s] > 0
-          && (c.pitches[k] - tuning[s] < g || c.pitches[k] - tuning[s] + (c.rules?.[k]?.reach || 0) >= g + span)))) continue;
-      const recalled = gripAt(tuning, c.pitches, T, { ...opts, forced: given }, g, span, maxFret);
-      if (!recalled || recalled.out.some((s, k) => s !== given[k])) continue;
-      if (!placed || recalled.cost * MEMORY_REGISTER_WEIGHT - rememberedBonus(memory, c, recalled.out)
-        < placed.cost * MEMORY_REGISTER_WEIGHT - rememberedBonus(memory, c, placed.out)) placed = recalled;
-    }
-  }
-  return placed;
-}
-
-function rememberAhead(tuning, columns, start, registers, memory, stand, directed, carry, span, maxFret) {
-  let beam = [{ g: stand, carry, cost: 0, first: null }];
-  for (let i = start; i < Math.min(columns.length, start + MEMORY_LOOKAHEAD); i++) {
-    const c = columns[i];
-    if (i > start && (c.hold || c.cut || c.steer)) break;   // a pin is not prepared for: nothing reaches backwards
-    const states = new Map();
-    for (const state of beam) {
-      const T = directed && state.g != null ? state.g + ((span - 1) >> 1) : registers[i];
-      const opts = { rules: c.rules, forced: state.carry, pinned: c.pinned,
-        next: columns[i + 1]?.pitches, span, maxFret,
-        recall: (k, string) => {
-          if (c.rules?.[k]?.free || c.dead?.[k]) return 0;
-          const entry = memory.get(`n:${c.pitches[k]}`);
-          const count = entry?.counts.get(String(string)) || 0;
-          return count ? MEMORY_STRENGTH * Math.log2(1 + count) * count / entry.total / c.pitches.length : 0;
-        } };
-      const yields = c.soft && state.carry && state.carry.some((s, k) => s != null && s !== c.fixed[k]);
-      // An override is obeyed where it stands and planned for nowhere before it:
-      // looking ahead, the hand does not prepare for it, so nothing reaches backwards.
-      const fixed = c.fixed && !c.aside && !yields && i === start;
-      const anchored = i === start && c.hold;
-      const candidates = anchored ? [state.g] : Array.from({ length: handCeiling(maxFret) }, (_, k) => k + 1);
-      const context = { T, state, opts, memory, fixed, span, maxFret };
-      for (const g of candidates) {
-        const placed = rememberedPlacement(tuning, c, g, context);
-        if (!placed) continue;
-        const shift = anchored ? 0 : memoryShiftCost(state.g, g);
-        const cost = state.cost + placed.cost * MEMORY_REGISTER_WEIGHT + shift
-          - rememberedBonus(memory, c, placed.out);
-        const nextCarry = linkedStrings(tuning, c, placed.out, columns[i + 1], maxFret);
-        const key = `${g}:${nextCarry?.join(",") || ""}`;
-        if (!states.has(key) || cost < states.get(key).cost) states.set(key, {
-          g, carry: nextCarry, cost, first: state.first || { out: placed.out, g },
-        });
-      }
-    }
-    if (!states.size) break;
-    beam = [...states.values()].sort((a, b) => a.cost - b.cost).slice(0, MEMORY_BEAM);
-  }
-  if (beam[0].first) return beam[0].first;
-  const c = columns[start], T = registers[start];
-  const opts = { rules: c.rules, forced: carry, pinned: c.pinned, next: columns[start + 1]?.pitches, span, maxFret };
-  const fallback = stand != null && gripRun(tuning, c.pitches, T, opts, stand, span, maxFret);
-  return fallback ? { out: fallback.out, g: fallback.g }
-    : { out: fitAtRegister(tuning, c.pitches, T, opts), g: stand };
-}
-
-// Keep every per-pitch constraint aligned while sorting a column once.
+// A column with its pitches sorted low to high (`idx` maps back to the input order).
 function sortedRegisterColumn(c) {
   const idx = c.pitches.map((_, i) => i).sort((a, b) => c.pitches[a] - c.pitches[b]);
-  return {
-    idx, t0: c.t0, end: c.end, hold: c.hold, handAt: c.handAt ?? null, cut: !!c.cut, soft: !!c.soft, aside: !!c.aside,
-    guided: !!c.guided,
-    pitches: idx.map((i) => c.pitches[i]),
-    fixed: c.fixed ? idx.map((i) => c.fixed[i]) : null,
-    shadow: c.shadow ? idx.map((i) => c.shadow[i]) : null,
-    decided: c.decided ? idx.map((i) => c.decided[i]) : null, steer: !!c.steer,
-    pinned: c.pinned ? idx.map((i) => c.pinned[i]) : null,
-    rules: c.rules ? idx.map((i) => c.rules[i]) : null,
-    dead: c.dead ? idx.map((i) => c.dead[i]) : null,
-  };
-}
-
-function priceRegisterShapes(tuning, c, T, shapes, memory, stand, span, maxFret) {
-  return shapes.map(given => {
-    const assignment = c.idx.map(k => given[k]);
-    const got = priceAssignment(tuning, c.pitches, assignment, T, null, span, maxFret);
-    if (!got) return null;
-    const fretted = assignment.map((s, k) => c.rules?.[k]?.free || c.dead?.[k] ? 0 : c.pitches[k] - tuning[s]).filter(f => f > 0);
-    const lo = Math.max(1, Math.max(...fretted, 1) - span + 1);
-    const hi = Math.min(handCeiling(maxFret), Math.min(...fretted, handCeiling(maxFret)));
-    const target = Math.max(lo, Math.min(hi, stand ?? lo));
-    return { ...got, cost: got.cost * MEMORY_REGISTER_WEIGHT
-      + memoryShiftCost(stand, target) - rememberedBonus(memory, c, assignment) };
-  });
-}
-
-// Draw the hand from the placement that was actually chosen, including relaxed
-// dead/tapped notes and authored anchors that still fit the resulting grip.
-function writeRegisterSeats(seats, tuning, sorted, strings, stood, registers, blocks, span) {
-  const n = sorted.length;
-  const named = new Array(n).fill(null);
-  for (let i = 0; i < n; i++) if (stood[i] != null) named[i] = stood[i];
-  const loose = new Array(n).fill(null);
-  const reach = sorted.map((c, i) => {
-    let lo = Infinity, hi = -Infinity, llo = Infinity, lhi = -Infinity;
-    const at = [], on = [];
-    for (let k = 0; k < c.pitches.length; k++) {
-      const s = strings[i][k];
-      if (s < 0) continue;
-      const f = c.pitches[k] - tuning[s];
-      // A tapped note is the other hand's, and an open string is nobody's. A muted
-      // one is the hand relaxing where it already is: its fret is whatever the
-      // tab wrote down (an imported scratch says 22 beside a 3), not a reach. Its
-      // fret only says which neighbouring hand it sits under (`loose`, planHand).
-      if ((c.rules && c.rules[k] && c.rules[k].free) || c.dead?.[k]) {
-        if (f > 0) { llo = Math.min(llo, f); lhi = Math.max(lhi, f); }
-        continue;
-      }
-      if (f > 0) { lo = Math.min(lo, f); hi = Math.max(hi, f); at.push(f); on.push(s); }
-    }
-    if (Number.isFinite(llo)) loose[i] = { lo: llo, hi: lhi };
-    return Number.isFinite(lo) ? { lo, hi, at, on } : null;
-  });
-  const maxReach = handReach(handProfileForTuning(tuning));
-  // The player's hand, where it can play what is there; otherwise it has lapsed.
-  sorted.forEach((c, i) => {
-    const g = c.handAt, r = reach[i];
-    if (g != null && r && g >= 1 && g <= r.lo && r.hi - g < maxReach) named[i] = g;
-  });
-  const fingerCost = handProfileForTuning(tuning).id.startsWith(BASS_HAND_PROFILE.id) ? FINGER_COST : null;
-  const planned = planHand(reach, named, span, maxReach, sorted, fingerCost, loose);
-  for (let i = 0; i < n; i++) seats[i] = planned[i] ?? Math.max(1, registers[blocks.findIndex((idx) => idx.includes(i))] || 1);
+  const order = (list) => (list ? idx.map((i) => list[i]) : null);
+  return { idx, t0: c.t0, end: c.end, anchor: c.anchor ?? null, pitches: order(c.pitches),
+    fixed: order(c.fixed), pinned: order(c.pinned), rules: order(c.rules), dead: order(c.dead) };
 }
 
 /**
- * @param tuning  open-string MIDI pitches, physical order, index 0 = fattest
- *                string. Standard guitar is [40,45,50,55,59,64].
- * @param columns [{ pitches: [midi, ...], t0?, end?, fixed?, rules? }, ...] in
- *                time order. Pitches sounding together are one column; order
- *                inside it does not matter. `t0`/`end` are onset and release
- *                seconds — without them every column falls in one block and the
- *                lane gets a single register. `fixed` is an optional string
- *                index per pitch for a column the caller has already decided —
- *                an authored pin — and it is obeyed exactly, unless `soft` marks
- *                it as handed on from an identical column, in which case a slide
- *                or hammer arriving on another string wins. `hold` is a fret the
- *                player has put the hand on at this column; it starts a block and
- *                fixes its register, and the blocks after it are still solved.
- * @param span    how many frets one grip covers. The register says where the
- *                hand lives; this says how far it reaches from there, and every
- *                fretted note of a column has to fit inside one.
- * @param seats   optional array, filled with the fret the index stands on for
- *                each column — the lowest fretted fret in that column's own bar,
- *                so a lone note does not report itself as the anchor. The board
- *                draws this as the hand's band.
- * @param bars    bar-line times in seconds. The register is decided once per
- *                bar, which is the model's entire structure.
- * @param maxFret how many frets this instrument has. An acoustic has 20 and an
- *                electric 22; `web/fretboard-core.js` holds the measurements and
- *                registerColumns reads them off the lane.
- * @param price   optional { index, shapes, out }: string-index assignments for one
- *                column, priced where that column is decided and written back to
- *                `out`. See priceAssignment — this is what the fretboard's other
- *                positions cost.
- * @returns per column, per input pitch: { string, fret }. `string` is -1 for a
- *          note the instrument cannot play (below the lowest string, or a
- *          seventh voice on six strings) — the caller decides whether to
- *          octave-shift it or drop it.
+ * voiceRegister(tuning, columns, span, seats, maxFret, price)
+ * @param tuning  open-string MIDI pitches, physical order, index 0 = fattest string.
+ * @param columns [{ pitches, t0?, end?, fixed?, pinned?, rules?, dead?, anchor? }] in
+ *                time order. `fixed` is a string per pitch the caller has decided (a
+ *                placed column), `pinned` the same for some of its notes, `anchor` the
+ *                hand change in force at that column.
+ * @param seats   optional array, filled with each column's hand (index fret).
+ * @param price   optional { index, shapes, out }: string assignments for one column,
+ *                priced against the plan and written back to `out` as { cost, seat }.
+ *                This is what the fretboard's other positions cost.
+ * @returns per column, per input pitch: { string, fret }; string -1 for a note the
+ *          instrument cannot play.
  */
-function voiceRegister(tuning, columns, span = SPAN, seats = null, bars = null, maxFret = DEFAULT_NECK_FRETS, price = null) {
-  const n = columns.length;
-  if (!n) return [];
 
+// THE HAND PLANNER. The hand stays where it is until the notes force it to move,
+// and over the whole lane it moves as few times as it can:
+//
+//   window    a hand covers four frets from the index; the pinky reaching one
+//             fret further is a stretch, cheaper than a shift. Nothing wider, so
+//             one hand never covers more than five frets.
+//   shift     costs 1, less where the music makes room (a rest, a column played
+//             on open strings, a slide that carries the hand, after a long note)
+//             and more in the middle of a fast run. A hair per fret travelled, so
+//             the hand stays closest to where it already is.
+//   open      an open string costs a little: used when it saves a shift.
+//   anchors   a saved hand change keeps the hand there until the next one; leaving
+//             it costs more than any shift, so only notes that cannot be played
+//             there move it (and then the anchor reports a conflict).
+//   pins      a placed note keeps its string; the hand goes where it can reach it.
+//   links     a slide or hammer-on continues on the same string.
+// ponytail: one Viterbi over hand frets (columns x frets^2); chords try every string
+// assignment, fine up to six strings.
+const SHIFT = 1, STRETCH = 0.3, OPEN = 0.1, LOOSE = 0.2, LEAVE_ANCHOR = 20, BROKEN_LINK = 50, OFF_PIN = 100;
+const FAST_NOTE = 0.15, LONG_NOTE = 0.5, TIE_ON = 1e-5, TIE_MOVE = 1e-6;
+
+function shiftEase(prev, c, prevStrings, tuning) {
+  if (prev.t0 == null || c.t0 == null) return 1;
+  const gap = c.t0 - prev.end, dur = prev.end - prev.t0;
+  const open = prev.pitches.every((p, k) => prevStrings[k] < 0 || p - tuning[prevStrings[k]] === 0);
+  if (gap >= REST_GAP || open || prev.rules?.some((r) => r?.slide)) return 0.25;
+  if (dur >= LONG_NOTE) return 0.5;
+  return dur < FAST_NOTE ? 2 : 1;
+}
+
+// The cheapest way to play column `c` with the hand at `g`: { cost, strings } or null.
+function placeInHand(tuning, c, g, span, maxFret) {
+  const k = c.pitches.length, pinnedAny = !!c.fixed || !!c.pinned?.some((s) => s != null);
+  const options = c.pitches.map((p, j) => {
+    const want = c.fixed ? c.fixed[j] : c.pinned?.[j] ?? null, rule = c.rules?.[j], out = [];
+    for (let s = 0; s < tuning.length; s++) {
+      if (want != null && s !== want) continue;
+      const f = p - tuning[s];
+      if (f < 0 || f > maxFret) continue;
+      if (want == null && ((f === 0 && rule?.fretted) || rule?.edge?.(f))) continue;
+      out.push({ s, f, bound: f > 0 && !rule?.free && !c.dead?.[j], reach: rule?.reach || 0 });
+    }
+    return out;
+  });
+  const used = new Array(tuning.length).fill(false), pick = new Array(k).fill(null);
+  let best = null;
+  const score = () => {
+    let lo = Infinity, hi = -Infinity, cost = 0;
+    for (const o of pick) {
+      if (!o) continue;
+      if (o.f === 0) cost += OPEN;
+      else if (o.bound) { lo = Math.min(lo, o.f); hi = Math.max(hi, o.f + o.reach); }
+      else if (o.f < g || o.f > g + span) cost += LOOSE;   // muted or tapped: anywhere, near is nicer
+    }
+    if (lo === Infinity) return cost;
+    // Ties only, never worth a shift over a whole lane: the hand sits on the notes,
+    // the index on the lowest (TIE_ON), then it moves the least (TIE_MOVE).
+    cost += TIE_ON * Math.abs(lo - g);
+    if (lo >= g && hi <= g + span - 1) return cost;
+    if (lo >= g && hi <= g + span) return cost + STRETCH;
+    return pinnedAny ? cost + OFF_PIN + 0.1 * Math.min(Math.abs(g - lo), Math.abs(g + span - 1 - hi)) : Infinity;
+  };
+  const walk = (j) => {
+    if (j === k) {
+      const cost = score();
+      if (cost < (best?.cost ?? Infinity)) best = { cost, strings: pick.map((o) => (o ? o.s : -1)) };
+      return;
+    }
+    let any = false;
+    for (const o of options[j]) {
+      if (used[o.s]) continue;
+      any = true; used[o.s] = true; pick[j] = o; walk(j + 1); used[o.s] = false; pick[j] = null;
+    }
+    if (!any) walk(j + 1);   // nowhere to put it: it stays unplaced (-1)
+  };
+  walk(0);
+  return best;
+}
+
+// A slide or hammer-on leaving a lone note continues on the same string.
+function linkCost(prev, c, a, b, tuning) {
+  if (prev.pitches.length !== 1 || c.pitches.length !== 1) return 0;
+  const rule = prev.rules?.[0];
+  if (!rule?.link) return 0;
+  if (a.strings[0] !== b.strings[0]) return BROKEN_LINK;
+  return rule.link === "fretted" && b.strings[0] >= 0 && c.pitches[0] - tuning[b.strings[0]] === 0 ? BROKEN_LINK : 0;
+}
+
+function planShifts(tuning, cols, span, seats, maxFret, price) {
+  const n = cols.length, frets = Array.from({ length: handCeiling(maxFret) }, (_, i) => i + 1);
+  const at = cols.map((c) => {
+    const row = frets.map((g) => placeInHand(tuning, c, g, span, maxFret));
+    if (row.some(Boolean)) return row;
+    // No hand anywhere holds it (a chord wider than a stretch): place it anyway, hand-free.
+    const strings = placeAnyway(tuning, c.pitches, c.fixed || c.pinned?.map((s) => s ?? -1) || null, maxFret);
+    return frets.map(() => ({ cost: 0, strings }));
+  });
+  const own = (i, gi, until) => {
+    const p = at[i][gi];
+    if (!p) return Infinity;
+    const a = i < until ? cols[i].anchor : null;
+    return p.cost + (a != null && frets[gi] !== a ? LEAVE_ANCHOR : 0);
+  };
+  const step = (i, hi, gi) => (hi === gi ? 0 : SHIFT * shiftEase(cols[i - 1], cols[i], at[i - 1][hi].strings, tuning)
+    + TIE_MOVE * Math.abs(frets[hi] - frets[gi])) + linkCost(cols[i - 1], cols[i], at[i - 1][hi], at[i][gi], tuning);
+  // Plan columns a.. to the end from the hand before a, seeing the hand changes
+  // before `until` only.
+  const hand = new Array(n);
+  const plan = (a, until) => {
+    let cost = frets.map((g, gi) => own(a, gi, until) + (a ? step(a, hand[a - 1], gi) : 0));
+    const back = [];
+    for (let i = a + 1; i < n; i++) {
+      const next = [], from = [];
+      frets.forEach((g, gi) => {
+        const o = own(i, gi, until);
+        let best = Infinity, k = -1;
+        if (o < Infinity) frets.forEach((h, hi) => {
+          if (cost[hi] === Infinity) return;
+          const v = cost[hi] + step(i, hi, gi);
+          if (v < best) { best = v; k = hi; }
+        });
+        next.push(best + o); from.push(k);
+      });
+      back.push(from); cost = next;
+    }
+    hand[n - 1] = cost.reduce((best, v, gi) => (v < cost[best] ? gi : best), 0);
+    for (let i = n - 1; i > a; i--) hand[i - 1] = back[i - 1 - a][hand[i]];
+  };
+  // A hand change reaches forward only. The plan is made without it, and again from
+  // it on with it; what comes before it never depends on it.
+  // ponytail: one pass per hand change (changes x columns x frets^2); carry the
+  // prefix's states forward if a lane with hundreds of changes gets slow.
+  const starts = [0];
+  for (let i = 1; i < n; i++) if (cols[i].anchor != null && cols[i].anchor !== cols[i - 1].anchor) starts.push(i);
+  starts.forEach((a, k) => plan(a, starts[k + 1] ?? n));
+  if (seats) hand.forEach((gi, i) => { seats[i] = frets[gi]; });
+  if (price && cols[price.index]) {
+    const c = cols[price.index], g = frets[hand[price.index]];
+    price.out = price.shapes.map((given) => {
+      const fixed = c.idx.map((k) => given[k]);
+      if (fixed.some((s, j) => s == null || s < 0 || c.pitches[j] - tuning[s] < 0 || c.pitches[j] - tuning[s] > maxFret)) return null;
+      // What it costs: played from this column's hand, or after a shift.
+      let cost = Infinity;
+      for (const h of frets) {
+        const p = placeInHand(tuning, { ...c, fixed, pinned: null }, h, span, maxFret);
+        if (p) cost = Math.min(cost, p.cost + (h === g ? 0 : SHIFT));
+      }
+      // Where the index would stand to take it: its lowest fretted note.
+      const held = fixed.map((s, j) => c.rules?.[j]?.free || c.dead?.[j] ? 0 : c.pitches[j] - tuning[s]).filter((f) => f > 0);
+      return Number.isFinite(cost) ? { cost, seat: held.length ? Math.min(...held) : null } : null;
+    });
+  }
+  return hand.map((gi, i) => at[i][gi].strings);
+}
+
+function voiceRegister(tuning, columns, span = SPAN, seats = null, maxFret = DEFAULT_NECK_FRETS, price = null) {
+  if (!columns.length) return [];
   // Sort each column once; placement walks it lowest pitch first.
   const sorted = columns.map(sortedRegisterColumn);
-
-  const { blocks, bar } = blocksOf(sorted, bars);
-  // WHERE THE LANE LIVES is measured on bars alone. A hold splits the bar it lands
-  // in, and the home estimate is a solve over whatever blocks it is handed — so the
-  // split alone moved `home` for the whole lane, which moved the bars BEFORE the
-  // hold. One of three quiet ways an edit reached backwards, and none of them was
-  // the Viterbi everybody suspects.
-  const flat = blocksOf(sorted, bars, true);
-  const home = homeRegister(tuning, sorted, flat.blocks, flat.bar, maxFret);
-  const registers = solveRegisters(tuning, sorted, blocks, bar, MU, home, maxFret);
-
-  // Global registers remain a prior. Placement uses chronological memory and a
-  // short joint search, rather than binding isolated matching fragments.
-  const strings = new Array(n), stood = new Array(n).fill(null);
-  const registerAt = new Array(n);
-  blocks.forEach((idx, b) => idx.forEach(i => { registerAt[i] = registers[b]; }));
-  let memory = new Map(), stand = null, directed = false, carry = null;
-  let resume = null;
-  for (let i = 0; i < n; i++) {
-    const c = sorted[i];
-    if (c.cut) {
-      if (resume) ({ memory, stand, directed } = resume);
-      else { memory = new Map(); stand = null; directed = false; }
-      resume = null;
-    }
-    if (c.hold) {
-      resume = c.hold.local ? { memory, stand, directed } : null;
-      memory = new Map();
-      stand = Math.max(1, Math.round(c.hold.fret));
-      directed = true;
-    }
-    const T = directed && stand != null ? stand + ((span - 1) >> 1) : registerAt[i];
-    if (price && price.index === i) {
-      price.out = priceRegisterShapes(tuning, c, T, price.shapes, memory, stand, span, maxFret);
-    }
-    // An override "only here" is planned around as the placement it replaced.
-    const plan = c.aside && c.shadow ? Object.assign(sorted.slice(), { [i]: { ...c, fixed: c.shadow, aside: false } }) : sorted;
-    const chosen = rememberAhead(tuning, plan, i, registerAt, memory,
-      stand, directed, carry, span, maxFret);
-    let got = chosen.out;
-    const yields = c.soft && carry && carry.some((s, k) => s != null && s !== c.fixed[k]);
-    if (c.fixed && !yields) got = c.fixed.slice();
-    if (c.pinned) c.pinned.forEach((s, k) => { if (s != null) got[k] = s; });
-    if (got.some(s => s < 0)) got = placeAnyway(tuning, c.pitches, got, maxFret);
-    strings[i] = got;
-    // Local pins are exceptions: the hypothetical automatic placement supplies
-    // continuity and learning, while the authored placement alone is displayed.
-    stand = chosen.g;
-    if (!c.aside) {
-      if (directed) stood[i] = stand;
-      // A guided override replaces what was learned for these notes, and only these.
-      if (c.guided) for (const [key] of memoryEntries(c)) memory.delete(key);
-      learnPlacement(memory, c, got, c.guided ? GUIDED_WEIGHT : directed ? 2 : 1);
-    } else learnPlacement(memory, c, chosen.out, 1);
-    carry = linkedStrings(tuning, c, got, sorted[i + 1], maxFret);
-  }
-
-  // The hand the board draws. The register is a centroid, not a finger — an
-  // asymmetric cost that treated it as the index measured ten points worse — so the
-  // anchor is read back off what was actually played. See planHand.
-  if (seats) writeRegisterSeats(seats, tuning, sorted, strings, stood, registers, blocks, span);
-
+  const strings = planShifts(tuning, sorted, span, seats, maxFret, price);
   return sorted.map((c, i) => {
     const out = new Array(c.idx.length);
     for (let k = 0; k < c.idx.length; k++) {
@@ -3019,128 +2283,7 @@ function voiceRegister(tuning, columns, span = SPAN, seats = null, bars = null, 
   });
 }
 
-// WHERE THE HAND IS, COLUMN BY COLUMN, once the notes are placed. It used to be one
-// answer per bar — the lowest fretted fret in it — which is right while a bar fits in
-// a hand and nonsense when it does not: a run coming down from the 13th fret to the
-// 2nd in one bar reported the hand at 2 throughout, with a fourth finger eleven frets
-// away. One note at a time is a chord spread over time, and it has to fit a hand too.
-//
-// So the hand is walked. On each column the index stands at or below the lowest
-// fretted note and reaches up to the highest; a shift moves it. Both are priced and
-// the cheapest walk wins (a Viterbi over the index fret):
-//
-//   reaching   free up to four frets, then steeper with every fret — 5 is a stretch
-//              (1), 6 a real one (3), 7 costs more than moving twice (9), and on up.
-//              A soft edge, not a cutoff: one note a fret outside the hand is played
-//              with a stretch, not with two shifts.
-//   shifting   4 (and a hair per fret travelled), so a stretch of six still beats
-//              a shift and one of seven does not. A one-fret nudge onto another
-//              string costs 1 when it plants the index on the new note: the fingers
-//              lift anyway. Anywhere else it is a shift — a cheap step chains into a
-//              crawl (9 -> 10 -> 11 across a run) that undercuts one clean shift.
-//   fingers    on bass, every note costs what the finger the hand gives it costs
-//              (FINGER_COST), per note, so a run on weak fingers adds up. Without it
-//              2-4-2-4-2 and 1-3-1-3-1 over the same frets cost the same, and the hand
-//              sat a fret below a figure for a whole bar to save a nudge a second
-//              later. Not on guitar, where a position with the pinky is the norm.
-//   the index  a hair for every fret the index stands below the lowest note, which
-//              only breaks ties: the hand sits ON the phrase, not under it.
-//
-//   a free hand  a shift costs 0.5 when nothing holds the hand before the column: a
-//              muted or open note since the last fretted one, or a rest at least as
-//              long as that note (a shorter gap is articulation). That is when players
-//              move, so a five-fret stretch (1) no longer beats shifting during
-//              a mute — a hammer-on from fret 11 to 13 after muted notes is played from
-//              the index at 11, not with ring and pinky off a hand left at 9. Still not
-//              free, so a hand does not chase a one-fret difference across every mute.
-//
-// `named[i]` is a hand the player put there (a hold) and is taken as given. Columns
-// with nothing fretted take the hand that is already there. This reads the hand off
-// the notes; it does not move them — where each note goes is still the register's.
-const HAND_SHIFT = 4;
-const FREE_SHIFT = 0.5;
-const NUDGE = 1;
-// ponytail: flat across the neck; the pinky is normal low on a bass (1-2-4), so scale
-// it by fret width there if low positions start dodging it.
-const FINGER_COST = [0, 0, 0.15, 0.2, 0.8];   // by finger, 1 index .. 4 pinky
-const fingersCost = (cost, at, g) => cost ? at.reduce((sum, f) => sum + cost[Math.min(4, Math.max(1, f - g + 1))], 0) : 0;
 const REST_GAP = 0.1;   // s; the shortest rest that frees the hand, however short the note
-// Past the reach no hand gets there: priced out, but still finite, so a column that
-// cannot be held any other way (a chord wider than the reach) keeps a hand.
-const stretchCost = (frets, span, reach = MAX_REACH) => (frets <= span ? 0 : frets > reach ? 1e6 : 3 ** (frets - span - 1));
-
-// A hand the player puts down reaches forward only. The walk is a Viterbi, so a
-// fixed hand would otherwise re-plan the columns before it as well: they had
-// stood where the next notes needed them, and once the hand is put somewhere
-// else there they shift back. So the walk runs without any hold, and from each
-// hold on it runs again with that hold as its start, ignoring later ones; each
-// replaces what follows. Nothing before a hold depends on it.
-// ponytail: one walk per hold (holds x columns); one forward pass carrying the
-// prefix's states if a song with hundreds of holds gets slow.
-function planHand(reach, named, span = SPAN, maxReach = MAX_REACH, times = null, fingerCost = null, loose = null) {
-  const none = named.map(() => null);
-  const out = walkHand(reach, none, span, maxReach, times, fingerCost, loose);
-  named.forEach((g, h) => {
-    if (g == null) return;
-    const after = walkHand(reach.slice(h), [g, ...none.slice(h + 1)], span, maxReach, times?.slice(h), fingerCost, loose?.slice(h));
-    out.splice(h, after.length, ...after);
-  });
-  return out;
-}
-
-function walkHand(reach, named, span = SPAN, maxReach = MAX_REACH, times = null, fingerCost = null, loose = null) {
-  const n = reach.length, out = new Array(n).fill(null);
-  let prev = null;                         // [{ g, cost, from }] of the last fretted column
-  let last = -1, free = false;             // that column, and whether the hand let go since
-  const trail = [];
-  for (let i = 0; i < n; i++) {
-    const r = reach[i];
-    if (named[i] == null && !r) { free = true; continue; }
-    if (last >= 0 && times && times[i].t0 - times[last].end >= Math.max(REST_GAP, times[last].end - times[last].t0)) free = true;
-    const shift = free ? FREE_SHIFT : HAND_SHIFT;
-    // A nudge onto other strings (see above): no string shared with the last column.
-    const crossed = r && last >= 0 && reach[last] && !r.on.some((s) => reach[last].on.includes(s));
-    free = false; last = i;
-    // From the lowest note down to where the top one is still in reach. A column
-    // wider than any reach (fret 2 and fret 14 at once) still has the first: the
-    // index on its lowest note. With none, the walk below had no state to read.
-    const frets = named[i] != null ? [named[i]]
-      : Array.from({ length: r.lo - Math.min(r.lo, Math.max(1, r.hi - maxReach + 1)) + 1 }, (_, k) => r.lo - k);
-    const states = frets.map((g) => {
-      const own = named[i] != null ? 0
-        : stretchCost(r.hi - g + 1, span, maxReach) + fingersCost(fingerCost, r.at, g) + 0.01 * (r.lo - g);
-      let best = 0, from = -1;
-      if (prev) {
-        best = Infinity;
-        prev.forEach((p, k) => {
-          const move = crossed && g === r.lo && Math.abs(p.g - g) === 1 ? Math.min(shift, NUDGE) : shift;
-          const c = p.cost + (p.g === g ? 0 : move + 0.002 * Math.abs(p.g - g));
-          if (c < best) { best = c; from = k; }
-        });
-      }
-      return { g, cost: best + own, from };
-    });
-    trail.push({ i, states });
-    prev = states;
-  }
-  let k = prev ? prev.reduce((b, st, j) => (st.cost < prev[b].cost ? j : b), 0) : -1;
-  for (let t = trail.length - 1; t >= 0; t--) {
-    const st = trail[t].states[k];
-    out[trail[t].i] = st.g; k = st.from;
-  }
-  // Nothing fretted here: the hand is wherever it already was, or is about to be.
-  // A muted or tapped note still sits on a fret: it takes the hand before it when
-  // that reaches the fret, else the one after it when that does (a mute leading into
-  // a shift is played where the shift lands), else the one before.
-  const next = new Array(n).fill(null);
-  for (let i = n - 1, q = null; i >= 0; i--) { next[i] = q; if (out[i] != null) q = out[i]; }
-  const fits = (g, m) => g != null && (!m || (g <= m.lo && m.hi - g < maxReach));
-  for (let i = 0; i < n; i++) if (out[i] == null) {
-    const p = i ? out[i - 1] : null, q = next[i], m = loose?.[i];
-    out[i] = fits(p, m) ? p : fits(q, m) ? q : p ?? q;
-  }
-  return out;
-}
 
 // Last resort for the notes a register could not seat. Works down from the top
 // pitch and gives each the *highest* string that reaches it, which leaves the fat

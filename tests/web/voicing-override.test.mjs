@@ -30,7 +30,11 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
   assert.deepEqual(played(), guided, 'an unspecified mode behaves as Guided');
   lane[2].pos = pin(4, 12, {follow: 'locked'});
   assert.deepEqual(played(), guided, 'a legacy Locked override behaves as Guided');
-  assert.deepEqual(guided.slice(0, 2), [auto, auto], 'nothing before the override changes');
+  // Unplaced notes before it join its hand rather than shift; placed ones keep theirs.
+  assert.deepEqual(guided.slice(0, 2), ['4:12', '4:12'], 'unplaced notes before the override join its hand');
+  lane[0].pos = pin(2, 2);
+  assert.equal(played()[0], '2:2', 'a placed note before the override keeps its place');
+  delete lane[0].pos;
 }
 
 // Guided: the same notes after prefer the override where the hand allows it, and no
@@ -38,24 +42,25 @@ const at = (voiced, n) => `${voiced.get(n).string}:${voiced.get(n).fret}`;
 {
   const options = { bars: [0, 4, 8, 12, 16] };
   const play = (notes) => { const v = voiceNotes(notes, tuning, Infinity, options); return notes.map((n) => at(v, n)); };
-  // Alone, a repeated C#4 follows the override: one shift there, then it stays.
+  // Alone, a repeated C#4 is played where the override is: no shift at all.
   const repeated = () => [0, 1, 2, 3, 4, 5].map((t) => note(t, 61));
-  const base1 = play(repeated());
   const alone = repeated();
   alone[2].pos = pin(3, 11, { follow: "guided" });
-  assert.deepEqual(play(alone), [...base1.slice(0, 2), "3:11", "3:11", "3:11", "3:11"], "guided: the same notes after follow");
-  // Inside a motif played around the 7th fret, the hand would have to leave and
-  // come back for each one: a preference the hand declines, and the motif's other
-  // notes keep what they learned.
+  assert.deepEqual(play(alone), ["3:11", "3:11", "3:11", "3:11", "3:11", "3:11"], "guided: the same notes around it follow");
+  // One note of an unplaced motif placed far up the neck: rather than shift there and
+  // back, the motif is played around it. Notes already placed would keep their place.
   const motif = [57, 59, 61, 59];
   const lane = () => [...motif, ...motif, ...motif, ...motif].map((pitch, i) => note(i, pitch));
-  const base = play(lane());
   const far = lane();
   far[6].pos = pin(4, 16, { follow: "guided" });
   const stays = play(far);
   assert.equal(stays[6], "4:16");
-  assert.deepEqual(stays.filter((_, i) => i !== 6), base.filter((_, i) => i !== 6),
-    "out of the hand's way it is a preference the hand may decline; nothing before it changes");
+  const frets = stays.map((p) => Number(p.split(":")[1])).filter((f) => f > 0);
+  assert.ok(Math.max(...frets) - Math.min(...frets) <= 4, "the whole motif is played from one hand around the override");
+  const placed = lane(), auto = play(lane());
+  placed.forEach((n, i) => { const [string, fret] = auto[i].split(":").map(Number); n.pos = pin(string, fret); });
+  placed[6].pos = pin(4, 16);
+  assert.deepEqual(play(placed).filter((_, i) => i !== 6), auto.filter((_, i) => i !== 6), "placed notes stay where they are");
 }
 
 // A repeated chord can follow a Guided override.

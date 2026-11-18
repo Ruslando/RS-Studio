@@ -11,51 +11,31 @@ reduced chord. It contains no note position overrides or hand anchors.
 
 | Time | Passage | Input / expected result |
 | --- | --- | --- |
-| 32-40 s | A: E3 F#3 G3 A3 B3 A3 G3 E3 | One hand anchor at 32 s, fret 2 |
-| 40-48 s | B: A3 B3 C4 D4 E4 D4 C4 A3 | Continue at hand position 2 |
-| 48-56 s | C: B4 C#5 D5 C#5 B4 C#5 D5 B4 | Automatic shift to 7 |
-| 56-64 s | D: E5 F#5 G5 F#5 E5 F#5 G5 E5 | Automatic shift to 12 |
-| 64-72 s | A repeated | Return to the original low strings and hand position 2 |
-| 72-80 s | B repeated | Return to the original low strings and hand position 2 |
-| 80-88 s | A with a different ending | Entire eight-note run remains playable at 2 |
-| 88-96 s | B with a changed inner note | Remain at 2 |
-| 96-104 s | C again | Automatic high shift |
-| 104-112 s | D again | Automatic high shift |
-| 112-120 s | A variation after the high passages | Return to 2 without a split after the matching prefix |
-| 120-128 s | A with a different beginning | Remain at 2 |
+| 32-40 s | A: E3 F#3 G3 A3 B3 A3 G3 E3 | One hand anchor at 32 s, fret 2: played at 2 |
+| 40-48 s | B: A3 B3 C4 D4 E4 D4 C4 A3 | At 2 until D4, then one shift to 12 |
+| 48-56 s | C: B4 C#5 D5 C#5 B4 C#5 D5 B4 | Stays at 12 |
+| 56-64 s | D: E5 F#5 G5 F#5 E5 F#5 G5 E5 | Stays at 12 |
+| 64-128 s | A, B, C and D again, with variations | Stays at 12: everything fits, so the hand does not move |
 
-Only the hand anchor at 32 seconds is authored. Earlier versions of this fixture
-also anchored the later bars and high runs; those anchors were removed. Explicit
-anchors intentionally begin a fresh memory section and would prevent this fixture
-from testing recall across natural high shifts. There are no note pins, motif
-labels or reference boxes supplying the repetition answer.
+Only the hand anchor at 32 seconds is authored. There are no note pins, motif
+labels or reference boxes.
 
 ## Implemented rules
 
-- Global bar-register planning remains a soft prior.
-- A rolling eight-column search compares hand positions jointly, including across
-  bar lines. It retains up to twelve alternative paths at each step; it does not
-  identify, label or lock motif fragments.
-- Each committed column teaches pitch-to-string positions and complete chord
-  assignments. Frequency and the proportion of uses at that position determine
-  the bonus, with logarithmic growth. Only actual committed placements train the
-  memory; speculative search paths never do.
-- Authored hand placement and position overrides with forward adaptation begin
-  the same new memory section. Their hand position continues across bar lines;
-  feasible natural shifts and remembered returns remain possible.
-- A local pin is displayed exactly as authored, while its hypothetical automatic
-  placement supplies continuity and learning. The exception cannot teach a new
-  future preference. Technique links still connect the real authored notes.
-- Before-only adaptation temporarily replaces the memory and hand context; the
-  previous context resumes immediately after its target column.
-- Chord open strings carry no register penalty. Single notes retain the open-string
-  restriction, and fretted techniques retain their physical constraints.
-- Every solve reconstructs memory chronologically. Save/reload and undo do not
-  accumulate a separate historical preference store.
+The hand planner (`planShifts` in `web/voicing-core.js`):
 
-The current search is bounded, not an exact whole-song optimum. Automatic first
-choices still depend on the global register estimate. These are useful points to
-listen for during manual review, alongside transitions at 48, 56, 64 and 112 s.
+- The hand stays where it is until a note cannot be played from it, and over the
+  lane it moves as few times as it can. It does not return to where a passage was
+  played before; a reference box is how a repeat is played the same way.
+- A hand covers four frets from the index; the pinky can stretch one fret further.
+- A shift is cheaper at a rest, after open strings, on a slide or after a long
+  note, and dearer in the middle of a fast run. Between equal plans the hand sits on
+  the notes and moves the least.
+- An open string is used when it saves a shift.
+- A hand anchor keeps the hand there until the next anchor or until a note cannot be
+  played from it; it reaches forward only. Placed notes keep their positions, and
+  the hand goes where it can reach them.
+- Slides and hammer-ons stay on one string.
 
-Regression coverage: `tests/web/voicing-memory.test.mjs` and
-`tests/web/voicing-override.test.mjs`.
+Regression coverage: `tests/web/hand-planner.test.mjs`,
+`tests/web/voicing-override.test.mjs` and `tests/web/hand-anchor-forward.test.mjs`.
