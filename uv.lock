@@ -1186,7 +1186,7 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (python_full_version < '3.12' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda') or (sys_platform != 'win32' and extra == 'group-9-rs-studio-cpu' and extra == 'group-9-rs-studio-cuda')" },
 ]
 wheels = [
-    { filename = "madmom-0.17.dev0-cp312-cp312-win_amd64.whl", hash = "sha256:bbd291ee9c407b0b995798acd369744ad177fc0e97ea3bba7a7c93a26fcc054d" },
+    { filename = "madmom-0.17.dev0-cp312-cp312-win_amd64.whl", hash = "sha256:b4c436d22155fe9496febbd1a99766f39dca1e6b772201f13c6ddf6ed14c0996" },
 ]
 
 [package.metadata]
