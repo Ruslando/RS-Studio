@@ -207,6 +207,24 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate('''async job => { await (await import('/project.js')).loadCached(job); }''', self.reference_job)
         expect(page.locator('#repeatNavigator')).to_be_hidden()
 
+    def test_find_repeats_button_toggles_and_takes_the_split_with_it(self):
+        self.open_repeat_project()
+        page = self.page
+        button = page.locator('#findRepeatsBtn')
+        expect(button).to_have_attribute('aria-pressed', 'true')
+        button.click()
+        expect(button).to_have_attribute('aria-pressed', 'false')
+        expect(page.locator('#repeatNavigator')).to_be_hidden()
+        expect(page.locator('#splitPane')).to_be_hidden()
+        button.click()
+        expect(button).to_have_attribute('aria-pressed', 'true')
+        expect(page.locator('#repeatNavigator')).to_have_attribute('aria-busy', 'false')
+        expect(page.locator('#splitPane')).to_be_visible()
+        # The navigator's own close ends the review but leaves the split open.
+        page.click('#repeatClose')
+        expect(button).to_have_attribute('aria-pressed', 'false')
+        expect(page.locator('#splitPane')).to_be_visible()
+
     def test_note_arrows_keep_linked_repeat_playhead_visible(self):
         self.open_repeat_project()
         page = self.page

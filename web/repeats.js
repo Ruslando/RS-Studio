@@ -223,6 +223,13 @@ function closeRepeats() {
   renderRepeatNavigator(); draw();
   return true;
 }
+// The toolbar button toggles the feature. Turned off there, the split view the
+// comparison opened goes with it; the navigator's close leaves the split open.
+const repeatsOn = () => !!(review || worker);
+function toggleRepeats() {
+  if (!repeatsOn()) { runFindRepeats(); return; }
+  closeRepeats(); splitHost?.close();
+}
 function editGroups(lane, change) {
   if (!canEditLane(lane)) return;
   const prev = snapshotEdit();
@@ -281,7 +288,7 @@ export function renderRepeatNavigator(elements = null) {
   const $ = id => elements ? elements[id] : document.getElementById(id);
   const nav = $('repeatNavigator');
   if (!nav) return;
-  if (!elements) syncRepeatPlayhead();
+  if (!elements) { syncRepeatPlayhead(); $('findRepeatsBtn')?.setAttribute('aria-pressed', String(repeatsOn())); }
   const lane = S.state ? activeLane() : null, state = current(), scanning = !!worker && scanLane === lane;
   nav.hidden = !scanning && !state;
   if (nav.hidden) { if (!elements) hideRepeatHover(); return; }
@@ -740,7 +747,7 @@ export function init_repeats(dependencies) {
   });
   $('repeatHoverClose').addEventListener('click', hideRepeatHover);
   $('repeatClose').addEventListener('click', closeRepeats);
-  $('findRepeatsBtn').addEventListener('click', () => runFindRepeats());
+  $('findRepeatsBtn').addEventListener('click', toggleRepeats);
   registerEscapeLayer(ESC_DEPTH.popover, () => closeRepeatPickers() || hideRepeatHover());
   $('repeatGroup').addEventListener('change', () => {
     if (!review) return;

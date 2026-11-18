@@ -399,6 +399,7 @@ export function init_split_view() {
       setReviewing(true);
       pairRepeats(true); syncFocus(); draw(); later();
     },
+    close: () => close(),
     reviewing: setReviewing,
     reveal: showInstance,
   });
