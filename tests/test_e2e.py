@@ -899,22 +899,18 @@ class EndToEndTests(unittest.TestCase):
         points = self.fretboard_hover_points(1.1)
         auto = page.evaluate(state)
         self.assertIsNone(auto["typed"])
-        # Point at the note and type its finger; Done keeps it as one edit.
-        page.click("#fretboardFingering")
-        expect(page.locator("#fretboardFingering")).to_have_text("Cancel")
-        page.mouse.click(*points["note"])
+        # Point at the note on the neck and type its finger: one edit at once (16fb00c).
+        page.mouse.move(*points["note"])
         page.keyboard.press("3")
-        page.click("#fretboardApply")
-        expect(page.locator("#fretboardFingering")).to_have_text("Assign custom fingering")
         got = page.evaluate(state)
         self.assertEqual((got["typed"], got["played"], got["pos"]), (3, 3, [4, 7]), "the typed finger, on the same position")
         page.keyboard.press("Control+z")
         self.assertIsNone(page.evaluate(state)["typed"], "undone like any edit")
-        # Escape discards what was typed.
-        page.click("#fretboardFingering")
-        page.mouse.click(*points["note"])
+        # Delete gives the note back to the automatic fingering.
+        page.mouse.move(*points["note"])
         page.keyboard.press("2")
-        page.keyboard.press("Escape")
+        self.assertEqual(page.evaluate(state)["typed"], 2)
+        page.keyboard.press("Delete")
         self.assertIsNone(page.evaluate(state)["typed"])
 
     def test_rocksmith_hand_positions_are_the_fretboards(self):
@@ -3461,6 +3457,8 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#fretboardPanel')).to_have_attribute('data-alternative-count', '0')
         positions = page.evaluate("""async () => {
             const lane = (await import('/store.js')).S.state.editLanes[0];
+            // Reset leaves the chord to the automatic fingering, stored in the background.
+            await (await import('/lane-fingering.js')).laneFingering(lane);
             return lane.notes.filter(n => n.start === 80).map(n => [n.pos.string, n.pos.fret]).sort();
         }""")
         self.assertEqual(positions, [[2, 5], [3, 5], [5, 5]])
@@ -5090,6 +5088,8 @@ class EndToEndTests(unittest.TestCase):
         with page.expect_file_chooser() as chooser:
             page.click('#welcomeOpen')
         chooser.value.set_files(bundle)
+        expect(page.locator('#appshell')).to_be_visible()   # opening the bundle takes a moment
+        self.loaded()
         warning = page.locator('.toast').filter(has_text='Missing tone presets:')
         expect(warning).to_have_count(0)
         before = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers''')
@@ -6045,7 +6045,7 @@ class EndToEndTests(unittest.TestCase):
         self.loaded()
         imported = page.evaluate("""async () => {
             const {S}=await import('./store.js'); const {timingData,timingIdOf}=await import('./timing.js');
-            const lane=S.state.editLanes.find(l=>l.sourceTrackIndex!=null);
+            const lane=S.state.editLanes.find(l=>l.gpSource);   // an imported layer keeps its staff of the file
             const timing=timingData(timingIdOf(lane));
             return {start:S.state.projectStart,notes:lane.notes.map(n=>n.start),offset:timing.grid.offset,
                 tones:lane.toneMarkers.map(m=>m.t),bars:timing.scoreBars.map(b=>b.seconds)};
@@ -6492,80 +6492,51 @@ class EndToEndTests(unittest.TestCase):
         page.click("[data-settings-pane=tunings]")
         expect(page.locator(".tuning-item", has_text="My tuning")).to_have_count(1)
 
-    def test_project_pitch_controls_distinguish_recording_and_output(self):
+    def test_project_pitch_target_shifts_the_audio_only_when_asked(self):
+        # The pitch section (d260a9c): the detected pitch, a target, and an opt-in
+        # audio shift that Apply carries out; the target alone changes nothing.
         self.new_audio_project()
         page = self.page
-        original = page.evaluate("""async () => {
+        reference = page.evaluate("""async () => {
             const {S} = await import('/store.js');
             const reference = 1200*Math.log2(441/440);
             await (await import('/project.js')).setTuning({reference, shift:0});
             S.state.tuning.estimate = reference;
-            return structuredClone(S.state.tuning);
+            return S.state.tuning.reference;   // as stored: rounded to a tenth of a cent
         }""")
         self.file_menu('#menuProjectSettings')
-        expect(page.locator('#settingsApply')).to_have_text('Save changes')
-        expect(page.locator('#settingsApply')).to_be_disabled()
-        expect(page.locator('#projTuningRef')).to_have_value('441.0')
-        expect(page.locator('#projTuningDetected')).to_have_text('Detected 441.0 Hz')
-        expect(page.locator('#projTuningAudio')).to_have_value('none')
-        expect(page.locator('#projTuningExport')).to_have_text('441.0 Hz')
-        self.assertGreaterEqual(page.locator('#settingsModal').bounding_box()['width'], 700)
-        # Audio processing is opt-in and uses the exact stored reference.
-        page.select_option('#projTuningAudio', 'a440')
-        self.assertAlmostEqual(float(page.locator('#projTuningShift').input_value()), -original['reference'])
-        expect(page.locator('#projTuningExport')).to_have_text('440.0 Hz')
-        page.select_option('#projTuningAudio', 'none')
-        expect(page.locator('#projTuningShift')).to_have_value('0')
-        # Override a mistaken estimate without changing the audio at all.
-        page.click('#projTuningRef440')
-        expect(page.locator('#projTuningRef')).to_have_value('440.0')
-        expect(page.locator('#projTuningAudio')).to_have_value('none')
-        expect(page.locator('#projTuningExport')).to_have_text('440.0 Hz')
+        expect(page.locator('#projPitchDetected')).to_have_text('441 Hz')
+        expect(page.locator('#projPitchTarget')).to_have_value('441')
+        expect(page.locator('#projPitchShiftAudio')).not_to_be_checked()
+        expect(page.locator('#projPitchApply')).to_be_hidden()
+        page.fill('#projPitchTarget', '440')
+        expect(page.locator('#projPitchApply')).to_be_hidden()   # no audio shift asked for
+        page.check('#projPitchShiftAudio')
+        expect(page.locator('#projPitchApply')).to_be_visible()
         with page.expect_request(re.compile(r'/tuning$')) as request:
-            page.click('#settingsApply')
-        self.assertEqual(request.value.post_data_json, {'reference': 0, 'shift': 0})
-        expect(page.locator('#projMetaStatus')).to_have_text('Saved', timeout=60000)
-        expect(page.locator('#settingsApply')).to_be_disabled()
-        saved = page.evaluate("async () => (await import('/store.js')).S.state.tuning")
-        self.assertEqual(saved['reference'], 0)
-        self.assertEqual(saved['shift'], 0)
-        page.fill('#projTuningRef', '442.0')
-        expect(page.locator('#projTuningAudio')).to_have_value('none')
-        expect(page.locator('#projTuningShift')).to_have_value('0')
-        expect(page.locator('#projTuningExport')).to_have_text('442.0 Hz')
-        page.select_option('#projTuningAudio', 'custom')
-        expect(page.locator('#projTuningShift')).to_be_visible()
-        page.fill('#projTuningShift', '25')
-        self.assertGreater(float(page.locator('#projTuningExport').inner_text().split()[0]), 442)
-        page.fill('#projTuningShift', '51')
-        page.click('#settingsApply')
-        expect(page.locator('#projMetaStatus')).to_contain_text('within the field')
-        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.tuning"), saved)
-        page.click('#settingsProjectCancel')
-        self.file_menu('#menuProjectSettings')
-        expect(page.locator('#projTuningRef')).to_have_value('440.0')
-        expect(page.locator('#projTuningAudio')).to_have_value('none')
-        page.click('#projTuningMeasure')
-        expect(page.locator('#projMetaStatus')).to_be_hidden(timeout=60000)
-        expect(page.locator('#projTuningRef')).to_have_value('440.0')
-        detected_hz = page.evaluate("async () => (440*2**((await import('/store.js')).S.state.tuning.estimate/1200)).toFixed(1)")
-        page.click('#projTuningUse')
-        expect(page.locator('#projTuningRef')).to_have_value(detected_hz)
-        expect(page.locator('#projTuningAudio')).to_have_value('none')
-        page.click('#projTuningRef440')
-        for theme in ['dark', 'light']:
-            page.evaluate('(theme) => document.documentElement.dataset.theme = theme', theme)
-            self.assertFalse(page.locator('#settingsModal .settings-layout > .dialog-body').evaluate('el => el.scrollWidth > el.clientWidth'))
-        page.set_viewport_size({'width': 520, 'height': 600})
-        expect(page.locator('#settingsProjectCancel')).to_be_in_viewport()
-        self.assertFalse(page.locator('#settingsModal .settings-layout > .dialog-body').evaluate('el => el.scrollWidth > el.clientWidth'))
+            page.click('#projPitchApply')
+        sent = request.value.post_data_json
+        self.assertAlmostEqual(sent['reference'], reference, places=6)
+        self.assertAlmostEqual(sent['shift'], -reference, places=6)   # 441 Hz down to 440
+        expect(page.locator('#projMetaStatus')).to_have_text('Pitch shift applied', timeout=60000)
+        expect(page.locator('#projPitchTarget')).to_have_value('440')
+        expect(page.locator('#projPitchShiftAudio')).to_be_checked()
+        expect(page.locator('#projPitchApply')).to_be_hidden()
+        # Unticking the shift and applying gives the recording back unchanged.
+        page.uncheck('#projPitchShiftAudio')
+        with page.expect_request(re.compile(r'/tuning$')) as request:
+            page.click('#projPitchApply')
+        self.assertEqual(request.value.post_data_json['shift'], 0)
+        expect(page.locator('#projMetaStatus')).to_have_text('Pitch shift applied', timeout=60000)
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.tuning.shift"), 0)
 
     def test_project_pitch_without_audio_is_disabled(self):
         self.open_reference_project()
         self.file_menu('#menuProjectSettings')
-        for control in ['projTuningRef', 'projTuningRef440', 'projTuningAudio', 'projTuningShift', 'projTuningUse', 'projTuningMeasure']:
+        for control in ['projPitchTarget', 'projPitchShiftAudio']:
             expect(self.page.locator(f'#{control}')).to_be_disabled()
-        expect(self.page.locator('#projTuningDetected')).to_have_text('No audio')
+        expect(self.page.locator('#projPitchApply')).to_be_hidden()
+        expect(self.page.locator('#projPitchDetected')).to_have_text('Not detected')
 
     def test_project_is_renamed_then_deleted_from_the_library(self):
         page = self.page
@@ -6609,6 +6580,7 @@ class EndToEndTests(unittest.TestCase):
         chooser.value.set_files(modern)
         expect(page.locator("#gpImportTracks")).to_contain_text("8 notes")
 
+    @unittest.skip("the walkthrough is switched off on the welcome screen (f5b8afe)")
     def test_walkthrough_runs_from_first_card_to_last(self):
         page = self.page
         page.click("#welcomeTour")
