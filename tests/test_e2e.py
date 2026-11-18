@@ -289,14 +289,21 @@ class EndToEndTests(unittest.TestCase):
             await playback.playTransport();
         }''')
         page.wait_for_function("async () => !(await import('/playback.js')).transportPlaying()")
-        stopped = page.evaluate('''async () => {
+        now = '''async () => {
             const playback = await import('/playback.js'), repeats = await import('/repeats.js');
-            playback.seekPlayback(playback.playbackZone().t1 + .02);
             return {review:repeats.savedRepeatReview(), time:playback.playbackTime(), zone:playback.playbackZone()};
-        }''')
+        }'''
+        stopped = page.evaluate(now)
         self.assertEqual(stopped['review']['copyKey'], initial['copyKey'])
         self.assertAlmostEqual(stopped['time'], state['zone']['t1'], places=6)
         self.assertEqual(stopped['zone'], state['zone'])
+        # Paused, the playhead may be put anywhere, also past the end: that never
+        # chooses another instance (find-repeats.md).
+        page.evaluate("async () => { const p = await import('/playback.js'); p.seekPlayback(p.playbackZone().t1 + .02); }")
+        parked = page.evaluate(now)
+        self.assertAlmostEqual(parked['time'], state['zone']['t1'] + .02, places=6)
+        self.assertEqual(parked['review']['copyKey'], initial['copyKey'])
+        self.assertEqual(parked['zone'], state['zone'])
         page.click('#repeatNext')
         selected = page.evaluate("async () => (await import('/repeats.js')).savedRepeatReview()")
         self.assertNotEqual(selected['copyKey'], initial['copyKey'], 'the instance control can still choose another instance')
@@ -3214,7 +3221,13 @@ class EndToEndTests(unittest.TestCase):
             a.slide = 'shift'; a.end = a.start + (b.start - a.start) / 2; b.pitch = a.pitch + 5;
             c.bend = 'custom'; c.bendPoints = [[0, 0], [0.5, 2], [1, 2]];
             commit(prev); setSelection(new Set());
-            (await import('/repaint.js')).draw();
+            // Zoomed in: at the default zoom the slide's last tenth is within a
+            // note edge's grab distance (EDGE_PX) of the note it lands on.
+            const stage = document.querySelector('#stage').getBoundingClientRect();
+            (await import('/geometry.js')).zoomBothTo(2.5, stage.left + stage.width / 2, stage.top + stage.height / 2);
+            scroll.scrollLeft = Math.max(0, xOf(a.start) - 80);
+            scroll.scrollTop = Math.max(0, yOf(b.pitch + 1) - 40);
+            (await import('/repaint.js')).drawNow();
             const rect = document.querySelector('#stage').getBoundingClientRect();
             const at = (t, pitch) => ({ x: xOf(t) - scroll.scrollLeft + rect.left,
                 y: yOf(pitch) + S.state.rowH / 2 - scroll.scrollTop + rect.top });
