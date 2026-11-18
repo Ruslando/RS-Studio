@@ -374,6 +374,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                   <button type="button" class="tab" role="tab" id="stageTabSpectrogram" data-stage-tab="spectrogram" aria-controls="stagePaneSpectrogram">Spectrogram</button>
                   <button type="button" class="tab" role="tab" id="stageTabView" data-stage-tab="view" aria-controls="stagePaneView">View</button>
                   <button type="button" class="tab" role="tab" id="stageTabDraw" data-stage-tab="draw" aria-controls="stagePaneDraw">Drawing</button>
+                  <button type="button" class="tab" role="tab" id="stageTabSplit" data-stage-tab="split" aria-controls="stagePaneSplit" hidden>Split</button>
                 </div>
                 <button type="button" id="stageControlsToggle" class="icon-btn icon-btn--compact" aria-controls="stageControlsBody" aria-expanded="false" aria-label="Expand spectrogram controls"></button>
               </div>
@@ -426,6 +427,12 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                   <div class="stage-channel-row"><span>Range</span><select id="quickTraceRange" class="trace-range-ctl" aria-label="Drawing search range"><option value="1">±1</option><option value="2" selected>±2</option><option value="3">±3</option></select></div>
                   <label title="How bright the spectrogram must be for a drawn note to snap to it. While you use the slider, the stage shows in green what passes.">Snap threshold <input type="range" id="quickTraceThreshold" class="trace-heat-ctl" min="0" max="100" step="1" value="18" aria-label="Snap threshold" /><output class="trace-thresh-val" for="quickTraceThreshold">18%</output></label>
                 </div>
+                <!-- Split view settings (split-view.js); the tab shows while the split is open. -->
+                <div id="stagePaneSplit" class="stage-pane" role="tabpanel" aria-labelledby="stageTabSplit" hidden>
+                  <div class="stage-channel-row"><span>Layout</span><select id="splitLayout" aria-label="Split layout"><option value="columns">Side by side</option><option value="rows">Stacked</option></select></div>
+                  <div class="stage-channel-row" title="Independent: each pane keeps its own playhead. Linked: both play and move together, each at its own position. Synced: one playhead for both."><span>Playheads</span><select id="splitMode" aria-label="Playheads"><option value="free">Independent</option><option value="link">Linked</option><option value="sync">Synced</option></select></div>
+                  <div class="stage-channel-row" title="Both panes share zoom and pitch range"><label class="chk"><input type="checkbox" id="splitSyncView" /> Sync view</label></div>
+                </div>
               </div>
               <span id="stageChannelStatus" role="status"></span>
             </div>
@@ -438,23 +445,23 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             </nav>
             <nav id="repeatNavigator" aria-label="Repeat navigation" hidden>
               <button type="button" id="repeatDrag" aria-label="Move repeat toolbar" title="Drag to move repeat toolbar"></button>
-              <div class="repeat-nav-group" role="group" aria-label="Groups">
+              <div class="repeat-nav-group repeat-shared" role="group" aria-label="Groups">
                 <button type="button" id="repeatGroupPrevious" aria-label="Previous group" title="Previous group (Shift+←)">‹</button>
                 <select id="repeatGroup" aria-label="Repeat group"></select>
                 <button type="button" id="repeatGroupNext" aria-label="Next group" title="Next group (Shift+→)">›</button>
               </div>
               <div class="repeat-nav-group" role="group" aria-label="Instances">
                 <button type="button" id="repeatPrevious" aria-label="Previous instance" title="Previous instance (Alt+←)">‹</button>
-                <details id="repeatInstance" class="repeat-picker" aria-label="Instance"></details>
+                <select id="repeatInstance" aria-label="Instance"></select>
                 <output id="repeatPosition" aria-live="polite">0 / 0</output>
                 <button type="button" id="repeatNext" aria-label="Next instance" title="Next instance (Alt+→)">›</button>
               </div>
-              <div id="repeatChangeNavigation" class="repeat-nav-group" role="group" aria-label="Changed notes" hidden>
+              <div id="repeatChangeNavigation" class="repeat-nav-group repeat-shared" role="group" aria-label="Changed notes" hidden>
                 <button type="button" id="repeatChangePrevious" aria-label="Previous difference" title="Previous difference">‹</button>
                 <select id="repeatChangePosition" aria-label="Changed note"></select>
                 <button type="button" id="repeatChangeNext" aria-label="Next difference" title="Next difference">›</button>
               </div>
-              <button type="button" id="repeatClose" aria-label="Close repeat review" title="Close repeat review">×</button>
+              <button type="button" id="repeatClose" class="repeat-shared" aria-label="Close repeat review" title="Close repeat review">×</button>
               <section id="repeatHover" role="dialog" aria-label="Note comparison" hidden>
                 <button type="button" id="repeatHoverClose" aria-label="Close note comparison">×</button>
                 <table><thead><tr id="repeatHoverHead"></tr></thead><tbody id="repeatHoverRows"></tbody></table>
@@ -474,14 +481,11 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <!-- Split view (split-view.js): a header per column and the second pane,
                which the editor's own renderer paints. Clicking it makes it live. -->
           <div id="splitHead0" class="split-head" hidden><span class="pane-badge" title="View 1">1</span><label>Audio <select aria-label="Left pane audio layer"></select></label><label>Layer <select aria-label="Left pane editing layer"></select></label></div>
+          <!-- Reviewing repeats, the rail replaces both headers: each pane's instance on its
+               own side, what both panes share (audio, layer, group, difference) in the middle. -->
+          <div id="splitRail" class="split-rail" hidden><div id="splitRailZone0" class="rail-zone"></div><div id="splitRailCenter" class="rail-center"><label title="The audio both panes play">Audio <select id="splitSharedStem" aria-label="Audio for both panes"></select></label><label title="The layer both panes review">Layer <select id="splitSharedLane" aria-label="Layer for both panes"></select></label></div><div id="splitRailZone1" class="rail-zone"></div></div>
           <div id="splitDivider" class="splitter splitter--x" aria-hidden="true" hidden><svg class="splitter-dots" width="5" height="26" viewBox="0 0 5 26" fill="none"><circle cx="2.5" cy="5" r="1.4" fill="currentColor"/><circle cx="2.5" cy="13" r="1.4" fill="currentColor"/><circle cx="2.5" cy="21" r="1.4" fill="currentColor"/></svg></div>
           <div id="splitDividerY" class="splitter splitter--y" aria-hidden="true" hidden><svg class="splitter-dots" width="26" height="5" viewBox="0 0 26 5" fill="none"><circle cx="5" cy="2.5" r="1.4" fill="currentColor"/><circle cx="13" cy="2.5" r="1.4" fill="currentColor"/><circle cx="21" cy="2.5" r="1.4" fill="currentColor"/></svg></div>
-          <nav id="splitControls" aria-label="Split view settings" hidden>
-            <button type="button" id="splitDrag" aria-label="Move split view settings" title="Drag to move split view settings"></button>
-            <select id="splitLayout" aria-label="Split layout"><option value="columns">Side by side</option><option value="rows">Stacked</option></select>
-            <label title="Independent: each pane keeps its own playhead. Linked: both play and move together, each at its own position. Synced: one playhead for both.">Playheads <select id="splitMode" aria-label="Playheads"><option value="free">Independent</option><option value="link">Linked</option><option value="sync">Synced</option></select></label>
-            <label class="chk" title="Both panes share zoom and pitch range"><input type="checkbox" id="splitSyncView" /> Sync view</label>
-          </nav>
           <div id="splitHead1" class="split-head" hidden><span class="pane-badge" title="View 2">2</span><label>Audio <select aria-label="Right pane audio layer"></select></label><label>Layer <select aria-label="Right pane editing layer"></select></label></div>
           <div id="splitPane" class="split-viewer" hidden>
             <canvas class="split-ruler"></canvas>

@@ -4,7 +4,11 @@ Find Repeats opens the split view with one instance in each pane. The first pane
 shows the instance under review; the second starts on the next instance. Every
 instance of a group is in one list. Groups with only one instance are kept
 but not shown, since there is nothing to compare. Each pane chooses its own instance with the
-repeat toolbar, which sits on the active pane; the instance shown in the other
+repeat toolbar on its own side of the rail, the one header that stands in for
+both pane headers during a review. What both panes share sits in the middle of
+the rail: one audio and one layer for both panes, the group and the difference
+buttons. The split view settings are the Split tab of the spectrogram controls.
+The instance shown in the other
 pane can't be chosen as well, so the panes never show the same one; a click in the other pane makes
 it active and acts there at once. The group is shared by both panes.
 
@@ -46,8 +50,8 @@ no additional outline. A single differing note is counted once even when it
 differs in several ways. Whammy type alone does not add an amber outline;
 whammy curve differences can.
 
-The note card hangs below the repeat toolbar, or above it when the toolbar is
-near the foot of the pane, so it never covers the note itself. It lists only
+The note card hangs below the middle of the rail, so it
+never covers the note itself. It lists only
 what differs, each value on its pane's side. Position values are
 compared only between notes with the same pitch. → copies a value from the left
 to the right, ← from the right to the left; hovering an arrow previews the

@@ -3,13 +3,15 @@ import { dockBounds, dockPosition } from './edge-dock.js';
 import { closeMenus } from './menus.js';
 import { icon, DRAG_HANDLE_ICON } from './icons.js';
 
-let showTab = () => {};
-// Expand the controls on one tab ('spectrogram' | 'view' | 'draw'); a second call on the open tab collapses.
+let showTab = () => {}, refresh = () => {};
+// Expand the controls on one tab ('spectrogram' | 'view' | 'draw' | 'split'); a second call on the open tab collapses.
 export const toggleStageTab = tab => showTab(tab);
+// A tab was shown or hidden (split-view.js shows 'split' while the split is open).
+export const refreshStageTabs = () => refresh();
 
 export function initSpectrogramDock(panel) {
   const key = 'rs-spectrogram-controls';
-  const TABS = ['spectrogram', 'view', 'draw'];
+  const TABS = ['spectrogram', 'view', 'draw', 'split'];
   let state = { edge: 'right', fraction: .15, collapsed: true, tab: 'spectrogram' };
   try {
     const saved = JSON.parse(localStorage.getItem(key));
@@ -28,10 +30,14 @@ export function initSpectrogramDock(panel) {
     panel.dataset.edge = state.edge;
     panel.dataset.statusAbove = String(y + panel.offsetHeight + 50 > panel.parentElement.clientHeight);
   }
+  // A hidden tab keeps its saved choice for when it shows again.
+  const shown = () => TABS.filter(tab => !tabs.querySelector(`[data-stage-tab="${tab}"]`).hidden);
+  const current = () => (shown().includes(state.tab) ? state.tab : 'spectrogram');
   function collapse() {
     body.hidden = tabs.hidden = state.collapsed;
+    const tab = current();
     for (const button of tabs.querySelectorAll('[data-stage-tab]')) {
-      const active = button.dataset.stageTab === state.tab;
+      const active = button.dataset.stageTab === tab;
       button.classList.toggle('active', active);
       button.setAttribute('aria-selected', String(active));
       button.tabIndex = active ? 0 : -1;
@@ -49,12 +55,13 @@ export function initSpectrogramDock(panel) {
   tabs.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
     event.preventDefault();
-    select(TABS[(TABS.indexOf(state.tab) + (event.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]);
+    const list = shown();
+    select(list[(list.indexOf(current()) + (event.key === 'ArrowRight' ? 1 : list.length - 1)) % list.length]);
     tabs.querySelector(`[data-stage-tab="${state.tab}"]`).focus();
   });
   showTab = tab => {
     if (panel.hidden) return false;
-    if (!state.collapsed && state.tab === tab) { state.collapsed = true; collapse(); save(); return false; }
+    if (!state.collapsed && current() === tab) { state.collapsed = true; collapse(); save(); return false; }
     select(tab); return true;
   };
   wireDockControls(panel, handle, {
@@ -62,5 +69,6 @@ export function initSpectrogramDock(panel) {
     move: dock => Object.assign(state, dock),
     setEdge: edge => { state.edge = edge; },
   });
+  refresh = collapse;
   collapse();
 }

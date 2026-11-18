@@ -26,7 +26,6 @@ import { modalOpen } from './modal-focus.js';
 import { paintZoneFrame, paintZoneLabel, zoneFrameEdge, ZONE_PADDING } from './zone-frame.js';
 import { railsBottom } from './marker-rails.js';
 import { nid } from './ids.js';
-import { renderRepeatPicker } from './repeat-picker.js';
 import { playbackTime, seekPlayback, setPlaybackZone, transportPlaying } from './playback.js';
 import { initRepeatDock } from './repeat-dock.js';
 
@@ -216,7 +215,7 @@ function stepCopy(delta) {
 }
 function closeRepeats() {
   if (!review && !worker) return false;
-  hideRepeatHover(); closeRepeatPickers();
+  hideRepeatHover();
   worker?.terminate(); worker = null; scanLane = null; scanProject = null;
   review = null; navKey = null; handRequest = null; handResult = null; handSeats = null; stopCache = null; groupsCache = null;
   setPlaybackZone(null); splitHost?.reviewing(false);
@@ -318,8 +317,17 @@ export function renderRepeatNavigator(elements = null) {
   select.disabled = scanning || !state;
   nav.setAttribute('aria-busy', String(scanning));
   const instanceChoices = (state?.navigationCopies || []).map(copy => ({ value: copy.ids[0],
-    label: `Instance ${originalIndex(state, copy)}`, disabled: copy !== state.copy && shownElsewhere(copy) }));
-  renderRepeatPicker($('repeatInstance'), instanceChoices, state?.copy.ids[0], { disabled: scanning || !state });
+    label: `Instance ${originalIndex(state, copy)} of ${state.parent.copies.length}`, disabled: copy !== state.copy && shownElsewhere(copy) }));
+  // A plain select, like every dropdown: the other pane's instance is a disabled row.
+  const instance = $('repeatInstance');
+  instance.replaceChildren(...instanceChoices.map(choice => {
+    const option = document.createElement('option');
+    option.value = choice.value; option.textContent = choice.label; option.disabled = choice.disabled;
+    return option;
+  }));
+  if (!instanceChoices.length) { const option = document.createElement('option'); option.textContent = 'Scanning…'; instance.append(option); }
+  instance.value = state?.copy.ids[0] ?? '';
+  instance.disabled = scanning || !state;
   $('repeatPosition').textContent = state ? `${state.navigationIndex + 1} / ${state.navigationCopies.length}` +
     (state.parent.copies.length !== state.navigationCopies.length ? ` · #${originalIndex(state, state.copy)}` : '') : 'Scanning…';
   $('repeatPrevious').disabled = $('repeatNext').disabled = scanning || !state || choosableCopies(state).length < 2;
@@ -441,7 +449,7 @@ export function handleRepeatNavigationKey(event) {
     || $('repeatNavigator').hidden || $('repeatNavigator').closest?.('[hidden], [inert]')
     || modalOpen('[aria-modal="true"]:not([data-editor-keys])')) return false;
   const target = event.target;
-  if (target === $('repeatDrag') || target?.closest?.('.repeat-picker')) return false;
+  if (target === $('repeatDrag')) return false;
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(target?.tagName) || target?.isContentEditable
     || target?.closest?.('[contenteditable="true"], [role="listbox"], [role="menu"]')) return false;
   const delta = event.key === 'ArrowRight' ? 1 : -1;
@@ -605,7 +613,8 @@ function counterpart(state, anchorCopy, anchor, targetCopy) {
 function updateHoverPreview() {
   if (!hover) return;
   // Below the repeat toolbar, or above it where the pane has no room below.
-  const card = $('repeatHover'), nav = $('repeatNavigator').getBoundingClientRect?.(), room = $('repeatNavigator').parentElement?.getBoundingClientRect?.();
+  // In the split view's compare row the toolbar sits above its pane, not on it.
+  const card = $('repeatHover'), nav = $('repeatNavigator').getBoundingClientRect?.(), room = $('viewer')?.getBoundingClientRect?.();
   card.classList.toggle('repeat-hover-above', !!nav && !!room && nav.bottom + card.offsetHeight + 8 > room.bottom);
   draw();
 }
@@ -725,30 +734,13 @@ export function drawRepeats() {
   }
   sctx.restore();
 }
-function closeRepeatPickers(except = null) {
-  let closed = false;
-  for (const id of ['repeatInstance']) {
-    const picker = $(id);
-    if (picker !== except && picker.open) {
-      picker.open = false; closed = true;
-      if (picker.contains(document.activeElement)) picker.children[0]?.focus();
-    }
-  }
-  return closed;
-}
 export function init_repeats(dependencies) {
   actions = dependencies;
   initRepeatDock($('repeatNavigator'), $('repeatDrag'));
-  for (const id of ['repeatInstance']) $(id).addEventListener('toggle', () => {
-    if ($(id).open) closeRepeatPickers($(id));
-  });
-  window.addEventListener('pointerdown', event => {
-    for (const id of ['repeatInstance']) if (!$(id).contains(event.target)) $(id).open = false;
-  });
   $('repeatHoverClose').addEventListener('click', hideRepeatHover);
   $('repeatClose').addEventListener('click', closeRepeats);
   $('findRepeatsBtn').addEventListener('click', toggleRepeats);
-  registerEscapeLayer(ESC_DEPTH.popover, () => closeRepeatPickers() || hideRepeatHover());
+  registerEscapeLayer(ESC_DEPTH.popover, hideRepeatHover);
   $('repeatGroup').addEventListener('change', () => {
     if (!review) return;
     review.group = $('repeatGroup').value; review.first = null; review.copyKey = null;

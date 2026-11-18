@@ -1647,11 +1647,11 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 .repeat-curve-point { fill: var(--panel); stroke: currentColor; stroke-width: 1.5; }
 
 
-#spectrogramControls { position: absolute; z-index: 2; width: 320px; max-width: calc(100% - 16px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--e1); }
+#spectrogramControls { position: absolute; z-index: var(--z-edge); width: 380px; max-width: calc(100% - 16px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--e1); }
 #spectrogramControls.collapsed { width: max-content; }
 .stage-controls-head { display: flex; align-items: center; gap: var(--s-pair); padding: var(--s-pair); }
 #stageControlsTabs { flex: 1; }
-#stageControlsTabs .tab { flex: 1; min-width: 0; }
+#stageControlsTabs .tab { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
 #stagePaneDraw .kbd { color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); }
 #stageControlsDrag { cursor: grab; touch-action: none; }
 #spectrogramControls.docking #stageControlsDrag { cursor: grabbing; }
@@ -1671,17 +1671,6 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 
 :is(#repeatDrag, #splitRepeatDrag) { cursor: grab; touch-action: none; }
 :is(#repeatNavigator, #splitRepeatNavigator).docking :is(#repeatDrag, #splitRepeatDrag) { cursor: grabbing; }
-.repeat-picker { position: relative; font-size: var(--text-control); }
-.repeat-picker summary { display: flex; align-items: center; box-sizing: border-box; cursor: pointer; list-style: none; white-space: nowrap; }
-.repeat-picker summary::-webkit-details-marker { display: none; }
-.repeat-picker summary[aria-disabled="true"] { opacity: .5; cursor: default; }
-.repeat-picker-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; min-width: 100%; width: max-content; max-width: min(320px, 80vw); max-height: min(360px, 60vh); overflow: auto; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--panel); box-shadow: var(--e1); }
-:is(#repeatNavigator, #splitRepeatNavigator)[data-menu-above="true"] .repeat-picker-menu { top: auto; bottom: calc(100% + 4px); }
-:is(#repeatNavigator, #splitRepeatNavigator)[data-edge="right"] .repeat-picker-menu { left: auto; right: 0; }
-.repeat-picker-row { display: flex; align-items: center; gap: 8px; }
-:is(#repeatNavigator, #splitRepeatNavigator) .repeat-picker-menu button { display: block; width: 100%; padding: 4px 8px; text-align: left; white-space: nowrap; }
-.repeat-picker-row button[aria-current="true"] { color: var(--accent); }
-.repeat-picker-row button:disabled { color: var(--hint); cursor: default; }
 
 /* Split view (split-view.js): the live editor and the second pane, side by side
    or stacked, each under its own header, and their fretboards side by side with a
@@ -1695,7 +1684,10 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 #editor.split.live-second #splitPane { grid-area: 2 / 1; }
 #splitHead0 { grid-area: 1 / 1; }
 #splitHead1 { grid-area: 1 / 3; }
+#splitRail { grid-area: 1 / 1 / 2 / -1; }
 #splitDivider { grid-area: 1 / 2 / 3 / 3; }
+#editor.split.reviewing #splitDivider { grid-area: 2 / 2 / 3 / 3; }
+#editor.split.reviewing .split-head { display: none; }
 #editor.split.rows #editingPanel { grid-template: auto minmax(0, var(--split-a)) auto auto minmax(0, var(--split-b)) / minmax(0, 1fr); }
 #editor.split.rows #viewer { grid-area: 2 / 1; }
 #editor.split.rows #splitPane { grid-area: 5 / 1; }
@@ -1717,13 +1709,42 @@ body.col-resizing:not(.panel-snapping) #artifactsPanel { transition: none; }
 :is(#splitDivider, #splitDividerY, #splitFretDivider):is(:hover, .is-dragging) { color: var(--text); }
 /* The boards share one panel, so theirs is a rule through the gap. */
 #splitFretDivider::before { content: ""; position: absolute; top: var(--s-sibling); bottom: var(--s-sibling); left: 50%; width: 1px; background: var(--line); }
-:is(.split-head, .split-viewer, #splitDivider, #splitDividerY, #splitFretboard, #splitFretDivider, #splitControls)[hidden] { display: none; }
+:is(.split-head, .split-rail, .split-viewer, #splitDivider, #splitDividerY, #splitFretboard, #splitFretDivider)[hidden] { display: none; }
+#stageControlsTabs .tab[hidden] { display: none; }
+/* The rail (split-view.js): one header across both panes while reviewing repeats.
+   Each side holds its pane's instance toolbar, flattened; the middle what both share.
+   The sides hug their pickers; the middle takes the rest, and short of room it
+   wraps first. The note card hangs from the rail itself, so it opens in the middle. */
+.split-rail { position: relative; z-index: 3; display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; min-height: 40px; background: var(--panel); border: 1px solid var(--line); border-bottom: 0; border-radius: var(--r-container) var(--r-container) 0 0; }
+.rail-zone { display: flex; align-items: center; gap: var(--s-sibling); min-width: 0; padding: var(--s-pair) var(--s-sibling); box-shadow: inset 0 -1px var(--line); }
+#splitRailZone1 { flex-direction: row-reverse; }
+.rail-zone[data-live] { box-shadow: inset 0 -2px var(--accent); }
+.rail-center { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--s-pair) var(--s-row); padding: var(--s-pair) var(--s-row); box-shadow: inset 1px 0 var(--line), inset -1px 0 var(--line), inset 0 -1px var(--line); }
+.rail-center > label { display: flex; align-items: center; gap: var(--s-pair); color: var(--hint); font-size: var(--text-caption); }
+/* The middle sits on one line: each select is as wide as what it shows now,
+   rather than its longest option (design.md rule 12 yields to the stage's height). */
+.rail-center select { field-sizing: content; max-width: 20ch; }
+/* The rail has no pane headers to number, so each stage carries its view's
+   number in its top corner; the live view's is filled with the accent. */
+#editor.split.reviewing :is(#viewer, #splitPane)::after {
+  content: "1"; position: absolute; top: calc(var(--w-edge) + var(--s-sibling)); right: calc(var(--w-pitch-scale) + var(--s-sibling)); z-index: 2; pointer-events: none;
+  min-width: 16px; padding: 2px 4px; border-radius: 999px; text-align: center;
+  background: var(--selection); color: var(--text); font: 600 11px/1 var(--font-ui); }
+#editor.split.reviewing #splitPane::after, #editor.split.reviewing.live-second #viewer::after { content: "2"; }
+#editor.split.reviewing.live-second #splitPane::after { content: "1"; }
+#editor.split.reviewing #viewer::after { background: var(--accent); color: var(--on-accent); }
+#editor.split.reviewing :is(#viewer, #splitPane) { border-top: 0; border-radius: 0 0 var(--r-container) var(--r-container); }
+.split-rail :is(#repeatNavigator, #splitRepeatNavigator) { position: static; padding: 0; border: 0; background: none; max-width: none; flex-wrap: nowrap; gap: 2px; }
+.split-rail :is(#repeatDrag, #splitRepeatDrag, #repeatPosition, #splitRepeatPosition), #splitRepeatNavigator .repeat-shared { display: none; }
+/* Controls inside a row are compact (design.md 2.5); its steppers are ghost buttons. */
+.split-rail select { height: var(--h-compact); border-radius: var(--r-compact); }
+.split-rail :is(#repeatNavigator, #splitRepeatNavigator, #splitRailCenter) .repeat-nav-group > button, .split-rail #repeatClose {
+  min-width: var(--h-compact); height: var(--h-compact); padding: 0; border-radius: var(--r-compact); background: transparent; box-shadow: none; color: var(--label); }
+.split-rail :is(#repeatNavigator, #splitRepeatNavigator, #splitRailCenter) .repeat-nav-group > button:hover:not(:disabled), .split-rail #repeatClose:hover { background: var(--control-hover); color: var(--text); }
+/* A toolbar's hidden shared groups must not leave a separator before its instances. */
+.split-rail :is(#repeatNavigator, #splitRepeatNavigator) .repeat-nav-group { border-left: 0; padding-left: 0; }
 .split-head label { display: flex; align-items: center; gap: var(--s-pair); color: var(--hint); font-size: var(--text-caption); }
 .split-head select { max-width: 20ch; }
-#splitControls { position: absolute; z-index: calc(var(--z-splitter) + 1); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-sibling); width: max-content; max-width: calc(100% - 24px); padding: var(--s-pair); border: 1px solid var(--line); border-radius: var(--r-compact); background: var(--surface-toolbar); box-shadow: var(--e1); }
-#splitControls label { display: flex; align-items: center; gap: var(--s-pair); color: var(--hint); font-size: var(--text-caption); }
-#splitDrag { min-width: var(--h-control); height: var(--h-control); padding: 0; cursor: grab; touch-action: none; }
-#splitControls.docking #splitDrag { cursor: grabbing; }
 #fretboardLive { position: relative; width: 100%; height: 100%; }
 #editor.split #fretboardLive, #splitFretboard { position: absolute; top: 0; height: 100%; }
 #editor.split #fretboardLive, #editor.split.live-second #splitFretboard { left: 0; width: var(--fret-first); }

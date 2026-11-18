@@ -4,9 +4,10 @@ class Control extends EventTarget {
   value = ''; hidden = false; disabled = false; checked = true; textContent = '';
   setAttribute() {} matches() { return false; } querySelectorAll() { return []; }
 }
-const ids = ['spectrogramControls','stageChannel','stageViewButton','stageViewLabel','stageSharp','stageIntensityMin','stageIntensityMax','stageIntensityMinValue','stageIntensityMaxValue','stageChannelStatus','traceSnap','stageChannelButton','stageChannelLabel'];
+const ids = ['spectrogramControls','stageChannel','stageViewButton','stageViewLabel','stageSharp','stageIntensityMin','stageIntensityMax','stageIntensityMinValue','stageIntensityMaxValue','stageChannelStatus','traceSnap','stageChannelButton','stageChannelLabel','stageTabSplit'];
 const controls = Object.fromEntries(ids.map(id => [id, new Control()]));
 controls.stageIntensityMin.value = '0'; controls.stageIntensityMax.value = '100';
+controls.stageTabSplit.hidden = true;   // the split view is closed
 const a = { id: 'a', channel: 'left' }, b = { id: 'b', channel: 'stereo' };
 const S = { state: { curStem: 'a', stems: [a, b] } };
 const saved = { window: globalThis.window, document: globalThis.document };

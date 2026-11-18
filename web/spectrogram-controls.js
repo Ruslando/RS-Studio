@@ -32,7 +32,8 @@ export function initSpectrogramControls() {
   });
   function sync() {
     const stem = currentStem();
-    panel.hidden = !stem;
+    // Without audio it still holds the split view's settings while the split is open.
+    panel.hidden = !stem && document.getElementById('stageTabSplit').hidden;
     channel.value = stem?.channel || 'stereo';
     channel.disabled = !!stem && pending === stem;
     channelButton.disabled = channel.disabled;
@@ -105,6 +106,6 @@ export function initSpectrogramControls() {
     // Space operates the focused checkbox / button without starting playback.
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', ' '].includes(event.key)) event.stopPropagation();
   });
-  for (const event of ['cw-stem-view-changed', 'cw-project-opened', 'cw-project-closed', 'cw-intensity-status']) window.addEventListener(event, sync);
+  for (const event of ['cw-stem-view-changed', 'cw-project-opened', 'cw-project-closed', 'cw-intensity-status', 'cw-split-toggled']) window.addEventListener(event, sync);
   sync();
 }

@@ -207,6 +207,13 @@ class EndToEndTests(unittest.TestCase):
         page.evaluate('''async job => { await (await import('/project.js')).loadCached(job); }''', self.reference_job)
         expect(page.locator('#repeatNavigator')).to_be_hidden()
 
+    def open_split_settings(self):
+        """The split view settings are a tab of the floating spectrogram controls."""
+        self.page.evaluate('''async () => {
+            if (document.getElementById('stagePaneSplit').hidden)
+                (await import('/spectrogram-dock.js')).toggleStageTab('split');
+        }''')
+
     def test_find_repeats_button_toggles_and_takes_the_split_with_it(self):
         self.open_repeat_project()
         page = self.page
@@ -228,6 +235,7 @@ class EndToEndTests(unittest.TestCase):
     def test_note_arrows_keep_linked_repeat_playhead_visible(self):
         self.open_repeat_project()
         page = self.page
+        self.open_split_settings()
         page.select_option('#splitMode', 'link')
         page.check('#splitSyncView')
         page.evaluate('''async () => {
@@ -256,6 +264,7 @@ class EndToEndTests(unittest.TestCase):
     def test_repeat_instance_contains_navigation_and_stops_at_end(self):
         self.open_repeat_project()
         page = self.page
+        self.open_split_settings()
         page.select_option('#splitMode', 'link')
         page.evaluate('document.activeElement.blur()')
         initial = page.evaluate("async () => (await import('/repeats.js')).savedRepeatReview()")
@@ -306,44 +315,93 @@ class EndToEndTests(unittest.TestCase):
         changed = page.evaluate("async () => (await import('/repeats.js')).savedRepeatReview()")
         self.assertEqual(changed['other']['copyKey'], initial['copyKey'], 'the command leaves the first pane on its own instance')
         # The inactive pane's native picker also chooses for that pane.
-        page.click('#splitRepeatInstance summary')
-        page.locator('#splitRepeatInstance button').filter(has_text='Instance 2').click()
+        page.select_option('#splitRepeatInstance', label='Instance 2 of 3')
         expect(page.locator('#repeatPosition')).to_have_text('2 / 3')
         expect(page.locator('#splitRepeatPosition')).to_have_text('3 / 3')
         expect(page.locator('#repeatNavigator')).to_be_visible()
         expect(page.locator('#splitRepeatNavigator')).to_be_visible()
+        self.open_split_settings()
         page.select_option('#splitLayout', 'rows')
         expect(page.locator('#repeatNavigator')).to_be_visible()
         expect(page.locator('#splitRepeatNavigator')).to_be_visible()
-        page.click('#splitRepeatClose')
+        page.click('#repeatClose')
         expect(page.locator('#repeatNavigator')).to_be_hidden()
         expect(page.locator('#splitRepeatNavigator')).to_be_hidden()
 
-    def test_repeat_navigation_keeps_its_position_when_panes_activate(self):
+    def test_review_rail_replaces_the_heads_and_settings_are_a_tab(self):
         self.open_repeat_project()
         page = self.page
-        def positions():
+        def layout():
             return page.evaluate('''async () => {
                 await new Promise(requestAnimationFrame);
                 await new Promise(requestAnimationFrame);
-                const rows = document.querySelector('#splitLayout').value === 'rows';
-                return ['repeatNavigator','splitRepeatNavigator'].map(id => {
-                    const panel = document.getElementById(id), box = panel.getBoundingClientRect();
-                    const pane = panel.parentElement.getBoundingClientRect();
-                    return {side:rows ? pane.y : pane.x, x:box.x, y:box.y};
-                }).sort((a,b) => a.side-b.side);
+                const box = id => document.getElementById(id).getBoundingClientRect();
+                const cells = ['splitRailZone0', 'splitRailZone1'];
+                const navs = ['repeatNavigator', 'splitRepeatNavigator'].map(id => {
+                    const nav = document.getElementById(id), b = nav.getBoundingClientRect();
+                    return {cell:cells.indexOf(nav.parentElement.id), x:b.x, y:b.y, bottom:b.bottom};
+                });
+                const stages = [box('viewer'), box('splitPane')];
+                const visible = sel => [...document.querySelectorAll(sel)].filter(el => el.checkVisibility()).length;
+                return {navs, stageTop:Math.min(...stages.map(s => s.top)),
+                    groupCell:document.getElementById('repeatGroup').closest('.rail-center')?.id,
+                    audio:visible('#splitSharedStem, #splitSharedLane, .split-head select'),
+                    settingsTab:document.getElementById('splitLayout').closest('[role=tabpanel]')?.id,
+                    groups:visible('[aria-label="Repeat group"]'), closes:visible('[aria-label="Close repeat review"]'),
+                    floating:getComputedStyle(document.getElementById('repeatNavigator')).position};
             }''')
-        for layout in ['columns', 'rows']:
-            page.select_option('#splitLayout', layout)
-            page.locator('#repeatDrag').press('ArrowDown')
-            page.locator('#splitRepeatDrag').press('ArrowUp')
-            before = positions()
+        self.open_split_settings()
+        for mode in ['columns', 'rows']:
+            page.select_option('#splitLayout', mode)
+            before = layout()
+            self.assertEqual(sorted(nav['cell'] for nav in before['navs']), [0, 1], 'one toolbar on each side of the rail')
+            self.assertEqual(before['floating'], 'static', 'the toolbar is fixed in the rail, not docked')
+            self.assertEqual(before['groupCell'], 'splitRailCenter', 'what both panes share sits in the middle')
+            self.assertEqual(before['audio'], 2, 'one audio and one layer select for both panes')
+            self.assertEqual(before['settingsTab'], 'stagePaneSplit', 'the split settings are a tab of the floating controls')
+            self.assertEqual(before['groups'], 1, 'the shared group control shows once')
+            self.assertEqual(before['closes'], 1)
+            self.assertTrue(all(nav['bottom'] <= before['stageTop'] + 1 for nav in before['navs']), 'nothing covers the stages')
             for _ in range(2):
                 page.locator('#splitPane .split-ruler').click()
-                after = positions()
-                for old, new in zip(before, after):
+                after = layout()
+                # Activating a pane swaps the toolbars, never where each side's sits.
+                for old, new in zip(sorted(before['navs'], key=lambda n: n['cell']), sorted(after['navs'], key=lambda n: n['cell'])):
                     self.assertAlmostEqual(new['x'], old['x'], delta=1)
                     self.assertAlmostEqual(new['y'], old['y'], delta=1)
+        page.click('#repeatClose')
+        expect(page.locator('#splitRail')).to_be_hidden()
+        expect(page.locator('#splitHead0')).to_be_visible()
+        expect(page.locator('#splitHead1')).to_be_visible()
+        expect(page.locator('#stageTabSplit')).to_be_visible()
+        page.click('#splitViewToggle')
+        expect(page.locator('#stageTabSplit')).to_be_hidden()
+
+    def test_a_second_click_closes_a_dropdown_and_focus_returns(self):
+        # Dropdowns open on a completed click (select-pickers.js); with a styled
+        # popup the next click on the select must close it again, not reopen it.
+        self.open_repeat_project()
+        page = self.page
+        box = page.locator('#repeatGroup').bounding_box()
+        x, y = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2
+        states = []
+        for _ in range(4):
+            page.mouse.click(x, y)
+            page.wait_for_timeout(150)
+            states.append(page.evaluate("document.querySelector('#repeatGroup').matches(':open')"))
+        self.assertEqual(states, [True, False, True, False])
+        # Used with the pointer, the dropdown gives focus back, so note traversal keys work.
+        self.assertNotEqual(page.evaluate('document.activeElement?.id'), 'repeatGroup', 'closing it releases focus')
+        self.open_split_settings()
+        box = page.locator('#splitMode').bounding_box()
+        page.mouse.click(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+        page.locator('#splitMode option[value="link"]').click()
+        page.wait_for_timeout(150)
+        self.assertEqual(page.locator('#splitMode').input_value(), 'link')
+        self.assertNotEqual(page.evaluate('document.activeElement?.tagName'), 'SELECT', 'choosing an option releases focus')
+        page.keyboard.press('ArrowRight')
+        self.assertTrue(page.evaluate("async () => (await import('/store.js')).S.selection.size > 0"),
+                        'the arrow keys traverse notes again')
 
     @classmethod
     def setUpClass(cls):

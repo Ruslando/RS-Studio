@@ -5,7 +5,7 @@ import { mockImport } from './mock-import.mjs';
 // must be exactly as it was, a click must swap the two views, and linked or
 // synced playheads must follow the transport.
 class Element extends EventTarget {
-  hidden = true; checked = false; offsetHeight = 300; offsetLeft = 200; parentElement = null; scrollLeft = 0; scrollTop = 0; clientWidth = 400; offsetWidth = 200; attributes = {}; children = []; dataset = {}; style = { setProperty() {} };
+  hidden = true; checked = false; offsetHeight = 300; offsetLeft = 200; scrollLeft = 0; scrollTop = 0; clientWidth = 400; offsetWidth = 200; attributes = {}; children = []; dataset = {}; style = { setProperty() {} };
   classList = { set: new Set(), add(...c) { c.forEach(x => this.set.add(x)); }, remove(...c) { c.forEach(x => this.set.delete(x)); },
     toggle(c, on) { on ? this.set.add(c) : this.set.delete(c); }, contains(c) { return this.set.has(c); } };
   querySelector() { return new Element(); }
@@ -14,9 +14,11 @@ class Element extends EventTarget {
   toggleAttribute() {}
   contains(node) { return node === this; }
   replaceChildren(...c) { this.children = c; }
+  append() {} before() {} after() {}
+  get parentElement() { return this; } set parentElement(_) {}
 }
 const els = {}, $ = id => (els[id] ||= new Element());
-const editorEl = new Element(), live = { scroll: new Element(), name: 'live' };
+const editorEl = new Element(), live = { scroll: new Element(), viewer: new Element(), name: 'live' };
 let bound = live, shown = null, shownPlaying = false, time = 5, playing = false, fretboards = 0;
 const lanes = [{ id: 'a', name: 'A', active: true }, { id: 'b', name: 'B', active: false }];
 const stems = [{ id: 'mix', name: 'Mix', spec: 'mixSpec', audioUrl: 'mix.opus' }, { id: 'bass', name: 'Bass', spec: 'bassSpec', audioUrl: 'bass.opus' }];
@@ -47,7 +49,8 @@ const split = await mockImport(new URL('../../web/split-view.js', import.meta.ur
   './timing.js': { timingIdOf: lane => lane.id, withTiming: (id, fn) => fn() },
   './fretboard.js': { layoutFretboard() {}, paintFretboardInto() { fretboards++; } },
   './splitters.js': { splitter() {} },
-  './repeat-dock.js': { initRepeatDock() {}, swapRepeatDocks() {} },
+  './spectrogram-dock.js': { refreshStageTabs() {} },
+  './repeat-dock.js': { initRepeatDock() {} },
   './repeat-navigator-mirror.js': { createRepeatNavigatorMirror: () => () => {} },
   './repeats.js': { connectRepeatSplit(h) { host = h; }, pairRepeats(on) { pairs.push(on); if (!on) review = null; }, savedRepeatReview: () => review, restoreRepeatReview(saved) { review = saved ?? null; }, swapRepeatPane() { repeatSwaps++; if (zones) zones = { live: zones.other, other: zones.live }; }, holdRepeatPlayhead() {}, repeatZones: () => zones, withRepeatPane: fn => fn() },
   './util.js': { clamp: (v, lo, hi) => Math.min(hi, Math.max(lo, v)) },

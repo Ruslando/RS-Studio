@@ -80,7 +80,7 @@ try {
     './ids.js': { nid: () => `new${++noteUid}` },
     './note-render.js': { noteRibbon: () => null }, './canvas-components.js': { paintNoteGlow(context, level) { glows.push({ ...context.path, level }); } }, './constants.js': { stageUi: () => '11px sans-serif' },
     './stage-paint.js': { PAINT: { trace: 'blue', warn: 'orange', error: 'pink', accent: 'cyan', ok: 'green' }, halo: () => 'black' },
-  }, { './zone-frame.js': true, './repeat-picker.js': true, './repeats-core.js': true, './util.js': true, './repeat-change-details.js': true, './whammy.js': true, './note-effects.js': true });
+  }, { './zone-frame.js': true, './repeats-core.js': true, './util.js': true, './repeat-change-details.js': true, './whammy.js': true, './note-effects.js': true });
   module.init_repeats({ ...{ setHandAnchor(lane, t, fret) { lane.handHolds = (lane.handHolds || []).filter(h => h.t !== t); if (fret != null) lane.handHolds.push({t, fret}); commit(); } }, ...{ setFretboardVisible: on => { assert.equal(on, true); fretboardOpens++; } } });
   const changePosition = () => controls.repeatChangePosition.children.find(option => option.value === controls.repeatChangePosition.value)?.textContent.split(' · ')[0];
   const before = structuredClone(lane.notes);
@@ -370,11 +370,8 @@ try {
   module.runFindRepeats(lane); worker.finish();
   module.renderRepeatNavigator(); module.drawRepeats();
   assert.equal(controls.repeatPosition.textContent, '1 / 4', 'one list of every instance');
-  assert.deepEqual(controls.repeatInstance.children[1].children.map(row => row.children[0].textContent),
-    ['Instance 1', 'Instance 2', 'Instance 3', 'Instance 4']);
-  assert.equal(controls.repeatInstance.children[1].children.some(row => row.dataset?.focusKey?.startsWith('move:')
-    || row.children.some(el => el.dataset?.focusKey?.startsWith('move:') || el.type === 'checkbox')), false,
-    'no variations to move to, nothing to include or exclude');
+  assert.deepEqual(controls.repeatInstance.children.map(option => option.textContent),
+    ['Instance 1 of 4', 'Instance 2 of 4', 'Instance 3 of 4', 'Instance 4 of 4'], 'a plain dropdown of every instance');
   inspectNote(versions[0][0]);
   assert.deepEqual(rows()[0], ['Vibrato', 'On', 'Off'], 'the comparison covers every instance of the group');
   const chooseInstance = value => {
@@ -447,7 +444,7 @@ try {
   assert.equal(changePosition(), pairChanges, 'and sees the same differences from its side');
   module.renderRepeatNavigator();
   // The other pane's instance can't be chosen here as well.
-  assert.deepEqual(controls.repeatInstance.children[1].children.map(row => row.children[0].disabled), [false, true, false, false],
+  assert.deepEqual(controls.repeatInstance.children.map(option => option.disabled), [false, true, false, false],
     'the other pane\'s instance is disabled in the picker');
   chooseInstance(versions[1][0].id);
   assert.equal(controls.repeatPosition.textContent, '4 / 4', 'and is refused when chosen');

@@ -28,16 +28,21 @@ import { prepareSpectSample } from "./tracing.js";
 import { timingIdOf, withTiming } from "./timing.js";
 import { layoutFretboard, paintFretboardInto } from "./fretboard.js";
 import { splitter } from "./splitters.js";
-import { initRepeatDock, swapRepeatDocks } from "./repeat-dock.js";
+import { refreshStageTabs } from "./spectrogram-dock.js";
 import { createRepeatNavigatorMirror } from "./repeat-navigator-mirror.js";
 import { connectRepeatSplit, holdRepeatPlayhead, pairRepeats, repeatZones, restoreRepeatReview, savedRepeatReview, swapRepeatPane, withRepeatPane } from "./repeats.js";
 import { clamp } from "./util.js";
 
 const panel = $("editingPanel"), pane = $("splitPane"), toggle = $("splitViewToggle");
 const dividers = { columns: $("splitDivider"), rows: $("splitDividerY") };
-const controls = $("splitControls"), modeSel = $("splitMode"), layoutSel = $("splitLayout"), syncViewBox = $("splitSyncView");
+const splitTab = $("stageTabSplit"), modeSel = $("splitMode"), layoutSel = $("splitLayout"), syncViewBox = $("splitSyncView");
 const fretboard = $("splitFretboard"), fretDivider = $("splitFretDivider");
 const heads = [$("splitHead0"), $("splitHead1")];
+// Reviewing repeats, one rail stands in for both heads: each pane's repeat
+// toolbar on its own side, and what both panes share in the middle, the audio
+// and layer included. The split settings are a tab of the spectrogram controls.
+const rail = $("splitRail"), railCenter = $("splitRailCenter"), zones = [$("splitRailZone0"), $("splitRailZone1")];
+const sharedStem = $("splitSharedStem"), sharedLane = $("splitSharedLane");
 const paneView = {
   stage: pane.querySelector(".split-stage"), ruler: pane.querySelector(".split-ruler"),
   scroll: pane.querySelector(".split-scroll"), viewer: pane,
@@ -122,7 +127,7 @@ function swap() {
   holdRepeatPlayhead();
   Object.assign(S, { mouseX: null, mouseY: null, hoverNote: null });   // the pointer is on the other stage now
   layoutFretboard();
-  swapRepeatDocks($("repeatNavigator"), $("splitRepeatNavigator"));
+  placeCompare();
   renderLanes(); syncFocus(); draw(); later();
 }
 
@@ -207,7 +212,7 @@ function renderHeads() {
   const live = { stemId: S.state.curStem, laneId: activeLane()?.id };
   const views = liveSide ? [other, live] : [live, other];
   const stems = S.state.stems.map((s) => [s.id, s.name]), layers = editLanes().map((l) => [l.id, l.name]);
-  const key = JSON.stringify([liveSide, views.map((v) => [v.loading ?? v.stemId, v.laneId]), stems, layers]);
+  const key = JSON.stringify([liveSide, reviewing, views.map((v) => [v.loading ?? v.stemId, v.laneId]), stems, layers]);
   if (key === headKey) return;
   headKey = key;
   heads.forEach((head, side) => {
@@ -215,7 +220,10 @@ function renderHeads() {
     const [stemSel, laneSel] = head.querySelectorAll("select");
     fill(stemSel, stems, views[side].loading ?? views[side].stemId, "No audio");
     fill(laneSel, layers, views[side].laneId, "No layers");
+    zones[side].toggleAttribute("data-live", side === liveSide);
   });
+  fill(sharedStem, stems, live.stemId, "No audio");
+  fill(sharedLane, layers, live.laneId, "No layers");
 }
 function fill(select, items, value, empty) {
   select.replaceChildren(...(items.length ? items : [["", empty]]).map(([id, name]) => new Option(name, id)));
@@ -251,6 +259,14 @@ function chooseLane(side, id) {
 let reviewing = false;
 function setReviewing(on) {
   reviewing = on;
+  rail.hidden = !(on && other);
+  editorEl.classList.toggle("reviewing", !rail.hidden);
+  // One audio and one layer for both panes: the other pane takes the live one's.
+  if (!rail.hidden) {
+    if ((other.loading ?? other.stemId) !== S.state.curStem && S.state.curStem) loadOther(S.state.curStem);
+    if (activeLane()) other.laneId = activeLane().id;
+    headKey = ""; renderLanes(); syncFocus(); draw();
+  }
   modeSel.querySelector('option[value="sync"]').disabled = on;
   if (on && mode === "sync") { modeSel.value = "link"; setMode("link"); }
   later();
@@ -339,7 +355,10 @@ function open() {
   }
   showOnlyActiveLane(true);
   editorEl.classList.add("split"); editorEl.classList.toggle("live-second", liveSide === 1);
-  for (const el of [pane, ...Object.values(dividers), fretboard, fretDivider, controls, ...heads]) el.hidden = false;
+  for (const el of [pane, ...Object.values(dividers), fretboard, fretDivider, splitTab, ...heads]) el.hidden = false;
+  rail.hidden = !reviewing;   // a review restored before the split opened
+  editorEl.classList.toggle("reviewing", reviewing);
+  placeCompare(); refreshStageTabs(); window.dispatchEvent(new Event("cw-split-toggled"));
   toggle.setAttribute("aria-pressed", "true");
   if (last?.stemId && last.stemId !== other.stemId) loadOther(last.stemId);
   layoutFretboard(); renderLanes(); syncFocus(); draw(); later();
@@ -351,11 +370,29 @@ function close({ keep = true } = {}) {
   other = null;
   setPlaybackFocus(null); pairRepeats(false); showOnlyActiveLane(false);
   editorEl.classList.remove("split", "live-second");
-  for (const el of [pane, ...Object.values(dividers), fretboard, fretDivider, controls, ...heads]) el.hidden = true;
+  for (const el of [pane, ...Object.values(dividers), fretboard, fretDivider, splitTab, ...heads, rail]) el.hidden = true;
+  editorEl.classList.remove("reviewing");
+  unplaceCompare(); refreshStageTabs(); window.dispatchEvent(new Event("cw-split-toggled"));
   toggle.setAttribute("aria-pressed", "false");
   layoutFretboard(); if (S.state) renderLanes(); draw();
   if (keep) save();
   else { clearTimeout(saveTimer); saveTimer = 0; }
+}
+
+// The live toolbar goes with the live pane, the other pane's mirror with its own.
+// The shared repeat controls are the live toolbar's own, so they act directly.
+function placeCompare() {
+  const live = $("repeatNavigator"), mirror = $("splitRepeatNavigator");
+  const [first, second] = liveSide ? [mirror, live] : [live, mirror];
+  zones[0].append(first); zones[1].append(second);
+  railCenter.append($("repeatGroup").parentElement, $("repeatChangeNavigation"), $("repeatClose"));
+}
+// Without the split, a review uses the floating toolbar on the editor.
+function unplaceCompare() {
+  const nav = $("repeatNavigator"), instances = $("repeatInstance").parentElement;
+  instances.before($("repeatGroup").parentElement);
+  instances.after($("repeatChangeNavigation"), $("repeatClose"));
+  liveViewport.viewer.append(nav);
 }
 
 // The repeat review shows a second instance here (repeats.js).
@@ -418,10 +455,11 @@ export function init_split_view() {
     stemSel.addEventListener("change", () => chooseStem(side, stemSel.value));
     laneSel.addEventListener("change", () => chooseLane(side, laneSel.value));
   });
+  sharedStem.addEventListener("change", () => { chooseStem(1 - liveSide, sharedStem.value); chooseStem(liveSide, sharedStem.value); });
+  sharedLane.addEventListener("change", () => { chooseLane(1 - liveSide, sharedLane.value); chooseLane(liveSide, sharedLane.value); });
   modeSel.addEventListener("change", () => setMode(modeSel.value));
   layoutSel.addEventListener("change", () => setLayout(layoutSel.value));
   syncViewBox.addEventListener("change", () => { draw(); later(); });
-  initRepeatDock(controls, $("splitDrag"), { key: "rs-split-controls", edge: "bottom" });
   // The first pane is whichever element sits in the first slot.
   const panes = () => (liveSide ? [pane, liveViewport.viewer] : [liveViewport.viewer, pane]);
   for (const [axis, el, size] of [["x", dividers.columns, "offsetWidth"], ["y", dividers.rows, "offsetHeight"]]) {
