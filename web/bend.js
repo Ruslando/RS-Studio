@@ -55,7 +55,8 @@ export function pitchOffsetAt(n, u, sec) {
   const pts = bendCurve(n);
   const duration = Math.max(0, (n?.end ?? 0) - (n?.start ?? 0));
   const from = vibratoStartOf(n) * duration, to = vibratoEndOf(n) * duration;
-  return (pts ? bendAt(pts, u) : 0) + (n?.fx?.vibrato && sec < to ? vibratoAt(sec - from) : 0);
+  // Through `to` itself: a vibrato to the note's end releases from its last phase.
+  return (pts ? bendAt(pts, u) : 0) + (n?.fx?.vibrato && sec <= to ? vibratoAt(sec - from) : 0);
 }
 
 // Trills alternate with the upper fret at a sixteenth-note rate. Sharing the

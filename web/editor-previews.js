@@ -2,7 +2,7 @@ import { $ } from './dom.js';
 import { paintBarNumber, paintNoteRow, paintTimeGridLine } from './timeline-paint.js';
 import { S } from './store.js';
 import { noteMarks } from './note-effects.js';
-import { paintNoteLabel, paintSlideLabel } from './note-label-paint.js';
+import { noteLabelRowHeight, paintNoteLabel, paintSlideLabel } from './note-label-paint.js';
 import { resolveNoteAppearance, spectrogramLabel, spectrogramLabelOptions } from './spectrogram-labels.js';
 import { PAINT } from './stage-paint.js';
 import { dpr } from './util.js';
@@ -11,6 +11,9 @@ import { notePreviewLayout } from './editor-preview-layout.js';
 
 let noteHover = -1, boardFrame = 0, boardStart = null, boardHover = false;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+// The stage's row height, but tall enough for the chosen label size: the
+// preview is there to show the labels, which a short row leaves out.
+const previewRowHeight = () => Math.max(S.state?.rowH || 12, noteLabelRowHeight());
 
 export function drawNoteAppearancePreview() {
   const canvas = $('noteAppearancePreview');
@@ -21,7 +24,7 @@ export function drawNoteAppearancePreview() {
   ctx.setTransform(dp, 0, 0, dp, 0, 0);
   ctx.fillStyle = PAINT.ground; ctx.fillRect(0, 0, width, height);
   ctx.lineWidth = 1; ctx.strokeStyle = PAINT.gridBeat;
-  const layout = notePreviewLayout(width, S.state?.rowH || 12);
+  const layout = notePreviewLayout(width, previewRowHeight());
   // The stage's grid, half-beat subdivision included, and its bar numbers.
   for (let half = 0; half * layout.cellWidth / 2 < width; half++)
     paintTimeGridLine(ctx, half * layout.cellWidth / 2, 0, height, half % 8 ? half % 2 ? 'sub' : 'beat' : 'bar');
@@ -67,7 +70,7 @@ export function initEditorPreviews() {
   const note = $('noteAppearancePreview'), board = $('fretboardSettingsPreview');
   note.addEventListener('mousemove', event => {
     const rect = note.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
-    const layout = notePreviewLayout(Math.max(260, note.clientWidth || 420), S.state?.rowH || 12);
+    const layout = notePreviewLayout(Math.max(260, note.clientWidth || 420), previewRowHeight());
     noteHover = layout.notes.findIndex(rect => x >= rect.x - 14 && x <= rect.x + rect.width + 14 && y >= rect.y && y <= rect.y + rect.height);
     drawNoteAppearancePreview();
   });

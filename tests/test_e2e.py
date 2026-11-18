@@ -3750,13 +3750,21 @@ class EndToEndTests(unittest.TestCase):
             return {preview:capture('#noteAppearancePreview',preview.drawNoteAppearancePreview),
                 actual:capture('#stage',notes.drawNoteFx)};
         }""")
+        # A label has one size, and a note too short or narrow for it goes without:
+        # zoom the stage until 16 px labels fit. The preview sizes its own rows to fit.
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js'), {PX_PER_SEC} = await import('/constants.js');
+            const geometry = await import('/geometry.js');
+            S.zoomY = 1.5; S.zoomX = 6; S.pxPerSec = PX_PER_SEC * S.zoomX; geometry.layout();
+            const lane = S.state.editLanes.find(l => l.active) || S.state.editLanes[0];
+            document.querySelector('#scroll').scrollLeft = geometry.xOf(lane.notes[0].start) - 20;
+        }""")
         slider.evaluate("el => {el.value='10'; el.dispatchEvent(new Event('input', {bubbles:true}));}")
         expect(page.locator('#noteLabelSizeValue')).to_have_text('10 px')
         small = sizes()
         slider.evaluate("el => {el.value='16'; el.dispatchEvent(new Event('input', {bubbles:true}));}")
         expect(page.locator('#noteLabelSizeValue')).to_have_text('16 px')
         fonts = sizes()
-        # The size is the largest a label is drawn; a label shrinks to fit its note.
         for key in ('preview', 'actual'):
             self.assertTrue(fonts[key], key)
             self.assertLessEqual(max(fonts[key]), 16 + 1e-6, fonts)

@@ -9,6 +9,9 @@ function noteLabelSize() {
   return NOTE_LABEL_SIZES.includes(size) ? size : NOTE_LABEL_SIZE;
 }
 
+// The shortest note row a label is drawn in.
+export const noteLabelRowHeight = () => noteLabelSize() + 4;
+
 export function paintNoteLabel(ctx, text, x, width, y, height = Infinity, availableWidth = width) {
   if (!text) return;
   ctx.save();
@@ -18,7 +21,7 @@ export function paintNoteLabel(ctx, text, x, width, y, height = Infinity, availa
   // A note name has one configured, readable size. It either fits within the
   // note body or is omitted; scaling it down makes neighboring names look like
   // a different kind of annotation and is harder to read than no label.
-  if (height < preferred + 4 || availableWidth < measured + 6) { ctx.restore(); return; }
+  if (height < noteLabelRowHeight() || availableWidth < measured + 6) { ctx.restore(); return; }
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineWidth = 2.5; ctx.strokeStyle = halo(); ctx.fillStyle = PAINT.text;
   ctx.strokeText(text, x + width / 2, y);
