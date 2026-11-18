@@ -1177,6 +1177,53 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press('Control+z')
         self.assertEqual(state()['notes'], before['notes'])
 
+    def test_hand_anchors_stay_when_marker_lanes_hide(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js'), lane = S.state.editLanes[0];
+            lane.instrument = 'electric'; lane.tuning = 'guitar6'; lane.capo = 0; lane.refBoxes = {};
+            lane.notes = [{id:'hand-note', pitch:69, start:2.13, end:2.6, pos:{string:0,fret:5}}];
+            lane.handHolds = [{id:'hand-0', t:2.13, fret:3}];
+            S.state.sectionMarkers = [{t:0,kind:'intro',name:'Intro'}];
+            (await import('/marker-rails.js')).setRailsHidden(false);
+            S.voicingRevision++;
+            await (await import('/lane-fingering.js')).laneFingering(lane);
+            (await import('/repaint.js')).drawNow();
+        }""")
+        bands = """async () => {
+            const {railBand} = await import('/marker-rails.js');
+            return {section: railBand('section'), hand: railBand('hand-anchor')};
+        }"""
+        shown = page.evaluate(bands)
+        self.assertGreater(shown['section']['h'], 0)
+        def settle(scale):   # an async wait_for_function is truthy at once (its promise)
+            for _ in range(100):
+                if page.evaluate("async () => (await import('/marker-rails.js')).railScale()") == scale: return
+                page.wait_for_timeout(20)
+            self.fail(f'rails never reached scale {scale}')
+        page.click('#markerLanesToggle')
+        settle(0)
+        hidden = page.evaluate(bands)
+        self.assertEqual(hidden['section']['h'], 0, 'song markers hide')
+        self.assertGreater(hidden['hand']['h'], 0, 'hand anchors stay')
+        self.assertLess(hidden['hand']['y'], shown['hand']['y'], 'moved up into the freed space')
+        flag = page.evaluate("""async () => {
+            const {scroll,stage} = await import('/dom.js');
+            const {xOf} = await import('/geometry.js');
+            const {railBand} = await import('/marker-rails.js');
+            scroll.scrollLeft = 0;
+            await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+            const r = stage.getBoundingClientRect();
+            return {x:r.left+xOf(2.13)+5, y:r.top+railBand('hand-anchor').y+10};
+        }""")
+        page.mouse.click(flag['x'], flag['y'])
+        expect(page.get_by_role('button', name='Initial hand position', exact=True)).to_be_visible()
+        page.keyboard.press('Escape')
+        page.click('#markerLanesToggle')
+        settle(1)
+        self.assertEqual(page.evaluate(bands), shown)
+
     def test_ctrl_click_selects_notes_between_and_under_hidden_marker_rails(self):
         self.open_reference_project()
         page = self.page

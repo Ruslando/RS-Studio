@@ -194,7 +194,7 @@ export function init_hand_anchors() {
   window.addEventListener('cw-project-opened', cancelDrag);
   window.addEventListener('cw-state-restored', cancelDrag);
   registerMarkerRail({
-    id: RAIL, height: HEIGHT, count: () => {
+    id: RAIL, height: HEIGHT, staysWhenHidden: true, count: () => {
       const { saved, slides } = changesOf(shownLane());
       return saved.length + slides.length;
     },

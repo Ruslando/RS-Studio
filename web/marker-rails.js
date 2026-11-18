@@ -68,7 +68,7 @@ export function setRailOrigin(y) {
 }
 
 // rail: { id, height, draw?, drawMinimap?, cursorAt?, tipAt?, mouseDown?, contextMenu?,
-//          menuLabel?, addAt?(time, clientX, clientY) }
+//          menuLabel?, addAt?(time, clientX, clientY), staysWhenHidden? }
 // tipAt(x, y) returns a tooltip block { title, body } for the flag under the pointer.
 // menuLabel + addAt contribute an entry to the canvas right-click menu.
 export function registerMarkerRail(rail) {
@@ -82,8 +82,12 @@ export function registerMarkerRail(rail) {
 // The rails that are on screen — occupied, and the layer not hidden. This is
 // what draw and the mousedown/cursor chains iterate, so an absent rail costs
 // nothing anywhere. Registration order is preserved.
+// A rail that `staysWhenHidden` is not a song marker (hand anchors): hiding the
+// marker layer leaves it on screen, moved up as the others fold away.
+// ponytail: a stopgap until hand anchors get a place of their own.
 export function markerRails() {
-  return hidden && scale <= 0 ? [] : rails.filter(occupied);
+  const folded = hidden && scale <= 0;
+  return rails.filter((rail) => occupied(rail) && (!folded || rail.staysWhenHidden));
 }
 
 // Canvas right-click entries contributed by rails, in rail order. Built from the
@@ -101,10 +105,13 @@ export function railMenuItems(atTime, clientX, clientY) {
 // Absolute local (unscrolled) y offset and height of one rail. A rail that is
 // not on screen reports h 0, which is what collapses the ones below it upward.
 export function railBand(id) {
-  let y = origin;
+  // The rails that hide take up their share of the stack as far as it is revealed.
+  let folding = 0, kept = 0;
   for (const rail of markerRails()) {
-    if (rail.id === id) return { y, h: railHeight(rail) };
-    y += railHeight(rail);
+    if (rail.id === id)
+      return { y: origin + kept + folding * (rail.staysWhenHidden ? scale : 1), h: railHeight(rail) };
+    if (rail.staysWhenHidden) kept += railHeight(rail);
+    else folding += railHeight(rail);
   }
   return { y: origin, h: 0 };
 }
@@ -120,7 +127,10 @@ export function inRailBand(id, localY) {
 }
 
 export function railsBottom() {
-  return markerRails().reduce((total, rail) => total + railHeight(rail), origin);
+  return markerRails().reduce((bottom, rail) => {
+    const band = railBand(rail.id);
+    return Math.max(bottom, band.y + band.h);
+  }, origin);
 }
 
 // ---- per-lane marker collections ----

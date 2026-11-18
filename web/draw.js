@@ -27,7 +27,7 @@ import { drawFretboard, fretboardEditTargets } from "./fretboard.js";
 import { drawMarkers, markerCursorAt } from "./markers.js";
 import { commentCursorAt, drawComments } from "./comments.js";
 import { syncProjectStartHandle } from "./project-position.js";
-import { markerRails, railScale, railsBottom } from "./marker-rails.js";
+import { markerRails, railBand, railScale, railsBottom } from "./marker-rails.js";
 import { contentH, layout, pitchAt, pitchAtExact, stageRoom, timeAt, xOf, yOf } from "./geometry.js";
 import { edgeOf } from "./interaction.js";
 import { hoveredStageNote, localXY, pickNote, pickNoteEdge } from "./stage-hit-test.js";
@@ -667,16 +667,28 @@ function paintMarkerRails(vx0, vx1) {
   sctx.rect(vx0, scroll.scrollTop, vx1 - vx0, railsBottom() * reveal);
   sctx.clip();
   drawMarkers();   // tempo/meter flags, pinned to the top of the viewport
+  const rails = markerRails(), folding = rails.filter(rail => !rail.staysWhenHidden);
   // Full-size flags stay within their overlay, including when vertically scrolled.
-  if (markerRails().length) {
+  if (folding.length) {
     sctx.save();
     sctx.beginPath();
     sctx.rect(vx0, scroll.scrollTop, vx1 - vx0, railsBottom());
     sctx.clip();
-    for (const rail of markerRails()) rail.draw?.();  // sections, phrases, tones
+    for (const rail of folding) rail.draw?.();  // sections, phrases, tones
     sctx.restore();
   }
   sctx.restore();
+  // Hand anchors are no song marker: they stay while the marker layer hides.
+  for (const rail of rails) {
+    if (!rail.staysWhenHidden) continue;
+    const band = railBand(rail.id);
+    sctx.save();
+    sctx.beginPath();
+    sctx.rect(vx0, scroll.scrollTop + band.y, vx1 - vx0, band.h);
+    sctx.clip();
+    rail.draw?.();
+    sctx.restore();
+  }
 }
 
 function paintNoteBody(n, { x, y, w, rowH, curve, active, glow, laneAlpha, motion, fill }) {
