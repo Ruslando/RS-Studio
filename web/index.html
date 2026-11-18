@@ -473,7 +473,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
 
           <!-- Split view (split-view.js): a header per column and the second pane,
                which the editor's own renderer paints. Clicking it makes it live. -->
-          <div id="splitHead0" class="split-head" hidden><label>Audio <select aria-label="Left pane audio layer"></select></label><label>Layer <select aria-label="Left pane editing layer"></select></label></div>
+          <div id="splitHead0" class="split-head" hidden><span class="pane-badge" title="View 1">1</span><label>Audio <select aria-label="Left pane audio layer"></select></label><label>Layer <select aria-label="Left pane editing layer"></select></label></div>
           <div id="splitDivider" class="splitter splitter--x" aria-hidden="true" hidden><svg class="splitter-dots" width="5" height="26" viewBox="0 0 5 26" fill="none"><circle cx="2.5" cy="5" r="1.4" fill="currentColor"/><circle cx="2.5" cy="13" r="1.4" fill="currentColor"/><circle cx="2.5" cy="21" r="1.4" fill="currentColor"/></svg></div>
           <div id="splitDividerY" class="splitter splitter--y" aria-hidden="true" hidden><svg class="splitter-dots" width="26" height="5" viewBox="0 0 26 5" fill="none"><circle cx="5" cy="2.5" r="1.4" fill="currentColor"/><circle cx="13" cy="2.5" r="1.4" fill="currentColor"/><circle cx="21" cy="2.5" r="1.4" fill="currentColor"/></svg></div>
           <nav id="splitControls" aria-label="Split view settings" hidden>
@@ -482,7 +482,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <label title="Independent: each pane keeps its own playhead. Linked: both play and move together, each at its own position. Synced: one playhead for both.">Playheads <select id="splitMode" aria-label="Playheads"><option value="free">Independent</option><option value="link">Linked</option><option value="sync">Synced</option></select></label>
             <label class="chk" title="Both panes share zoom and pitch range"><input type="checkbox" id="splitSyncView" /> Sync view</label>
           </nav>
-          <div id="splitHead1" class="split-head" hidden><label>Audio <select aria-label="Right pane audio layer"></select></label><label>Layer <select aria-label="Right pane editing layer"></select></label></div>
+          <div id="splitHead1" class="split-head" hidden><span class="pane-badge" title="View 2">2</span><label>Audio <select aria-label="Right pane audio layer"></select></label><label>Layer <select aria-label="Right pane editing layer"></select></label></div>
           <div id="splitPane" class="split-viewer" hidden>
             <canvas class="split-ruler"></canvas>
             <div class="timeline-start-gutter" aria-hidden="true"></div>

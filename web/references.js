@@ -1,3 +1,4 @@
+import { laneShown } from "./lane-state.js";
 import { laneClock, boxMinIn } from "./reference-clock.js";
 // Linked repeated-note groups ("references"): creating a reference from a selection
 // and the per-occurrence operations (move, resize, or edit a single instance).
@@ -623,7 +624,7 @@ export function drawReferences() {
   sctx.save();
   sctx.font = stageUi(11, 700); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
   eachRefGroup((lane, ref, group) => {
-    if (!lane.visible) return;
+    if (!laneShown(lane)) return;
     const on = hotRefs.has(lane.id + ":" + ref), clock = laneClock(lane);
     for (let i = 0; i < group.anchors.length; i++) {
       const s = shiftOf(group, i), label = refName(group, ref) + (s ? ` ${s > 0 ? "+" : "−"}${Math.abs(s)}` : "");

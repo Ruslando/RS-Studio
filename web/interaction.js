@@ -1,3 +1,4 @@
+import { laneShown } from "./lane-state.js";
 import { clientToCanvas, localXY, pickNote, pickNoteEdge } from "./stage-hit-test.js";
 import { diagnosticMarksAt } from './diagnostic-marks.js';
 import { openIssueMenu } from './issue-state.js';
@@ -86,7 +87,7 @@ const pointTime = (x, free) => free ? timeAt(x) : snap(timeAt(x));
 // The selection first, then every editable note around x (draw.js shows each curve).
 function notesNear(x, grab) {
   const t0 = timeAt(x - grab), t1 = timeAt(x + grab);
-  const lanes = S.state.lanes.filter((lane) => lane.visible && canEditLane(lane));
+  const lanes = S.state.lanes.filter((lane) => laneShown(lane) && canEditLane(lane));
   return [...S.selection, ...lanes.flatMap((lane) => lane.notes.filter((n) => n.start <= t1 && n.end >= t0))];
 }
 

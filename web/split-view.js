@@ -21,7 +21,8 @@ import { draw } from "./repaint.js";
 import { freshMemo } from "./paint-memo.js";
 import { layout, syncRowHeight, updateZoomLabels, xOf, yOf } from "./geometry.js";
 import { playbackTime, seekPlayback, setPlaybackFocus, showPlayhead, transportPlaying } from "./playback.js";
-import { activeLane, activateLane, editLanes } from "./lanes.js";
+import { activeLane, activateLane, editLanes, renderLanes, setPaneSides } from "./lanes.js";
+import { showOnlyActiveLane } from "./lane-state.js";
 import { selectStem, spectrogramUrl } from "./project.js";
 import { prepareSpectSample } from "./tracing.js";
 import { timingIdOf, withTiming } from "./timing.js";
@@ -122,7 +123,7 @@ function swap() {
   Object.assign(S, { mouseX: null, mouseY: null, hoverNote: null });   // the pointer is on the other stage now
   layoutFretboard();
   swapRepeatDocks($("repeatNavigator"), $("splitRepeatNavigator"));
-  syncFocus(); draw(); later();
+  renderLanes(); syncFocus(); draw(); later();
 }
 
 // A press in the other pane makes it live, and then reaches what the live editor
@@ -240,7 +241,7 @@ function chooseStem(side, id) {
   if (side === liveSide) selectStem(id); else loadOther(id);
 }
 function chooseLane(side, id) {
-  if (side !== liveSide) { other.laneId = id; syncFocus(); draw(); later(); return; }
+  if (side !== liveSide) { other.laneId = id; renderLanes(); syncFocus(); draw(); later(); return; }
   const lane = S.state.lanes.find((l) => l.id === id);
   if (lane) activateLane(lane);
 }
@@ -264,7 +265,7 @@ function setMode(next) {
 
 function setLayout(next) {
   editorEl.classList.toggle("rows", next === "rows");
-  draw(); later();
+  renderLanes(); draw(); later();
 }
 
 const share = (value) => clamp(Number.isFinite(value) ? value : 0.5, 0.2, 0.8);
@@ -336,22 +337,23 @@ function open() {
     liveSide = last.liveSide === 1 ? 1 : 0;
     offset = num(last.offset, 0);
   }
+  showOnlyActiveLane(true);
   editorEl.classList.add("split"); editorEl.classList.toggle("live-second", liveSide === 1);
   for (const el of [pane, ...Object.values(dividers), fretboard, fretDivider, controls, ...heads]) el.hidden = false;
   toggle.setAttribute("aria-pressed", "true");
   if (last?.stemId && last.stemId !== other.stemId) loadOther(last.stemId);
-  layoutFretboard(); syncFocus(); draw(); later();
+  layoutFretboard(); renderLanes(); syncFocus(); draw(); later();
   pairRepeats(true);
 }
 function close({ keep = true } = {}) {
   if (!other) return;
   remember();   // reopening the split here brings the other pane back
   other = null;
-  setPlaybackFocus(null); pairRepeats(false);
+  setPlaybackFocus(null); pairRepeats(false); showOnlyActiveLane(false);
   editorEl.classList.remove("split", "live-second");
   for (const el of [pane, ...Object.values(dividers), fretboard, fretDivider, controls, ...heads]) el.hidden = true;
   toggle.setAttribute("aria-pressed", "false");
-  layoutFretboard(); draw();
+  layoutFretboard(); if (S.state) renderLanes(); draw();
   if (keep) save();
   else { clearTimeout(saveTimer); saveTimer = 0; }
 }
@@ -365,7 +367,27 @@ function showInstance({ t0, pitch }, { linked = false } = {}) {
   syncFocus(); draw(); later();
 }
 
+// Each view has its own active layer: the live view's is the one lanes.js calls
+// active, the other's is other.laneId. The sidebar badges both (L/R, T/B stacked).
+function otherLaneId() {
+  return S.state.lanes.some((l) => l.id === other.laneId) ? other.laneId : activeLane()?.id;
+}
+function paneSides() {
+  if (!other || !S.state) return null;
+  const ids = liveSide ? [otherLaneId(), activeLane()?.id] : [activeLane()?.id, otherLaneId()];
+  const sides = new Map();
+  ids.forEach((id, i) => { if (id) sides.set(id, [...(sides.get(id) || []), i + 1]); });
+  return sides;
+}
+// A click on the other view's layer goes to that view, not into this one.
+function focusPane(lane) {
+  if (!other || lane.active || otherLaneId() !== lane.id) return false;
+  swap();
+  return true;
+}
+
 export function init_split_view() {
+  setPaneSides({ sides: paneSides, focus: focusPane });
   renderRepeatMirror = createRepeatNavigatorMirror(pane, () => { if (other) swap(); });
   connectRepeatSplit({
     isOpen: () => !!other,

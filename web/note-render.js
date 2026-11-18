@@ -1,3 +1,4 @@
+import { laneShown } from "./lane-state.js";
 import { paintTimeGridLine } from './timeline-paint.js';
 // Everything the canvas paints that is not the spectrogram itself: the pitch
 // ruler, the beat grid, the Alt-dragged detect frame, stacked-note badges, and
@@ -454,7 +455,7 @@ export function drawNoteFx(hiddenNote = null, preview = null) {
   const options = spectrogramLabelOptions();
   const segments = gridSegments();
   for (const lane of S.state.lanes) {
-    if (!lane.visible) continue;
+    if (!laneShown(lane)) continue;
     const positions = options.positions !== 'off' ? positionsForLabels(lane) : null;
     const capo = options.fromNut ? Number(lane.capo) || 0 : 0;
     const hammerTags = laneHammerTags(lane);

@@ -1,4 +1,5 @@
 // Paint-only edit feedback. Musical state and hit testing always land immediately.
+import { laneShown } from "./lane-state.js";
 import { motionTiming } from "./panel-motion.js";
 import { draw } from "./repaint.js";
 
@@ -46,7 +47,7 @@ export function animateNoteChanges(previous, state, cuts = null) {
   if (!timing.duration) { clearNoteMotion(); return; }
   const changes = [];
   for (const lane of state.editLanes || []) {
-    if (!lane.visible) continue;
+    if (!laneShown(lane)) continue;
     const before = new Map((previous.lanes[lane.id] || []).map(note => [note.id, note]));
     for (const note of lane.notes) {
       const old = before.get(note.id);
@@ -177,7 +178,7 @@ export function beginNoteMotionFrame(state, drag) {
 const glowAt = effect => effect.duration
   ? effect.from + (effect.to - effect.from) * springProgress(effect, frameTime)
   : effect.to;
-const underPlayhead = (lane, note) => playing && lane.visible && note.start <= playbackPosition && playbackPosition < note.end;
+const underPlayhead = (lane, note) => playing && laneShown(lane) && note.start <= playbackPosition && playbackPosition < note.end;
 
 export function beginNotePlaybackFrame(state, position, isPlaying) {
   useProject(state);
@@ -187,7 +188,7 @@ export function beginNotePlaybackFrame(state, position, isPlaying) {
     leave: motionTiming("--dur-note-glow-out", "--ease"),
   };
   for (const [id, effect] of glows) {
-    if (!state?.lanes?.includes(effect.lane) || !effect.lane.visible) { glows.delete(id); continue; }
+    if (!state?.lanes?.includes(effect.lane) || !laneShown(effect.lane)) { glows.delete(id); continue; }
     const target = underPlayhead(effect.lane, effect.note) ? 1 : 0;
     if (target !== effect.to || (!glowTiming.enter.duration && effect.duration)) {
       const from = glowAt(effect);
@@ -233,7 +234,7 @@ export function noteMotion(lane, note) {
 export function noteMotionGhosts() {
   const result = [];
   for (const effect of effects.values()) {
-    if (!effect.lane.visible || !["remove", "drag"].includes(effect.kind)) continue;
+    if (!laneShown(effect.lane) || !["remove", "drag"].includes(effect.kind)) continue;
     const p = progress(effect);
     result.push({ lane: effect.lane, note: effect.from || effect.note,
       alpha: (effect.kind === "drag" ? .18 : .65) * (1 - p), shrink: effect.kind === "remove" ? p : 0 });

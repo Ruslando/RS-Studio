@@ -6,6 +6,7 @@
 // Ruler and headroom (the strip above the spectrogram) scrub the playhead, the
 // arrow keys on the ruler nudge it, and the time label takes a typed time.
 import { MM_HEAD, stageMono } from "./constants.js";
+import { laneShown } from "./lane-state.js";
 import { drawMinimapMarkers } from "./markers.js";
 import { overviewMarkerRails } from "./marker-rails.js";
 import { intensityRevision, paintIntensity } from "./spectrogram-intensity.js";
@@ -91,7 +92,7 @@ export function createOverview({ ruler, map, time, getTime, seek, getImage = () 
     const at = (t) => xAt(t, W);
     const { midi_high: high, midi_low: low } = S.state.spec, rh = CH / (high - low + 1);
     for (const lane of S.state.lanes) {
-      if (!lane.visible) continue;
+      if (!laneShown(lane)) continue;
       ctx.fillStyle = lane.color;
       for (const n of lane.notes) {
         const x = at(n.start);

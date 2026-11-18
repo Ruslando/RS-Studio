@@ -1,3 +1,4 @@
+import { laneShown } from "./lane-state.js";
 import { paintSplitPane } from "./split-view.js";
 import { warningMarks } from './diagnostic-marks.js';
 import { issueInstanceKey } from './issue-identity.js';
@@ -176,7 +177,7 @@ function traceBendPath(x, w, ym, pts, rowH) {
 // Every curve shows its points, so a bend can be reshaped without selecting it
 // first; the selection's slide and vibrato handles too.
 function drawBendHandles(vx0, vx1) {
-  const curved = S.state.lanes.filter((lane) => lane.visible).flatMap((lane) => lane.notes.filter((n) =>
+  const curved = S.state.lanes.filter(laneShown).flatMap((lane) => lane.notes.filter((n) =>
     (n.bend || n.whammy) && !S.selection.has(n) && xOf(n.end) >= vx0 && xOf(n.start) <= vx1));
   for (const n of [...curved, ...S.selection]) {
     // Where a slide leaves or vibrato sets in only moves in time: a stem from
@@ -222,7 +223,7 @@ function drawMotifs(vx0, vx1) {
   S.motifLabels = [];
   const active = activeLane();
   for (const lane of S.state.lanes) {
-    if (!lane.visible) continue;
+    if (!laneShown(lane)) continue;
     // Measure each group ONCE, then sort on the measurement. This used to sort
     // with `Math.min(...a.map(n => n.start))` in the comparator — a map and a
     // spread per comparison, so O(n log n) allocations every frame, on a path
@@ -266,7 +267,7 @@ function drawShapes(vx0, vx1) {
   S.shapeLabels = [];
   const active = activeLane();
   for (const lane of S.state.lanes) {
-    if (!lane.visible) continue;
+    if (!laneShown(lane)) continue;
     const problems = rocksmithShapeProblems(lane);
     for (const [id, notes] of shapeGroups(lane.notes)) {
       const problem = problems.get(id);
@@ -306,7 +307,7 @@ function drawChordNames(vx0, vx1) {
   sctx.font = stageUi(CHORD_NAME_PX, 600); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
   sctx.lineJoin = "round";
   for (const lane of S.state.lanes) {
-    if (!lane.visible || !lane.notes?.length) continue;
+    if (!laneShown(lane) || !lane.notes?.length) continue;
     const chords = laneChords(lane);
     for (const chord of chordNameRanges(chords, lane.notes, time => segBeatSec(gridAt(time)) / 2)) {
       const start = xOf(chord.t0), end = xOf(chord.t1);
@@ -428,12 +429,12 @@ function paintStageBackground(vx0, vx1, vy0) {
 function collectFrameDiagnostics() {
   // Overlap stacks (same pitch + overlapping time inside one edit lane) are no
   // longer merged — flag them with a hot color + a count badge instead.
-  const frameIssues = new Map(S.state.lanes.filter(lane => lane.visible).map(lane => [lane, rowsFor(lane)]));
+  const frameIssues = new Map(S.state.lanes.filter(laneShown).map(lane => [lane, rowsFor(lane)]));
   const stackCount = new Map();   // note -> how many notes share its overlap cluster (>=2)
   const ignoredStackNotes = new Set();
   const stackBadges = [];         // one badge per cluster, drawn on top of the notes
   for (const lane of S.state.lanes) {
-    if (!lane.visible) continue;
+    if (!laneShown(lane)) continue;
     const counts = new Map(), badges = [];
     collectStacks(lane, counts, badges);
     const ignored = frameIssues.get(lane).filter(i => i.kind === 'stack' && issueIgnored(lane, i));
@@ -507,7 +508,7 @@ function paintLaneNotes(vx0, vx1, stackCount, ignoredStackNotes) {
   const outOfRange = [];
   const ghostNotes = [];
   for (const lane of S.state.lanes) {
-    if (!lane.visible) continue;
+    if (!laneShown(lane)) continue;
     const { omitted: omittedNotes, added: addedNotes } = arrangementMarksForLane(lane);
     // Every lane has a tuning and the fretboard will voice against it, whether
     // or not the tab view happens to render this lane — so the range warning is
@@ -585,7 +586,7 @@ function paintDiagnosticMarks(vx0, vx1, frameIssues) {
   const frames = [];
   const hoverMark = (x, y, w, h, tip) => warningMarks.push({ x0: x, x1: x + w, y0: y, y1: y + h, tip });
   for (const lane of S.state.lanes) {
-    if (!lane.visible) continue;
+    if (!laneShown(lane)) continue;
     for (const issue of frameIssues.get(lane)) {
       if (!issue.notes?.length || (!showIgnoredIssues && issueIgnored(lane, issue))) continue;
       const ignored = issueIgnored(lane, issue);
@@ -606,7 +607,7 @@ function paintDiagnosticMarks(vx0, vx1, frameIssues) {
   // because the export resolves it, up and right of the point so its handle stays free.
   sctx.font = stageMono(STAGE_ANCHORED, 600); sctx.textAlign = "center"; sctx.textBaseline = "middle";
   for (const lane of S.state.lanes) {
-    if (!lane.visible) continue;
+    if (!laneShown(lane)) continue;
     for (const note of lane.notes) {
       if (!note.bend || xOf(note.end) < vx0 || xOf(note.start) > vx1) continue;
       for (const [slot, { x, y, count }] of stackedBendPoints(note).entries()) {

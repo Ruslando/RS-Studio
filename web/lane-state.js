@@ -10,6 +10,11 @@ export function targetLane() {
 }
 
 
+// Split view shows each view's active layer only; the other layers' eyes wait for one view.
+let onlyActive = false;
+export const showOnlyActiveLane = (on) => { onlyActive = on; };
+export const laneShown = (l) => !!(l && l.visible && (!onlyActive || l.active));
+
 export const canEditLane = (l) => !!(l && l.visible && !l.locked);
 
 export const curStemObj = () => S.state.stems.find((s) => s.id === S.state.curStem) || S.state.stems[0];

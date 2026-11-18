@@ -386,6 +386,12 @@ body.artifact-drop-blocked, body.artifact-drop-blocked * { cursor: no-drop !impo
 /* The summary line (arrangement · tuning · notes) runs under the buttons too. */
 .lane-row .count { grid-column: 2 / 4; grid-row: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lane-row .lane-ctrls { grid-column: 3; grid-row: 1; }
+/* Split view: the number of the view a layer is active in (sidebar and pane headers). */
+.pane-badge {
+  display: inline-block; min-width: 16px; margin-right: var(--s-pair); padding: 2px 4px;
+  border-radius: 999px; text-align: center; vertical-align: 1px;
+  background: var(--selection); color: var(--text); font: 600 11px/1 var(--font-ui);
+}
 @container layers (max-width: 280px) {
   .lane-row .lane-name, .lane-row .lane-name-input { grid-column: 2 / 4; }
   .lane-row .lane-ctrls { grid-row: 2; }

@@ -215,14 +215,20 @@ function wireLaneDrag(row, lane) {
   });
 }
 
+// Split view: each view has its own active layer. split-view.js says which view
+// shows a layer ({ sides: () => Map(laneId → [1] | [2] | [1, 2]) | null }) and takes a
+// click on the other view's layer (focus(lane) → true when it switched views).
+let panes = { sides: () => null, focus: () => false };
+export function setPaneSides(source) { panes = source; }
+
 // Construct the same layer row for the editor and its inert appearance preview.
 export function createLaneRow(lane, { preview = false } = {}) {
   const row = document.createElement("div");
   row.dataset.lane = lane.id;
-  row.className = "lane-row arriving" + (lane.active ? " active" : "") + (lane.locked ? " locked" : "")
-    + (lane.muted ? " muted" : "") + (lane.visible ? "" : " hiddenLane");
+  const side = preview ? null : panes.sides()?.get(lane.id);
+  row.className = "lane-row arriving" + (lane.active || side ? " active" : "")    + (lane.locked ? " locked" : "") + (lane.muted ? " muted" : "") + (lane.visible ? "" : " hiddenLane");
   // Clicking the row (anywhere but a control) makes it the active edit target.
-  row.addEventListener("click", () => activateLane(lane));
+  row.addEventListener("click", () => panes.focus(lane) || activateLane(lane));
 
   const dot = document.createElement("span");
   dot.className = "lane-dot"; dot.style.background = lane.color;
@@ -265,6 +271,12 @@ export function createLaneRow(lane, { preview = false } = {}) {
   ctrls.append(edit, lock, vis, vol);
 
   row.append(dot, name, count, ctrls);
+  // Inside the name, so it truncates with it and never takes grid space.
+  name.prepend(...(side || []).map(n => {
+    const badge = document.createElement("span");
+    badge.className = "pane-badge"; badge.textContent = n; badge.title = `Active in view ${n}`;
+    return badge;
+  }));
   if (!preview) wireLaneDrag(row, lane);
   return row;
 }

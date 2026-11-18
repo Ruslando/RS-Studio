@@ -1,4 +1,5 @@
 // Stage hit testing shared by rendering, hover actions and pointer gestures.
+import { laneShown } from "./lane-state.js";
 import { graceBefore } from "./grace.js";
 import { pitchCurve } from "./whammy.js";
 import { easedCurveAt } from "./bend.js";
@@ -41,7 +42,7 @@ export const pickNoteEdge = (x, y) => withMemo(() => {
   if (!S.state) return null;
   const active = activeLane(), exact = pitchAtExact(y);
   for (const lane of [active, ...S.state.lanes.filter(lane => lane !== active)]) {
-    if (!lane?.visible || lane.locked) continue;
+    if (!laneShown(lane) || lane.locked) continue;
     let best = null;
     for (let i = lane.notes.length - 1; i >= 0; i--) {
       const note = lane.notes[i];
@@ -66,7 +67,7 @@ function pickNoteNow(t, pitch, exact) {
   for (const lane of order) {
     // Locked or hidden lanes are display-only — never hit-test them, so their
     // notes can't be grabbed, moved, or selected.
-    if (!lane || !lane.visible || lane.locked) continue;
+    if (!laneShown(lane) || lane.locked) continue;
     const n = noteAt(lane, t, pitch, exact);
     if (n) return { lane, note: n };
     // A derived grace bar grabs its parent. It is never an independent note,
