@@ -5938,6 +5938,10 @@ class EndToEndTests(unittest.TestCase):
                 active:false,locked:true,visible:false,timing:own,color:lane.color,volume:1,handHolds:[],phraseBoundaries:[],
                 refBoxes:{},notes:[{id:'own-note',start:14.137,end:15.137,pitch:45}],toneMarkers:[{id:'own-tone',t:0,tone:lane.toneMarkers[0].tone}]});
             (await import('./lanes.js')).renderLanes();
+            // A saved hand change sits on its note's start, set in the background with the
+            // fingering: let it land before the "before" snapshot.
+            const { laneFingering } = await import('./lane-fingering.js');
+            for (const each of S.state.editLanes) await laneFingering(each);
             (await import('./repaint.js')).drawNow();
         }""")
         state = """async () => {
@@ -6104,6 +6108,10 @@ class EndToEndTests(unittest.TestCase):
             const { addMarker } = await import("./grid.js");
             const { snap } = await import("./grid-read.js");
             const { drawNow } = await import("./repaint.js");   // now: the flags' hit areas are built by the paint
+            // The grid starts before everything here, wherever the detected one began:
+            // the start flag's span is 0.5 s to 2 s. Nothing is in the project yet to shift.
+            const { offsetInput } = await import("./dom.js");
+            offsetInput.value = "0.5"; offsetInput.dispatchEvent(new Event("change"));
             addMarker(2); addMarker(4);
             S.state.sectionMarkers = [1, 3, 5].map((t) => ({ id: "s" + t, t, type: "verse", name: "" }));
             const lane = S.state.editLanes[0];
@@ -6164,6 +6172,9 @@ class EndToEndTests(unittest.TestCase):
             const { S } = await import("./store.js");
             const { addMarker } = await import("./grid.js");
             const { drawNow } = await import("./repaint.js");   // now: the flags' hit areas are built by the paint
+            // The grid starts on the beat the note sits on, wherever the detected one began.
+            const { offsetInput } = await import("./dom.js");
+            offsetInput.value = "0.5"; offsetInput.dispatchEvent(new Event("change"));
             addMarker(2); addMarker(4).bpm = 90;
             S.state.editLanes[0].notes = [{ start: 3, end: 3.25, pitch: 45, string: 5, fret: 0 }];
             drawNow();
