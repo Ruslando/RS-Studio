@@ -7,11 +7,14 @@ export function strumOffset(n, column, duration = n.end - n.start) {
   return 0;
 }
 
-export function hammerLink(a, b) {
+// The plain toggle (`true`) links a note to the one before it and, when it does not
+// already end a pair (aEndsPair), to the one after: C#3 → D#3 → C#3(toggled) is a
+// pull-off back to C#3, not also a pull-off on into whatever is played next.
+export function hammerLink(a, b, aEndsPair = false) {
   if (!a || !b || a.fx?.dead || b.fx?.dead || b.slap === "tap"
       || Math.abs(b.start - a.end) >= 0.03 || b.start <= a.start) return false;
   const from = a.fx?.hammer, to = b.fx?.hammer;
-  return to === true || to === "dest" || to === "both" || from === true;
+  return to === true || to === "dest" || to === "both" || (from === true && !aEndsPair);
 }
 
 // Imported notes carry origin/destination roles; authored ones use the shared
@@ -21,7 +24,7 @@ export function hammerDirections(notes) {
   let column = [], previous = [];
   for (const n of sorted) {
     if (column.length && n.start - column[0].start >= 1e-4) { previous = column; column = []; }
-    const choices = previous.filter((a) => hammerLink(a, n)
+    const choices = previous.filter((a) => hammerLink(a, n, map.has(a))
       && (a.pos?.string == null || n.pos?.string == null || a.pos.string === n.pos.string));
     const origin = choices.sort((a, b) => Math.abs(a.pitch - n.pitch) - Math.abs(b.pitch - n.pitch))[0];
     if (origin) {

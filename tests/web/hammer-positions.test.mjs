@@ -60,3 +60,29 @@ test('batch edits move the incoming source of every selected hammer destination'
   assert.equal(plan.error, null); assert.equal(plan.changes.length, 4);
   assert.ok(plan.changes.every(c => c.pos.string === 0));
 });
+test('a toggled pull-off back to C#3 does not also pull off into the next picked note (Kroi bass, 16 s)', async () => {
+  const { hammerDirections } = await import('../../web/articulations.js');
+  const note = (id, pitch, start, end, string, fret, fx) => ({ id, pitch, start, end, pos: { string, fret }, ...(fx && { fx }) });
+  const notes = [
+    note('c1', 49, 16.233, 16.387, 0, 6),
+    note('c2', 49, 16.387, 16.438, 0, 6, { hammer: 'origin' }),
+    note('d', 51, 16.438, 16.747, 0, 8, { hammer: 'dest' }),
+    note('c3', 49, 16.747, 17.055, 0, 6, { hammer: true }),
+    note('g', 44, 17.055, 17.260, 1, 6),
+  ];
+  assert.deepEqual(hammerPositionGroup(notes, notes[2]).map(n => n.id).sort(), ['c2', 'c3', 'd']);
+  const shape = new Map([[notes[2], { string: 1, fret: 13 }]]);
+  const plan = hammerPositionPlan({ notes }, shape, tuning, n => n.pos);
+  assert.equal(plan.error, null);
+  assert.deepEqual(plan.changes.map(c => [c.note.id, c.pos.string, c.pos.fret]).sort(), [['c2', 1, 11], ['c3', 1, 11], ['d', 1, 13]]);
+  const preview = positionPreviewLane({ notes }, [notes[2]], shape, new Set([notes[2]]), tuning, n => n.pos, 24);
+  assert.deepEqual(hammerPositionPreview(preview.lane.notes, [preview.noteFor(notes[2])]).map(l => l.kind), ['H', 'P']);
+  // Moved there, the G#2 shares the string but is still picked.
+  for (const { note: n, pos } of plan.changes) n.pos = pos;
+  notes[4].pos = { string: 1, fret: 6 };
+  assert.equal(hammerDirections(notes).get(notes[4]), undefined);
+  // The toggle still starts a pair when it does not end one.
+  delete notes[2].fx; notes[1].fx = { hammer: true };
+  notes[0].end = 16.3;   // a rest before it: the toggle can only mean c2 → d
+  assert.deepEqual(hammerPositionGroup(notes, notes[1]).map(n => n.id), ['c2', 'd', 'c3']);
+});

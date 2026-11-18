@@ -42,7 +42,7 @@ export function eventOffsetAt(event, sec) {
 
 export function playbackEvents(notes, bpmAt = () => 120, songEnd = Infinity) {
   const sorted = [...notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch);
-  const slides = slideTargets(sorted), into = new Map(), onward = new Map();
+  const slides = slideTargets(sorted), into = new Map(), onward = new Map(), hammered = new Set();
   const columns = [], columnOf = new Map(), nextSame = new Map(), future = new Map();
   for (const n of sorted) {
     if (!columns.length || n.start - columns.at(-1)[0].start >= 1e-4) columns.push([]);
@@ -59,8 +59,10 @@ export function playbackEvents(notes, bpmAt = () => 120, songEnd = Infinity) {
     let target = n.slide === "legato" ? slides.get(n) : null;
     if (target?.fx?.dead) target = null;
     const next = nextSame.get(n);
-    if (!target && hammerLink(n, next)) target = next;
-    if (target && !into.has(target)) { onward.set(n, target); into.set(target, n); }
+    // Only a hammer arrival ends a pair, as in hammerDirections: a legato slide into n does not.
+    const viaHammer = !target && hammerLink(n, next, hammered.has(n));
+    if (viaHammer) target = next;
+    if (target && !into.has(target)) { onward.set(n, target); into.set(target, n); if (viaHammer) hammered.add(target); }
   }
   const events = [];
   for (const n of sorted) {
