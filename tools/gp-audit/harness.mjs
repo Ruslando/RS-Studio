@@ -4,10 +4,11 @@
 // file would have.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 const WEB = new URL("../../web/", import.meta.url);
 // alphaTab first: with a `window` it would take its browser path.
-export const alphaTab = createRequire(import.meta.url)(new URL("vendor/alphatab/alphaTab.min.js", WEB).pathname);
+export const alphaTab = createRequire(import.meta.url)(fileURLToPath(new URL("vendor/alphatab/alphaTab.min.js", WEB)));
 await import("./dom-stub.mjs");
 const settings = () => new alphaTab.Settings();
 const web = (name) => import(new URL(name, WEB).href);
@@ -38,7 +39,7 @@ export async function roundTrip(score, trackIndex, mode, edit = null) {
   const converted = core.convertGpScore(score, [trackIndex]);
   const lane = project.mapLane(converted.editLanes[0], 0);
   const grid = converted.grid;
-  S.state = { job: "audit", name: converted.name, filename: "audit.gp", editLanes: [lane], duration: converted.duration,
+  S.state = { job: "audit", name: converted.name, filename: "audit.gp", stems: [], lanes: [lane], editLanes: [lane], duration: converted.duration,
     scoreDuration: converted.duration, metadata: converted.metadata, sectionMarkers: [], tempoMap: [], timings: {} };
   const { scoreBars, sectionMarkers, target } = gpImport.importedStructure(converted);
   Object.assign(S.state, { scoreBars, sectionMarkers, scoreDuration: target, tempoMap: grid.tempoMap.map((m) => ({ ...m })) });

@@ -1273,7 +1273,13 @@ class EndToEndTests(unittest.TestCase):
         self.assertIsNone(page.evaluate("async () => (await import('/store.js')).S.drag"),
                           'a visible marker must still block Ctrl selection and tracing')
         page.mouse.up()
-        self.assertEqual(selected(), ['upper'])
+        flags = "async () => (await import('/marker-rails.js')).markerSelection().size"
+        # One selection at a time (marker-clipboard.js): the flag takes it from the notes.
+        self.assertEqual(selected(), [])
+        self.assertEqual(page.evaluate(flags), 1)
+        page.mouse.click(*point('upper'))
+        self.assertEqual(selected(), ['upper'], 'a Ctrl-click on a note takes it back')
+        self.assertEqual(page.evaluate(flags), 0)
         page.mouse.click(*point('upper'))
         self.assertEqual(selected(), [])
         page.mouse.click(*point('lower', scrolled=True))

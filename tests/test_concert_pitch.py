@@ -122,7 +122,7 @@ class TuningRouteTests(unittest.TestCase):
         with patch.object(server, "_read_manifest", return_value=manifest), \
              patch.object(server, "_write_manifest"):
             with self.assertRaises(HTTPException):
-                server.api_project_tuning("pitchtest", {"shift": 51})
+                server.api_project_tuning("pitchtest", {"shift": 106})   # the shift limit is +-105
             body = json.loads(server.api_project_tuning("pitchtest", {"reference": -20}).body)
         self.assertEqual(body["tuning"], {"estimate": -31.8, "reference": -20.0, "shift": 0.0})
         self.assertTrue(body["stems"][0]["spectrogram"]["url"].endswith("?cents=-20.0"))
