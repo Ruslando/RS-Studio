@@ -1081,14 +1081,17 @@ class EndToEndTests(unittest.TestCase):
         with page.expect_file_chooser() as chooser:
             page.click("#welcomeOpen")
         chooser.value.set_files(bundle)
-        # The export's own checker reports the harmonic bend once edits settle.
-        row = page.locator("#artifactWarnings .artifact-issue-row", has_text="Natural harmonic with bend")
+        # The export's own checker reports the harmonic bend once edits settle. Issues
+        # of one kind are a group (b9af37a); its instances show once it is opened.
+        group = page.locator("#artifactWarnings .artifact-issue-group", has_text="Natural harmonic with bend")
+        group.locator(".artifact-issue-group-head .artifact-row-head").click()
+        row = group.locator(".artifact-issue-row")
         expect(row).to_be_visible()
         self.assertEqual(row.get_attribute("data-tip-tone"), "warning")
         self.assertNotIn("I35", row.get_attribute("data-tip"), "DLC Builder's codes stay internal")
         row.hover()
         expect(page.locator(".app-tooltip")).to_contain_text("Warning")
-        expect(page.locator(".app-tooltip")).to_contain_text("pinch harmonic")
+        expect(page.locator(".app-tooltip")).to_contain_text("select Pinch")   # the fix, from checker.py
         row.click()
         time_at = lambda: page.evaluate("async () => (await import('/playback.js')).playbackTime()")
         self.assertAlmostEqual(time_at(), 2.0, places=2)
