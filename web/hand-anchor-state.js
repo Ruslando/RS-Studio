@@ -1,5 +1,5 @@
 // The saved hand is a sequence of changes, shared by editing, loading and export.
-import { chordColumns } from './voicing-core.js';
+import { chordColumns, slideLanding } from './voicing-core.js';
 
 export const HAND_ANCHOR_VERSION = 1;
 const EPS = 1e-6;
@@ -16,7 +16,7 @@ export function nearestHandStart(notes, time) {
 }
 
 export function normalizeHandAnchors(notes, holds = [], initial = null) {
-  const starts = chordColumns(notes).map(c => c.t0);
+  const columns = chordColumns(notes), starts = columns.map(c => c.t0);
   if (!starts.length) return [];
   const ordered = (Array.isArray(holds) ? holds : []).filter(h => h && typeof h === 'object')
     .sort((a, b) => Number(a.t) - Number(b.t));
@@ -31,14 +31,23 @@ export function normalizeHandAnchors(notes, holds = [], initial = null) {
     id: `anchor_start_${notes.find(n => n.start === starts[0])?.id || starts[0]}`,
     t: starts[0], fret: Math.max(1, Math.round(initial ?? ordered.find(h => Number.isInteger(Number(h.fret)) && Number(h.fret) > 0)?.fret ?? 1) || 1),
   });
+  // A change is redundant only when it repeats the hand already in force there,
+  // and a slide's landing (an implicit anchor) counts: 9 right after a 9→3
+  // slide-out overrides the landing and must survive.
   const out = [], ids = new Set();
-  for (const hold of [...byTime.values()].sort((a, b) => a.t - b.t)) {
-    if (out.at(-1)?.fret === hold.fret) continue;
-    const base = String(hold.id);
-    let id = base, suffix = 1;
-    while (ids.has(id)) id = `${base}_${suffix++}`;
-    hold.id = id; ids.add(id); out.push(hold);
-  }
+  let fret = null, landing = null;
+  columns.forEach((column, i) => {
+    const hold = byTime.get(column.t0), inForce = landing ?? fret;
+    fret = inForce;
+    if (hold && hold.fret !== inForce) {
+      const base = String(hold.id);
+      let id = base, suffix = 1;
+      while (ids.has(id)) id = `${base}_${suffix++}`;
+      hold.id = id; ids.add(id); out.push(hold); fret = hold.fret;
+    }
+    landing = column.notes.length === 1 && fret != null
+      ? slideLanding(column.notes[0], columns[i + 1], fret, n => n.pos) : null;
+  });
   return out;
 }
 

@@ -165,8 +165,10 @@ function previewIsCurrent(offer, lane) {
 // bare until it lands. Keyed the way draw.js keys its own voicing caches — the
 // revision plus the notes array's identity — with the inputs that change a
 // fingering without changing a note (the tuning).
-let hand = null;      // { key, columns, strings }
-let handJob = "";     // the key currently being voiced, so one lane is asked once
+// One slot per lane: split view shows two lanes' boards in one frame, and a single
+// shared slot made each pane's answer evict the other's, every frame, forever.
+// slot: { hand: { key, columns, strings } | null, job: the key being voiced, so it is asked once }
+const handSlots = new WeakMap();
 
 function handKey(lane) {
   return `${voicingKey(lane)}:f${S.fingerRevision || 0}`;
@@ -245,18 +247,20 @@ function gripsFrom({ tuning, notes, voiced, fingers: walked, seats }) {
 
 function gripsFor(lane) {
   const key = handKey(lane), vkey = voicingKey(lane);
-  if (hand && hand.key === key) return hand;
-  if (handJob !== key) {
-    handJob = key;
+  let slot = handSlots.get(lane);
+  if (!slot) handSlots.set(lane, slot = { hand: null, job: "" });
+  if (slot.hand && slot.hand.key === key) return slot.hand;
+  if (slot.job !== key) {
+    slot.job = key;
     laneFingering(lane).then((fingering) => {
-      if (handJob !== key) return;    // a later edit already asked for a newer one
+      if (slot.job !== key) return;    // a later edit already asked for a newer one
       const columns = gripsFrom(fingering);
       const shapes = fretboardShapeFrames(fingering, columns);
       const blockedStarts = new Set(chordWarnings(lane, laneFretTuning(lane), laneFretCount(lane), S.voicingRevision)
         .filter(column => column.kind === "impossible").map(column => column.t0));
       const playableColumns = columns.filter(column => !blockedStarts.has(column.start));
       const fingers = playableColumns.flatMap(column => column.fingers);
-      hand = { key, vkey, strings: fingering.tuning.length, columns, playableColumns, shapes, blockedStarts, voiced: fingering.voiced, fingers: fingering.fingers,
+      slot.hand = { key, vkey, strings: fingering.tuning.length, columns, playableColumns, shapes, blockedStarts, voiced: fingering.voiced, fingers: fingering.fingers,
         ringFingers: fingers.filter((f) => f.note.fx?.letRing),
         releaseFingers: [...fingers].reverse(),
         popFingers: fingers.filter((f) => f.note.slap === "pop") };
@@ -267,10 +271,11 @@ function gripsFor(lane) {
     // difference the spinner below is drawing. The one failure that actually happens
     // is an imported lane missing an authored position — a property of the lane, not
     // a hiccup, so it is not retried until an edit changes the key.
-    }).catch(() => { hand = { key, vkey, strings: 0, columns: [] }; draw(); });
+    }).catch(() => { slot.hand = { key, vkey, strings: 0, columns: [] }; draw(); });
   }
   // Only the fingers changed: the last grips stand in for the few milliseconds until
   // the new ones are laid over the same voicing, instead of a "working out" flash.
+  const { hand } = slot;
   return hand && (hand.key === key || hand.vkey === vkey) ? hand : null;
 }
 
@@ -805,6 +810,13 @@ function paintHandPositionBand(ctx, s, X, Y, { lane, now, seat, offered }) {
   if (anchor) {
     ctx.fillStyle = hexA(hue, (moves ? WASH * 0.6 : WASH) * anchor.opacity);
     fretSpaceBounds(ctx, anchor.x0, anchor.x1, s, X, Y);
+    ctx.fill();
+  }
+  // A slide also shows where it takes the hand, lighter, unless the hand is there already.
+  const to = now?.at?.anchorTo;
+  if (to && (!anchor || Math.abs(to.x0 - anchor.x0) > 1)) {
+    ctx.fillStyle = hexA(hue, WASH * 0.5);
+    fretSpaceBounds(ctx, to.x0, to.x1, s, X, Y);
     ctx.fill();
   }
   if (moves && offered <= s.frets) {
@@ -2106,8 +2118,10 @@ function handColumnHere(lane) {
   const column = found.columns[i];
   if (!handChoicesOf.has(column)) {
     const shape = new Map(column.fingers.map((f) => [f.note, { string: f.string, fret: f.fret }]));
-    handChoicesOf.set(column, handChoices(shape, handProfileForTuning(laneFretTuning(lane)),
-      Math.max(1, laneFretCount(lane) - 3)));
+    // The initial hand is the player's call: any fret, an unreachable one is reported
+    // as a conflict (applyHandAnchors), never refused.
+    handChoicesOf.set(column, i === 0 ? Array.from({ length: Math.max(1, laneFretCount(lane) - 3) }, (_, f) => f + 1)
+      : handChoices(shape, handProfileForTuning(laneFretTuning(lane)), Math.max(1, laneFretCount(lane) - 3)));
   }
   return { column, after: i > 0 ? found.columns[i - 1].start : -Infinity, choices: handChoicesOf.get(column),
     shift: slideInShift(column) };

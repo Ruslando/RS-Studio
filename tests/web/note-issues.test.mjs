@@ -25,6 +25,13 @@ assert.deepEqual(laneIssues({ notes: [note(1.25, 2.25, 40, { preciseLength: true
 const stretched = note(0, 1, 48, { pos: { string: 0, fret: 5 } });
 assert.deepEqual(laneIssues({ notes: [stretched], handHolds: [{ t: 0, fret: 1 }] }, BASS, 20)
   .map(({ kind, tone }) => [kind, tone]), [['handStretch', 'warning']], 'more than four frets is a soft-limit warning');
+{
+  // A slide-out leaves the hand where it ends: 4 slides up to 9, so fret 11 is in reach.
+  const out = note(0, 1, 47, { pos: { string: 0, fret: 4 }, slide: 'outUp', slideFrets: 5 });
+  const after = note(1, 2, 54, { pos: { string: 0, fret: 11 } });
+  assert.deepEqual(laneIssues({ notes: [out, after], handHolds: [{ t: 0, fret: 4 }] }, BASS, 20)
+    .filter(i => i.kind === 'handStretch'), [], 'a slide-out landing is the hand for later notes');
+}
 assert.deepEqual(laneIssues({ notes: [stretched], handHolds: [{ t: 0, fret: 2 }] }, BASS, 20), [],
   'a four-fret hand span is within the soft limit');
 assert.deepEqual(kinds([note(0, 1, 20)]), [['outOfRange', 'warning']], 'said once, not also as a shape');

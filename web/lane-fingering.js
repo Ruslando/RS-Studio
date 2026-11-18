@@ -188,6 +188,7 @@ function finishLaneFingering(lane, notes, tuning, found, remember) {
   else applyHandAnchors(notes, found, tuning, holds);
   if (remember && S.state?.editLanes?.includes(lane)) {
     lane._handConflicts = found.handConflicts;
+    lane._handAnchors = found.handAnchors;
     laneVoicingCache.set(lane, { key: laneFingeringKey(lane, tuning),
       positions: notes.map(n => found.voiced.get(n) || null),
       fingers: notes.map(n => found.fingers.get(n) ?? null), seats: notes.map(n => found.seats.get(n) ?? null) });

@@ -9,7 +9,7 @@ import { isMarkerSelected, markerKey, registerMarkerRail, railBand, setMarkerSel
 import { paintMarkerFlag } from './canvas-components.js';
 import { PAINT } from './stage-paint.js';
 import { laneFingering, laneFingeringKey } from './lane-fingering.js';
-import { slideHandChanges } from './hand-anchor-core.js';
+import { slideHandChanges, slideOutHandChanges } from './hand-anchor-core.js';
 import { gridAt } from './grid-read.js';
 import { chordColumns, handChoices, handProfileForTuning } from './voicing-core.js';
 import { draw } from './repaint.js';
@@ -36,8 +36,12 @@ function changesOf(lane) {
     laneFingering(lane, entry.controller.signal).then(found => {
       if (cache.get(lane) !== entry) return;
       entry.found = found;
-      entry.slides = slideHandChanges(found.notes, found.seats, found.voiced,
-        t => 30 / (gridAt(t)?.bpm || 120));
+      // Every slide shows where the hand starts and where it lands, the landing at
+      // the end of the slide's note.
+      const noteEnd = new Map(found.notes.map(n => [`slide_${n.id || n.start}_end`, n.end]));
+      entry.slides = slideHandChanges(found.notes, found.seats, found.voiced, t => 30 / (gridAt(t)?.bpm || 120))
+        .map(e => (noteEnd.has(e.id) ? { ...e, t: noteEnd.get(e.id) } : e))
+        .concat(slideOutHandChanges(found.notes, found.seats, found.voiced));
       draw();
     }).catch(() => {});
   }
@@ -52,20 +56,41 @@ function drawAnchors() {
   const problems = new Set(lane._handConflicts?.values() || []);
   sctx.save(); sctx.font = stageMono(11, 500); sctx.textAlign = 'left'; sctx.textBaseline = 'middle';
   const { saved, slides } = changesOf(lane);
+  // A saved anchor on a slide-in's note is where that slide lands: draw it at the
+  // landing instead of the derived landing flag, so it never sits under the start flag.
+  const landedAt = new Map(), hidden = new Set();
+  for (const start of slides) {
+    if (!start.id.endsWith('_start')) continue;
+    const hold = saved.find(h => Math.abs(h.t - start.t) < 1e-6);
+    const end = hold && slides.find(e => e.id === start.id.replace(/_start$/, '_end'));
+    if (end) { landedAt.set(hold.id, end.t); hidden.add(end.id); }
+  }
+  // Where a slide-out starts is already said by a saved hand or a slide-in's start there.
+  for (const from of slides) if (from.id.endsWith('_from')
+    && (saved.some(h => Math.abs(h.t - from.t) < 1e-6) || slides.some(s => s.id.endsWith('_start') && Math.abs(s.t - from.t) < 1e-6)))
+    hidden.add(from.id);
+  // A landing ends at its time and points left; everything else starts there.
+  const endsAt = marker => marker.ends || !!marker.id?.endsWith('_end') || landedAt.has(marker.id);
   const drawFlag = (marker, derived = false) => {
-    const t = dragging?.lane === lane && dragging.id === marker.id ? dragging.time : marker.t;
-    const problem = !derived && problems.has(marker.id);
-    const label = `${Math.round(marker.fret)}${problem ? ' !' : ''}`, x = xOf(t);
+    // A dragged anchor follows the column starts it snaps to, so it is drawn starting there.
+    const held = dragging?.lane === lane && dragging.id === marker.id;
+    const t = held ? dragging.time : derived ? marker.t : landedAt.get(marker.id) ?? marker.t;
+    const problem = problems.has(marker.id);
+    const label = `${Math.round(marker.fret)}${problem ? ' !' : ''}`;
     const width = Math.ceil(sctx.measureText(label).width) + 14;
+    const ends = !held && endsAt(marker), x = ends ? xOf(t) - width : xOf(t);
     const rect = { marker, lane, x0: x, x1: x + width, y0: top + 2, y1: top + HEIGHT - 2 };
     if (!derived) rects.push(rect);
     if (x > scroll.scrollLeft + scroll.clientWidth || x + width < scroll.scrollLeft) return;
     paintMarkerFlag(sctx, rect, problem ? PAINT.warn : lane.color || PAINT.accent,
       { dashed: derived, selected: !derived && isMarkerSelected(RAIL, marker.id) });
+    // The edge that sits on the time: left for a start, right for a landing.
+    sctx.fillStyle = problem ? PAINT.warn : lane.color || PAINT.accent;
+    sctx.fillRect(ends ? rect.x1 - 2 : rect.x0, rect.y0 + 3, 2, rect.y1 - rect.y0 - 6);
     sctx.fillStyle = PAINT.text; sctx.fillText(label, x + 7, top + HEIGHT / 2);
   };
   for (const marker of saved) drawFlag(marker);
-  for (const marker of slides) drawFlag(marker, true);
+  for (const marker of slides) if (!hidden.has(marker.id)) drawFlag(marker, true);
   sctx.restore();
 }
 
@@ -104,7 +129,8 @@ function menu(hit, event) {
     if (live) setHandAnchor(lane, live.t, value);
     if (!lane.handHolds?.some(h => h.id === marker.id)) setMarkerSelection([]);
   };
-  const choices = new Set(choicesAt(lane, marker.t));
+  // The initial hand takes any fret; out of reach is reported, not refused.
+  const choices = new Set(first ? Array.from({ length: Math.max(1, laneFretCount(lane) - 3) }, (_, f) => f + 1) : choicesAt(lane, marker.t));
   choices.add(marker.fret);
   openDiagnosticMenu(event.clientX, event.clientY, [
     { label: first ? 'Initial hand position' : 'Hand position', children:

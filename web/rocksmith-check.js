@@ -145,12 +145,12 @@ export function rowsFor(lane) {
   const found = checkResults().get(lane?.id);
   const rows = [];
   const conflicts = lane?._handConflicts || new Map();
-  for (const hold of lane?.handHolds || []) {
+  for (const hold of lane?._handAnchors || lane?.handHolds || []) {
     const notes = [...conflicts].filter(([, id]) => id === hold.id).map(([note]) => note);
     if (notes.length) rows.push({ id: 'marker.anchor-out-of-reach', key: 'marker.anchor-out-of-reach',
       title: `Hand position ${hold.fret} conflicts with notes or chosen fingers`,
       help: 'Change the hand position, explicit fingers or note positions in this range.',
-      tone: 'warning', time: hold.t, notes, target: `hand-anchor:${lane.id}:${hold.id}` });
+      tone: 'warning', time: hold.t, notes, ...(hold.implicit ? {} : { target: `hand-anchor:${lane.id}:${hold.id}` }) });
   }
   if (found?.error) rows.push({ id: found.errorId || 'export.compile-failed', key: found.errorId || 'export.compile-failed', title: 'Rocksmith: Export failed', help: found.error, tone: 'error', time: null });
   if (found?.warningIssues) for (const issue of found.warningIssues) rows.push({ ...issue, key: issue.id });

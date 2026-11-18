@@ -3408,6 +3408,12 @@ class EndToEndTests(unittest.TestCase):
         expect(hand(7)).to_be_enabled()
         hand(7).click()
         expect(hand(7)).not_to_be_focused()   # the editor keeps its keys
+        # The initial hand is the player's call: any fret, even one that can't reach the note.
+        for fret in (1, 15):
+            expect(hand(fret)).to_be_enabled()
+            hand(fret).click()
+            holds = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds")
+            self.assertEqual((holds[0]['t'], holds[0]['fret']), (2, fret))
 
     def test_minimap_eases_while_pointer_keeps_moving(self):
         self.open_reference_project()
@@ -5113,14 +5119,238 @@ class EndToEndTests(unittest.TestCase):
             const original = sctx.fillText.bind(sctx);
             sctx.fillText = (text,x,y,...rest) => {
                 const top = scroll.scrollTop + railBand('hand-anchor').y;
-                if (y >= top && y <= top+20) window.slideHandPaint.push(String(text));
+                if (y >= top && y <= top+20) window.slideHandPaint.push([String(text), x]);
                 return original(text,x,y,...rest);
             };
             (await import('/repaint.js')).draw();
         }""")
-        page.wait_for_function("window.slideHandPaint.includes('5') && window.slideHandPaint.includes('9')")
+        page.wait_for_function("['5','9'].every(l => window.slideHandPaint.some(([t]) => t === l))")
+        # The saved 9 on the slide's note is drawn at the landing, after the start flag.
+        paints = dict(page.evaluate("window.slideHandPaint"))
+        self.assertGreater(paints['9'], paints['5'])
         self.assertIn('5', page.evaluate('window.slideHandPaint'), 'the rail shows the hand at the slide start')
         self.assertIn('9', page.evaluate('window.slideHandPaint'), 'the rail shows the hand at the slide landing')
+
+    def test_shift_slide_landing_paints_an_implicit_hand_flag(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [
+                {id:'shift-hand-rail', start:2, end:4, pitch:67,
+                 pos:{string:0,fret:3,scope:'local'}, finger:1, slide:'shift'},
+                {id:'shift-hand-target', start:4, end:5, pitch:73,
+                 pos:{string:0,fret:9,scope:'local'}, finger:1}];
+            lane.handHolds = [{id:'h0',t:2,fret:3}];
+            lane.handAnchorVersion = 1;
+            S.voicingRevision++;
+            const {sctx, scroll} = await import('/dom.js');
+            const {railBand} = await import('/marker-rails.js');
+            window.shiftHandPaint = [];
+            const original = sctx.fillText.bind(sctx);
+            sctx.fillText = (text,x,y,...rest) => {
+                const top = scroll.scrollTop + railBand('hand-anchor').y;
+                if (y >= top && y <= top+20) window.shiftHandPaint.push(String(text));
+                return original(text,x,y,...rest);
+            };
+            (await import('/repaint.js')).draw();
+        }""")
+        # Saved 3, and the slide's landing on 9 as an implicit flag.
+        page.wait_for_function(
+            "window.shiftHandPaint.includes('3') && window.shiftHandPaint.includes('9')")
+
+    def test_slide_shows_its_start_and_landing_on_the_rail_and_the_board(self):
+        self.open_reference_project()
+        page = self.page
+        got = page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            // A slide out of the 4th fret, then a note under a different saved hand.
+            lane.notes = [
+                {id:'up', start:2, end:3, pitch:68, pos:{string:0,fret:4,scope:'local'}, finger:1, slide:'outUp', slideFrets:5},
+                {id:'next', start:3, end:4, pitch:66, pos:{string:0,fret:2,scope:'local'}}];
+            lane.handHolds = [{id:'h0',t:2,fret:4},{id:'h1',t:3,fret:2}];
+            lane.handAnchorVersion = 1;
+            S.voicingRevision++;
+            const {xOf} = await import('/geometry.js');
+            (await import('/fretboard.js')).setFretboardVisible(true);
+            (await import('/playback.js')).seekPlayback(2.1);
+            const {laneFingering} = await import('/lane-fingering.js');
+            await laneFingering(lane);
+            (await import('/repaint.js')).draw();
+            await new Promise(r => setTimeout(r, 400));
+            (await import('/repaint.js')).draw();
+            await new Promise(requestAnimationFrame);
+            return { x2: xOf(2), x3: xOf(3) };
+        }""")
+        # The rail: the slide's start flag starts at 2 s, its landing ends at 3 s, and the
+        # next note's saved 2 starts at 3 s; none of them sit on top of each other.
+        flags = page.evaluate("""async () => {
+            const {sctx} = await import('/dom.js');
+            const seen = [], original = sctx.fillText.bind(sctx);
+            sctx.fillText = (text, x, y, ...rest) => { seen.push([String(text), x]); return original(text, x, y, ...rest); };
+            (await import('/repaint.js')).draw(); await new Promise(requestAnimationFrame);
+            sctx.fillText = original;
+            return seen;
+        }""")
+        def label_x(text):
+            return [x for t, x in flags if t == text]
+        self.assertTrue(any(abs(x - 7 - got['x2']) < 2 for x in label_x('4')), f'the slide starts at 4: {flags}')
+        landing = [x for x in label_x('9') if x < got['x3']]
+        self.assertTrue(landing, f'the landing 9 ends at the end of the slide note: {flags}')
+        self.assertTrue(any(abs(x - 7 - got['x3']) < 2 for x in label_x('2')), 'the next hand starts at 3 s')
+        # The board: the hand at 4 and, lighter, where the slide takes it.
+        to = page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const {laneFingering} = await import('/lane-fingering.js');
+            const {handAt, fretboardFor} = await import('/fretboard-core.js');
+            const lane = S.state.editLanes[0], f = await laneFingering(lane);
+            const s = {...fretboardFor(lane.instrument), strings: 6, capo: 0};
+            const cols = [{start: 2, end: 3, eighth: .25, seat: f.seats.get(f.notes[0]),
+              fingers: [{note: f.notes[0], string: 0, fret: 4, finger: 1, start: 2}]}];
+            const pose = handAt(cols, 2.1, 0, s, false);
+            return { anchor: !!pose.anchor, to: !!pose.anchorTo, same: pose.anchorTo?.x0 === pose.anchor?.x0 };
+        }""")
+        self.assertEqual(to, {'anchor': True, 'to': True, 'same': False})
+
+    def test_slide_out_landing_holds_the_hand_in_the_export(self):
+        self.open_reference_project()
+        hands = self.page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [
+                {id:'out', start:2, end:3, pitch:68, pos:{string:0,fret:4,scope:'local'},
+                 finger:1, slide:'outUp', slideFrets:5},
+                {id:'after', start:3, end:4, pitch:75, pos:{string:0,fret:11,scope:'local'}},
+                {id:'later', start:4, end:5, pitch:66, pos:{string:0,fret:2,scope:'local'}}];
+            lane.handHolds = [{id:'h0',t:2,fret:4},{id:'h1',t:4,fret:2}];
+            lane.handAnchorVersion = 1;
+            S.voicingRevision++;
+            const spec = await (await import('/tablature.js')).buildSpecForLanesAsync([lane]);
+            return spec.tracks[0].notes.map(n => n.hand);
+        }""")
+        # 4 slides out to 9, which holds until the saved anchor on 2.
+        self.assertEqual(hands, [4, 9, 2])
+
+    def open_split_with_two_layers(self):
+        """Split view: the left view on layer 'edit', the right on 'own' (its own 3/8 timing)."""
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const {addTiming} = await import('/timing.js');
+            const lane = S.state.editLanes[0];
+            const own = addTiming({grid:{bpm:146,offset:.85,tsNum:3,tsDen:8,subdiv:4},tempoMap:[],sectionMarkers:[],scoreBars:[]});
+            const other = {id:'own',name:'Own timing',kind:'edit',instrument:lane.instrument,tuning:lane.tuning,
+                active:false,locked:false,visible:true,timing:own,color:lane.color,volume:1,handHolds:[],phraseBoundaries:[],
+                refBoxes:{},toneMarkers:[],notes:lane.notes.map(n => ({id:'o'+n.id,start:n.start,end:n.end,pitch:n.pitch}))};
+            S.state.editLanes.push(other);
+            if (S.state.lanes !== S.state.editLanes) S.state.lanes.push(other);
+            (await import('/lanes.js')).renderLanes();
+            (await import('/playback.js')).seekPlayback(2);
+            (await import('/fretboard.js')).setFretboardVisible(true);
+        }""")
+        page.click('#splitViewToggle')
+        right = page.locator('#splitHead1 select[aria-label="Right pane editing layer"]')
+        expect(right.locator('option[value="own"]')).to_have_count(1)
+        right.select_option('own')
+        return page
+
+    def test_split_view_with_two_layers_settles_its_fingering(self):
+        # Each pane's board used to evict the other's fingering from one shared slot,
+        # and each answer's redraw evicted the next: an endless "Working out" flicker.
+        page = self.open_split_with_two_layers()
+        # Both layers get their fingering (the anchors are written when it lands).
+        page.wait_for_function("""async () => (await import('/store.js')).S.state.editLanes
+            .every(l => l.handAnchorVersion === 1 && l.handHolds.length)""")
+        page.wait_for_timeout(500)
+        frames = page.evaluate("""async () => {
+            let n = 0; const raf = window.requestAnimationFrame.bind(window);
+            window.requestAnimationFrame = f => { n++; return raf(f); };
+            (await import('/repaint.js')).draw();
+            await new Promise(r => setTimeout(r, 1000));
+            window.requestAnimationFrame = raf;
+            return n;
+        }""")
+        self.assertLess(frames, 10, 'the split view keeps repainting: the two boards evict each other')
+
+    def test_split_view_has_an_active_layer_per_view(self):
+        page = self.open_split_with_two_layers()
+        row = lambda lane: page.locator(f'#lanes .lane-row[data-lane="{lane}"]')
+        # Both views' layers are active in the sidebar, badged with their view.
+        for lane, side in (('edit', '1'), ('own', '2')):
+            expect(row(lane)).to_have_class(re.compile(r'\bactive\b'))
+            expect(row(lane).locator('.pane-badge')).to_have_text(side)
+        # The views carry the same numbers.
+        expect(page.locator('#splitHead0 .pane-badge')).to_have_text('1')
+        expect(page.locator('#splitHead1 .pane-badge')).to_have_text('2')
+        # The badge sits inside the name, so the row's buttons keep their place.
+        ctrls = lambda lane: row(lane).locator('.lane-ctrls').bounding_box()['x']
+        self.assertEqual(ctrls('edit'), ctrls('own'))
+        # Clicking the right view's layer goes to the right view; nothing moves view.
+        row('own').locator('.lane-name').click()
+        expect(page.locator('#splitHead1')).to_have_attribute('data-live', '')
+        self.assertEqual(page.evaluate("async () => (await import('/lanes.js')).activeLane().id"), 'own')
+        expect(page.locator('#splitHead0 select[aria-label="Left pane editing layer"]')).to_have_value('edit')
+        for lane, side in (('edit', '1'), ('own', '2')):
+            expect(row(lane).locator('.pane-badge')).to_have_text(side)
+        # Closed, there is one view again: one active layer, no badges.
+        page.click('#splitViewToggle')
+        expect(page.locator('#lanes .pane-badge')).to_have_count(0)
+        expect(page.locator('#lanes .lane-row.active')).to_have_count(1)
+
+    def test_split_view_shows_only_each_views_active_layer(self):
+        page = self.open_split_with_two_layers()
+        # A note of the right view's layer, where the left (live) view has none.
+        point = page.evaluate_handle("""async () => {
+            const {S} = await import('/store.js');
+            const {xOf, yOf} = await import('/geometry.js');
+            const {scroll, stage} = await import('/dom.js');
+            const edit = S.state.editLanes.find(l => l.id !== 'own');
+            const own = S.state.editLanes.find(l => l.id === 'own');
+            own.notes.forEach(n => { n.pitch += 3; });
+            const free = n => !edit.notes.some(e => e.pitch === n.pitch && e.start < n.end && e.end > n.start);
+            const note = own.notes.find(n => n.start >= 2 && free(n));
+            return async () => {
+                (await import('/repaint.js')).draw();
+                await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+                const r = stage.getBoundingClientRect();
+                return { id: note.id, x: r.left + xOf(note.start) - scroll.scrollLeft + 4,
+                         y: r.top + yOf(note.pitch) - scroll.scrollTop + S.state.rowH / 2 };
+            };
+        }""")
+        where = lambda: page.evaluate("f => f()", point)
+        selected = lambda: page.evaluate("async () => [...(await import('/store.js')).S.selection].map(n => n.id)")
+        # Split: the left view shows its own layer only, so the visible 'own' note isn't there.
+        p = where()
+        page.mouse.click(p['x'], p['y'])
+        self.assertEqual(selected(), [])
+        # One view again: every visible layer is shown, and the note can be picked.
+        page.click('#splitViewToggle')
+        p = where()
+        page.mouse.click(p['x'], p['y'])
+        self.assertEqual(selected(), [p['id']])
+
+    def test_hand_anchor_overrides_a_slide_out_landing(self):
+        self.open_reference_project()
+        hands = self.page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.notes = [
+                {id:'out', start:2, end:3, pitch:68, pos:{string:0,fret:4,scope:'local'},
+                 finger:1, slide:'outUp', slideFrets:5},
+                {id:'after', start:3, end:4, pitch:70, pos:{string:0,fret:6,scope:'local'}},
+                {id:'later', start:4, end:5, pitch:70, pos:{string:0,fret:6,scope:'local'}}];
+            lane.handHolds = [{id:'h0',t:2,fret:4}];
+            lane.handAnchorVersion = 1;
+            S.voicingRevision++;
+            // The same fret as the slide's own anchor: still a change, from the landing.
+            (await import('/edit.js')).setHandAnchor(lane, 3, 4);
+            const spec = await (await import('/tablature.js')).buildSpecForLanesAsync([lane]);
+            return spec.tracks[0].notes.map(n => n.hand);
+        }""")
+        self.assertEqual(hands, [4, 4, 4])
 
     def test_slide_hand_rail_matches_compiled_rocksmith_export(self):
         from rs_studio.rocksmith import chart

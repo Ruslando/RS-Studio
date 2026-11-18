@@ -6,7 +6,7 @@
 // An issue: { id, kind, tone: "error" | "warning" | "note", title, help, time, notes }.
 
 import { chordWarnings, SHAPE_WARNINGS } from "./chord-warnings.js";
-import { chordColumns, outOfFretboardRange, placementFault, placementLimits, shapeGripFault } from "./voicing-core.js";
+import { chordColumns, outOfFretboardRange, placementFault, placementLimits, handAnchorsInForce, shapeGripFault } from "./voicing-core.js";
 import { SHAPE_KINDS, shapeGroups } from "./shapes.js";
 import { bendCurve } from "./bend.js";
 import { handAnchorAt } from "./hand-anchor-state.js";
@@ -175,8 +175,9 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
       out.push({ ...issue("position", "warning", ISSUE_TEXT.position, [n]), help: because(ISSUE_TEXT.position, fault) });
     }
   });
-  if (lane.handHolds?.length) for (const column of columns) {
-    const active = handAnchorAt(lane.handHolds, column.t0);
+  const holds = lane.handHolds?.length ? handAnchorsInForce(columns, lane.handHolds) : [];
+  if (holds.length) for (const column of columns) {
+    const active = handAnchorAt(holds, column.t0);
     if (!active) continue;
     for (const n of column.notes) {
       if (n.pos?.fret > 0 && n.pos.fret - active.fret > 3)

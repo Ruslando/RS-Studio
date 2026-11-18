@@ -1,4 +1,4 @@
-import { chordColumns, voiceNotesFingered } from './voicing-core.js';
+import { chordColumns, slideLanding, voiceNotesFingered } from './voicing-core.js';
 import { slideInOf, edgeSlideSpan, slideEndOf } from './bend.js';
 
 // Auto means the answer without any anchor belonging to this column. Keep the
@@ -33,7 +33,8 @@ export function obeyedHolds(notes, holds) {
   });
 }
 
-// Slide travel is displayed on the anchor rail without becoming a saved change.
+// Slide-in travel is displayed on the anchor rail without becoming a saved change.
+// Landings of other slides are implicit anchors (handAnchorsInForce), not travel.
 export function slideHandChanges(notes, seats, voiced = new Map(), eighthAt = () => .25) {
   const events = [];
   for (const column of chordColumns(notes)) {
@@ -51,6 +52,25 @@ export function slideHandChanges(notes, seats, voiced = new Map(), eighthAt = ()
       fret: seat,
     });
   }
+  return events;
+}
+
+// A slide that leaves its note (slide-out, shift or legato slide) takes the hand
+// from the note's hand at its start to where the slide lands, at the note's end.
+// The landing is marked `ends`: the rail draws it ending there, pointing left, so
+// the next note's own hand can start right after it.
+export function slideOutHandChanges(notes, seats, voiced = new Map()) {
+  const columns = chordColumns(notes), events = [];
+  columns.forEach((column, i) => {
+    if (column.notes.length !== 1) return;
+    const note = column.notes[0], seat = seats.get(note);
+    if (!Number.isFinite(seat)) return;
+    const land = slideLanding(note, columns[i + 1], seat, n => voiced.get(n) || n.pos);
+    if (land == null) return;
+    const id = note.id || note.start;
+    events.push({ id: `slide_${id}_from`, t: note.start, fret: seat },
+      { id: `slide_${id}_to`, t: note.end, fret: land, ends: true });
+  });
   return events;
 }
 

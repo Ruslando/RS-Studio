@@ -31,7 +31,7 @@
 // of a millimetre is a real cross-check and not arithmetic.
 
 import { bendSnapAt } from "./string-techniques.js";
-import { hammerLink } from "./articulations.js";
+import { hammerDirections, hammerLink } from "./articulations.js";
 import { graceBefore } from "./grace.js";
 import { whammyChartNote } from "./whammy.js";
 import { SLIDES_TO_NEXT, SLIDE_IN, SLIDE_OUT, bendCurve, edgeSlideSpan, slideInOf, pitchMoves, pitchOffsetAt, slideAt, trillInterval, trillOffsetAt } from "./bend.js";
@@ -302,6 +302,10 @@ function movingAnchor(from, to, shift, s, fade = 1) {
     x1: a.x1 + (b.x1 - a.x1) * shift, opacity: 1 };
 }
 
+// Where a slide takes the hand: the seat moved by the frets from the note to where its
+// slide ends (0 for a slide-in, which ends on its note). Null when nothing slides.
+const slideDestination = (seat, landing, s) => seat > 0 && landing != null ? anchorAtSeat(Math.max(1, seat + landing), s) : null;
+
 // Whether `column` is reached by a slide from `prev`: a finger that slid there frets it.
 export const slidLanding = (prev, column) => column.fingers.some((f) => f.fret > 0
   && prev.fingers.some((g) => g.string === f.string && g.fret > 0 && SLIDES_TO_NEXT.has(g.note?.slide)));
@@ -345,6 +349,14 @@ export function slideSpan(f, next, eighth, s) {
 // A travelling finger is matched to the next grip by its finger number, so 1
 // slides to 1 and never to 3. Both its fret and its string interpolate, because a
 // finger crossing to another course moves diagonally.
+// Notes that already end a hammer pair: the same relation the H/P tags and playback use,
+// so a toggled note does not also hammer onward into the next one on the neck.
+const pairEnds = new WeakMap();
+function endsPair(columns, note) {
+  if (!pairEnds.has(columns)) pairEnds.set(columns, hammerDirections(columns.flatMap((c) => c.fingers.map((f) => f.note).filter(Boolean))));
+  return pairEnds.get(columns).has(note);
+}
+
 function handPoseAt(columns, t, travel, s = GUITAR) {
   const i = startedBy(columns, t);
   const cur = i >= 0 ? columns[i] : null;
@@ -375,7 +387,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
   }
 
   const hammersOn = cur && next?.fingers.some((f) => cur.fingers.some((g) =>
-    g.string === f.string && hammerLink(g.note, f.note)));
+    g.string === f.string && hammerLink(g.note, f.note, endsPair(columns, g.note))));
   // A slide out of the note plays to its end before the hand leaves for the next one.
   const slidesOut = cur?.fingers.some((f) => f.fret > 0 && SLIDE_OUT.has(f.note?.slide));
   const window = !next ? 0 : slidesOut ? Math.max(0, Math.min(travelWindow(cur, next, travel), next.start - cur.end))
@@ -434,7 +446,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
   }
   if (cur && t <= cur.end) {
     const prev = columns[i - 1];
-    let anchorSlide = 0;
+    let anchorSlide = 0, landing = null;
     const marks = cur.fingers.map((f) => {
       const m = markAt(f, s);
       // Arrived by a legato slide: sounding, but not picked again, so no strike.
@@ -443,14 +455,14 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
       // A slide carries the finger along its string, a fret per semitone. Onto the
       // next note it lands where that grip holds the same string.
       const note = f.note;
-      const source = prev?.fingers.find((g) => g.string === f.string && hammerLink(g.note, note));
+      const source = prev?.fingers.find((g) => g.string === f.string && hammerLink(g.note, note, endsPair(columns, g.note)));
       if (source) {
         m.slurred = true;
         m.hammerMotion = f.fret > source.fret ? "hammer" : "pull";
         if (source.fret < f.fret && source.fret > 0)
           m.hammerSupport = { fret: source.fret, x: fretCentre(source.fret, s), finger: source.finger };
       }
-      const target = next?.fingers.find((g) => g.string === f.string && hammerLink(note, g.note));
+      const target = next?.fingers.find((g) => g.string === f.string && hammerLink(note, g.note, endsPair(columns, note)));
       if (target && target.fret !== f.fret)
         m.hammerTarget = { fret: target.fret, x: fretCentre(target.fret, s), finger: target.finger,
           pressed: target.fret < f.fret, opacity: target.fret < f.fret ? 1 : 0.55 };
@@ -475,6 +487,7 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
           anchorSlide ||= semi;
         }
         m.slideSpan = slideSpan(f, next, cur.eighth, s);
+        if (m.slideSpan) landing ??= m.slideSpan.to.fret - f.fret;
       }
       const interval = trillInterval(note?.trill);
       if (interval && t >= note.start && t < note.end && f.fret + interval <= s.frets) {
@@ -486,7 +499,8 @@ function handPoseAt(columns, t, travel, s = GUITAR) {
       }
       return m;
     });
-    return { pressed: true, marks, anchor: anchorAtSeat(cur.seat > 0 ? Math.max(1, cur.seat + anchorSlide) : null, s) };
+    return { pressed: true, marks, anchor: anchorAtSeat(cur.seat > 0 ? Math.max(1, cur.seat + anchorSlide) : null, s),
+      anchorTo: slideDestination(cur.seat, landing, s) };
   }
   return null;
 }
@@ -502,7 +516,9 @@ export function handAt(columns, t, travel, s = GUITAR, animate = true) {
     const next = columns[startedBy(columns, t) + 1];
     const marks = col?.fingers.filter((f) => t <= (f.note?.end ?? col.end))
       .map((f) => ({ ...markAt(f, s), slideSpan: slideSpan(f, next, col.eighth, s) })) || [];
-    return marks.length ? { pressed: true, marks, anchor: anchorAtSeat(col.seat, s) } : null;
+    const slid = marks.find((m) => m.slideSpan);
+    return marks.length ? { pressed: true, marks, anchor: anchorAtSeat(col.seat, s),
+      anchorTo: slideDestination(col.seat, slid ? slid.slideSpan.to.fret - slid.fret : null, s) } : null;
   }
   const pose = handPoseAt(columns, t, travel, s);
   if (!(travel > 0)) return pose;
@@ -527,7 +543,7 @@ export function handAt(columns, t, travel, s = GUITAR, animate = true) {
       marks.push({ ...last, lift, pressed: true, releasing: true, opacity: 1 - u * u * (3 - 2 * u) });
     }
   }
-  return marks.length ? { pressed: pose?.pressed ?? true, marks, anchor: pose?.anchor ?? null } : null;
+  return marks.length ? { pressed: pose?.pressed ?? true, marks, anchor: pose?.anchor ?? null, anchorTo: pose?.anchorTo ?? null } : null;
 }
 
 // Sustaining strings and released tension outlive the displayed note column.
