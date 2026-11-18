@@ -275,5 +275,39 @@ class CountTests(unittest.TestCase):
         self.assertNotEqual(dd._signature(plain), dd._signature(dict(plain, fx={"vibrato": True})))
 
 
+class StringMaskTests(unittest.TestCase):
+    def test_each_level_marks_its_own_strings(self):
+        """DLC Builder: StringMasks[section][difficulty], then processStringMasks on every level."""
+        song = _compiled().dd_sng
+        sections = song.sections
+        for level in song.levels:
+            d = level.difficulty
+            own = [0] * len(sections)
+            for n in level.notes:
+                k = chart._find_section(sections, n.time)
+                strings = ([n.string] if n.chord_id == -1
+                           else [s for s, f in enumerate(song.chords[n.chord_id].frets) if f >= 0])
+                for s in strings:
+                    own[k] |= 1 << s
+            expected = [own[k] | (own[k + 1] if k + 1 < len(own) else 0) for k in range(len(own))]
+            self.assertEqual([s.string_mask[d] for s in sections], expected, f"level {d}")
+        self.assertTrue(any(s.string_mask[1] for s in sections), "levels above 0 are filled")
+        self.assertTrue(all(s.string_mask[d] == 0 for s in sections for d in range(len(song.levels), 36)))
+
+
+class MillisecondLookupTests(unittest.TestCase):
+    def test_a_note_drifted_just_before_a_phrase_starts_that_phrase(self):
+        """DLC Builder compares in ms: 0.18 ms of float drift does not move a note back a phrase."""
+        pi_times = [0.0, 10.0, 20.0, 30.0]
+        self.assertEqual(chart._find_pi(pi_times, 10.0 - 0.00018, inclusive=True), 1)
+        self.assertEqual(chart._find_pi(pi_times, 10.0 - 0.0006, inclusive=True), 0, "a whole ms before")
+        # Beats on a phrase start belong to the phrase before, drift or not.
+        self.assertEqual(chart._find_pi(pi_times, 10.0 + 0.00018, inclusive=False), 0)
+        self.assertEqual(chart._find_pi(pi_times, 10.002, inclusive=False), 1)
+        sections = [S.Section(name=n, number=1, start_time=t, end_time=0, start_pi=0, end_pi=0,
+                              string_mask=[0] * 36) for n, t in (("a", 0.0), ("b", 10.0))]
+        self.assertEqual(chart._find_section(sections, 10.0 - 0.00018), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

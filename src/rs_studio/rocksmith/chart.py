@@ -698,17 +698,30 @@ class _Notes:
 # Both lookups walk backwards from the end because callers ask in time order and
 # the last match is the answer. They were closures over pi_times/sections while
 # everything lived in one function.
+# They compare whole milliseconds, as DLC Builder does (its XML stores ms): a note
+# a fraction of a millisecond before a phrase start, from float drift, starts
+# that phrase. With a sub-ms tolerance it counted toward the phrase before.
 def _find_pi(pi_times: list, time: float, *, inclusive: bool) -> int:
+    t = dd.ms(time)
     pid = len(pi_times) - 1
-    while pid > 0 and not ((inclusive and abs(pi_times[pid] - time) < 1e-5)
-                           or pi_times[pid] < time - 1e-5):
+    while pid > 0 and not ((inclusive and dd.ms(pi_times[pid]) == t) or dd.ms(pi_times[pid]) < t):
         pid -= 1
     return pid
 
 
+def _carry_string_masks(sections: list, levels: int) -> None:
+    """DLC Builder's processStringMasks: "for whatever reason" each section also
+    carries the strings of the section after it (one step, as it walks forward),
+    on every difficulty level."""
+    for k in range(len(sections) - 1):
+        for d in range(levels):
+            sections[k].string_mask[d] |= sections[k + 1].string_mask[d]
+
+
 def _find_section(sections: list, time: float) -> int:
+    t = dd.ms(time)
     sid = len(sections) - 1
-    while sid > 0 and sections[sid].start_time > time + 1e-5:
+    while sid > 0 and dd.ms(sections[sid].start_time) > t:
         sid -= 1
     return sid
 
@@ -1316,8 +1329,9 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, f
     phrase_times = set(pi_times)
     out: list[tuple[float, int, int]] = []
     for k, (t, fret, _) in enumerate(anchors):
-        end = anchors[k + 1][0] if k + 1 < len(anchors) else math.inf
-        reach = [f for e in entities if t - 1e-6 <= e.time < end - 1e-6
+        end = dd.ms(anchors[k + 1][0]) if k + 1 < len(anchors) else math.inf
+        # In ms, like _find_pi: a note just before a phrase-start anchor is under it.
+        reach = [f for e in entities if dd.ms(t) <= dd.ms(e.time) < end
                  for f in (shape_info[e.shape_id]["frets"] if e.shape_id in shape_info else [f for _, f, _ in e.notes])
                  if f > 0]
         width = max(ANCHOR_WIDTH, max(reach, default=0) - fret + 1)
@@ -1325,7 +1339,7 @@ def _hand_anchors(entities: list, shape_info: dict, capo: int, pi_times: list, f
             continue
         out.append((t, fret, width))
     for e in entities:
-        active = next((a for a in reversed(out) if a[0] <= e.time + 1e-6), out[0] if out else None)
+        active = next((a for a in reversed(out) if dd.ms(a[0]) <= dd.ms(e.time)), out[0] if out else None)
         if active:
             e.anchor_fret, e.anchor_width = active[1], active[2]
     return out
@@ -1582,7 +1596,7 @@ def _is_power_chord(template) -> bool:
 
 
 def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bass: bool = False,
-                keep: set | None = None, chord_notes: tuple | None = None) -> _Notes:
+                keep: set | None = None, chord_notes: tuple | None = None, difficulty: int = 0) -> _Notes:
     """Entities -> SNG notes: masks, techniques, chord notes, arrangement flags.
 
     The longest stage, and the one that reads the most: anchors and fingerprints
@@ -1773,7 +1787,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
                 sustain=sustain, max_bend=max_bend, bend_values=bends,
                 finger_print_id=(e.finger_print, e.arpeggio_print),
             )
-            sec.string_mask[0] |= 1 << string
+            sec.string_mask[difficulty] |= 1 << string
         else:
             # chord: template-level mask + optional per-string chord notes
             sustain = e.sustain
@@ -1858,7 +1872,7 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
                 pick_direction=-1, sustain=sustain,
             )
             for s, fret, _ in e.notes:
-                sec.string_mask[0] |= 1 << s
+                sec.string_mask[difficulty] |= 1 << s
 
         if _ignored(e, note):
             note.mask |= S.IGNORE
@@ -1926,7 +1940,7 @@ def _level(entities: list, shape_info: dict, templates: list, arr: _Arrangement,
                    else _hand_anchors(entities, shape_info, capo, arr.pi_times, fixes))
     if arr.hand_anchors is not None:
         for entity in entities:
-            active = next((a for a in reversed(anchors_raw) if a[0] <= entity.time + 1e-6),
+            active = next((a for a in reversed(anchors_raw) if dd.ms(a[0]) <= dd.ms(entity.time)),
                           anchors_raw[0] if anchors_raw else None)
             if active:
                 entity.anchor_fret, entity.anchor_width = active[1], active[2]
@@ -1937,7 +1951,8 @@ def _level(entities: list, shape_info: dict, templates: list, arr: _Arrangement,
         anchors_raw = [a for a in anchors_raw if in_level(a[0])]
         fingerprints = _kept_prints(fingerprints, entities, "finger_print", in_level)
         arpeggios = _kept_prints(arpeggios, entities, "arpeggio_print", in_level)
-    emitted = _emit_notes(entities, templates, arr, is_bass=is_bass, keep=keep, chord_notes=chord_notes)
+    emitted = _emit_notes(entities, templates, arr, is_bass=is_bass, keep=keep, chord_notes=chord_notes,
+                          difficulty=difficulty)
     notes = emitted.notes
     _print_note_times(fingerprints, notes)
     _print_note_times(arpeggios, notes)
@@ -1945,7 +1960,7 @@ def _level(entities: list, shape_info: dict, templates: list, arr: _Arrangement,
     sng_anchors = []
     for k, (t, fret, width) in enumerate(anchors_raw):
         end = anchors_raw[k + 1][0] if k + 1 < len(anchors_raw) else arr.pi_times[-1]
-        in_range = [i for i, n in enumerate(notes) if t <= n.time < end]
+        in_range = [i for i, n in enumerate(notes) if dd.ms(t) <= dd.ms(n.time) < dd.ms(end)]
         if in_range:
             first_nt = notes[in_range[0]].time
             # DLC Builder's convertAnchor: after a slide that ends by the anchor's start
@@ -2055,10 +2070,7 @@ def compile_track(track: dict, grid: dict, song_length: float,
                             n_str == 4, fixes, chord_notes)
     notes = level.notes
     _phrase_differences(arr, notes, fixes)
-    # DLC Builder's processStringMasks: "for whatever reason" each section also
-    # carries the strings of the section after it (one step, as it walks forward).
-    for k in range(len(arr.sections) - 1):
-        arr.sections[k].string_mask[0] |= arr.sections[k + 1].string_mask[0]
+    _carry_string_masks(arr.sections, 1)
 
     metadata = S.MetaData(
         max_notes_and_chords=float(len(notes)),
@@ -2156,6 +2168,10 @@ def _difficulty_levels(full: S.SNG, voicing: _Voicing, arr: _Arrangement, capo: 
     """
     entities = voicing.entities
     templates = dd.Templates(voicing.chord_templates)
+    # Own sections: each level marks its strings in its own mask slot, and the
+    # full chart already filled slot 0 of the shared ones.
+    arr = dataclasses.replace(arr, sections=[dataclasses.replace(s, string_mask=[0] * 36)
+                                             for s in arr.sections])
     pis = arr.phrase_iterations
     by_pi: list[list] = [[] for _ in pis]
     for e in entities:
@@ -2212,11 +2228,13 @@ def _difficulty_levels(full: S.SNG, voicing: _Voicing, arr: _Arrangement, capo: 
         levels.append(level)
         per_pi.append(emitted.per_pi)
 
+    _carry_string_masks(arr.sections, len(levels))
     heroes = [dd.hero_levels(c - 1) for c in counts]
     phrases = [dataclasses.replace(p, max_difficulty=per_phrase.get(k, 1) - 1) for k, p in enumerate(full.phrases)]
     iterations = [dataclasses.replace(pi, difficulty=heroes[k]) for k, pi in enumerate(pis)]
     note_counts = tuple(sum(per_pi[heroes[k][h]][k] for k in range(len(pis))) for h in range(3))
     shipped = dataclasses.replace(
         full, phrases=phrases, phrase_iterations=iterations, levels=levels, chord_notes=chord_notes[0],
+        sections=arr.sections,
         metadata=dataclasses.replace(full.metadata, max_difficulty=len(levels) - 1))
     return shipped, note_counts
