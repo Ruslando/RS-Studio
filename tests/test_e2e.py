@@ -1185,6 +1185,9 @@ class EndToEndTests(unittest.TestCase):
             (await import('/playback.js')).seekPlayback(1.25);
             setSelection(new Set(lane.notes)); S.undoStack = []; S.redoStack = [];
             scroll.scrollLeft = 300; scroll.scrollTop = 200;
+            // The note gets the position it is played at in the background (keepVoicing):
+            // let that land first, so it is not mistaken for an edit by the drag.
+            await (await import('/lane-fingering.js')).laneFingering(lane);
             (await import('/repaint.js')).drawNow();
             const r = stage.getBoundingClientRect();
             return [r.left + r.width*.65, r.top + r.height*.65];
@@ -4439,17 +4442,7 @@ class EndToEndTests(unittest.TestCase):
         menu.get_by_text('Allow transposition', exact=True).click()
         self.assertTrue(page.evaluate(group)['transposable'])
         # Drop a copy at 0:12, two semitones above the first note.
-        page.evaluate("""async (pitch) => {
-            const { xOf, yOf } = await import('/geometry.js');
-            const { S } = await import('/store.js');
-            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
-            const at = { clientX: r.left + xOf(12) - scroll.scrollLeft + 2,
-                clientY: r.top + yOf(pitch) + S.state.rowH / 2 - scroll.scrollTop };
-            const dataTransfer = new DataTransfer();
-            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
-            const row = document.querySelector('.artifact-row[data-reference="1"]');
-            fire(row, 'dragstart'); fire(scroll, 'dragover', at); fire(scroll, 'drop', at); fire(row, 'dragend');
-        }""", base[0] + 2)
+        self.drag_artifact('.artifact-row[data-reference="1"]', 12, base[0] + 2)
         expect(row.locator('.artifact-preview-title')).to_contain_text('/ 3')
         g = page.evaluate(group)
         self.assertEqual(len(g['anchors']), 3)
@@ -4509,25 +4502,37 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate(shifts)[0], 3)
         expect(page.locator('.artifact-row[data-reference="1"] .artifact-preview-title')).to_contain_text('+3')
 
+    def drag_artifact(self, row, t, pitch=None):
+        """Drag an artifact row onto the stage at song time t (and pitch, else near the
+        top), the way the pane does it: pointer events (artifacts.js). The stage first
+        scrolls t into sight, as a drop lands only on the visible stage. Returns whether
+        the drop preview refused the spot."""
+        return self.page.evaluate("""async ([selector, t, pitch]) => {
+            const { xOf, yOf } = await import('/geometry.js');
+            const { S } = await import('/store.js');
+            const scroll = document.querySelector('#scroll');
+            scroll.scrollLeft = Math.max(0, xOf(t) - scroll.clientWidth / 2);
+            (await import('/repaint.js')).drawNow();
+            const r = scroll.getBoundingClientRect();
+            const at = { clientX: r.left + xOf(t) - scroll.scrollLeft + 2,
+                clientY: pitch == null ? r.top + 100 : r.top + yOf(pitch) + S.state.rowH / 2 - scroll.scrollTop };
+            const fire = (el, type, extra = {}) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, ...extra }));
+            const row = document.querySelector(selector), grip = row.querySelector('.artifact-name') || row;
+            const from = grip.getBoundingClientRect();
+            fire(grip, 'pointerdown', { clientX: from.left + 2, clientY: from.top + 2 });
+            fire(window, 'pointermove', at);
+            const blocked = !!S.dropPreview?.blocked;
+            fire(window, 'pointerup', at);
+            return blocked;
+        }""", [row, t, pitch])
+
     def test_references_never_land_inside_another_reference(self):
         self.open_reference_project()
         page = self.page
         anchors = "async () => (await import('/store.js')).S.state.editLanes[0].refBoxes[1].anchors"
         # Dropping Reference #1 over its own second occurrence (0:16) is refused,
         # and the preview says so while dragging.
-        blocked = page.evaluate("""async () => {
-            const { xOf, yOf } = await import('/geometry.js');
-            const { S } = await import('/store.js');
-            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
-            const at = { clientX: r.left + xOf(17) - scroll.scrollLeft + 2, clientY: r.top + 100 };
-            const fire = (el, type, extra = {}) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, ...extra }));
-            const row = document.querySelector('.artifact-row[data-reference="1"] .artifact-name');
-            const from = row.getBoundingClientRect();
-            fire(row, 'pointerdown', { clientX: from.left + 2, clientY: from.top + 2 }); fire(window, 'pointermove', at);
-            const blocked = S.dropPreview.blocked;
-            fire(window, 'pointerup', at);
-            return blocked;
-        }""")
+        blocked = self.drag_artifact('.artifact-row[data-reference="1"] .artifact-name', 17)
         self.assertTrue(blocked)
         self.assertEqual(page.evaluate(anchors), [2, 16])
         expect(page.locator('.toast').filter(has_text='inside another reference')).to_be_visible()
@@ -4569,7 +4574,9 @@ class EndToEndTests(unittest.TestCase):
         lock.click()
         expect(lock).to_have_attribute('aria-pressed', 'true')
         expect(transpose).to_be_disabled()
-        expect(row).to_have_attribute('draggable', 'false')
+        # Dragging is by pointer events now; test_locked_reference_cannot_start_native_drag
+        # proves a locked row cannot be dropped. The row is marked locked.
+        expect(row).to_have_attribute('data-locked', '')
         page.evaluate('document.activeElement.blur()')
         page.keyboard.press('Control+z')
         expect(lock).to_have_attribute('aria-pressed', 'false')
@@ -4629,6 +4636,8 @@ class EndToEndTests(unittest.TestCase):
             const { xOf, yOf } = await import('/geometry.js');
             const n = S.state.editLanes[0].notes.find(n => n.start >= 2 && n.start < 3);
             const rect = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            // The edit above revoices the lane in the background (keepVoicing): let it land.
+            await (await import('/lane-fingering.js')).laneFingering(S.state.editLanes[0]);
             window.lockedNoteSignature = JSON.stringify(S.state.editLanes[0].notes);
             return [rect.left + xOf((n.start + n.end) / 2) - sc.scrollLeft,
                 rect.top + yOf(n.pitch) + S.state.rowH / 2 - sc.scrollTop];
@@ -4723,15 +4732,7 @@ class EndToEndTests(unittest.TestCase):
             .filter(n => n.start >= t0 - 0.01 && n.start < t0 + 3).sort((a, b) => a.start - b.start).map(n => [n.start, n.end])"""
         source = page.evaluate(starts, 2)
         # Drop Reference #1 at 0:20.5, under the faster tempo.
-        page.evaluate("""async () => {
-            const { xOf } = await import('/geometry.js');
-            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
-            const at = { clientX: r.left + xOf(20.5) - scroll.scrollLeft + 2, clientY: r.top + 100 };
-            const dataTransfer = new DataTransfer();
-            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
-            const row = document.querySelector('.artifact-row[data-reference="1"]');
-            fire(row, 'dragstart'); fire(scroll, 'dragover', at); fire(scroll, 'drop', at); fire(row, 'dragend');
-        }""")
+        self.drag_artifact('.artifact-row[data-reference="1"]', 20.5)
         expect(page.locator('.artifact-row[data-reference="1"] .artifact-preview-title')).to_contain_text('/ 3')
         copy = page.evaluate(starts, 20.5)
         self.assertEqual(len(copy), len(source))
@@ -4769,15 +4770,7 @@ class EndToEndTests(unittest.TestCase):
         }""")
         expect(page.locator('#motifList .artifact-row')).to_have_count(1)
         motif = [n for n in page.evaluate(starts, 8) if n[0] < 9.9]   # the marked notes
-        page.evaluate("""async () => {
-            const { xOf } = await import('/geometry.js');
-            const scroll = document.querySelector('#scroll'), r = scroll.getBoundingClientRect();
-            const at = { clientX: r.left + xOf(22.5) - scroll.scrollLeft + 2, clientY: r.top + 100 };
-            const dataTransfer = new DataTransfer();
-            const fire = (el, type, extra = {}) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...extra }));
-            const row = document.querySelector('#motifList .artifact-row');
-            fire(row, 'dragstart'); fire(scroll, 'dragover', at); fire(scroll, 'drop', at); fire(row, 'dragend');
-        }""")
+        self.drag_artifact('#motifList .artifact-row', 22.5)
         expect(page.locator('#motifList .artifact-row')).to_have_count(2)
         dropped = sorted(page.evaluate("""async () => [...(await import('/store.js')).S.selection].map(n => n.start)"""))
         self.assertAlmostEqual(dropped[-1] - dropped[0], (motif[-1][0] - motif[0][0]) / 2, places=6)
@@ -5592,10 +5585,13 @@ class EndToEndTests(unittest.TestCase):
     def new_audio_project(self):
         page = self.page
         page.click("#welcomeNew")
-        page.fill("#npSongTitle", "E2E Audio")
-        page.fill("#npArtist", "E2E Artist")
         page.set_input_files("#file", self.audio)
         expect(page.locator("#go")).to_be_disabled()     # not while the song is still uploading
+        # The song's title and artist appear once its audio is in (new-project.js),
+        # which takes as long as the upload: as long as Create may take below.
+        expect(page.locator("#npSongTitle")).to_be_visible(timeout=60000)
+        page.fill("#npSongTitle", "E2E Audio")
+        page.fill("#npArtist", "E2E Artist")
         page.click("#go", timeout=60000)
         expect(page.locator("#appshell")).to_be_visible()
         expect(page.locator("#lanes")).to_contain_text("0 notes")
