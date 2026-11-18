@@ -550,7 +550,7 @@ def _plan_measures(segs: list[dict], resolution: int) -> tuple[list[dict], "call
         seg = segs[k]
         seg["slot_start"] = slot
         beats = max(1, int(round((segs[k + 1]["t"] - seg["t"]) / seg["beat_sec"]))) if seg["beat_sec"] else seg["ts_num"]
-        tempo = None if k == 0 else int(round(seg["bpm"]))
+        tempo = None if k == 0 or segs[k - 1].get("pickup") else int(round(seg["bpm"]))   # a pickup's tempo goes on
         full, rem = divmod(beats, seg["ts_num"])
         first = True
         for _ in range(full):
@@ -594,6 +594,13 @@ def build_gp5(spec: dict) -> tuple[bytes, list[str]]:
     figs = _figure_table(resolution)
 
     segs = _segments(grid, resolution)
+    # Notes before the grid start are a pickup: whole beats of the first tempo in
+    # front of bar 1, as a short bar of their own, instead of piling onto its first beat.
+    earliest = min((float(n["start"]) for t in tracks_spec for n in t["notes"] if not n.get("gripOnly")), default=None)
+    first = segs[0]
+    if earliest is not None and first["beat_sec"] and earliest < first["t"] - 1e-6:
+        beats = math.ceil((first["t"] - earliest) / first["beat_sec"] - 1e-6)
+        segs.insert(0, {**first, "t": first["t"] - beats * first["beat_sec"], "pickup": True})
     measures, to_slot = _plan_measures(segs, resolution)
     odd = sorted({s["bpm"] for s in segs if abs(s["bpm"] - round(s["bpm"])) > 1e-6})
     if odd:
