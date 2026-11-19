@@ -40,7 +40,7 @@ class ProjectKeyTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
         self.built = []
 
-        def build(spec, audio, cover_art_path=None, phrase_levels=None):
+        def build(spec, audio, cover_art_path=None, phrase_levels=None, project_files=None):
             self.built.append(spec["rocksmith"]["dlcKey"])
             return b"psarc", [], "song_p.psarc"
         patcher = patch.object(builder, "build_cdlc", build)
