@@ -75,7 +75,7 @@ their own licenses:
   Johannes Kepler University, Linz, Austria and Austrian Research Institute for
   Artificial Intelligence (OFAI), Vienna, Austria.
   The tempo-map detector uses madmom's DBN postprocessor. The upstream source
-  dependency includes no model/data files. See licenses/madmom-LICENSE.txt.
+  dependency includes no model/data files. See licenses/madmom-BSD-and-CC-BY-NC-SA.txt.
   https://github.com/CPJKU/madmom
 
   FFmpeg (LGPL-3.0)
