@@ -1,15 +1,15 @@
 import { LS_LEAD_IN, leadIn } from "./rocksmith-preferences.js";
 import { renderCoverPreview } from "./cover-preview.js";
 import { rowsFor } from './rocksmith-check.js';
-import { ignoredCategories, setIssueIgnored, setCategoriesIgnored, exportIssueIgnores } from './issue-state.js';
+import { exportIssueIgnores, ignoredCategories, setLaneKindsIgnored } from './issue-state.js';
 import { issueTone } from "./issue-tone.js";
 // Rocksmith CDLC export UI: the arrangement picker, the metadata form and the
 // POST that builds the .psarc. The File-menu entry is wired in ui.js with the
 // other exports.
 
 import { $ } from "./dom.js";
-import { MAX_CAPO, editLanes } from "./lanes.js";
-import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane, laneScrollSpeed } from "./layer-role.js";
+import { editLanes, tuningLabel } from "./lanes.js";
+import { RS_KIND_OPTIONS, defaultRsKind, isTablatureLane, laneScrollSpeed, rsKindFits } from "./layer-role.js";
 import { nameExportChords } from "./chord-names.js";
 import { applyCoverChange, clearProjectCover, coverStatus, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { formatTenths, parseTenths } from "./timeline-time.js";
@@ -24,72 +24,8 @@ import { matchKey } from "./keymap.js";
 import { togglePlay, transportPlaying } from "./playback.js";
 import { rememberPref } from "./util.js";
 import { rocksmithIssueKinds } from "./rocksmith-check.js";
-import { initCollapsibleSections } from "./collapsible-sections.js";
-import { TUNINGS, customTunings, laneTuning } from "./lane-tuning.js";
+import { laneTuning } from "./lane-tuning.js";
 import { buildSpecForLanesAsync } from "./tablature.js";
-import { parseTuning, tuningToNames } from "./util.js";
-
-function rsStringCountForKind(kind) {
-  return kind.includes("bass") ? 4 : 6;
-}
-
-function sameTuning(a, b) {
-  return a.length === b.length && a.every((v, i) => v === b[i]);
-}
-
-function rsTuningValue(tuning) {
-  return tuning.map((v) => String(v)).join(",");
-}
-
-function rsTuningFromSelect(select) {
-  return (select.value || "").split(",").map((v) => parseInt(v, 10)).filter((v) => Number.isFinite(v));
-}
-
-function rsDefaultTuning(count, preferred) {
-  if (preferred && preferred.length === count) return preferred;
-  return (count === 4 ? TUNINGS.bass4 : TUNINGS.guitar6).tuning;
-}
-
-function appendRsTuningGroup(select, label, tunings) {
-  if (!tunings.length) return;
-  const group = document.createElement("optgroup");
-  group.label = label;
-  for (const item of tunings) group.append(new Option(item.label, rsTuningValue(item.tuning)));
-  select.append(group);
-}
-
-function createRsTuningSelect(count, selected) {
-  const select = document.createElement("select");
-  select.className = "rs-arr-tuning";
-  select.title = "Open-string tuning, highest first";
-  select.setAttribute("aria-label", "Tuning");
-
-  const builtIns = Object.entries(TUNINGS)
-    .filter(([, def]) => def.tuning.length === count)
-    .map(([, def]) => ({ label: def.label, tuning: def.tuning }));
-  const customs = customTunings
-    .map((t) => ({ label: `${t.name} (${t.notes})`, tuning: parseTuning(t.notes) || [] }))
-    .filter((t) => t.tuning.length === count);
-  const allKnown = [...builtIns, ...customs];
-  const current = selected && selected.length === count && !allKnown.some((t) => sameTuning(t.tuning, selected))
-    ? [{ label: `Current layer (${tuningToNames(selected)})`, tuning: selected }]
-    : [];
-
-  appendRsTuningGroup(select, "Built-in", builtIns);
-  appendRsTuningGroup(select, "Custom", customs);
-  appendRsTuningGroup(select, "Current note layer", current);
-  select.value = rsTuningValue(selected);
-  return select;
-}
-
-function updateRsTuningSelect(row, preferred) {
-  const count = rsStringCountForKind(row.querySelector(".rs-arr-kind").value);
-  const selected = rsDefaultTuning(count, preferred && preferred.length === count ? preferred : row._trackTuning);
-  const next = createRsTuningSelect(count, selected);
-  const current = row.querySelector(".rs-arr-tuning");
-  if (current) current.replaceWith(next);
-  else row.append(next);
-}
 
 const rsLatin = latinFields({ title: "rsTitle", artist: "rsArtist", album: "rsAlbum" });
 
@@ -140,6 +76,9 @@ const WARN_ICON = icon("warning", 14);
 // silently disappearing from the picker.
 let rsModalLanes = [];
 
+// A card per layer (design.md 4.13): the head says what goes out (name, notes,
+// tuning, capo) and takes the one choice made here, the arrangement; the body
+// lists that layer's issues once it is ticked (renderRsIssues).
 function renderRsArrangements(lanes) {
   const wrap = $("rsArrangements");
   // Every layer's own arrangement is spoken for before a layer without one is given a free one.
@@ -150,42 +89,41 @@ function renderRsArrangements(lanes) {
     const track = { name: lane.name, notes, tuning: laneTuning(lane), arrangement: lane.rocksmithArrangement };
     const enabled = isTablatureLane(lane);
     const row = document.createElement("div");
-    // Rule 21's form sub-list: the row carries fields and the "Arrangements"
-    // label still governs it, so it stays in the normal body inside that group,
-    // is 44 tall on one line, and its controls drop to 24/r4. It used to be a
-    // three-line card whose reason text wrapped, which is what rule 24 means by
-    // a wrapping warning breaking every row beside it.
-    row.className = "rs-arr-row list-row list-row--fields";
+    row.className = "rs-arr-row";
     row.dataset.track = String(i);
-    row._trackTuning = track.tuning || [];
     const kind = defaultRsKind(track, used);
+    // Only arrangements the layer's neck can play. Its tuning and capo are the
+    // layer's own; changing them here could move notes, so this only names them.
+    const fits = RS_KIND_OPTIONS.filter(([value]) => rsKindFits(value, track.tuning));
     row.innerHTML = `
-      <input type="checkbox" class="rs-arr-on" ${enabled && notes.length ? "checked" : ""}>
-      <span class="rs-arr-name"></span>
-      ${enabled ? "" : `<span class="rs-arr-warn" role="img" title="${OFF_REASON}" aria-label="${OFF_REASON}">${WARN_ICON}</span>`}
-      <span class="count"></span>
-      <select class="rs-arr-kind">
-        ${RS_KIND_OPTIONS.map(([value, label]) => `<option value="${value}" ${value === kind ? "selected" : ""}>${label}</option>`).join("")}
-      </select>
+      <div class="rs-arr-head">
+        <input type="checkbox" class="rs-arr-on" ${enabled && notes.length ? "checked" : ""}>
+        <span class="lane-dot" aria-hidden="true"></span>
+        <div class="rs-arr-text">
+          <span class="rs-arr-name"></span>
+          <span class="rs-arr-meta"><span class="rs-arr-notes"></span> · <span class="rs-arr-setup"></span></span>
+        </div>
+        ${enabled ? "" : `<span class="rs-arr-warn" role="img" title="${OFF_REASON}" aria-label="${OFF_REASON}">${WARN_ICON}</span>`}
+        <div class="rs-arr-status">
+          <span class="rs-arr-tally"></span>
+          <label class="chk" title="Ignores each kind of error and warning listed here, in this layer" hidden><input type="checkbox" class="rs-issue-all"> Ignore all</label>
+        </div>
+        <select class="rs-arr-kind">
+          ${(fits.length ? fits : RS_KIND_OPTIONS).map(([value, label]) => `<option value="${value}" ${value === kind ? "selected" : ""}>${label}</option>`).join("")}
+        </select>
+      </div>
+      <div class="rs-arr-issues rs-issue-grid" hidden></div>
     `;
     const trackName = track.name || `Layer ${i + 1}`;
+    row.querySelector(".lane-dot").style.background = lane.color || "";
     row.querySelector(".rs-arr-on").setAttribute("aria-label", `Export ${trackName}`);
+    row.querySelector(".rs-arr-kind").setAttribute("aria-label", `Arrangement for ${trackName}`);
     row.querySelector(".rs-arr-name").textContent = trackName;
-    // Written the way the layer list writes it ("12 notes").
-    row.querySelector(".count").textContent = `${notes.length.toLocaleString()} note${notes.length === 1 ? "" : "s"}`;
-    row.querySelector(".rs-arr-kind").addEventListener("change", () =>
-      updateRsTuningSelect(row, rsTuningFromSelect(row.querySelector(".rs-arr-tuning"))));
-    updateRsTuningSelect(row, row._trackTuning);
-    // The layer's capo, overridable here like the tuning. Frets count from it, so a
-    // different capo keeps the shapes and moves where they sit on the neck.
-    const capo = document.createElement("select");
-    capo.className = "rs-arr-capo";
-    capo.title = "Capo fret in Rocksmith";
-    capo.setAttribute("aria-label", `Capo for ${trackName}`);
-    const own = Number(lane.capo) || 0;
-    for (let fret = 0; fret <= Math.max(MAX_CAPO, own); fret++) capo.append(new Option(fret ? `Capo ${fret}` : "No capo", String(fret)));
-    capo.value = String(own);
-    row.append(capo);
+    // Written the way the layer list writes it ("12 notes", "Eb Standard · Capo 2").
+    row.querySelector(".rs-arr-notes").textContent = `${notes.length.toLocaleString()} note${notes.length === 1 ? "" : "s"}`;
+    const setup = row.querySelector(".rs-arr-setup");
+    setup.textContent = [tuningLabel(lane), Number(lane.capo) > 0 ? `Capo ${lane.capo}` : "No capo"].join(" · ");
+    setup.title = "The layer's tuning and capo. Change them in the layer's settings.";
     wrap.append(row);
   });
 }
@@ -502,62 +440,88 @@ const rsPickedLanes = () => [...$("rsArrangements").querySelectorAll(".rs-arr-ro
   .filter((row) => row.querySelector(".rs-arr-on").checked)
   .map((row) => rsModalLanes[parseInt(row.dataset.track, 10)]).filter(Boolean);
 
-// The ticked layers' issues, as the Errors and Warnings pane lists them: a
-// disclosure each (the settings' one), a field row per kind with its Ignore box
-// (4.13), and Ignore all beside the disclosure's title.
+// Each ticked layer's issues in its own card: errors, then warnings, then notes,
+// as a wrapping grid of compact rows. Ignoring here is per kind and per layer:
+// the same kind in another layer stays as it is.
+const TONE_ORDER = { error: 0, warning: 1, note: 2 };
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function rsIssueRow(lane, key, { title, help, count, tone }, ignored) {
+  const row = document.createElement("div");
+  row.className = "rs-issue-row";
+  row.dataset.tone = tone;
+  row.dataset.issueId = key;
+  row.toggleAttribute("data-ignored", ignored);
+  // design.md 3, rule 19: the sentence is the row's tooltip; DLC Builder's codes stay internal.
+  row.dataset.tip = help ? `${title}\n${help}` : title;
+  row.dataset.tipTone = tone;
+  const mark = document.createElement("span");
+  mark.className = "rs-issue-mark";
+  mark.innerHTML = tone === "note" ? icon("info", 14) : WARN_ICON;
+  const name = document.createElement("span");
+  name.className = "rs-issue-name";
+  name.textContent = title;
+  const times = document.createElement("span");
+  times.className = "count";
+  times.textContent = count > 1 ? `${count}×` : "";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.className = "rs-issue-ignore";
+  input.checked = ignored;
+  input.setAttribute("aria-label", `Ignore ${title} in ${lane.name || "this layer"}`);
+  input.addEventListener("change", () => {
+    setLaneKindsIgnored(lane, [key], input.checked, editLanes());
+    renderRsIssues();
+  });
+  const ignore = document.createElement("label");
+  ignore.className = "chk rs-issue-ignore-label";
+  ignore.title = "Ignores this kind of issue in this layer";
+  ignore.append(input, "Ignore");
+  row.append(mark, name, times, ignore);
+  return row;
+}
+
 function renderRsIssues() {
-  const kinds = [...rocksmithIssueKinds(rsPickedLanes(), true)].sort(([, a], [, b]) => a.title.localeCompare(b.title));
-  for (const group of $("rsIssues").querySelectorAll(".sound-section")) {
-    const mine = kinds.filter(([, kind]) => issueTone(kind) === group.dataset.tone);
-    group.hidden = !mine.length;
-    group.querySelector(".rs-issue-count").textContent = String(mine.length);
-    group.querySelector(".sub-list").replaceChildren(...mine.map(([key, { title, help, count, tone }]) => {
-      const row = document.createElement("div");
-      row.className = "list-row list-row--fields artifact-issue-row rs-issue-row";
-      row.toggleAttribute("data-important", tone === "error");
-      row.dataset.tone = tone;
-      row.dataset.issueId = key;
-      // Rule 19: the sentence is the row's tooltip; DLC Builder's codes stay internal (10).
-      row.dataset.tip = help ? `${title}\n${help}` : title;
-      row.dataset.tipTone = tone;
-      const mark = document.createElement("span");
-      mark.className = "artifact-issue-mark";
-      mark.innerHTML = tone === "note" ? icon("info", 14) : WARN_ICON;
-      const name = document.createElement("span");
-      name.className = "rs-arr-name rs-issue-name";
-      name.textContent = title;
-      const times = document.createElement("span");
-      times.className = "count";
-      times.textContent = count > 1 ? `${count}×` : "";
-      const label = document.createElement("label");
-      label.className = "chk";
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = ignoredCategories().has(key);
-      input.addEventListener("change", () => {
-        setIssueIgnored(null, {id: key}, true, input.checked);
-        renderRsIssues();
-      });
-      label.append(input, " Ignore category");
-      label.hidden = false;
-      row.append(mark, name, times, label);
-      return row;
-    }));
-    const all = group.querySelector(".rs-issue-all"), ignored = mine.filter(([key]) => ignoredCategories().has(key)).length;
-    all.closest("label").hidden = group.dataset.tone === "note";
-    all.checked = !!mine.length && ignored === mine.length;
-    all.indeterminate = ignored > 0 && ignored < mine.length;
+  for (const card of $("rsArrangements").querySelectorAll(".rs-arr-row")) {
+    const lane = rsModalLanes[parseInt(card.dataset.track, 10)];
+    const on = card.querySelector(".rs-arr-on").checked;
+    const kinds = on && lane ? [...rocksmithIssueKinds([lane], true)]
+      .sort(([, a], [, b]) => TONE_ORDER[issueTone(a)] - TONE_ORDER[issueTone(b)] || a.title.localeCompare(b.title)) : [];
+    card.toggleAttribute("data-off", !on);
+    const body = card.querySelector(".rs-arr-issues"), tallyEl = card.querySelector(".rs-arr-tally");
+    body.hidden = !kinds.length;
+    tallyEl.hidden = !on;
+    // Kinds with an occurrence still open; the mark takes the worst of them.
+    const openKinds = on && lane ? rocksmithIssueKinds([lane]) : new Map();
+    const open = kinds.filter(([key]) => openKinds.has(key));
+    const tally = { error: 0, warning: 0, note: 0 };
+    for (const [, kind] of kinds) tally[issueTone(kind)]++;
+    // A triangle (or info mark) in the worst open tone, like the rows; a dot when all is clear.
+    const tone = open.length ? issueTone(open[0][1]) : "ok";
+    tallyEl.dataset.tone = tone;
+    tallyEl.innerHTML = tone === "ok" ? "" : tone === "note" ? icon("info", 14) : WARN_ICON;
+    tallyEl.append(kinds.length ? ["error", "warning", "note"].filter((t) => tally[t])
+      .map((t) => plural(tally[t], t)).join(" · ") : "No issues");
+    card.querySelector(".rs-issue-all").closest("label").hidden = true;
+    if (!kinds.length) continue;
+    body.replaceChildren(...kinds.map(([key, kind]) => rsIssueRow(lane, key, { ...kind, tone: issueTone(kind) }, !openKinds.has(key))));
+    // Notes never block the export, so Ignore all covers errors and warnings.
+    const blocking = kinds.filter(([, kind]) => issueTone(kind) !== "note").map(([key]) => key);
+    const all = card.querySelector(".rs-issue-all"), ignored = blocking.filter((key) => !openKinds.has(key)).length;
+    all.closest("label").hidden = blocking.length < 2;   // one kind has its own Ignore
+    all.checked = !!blocking.length && ignored === blocking.length;
+    all.indeterminate = ignored > 0 && ignored < blocking.length;
     all.onchange = () => {
-      setCategoriesIgnored(mine.map(([key]) => key), all.checked);
+      setLaneKindsIgnored(lane, blocking, all.checked, editLanes());
       renderRsIssues();
     };
   }
-  $("rsIssues").querySelector(".rs-issue-none").hidden = kinds.length > 0;
   syncRsExportGo();
 }
 
-// The issue kinds neither fixed nor ignored.
-const rsOpenIssues = () => [...rocksmithIssueKinds(rsPickedLanes())].filter(([key, issue]) => issueTone(issue) !== "note" && !ignoredCategories().has(key)).map(([key]) => key);
+// The ticked layers' errors and warnings with an occurrence neither fixed nor ignored.
+const rsOpenIssues = () => rsPickedLanes().flatMap((lane) => [...rocksmithIssueKinds([lane])]
+  .filter(([, issue]) => issueTone(issue) !== "note").map(([key]) => key));
 // The Export page in Settings edits the same stored values the window starts
 // from, live like the other pages (Cancel re-fires the inputs to undo).
 const RS_SETTINGS = [["setRsAuthor", LS_AUTHOR], ["setRsLeadIn", LS_LEAD_IN], ["setRsDynamicDifficulty", LS_DD], ["setRsMac", LS_MAC]];
@@ -608,8 +572,8 @@ async function submitRocksmithExport() {
       return;
     }
     seenKinds.add(kind);
-    const tuning = rsTuningFromSelect(row.querySelector(".rs-arr-tuning"));
-    if (!tuning || ![4, 6].includes(tuning.length)) {
+    const tuning = laneTuning(lane);
+    if (![4, 6].includes(tuning.length)) {
       setRsStatus("Rocksmith export needs 4-string bass or 6-string guitar tunings.", true);
       return;
     }
@@ -617,7 +581,7 @@ async function submitRocksmithExport() {
       setRsStatus("Bass arrangements need 4 strings; guitar arrangements need 6.", true);
       return;
     }
-    picks.push({ lane, kind, tuning, capo: Number(row.querySelector(".rs-arr-capo").value) || 0 });
+    picks.push({ lane, kind, tuning, capo: Number(lane.capo) || 0 });
   }
   if (!picks.length) { setRsStatus("Select at least one arrangement.", true); return; }
   const open = rsOpenIssues();
@@ -694,7 +658,6 @@ async function submitRocksmithExport() {
 export function init_rocksmith_export() {
   initPreviewClip();
   initRocksmithSettings();
-  initCollapsibleSections($("rsIssues"), "cw.rsIssueSections");
   $("rocksmithExportForm").addEventListener("submit", (e) => { e.preventDefault(); submitRocksmithExport(); });
   $("rsExportClose").addEventListener("click", closeRocksmithExportModal);
   $("rsArrangements").addEventListener("change", renderRsIssues);

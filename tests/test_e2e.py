@@ -5723,13 +5723,81 @@ class EndToEndTests(unittest.TestCase):
         row = page.locator(".rs-arr-row")
         expect(row).to_have_count(1)
         expect(row.locator(".rs-arr-on")).to_be_checked()
-        expect(row.locator(".count")).to_have_text("8 notes")
+        expect(row.locator(".rs-arr-notes")).to_have_text("8 notes")
         expect(row.locator(".rs-arr-kind")).to_have_value("lead")
-        # Bass needs four strings: the tuning list follows the arrangement type.
-        row.locator(".rs-arr-kind").select_option("bass")
-        self.assertEqual(row.locator(".rs-arr-tuning").input_value().count(","), 3)
+        # Only the arrangement is chosen here: a guitar layer offers no bass, and
+        # its tuning and capo are named, not changed.
+        expect(row.locator(".rs-arr-kind option[value=bass]")).to_have_count(0)
+        expect(row.locator("select")).to_have_count(1)
+        expect(row.locator(".rs-arr-setup")).to_have_text("E Standard · No capo")
+        # Project details' Pitch section is here while the window is open, and back after.
+        expect(page.locator("#rsPitchHost #projPitchTarget")).to_be_visible()
+        expect(page.locator("#rsPitchHost #projPitchHeading")).to_be_hidden()
         page.click("#rsExportClose")
         expect(page.locator("#rocksmithExportModal")).to_be_hidden()
+        page.evaluate("async () => (await import('/ui.js')).openSettingsModal('project')")
+        expect(page.locator("#spProject #projPitchTarget")).to_be_visible()
+        page.keyboard.press("Escape")
+
+    def test_rocksmith_export_lists_issues_per_layer(self):
+        page = self.page
+        issue = lambda id, title, n: [{"id": id, "code": id, "title": title, "help": "Why", "time": 1 + i} for i in range(n)]
+        # The check's answer per exported track: the guitar layer has two kinds, the bass one.
+        page.route("**/api/rocksmith/check", lambda route: route.fulfill(json=[
+            {"track": 0, "events": [], "issues": issue("I90", "Ghost note not supported", 3) + issue("I91", "Staccato not supported", 1)},
+            {"track": 1, "events": [], "issues": issue("I90", "Ghost note not supported", 2)}]))
+        self.open_reference_project()
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js'), lane = S.state.editLanes[0];
+            S.state.editLanes.push({...lane, id: 'e2e_bass', name: 'Bass', instrument: 'bass', tuning: 'bass4',
+                rocksmithArrangement: 'bass', capo: 0, refBoxes: {}, handHolds: [], tablatureEnabled: true,
+                notes: lane.notes.map(n => ({...n, id: n.id + 'b', pitch: n.pitch - 24, pos: null}))});
+            const {rebuildLanes, renderLanes} = await import('/lanes.js'); rebuildLanes(); renderLanes();
+            S.voicingRevision++;
+            const start = performance.now();
+            (await import('/repaint.js')).drawNow();
+            while (performance.now() - start < 15000) {
+                const checked = await new Promise(done => {
+                    window.addEventListener('cw-rocksmith-checked', () => done(true), {once: true});
+                    setTimeout(() => done(false), 1000);
+                });
+                if (checked && performance.now() - start >= 700) break;
+            }
+        }""")
+        self.file_menu("#menuExportRocksmith")
+        cards = page.locator(".rs-arr-row")
+        guitar, bass = cards.nth(0), cards.nth(1)
+        expect(bass.locator(".rs-arr-name")).to_have_text("Bass")
+        # Each layer lists its own issues; the editor's own checks add theirs, so compare by id.
+        expect(guitar.locator(".rs-issue-row[data-issue-id=I90] .count")).to_have_text("3×")
+        expect(guitar.locator(".rs-issue-row[data-issue-id=I91]")).to_have_count(1)
+        expect(bass.locator(".rs-issue-row[data-issue-id=I90] .count")).to_have_text("2×")
+        expect(bass.locator(".rs-issue-row[data-issue-id=I91]")).to_have_count(0)
+        expect(page.locator("#rsExportGo")).to_be_disabled()
+        # Ignoring is per kind and per layer: ignored in the bass card, it stays open in the guitar card.
+        bass.locator(".rs-issue-row[data-issue-id=I90] .rs-issue-ignore").check()
+        expect(bass.locator(".rs-issue-row[data-issue-id=I90]")).to_have_attribute("data-ignored", "")
+        expect(guitar.locator(".rs-issue-row[data-issue-id=I90]")).not_to_have_attribute("data-ignored", "")
+        expect(guitar.locator(".rs-issue-row[data-issue-id=I90] .rs-issue-ignore")).not_to_be_checked()
+        ignores = page.evaluate("""async () => {
+            const {S} = await import('/store.js'), rs = S.state.metadata.rocksmith;
+            return {song: rs.ignoredIssues || [], lanes: rs.ignoredLaneIssues || []};
+        }""")
+        self.assertNotIn("I90", ignores["song"])
+        self.assertIn('["e2e_bass","I90"]', ignores["lanes"])
+        # Export stays off while the guitar layer's issues are open, and opens once they are ignored.
+        expect(page.locator("#rsExportGo")).to_be_disabled()
+        guitar.locator(".rs-issue-all").check()
+        expect(guitar.locator(".rs-issue-row[data-issue-id=I91]")).to_have_attribute("data-ignored", "")
+        for card in (guitar, bass):   # the editor's own checks may add kinds of their own
+            for box in card.locator(".rs-issue-row:not([data-tone=note]) .rs-issue-ignore").all():
+                box.check()
+        expect(page.locator("#rsExportGo")).to_have_attribute("title", re.compile(r"^(?!Fix or ignore)"))
+        # A layer that is not exported shows no issues.
+        guitar.locator(".rs-arr-on").uncheck()
+        expect(guitar.locator(".rs-arr-issues")).to_be_hidden()
+        expect(guitar.locator(".rs-arr-tally")).to_be_hidden()
+        page.click("#rsExportClose")
 
     def test_rocksmith_preview_clip_is_chosen_on_the_song(self):
         page = self.page
@@ -5838,7 +5906,7 @@ class EndToEndTests(unittest.TestCase):
             if not json.load(response)["found"]:
                 self.skipTest("no audio converter (Wwise) on this machine: the Rocksmith package was not built")
         self.file_menu("#menuExportRocksmith")
-        expect(page.locator(".rs-arr-row .count")).to_have_text(f"{len(expected)} notes")
+        expect(page.locator(".rs-arr-row .rs-arr-notes")).to_have_text(f"{len(expected)} notes")
         with page.expect_download(timeout=300000) as download:
             page.click("#rsExportGo")
         self.assertEqual(download.value.suggested_filename, "E2E-Artist_E2E-Audio_v1_p.psarc")
@@ -6374,7 +6442,7 @@ class EndToEndTests(unittest.TestCase):
         self.file_menu("#menuExportRocksmith")
         row = page.locator(".rs-arr-row")
         expect(row.locator(".rs-arr-kind")).to_have_value("rhythm")
-        expect(row.locator(".rs-arr-capo")).to_have_value("2")
+        expect(row.locator(".rs-arr-setup")).to_contain_text("Capo 2")
         page.click("#rsExportClose")
 
         # A second layer takes the next free arrangement, and cannot take the first one's.
@@ -6599,7 +6667,7 @@ class EndToEndTests(unittest.TestCase):
         sent = request.value.post_data_json
         self.assertAlmostEqual(sent['reference'], reference, places=6)
         self.assertAlmostEqual(sent['shift'], -reference, places=6)   # 441 Hz down to 440
-        expect(page.locator('#projMetaStatus')).to_have_text('Pitch shift applied', timeout=60000)
+        expect(page.locator('#projPitchStatus')).to_have_text('Pitch shift applied', timeout=60000)
         expect(page.locator('#projPitchTarget')).to_have_value('440')
         expect(page.locator('#projPitchShiftAudio')).to_be_checked()
         expect(page.locator('#projPitchApply')).to_be_hidden()
@@ -6608,7 +6676,7 @@ class EndToEndTests(unittest.TestCase):
         with page.expect_request(re.compile(r'/tuning$')) as request:
             page.click('#projPitchApply')
         self.assertEqual(request.value.post_data_json['shift'], 0)
-        expect(page.locator('#projMetaStatus')).to_have_text('Pitch shift applied', timeout=60000)
+        expect(page.locator('#projPitchStatus')).to_have_text('Pitch shift applied', timeout=60000)
         self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.tuning.shift"), 0)
 
     def test_project_pitch_without_audio_is_disabled(self):

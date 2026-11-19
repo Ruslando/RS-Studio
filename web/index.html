@@ -1244,6 +1244,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <div class="project-pitch-row project-pitch-action">
               <span></span><button type="button" id="projPitchApply" class="primary" hidden>Apply pitch shift</button>
             </div>
+            <p id="projPitchStatus" class="sp-note" role="status" hidden></p>
           </section>
           <p id="projMetaStatus" class="sp-note" role="status" hidden></p>
         </div>
@@ -1488,10 +1489,10 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
         <button id="rsExportClose" class="sp-x" title="Close (Esc)" aria-label="Close"><span data-ui-icon="close" data-icon-size="14" aria-hidden="true"></span></button>
       </div>
       <form id="rocksmithExportForm">
-        <div class="dialog-body dialog-body--sectioned">
+        <div class="dialog-body dialog-body--sectioned rs-export-body">
           <!-- The audio conversion step needs local tools. The message and link
                are selected for Windows or Linux when this dialog opens. -->
-          <div id="rsWwiseWarn" class="rs-wwise" hidden>
+          <div id="rsWwiseWarn" class="rs-wwise rs-wide" hidden>
             <span class="dot dot--warn"></span>
             <span class="rs-wwise-text">Wwise isn't installed. Rocksmith audio can't be converted without it.</span>
             <a class="rs-wwise-get" id="rsWwiseGet" href="https://www.audiokinetic.com/download/" target="_blank" rel="noopener noreferrer">Get Wwise</a>
@@ -1541,7 +1542,29 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           </div>
           </div>
           <div class="section">
+          <div class="section-head"><span>Package</span></div>
+          <label class="field-group block" title="Your name as the package's author, shown by CustomsForge Song Manager. Remembered for every export.">Author
+            <input type="text" id="rsAuthor" maxlength="100" autocomplete="name" />
+          </label>
+          <div class="field-pair">
+          <!-- A div and a label[for], not a wrapping label: the stepper's buttons sit
+               beside the field, and a click on them must not land on the field. -->
+          <div class="field-group block is-narrow" title="Silence added in front of the song. Never shorter than two measures: the count-in phrase, then the count-in ticks.">
+            <label class="label" for="rsLeadIn">Leading silence</label>
+            <span class="stepper"><span class="pop-field"><input type="number" id="rsLeadIn" class="num-4" min="0" max="30" step="0.5" value="10" data-stepper /><span class="pop-unit">s</span></span></span>
+          </div>
+          <div class="field-group block is-narrow" title="Goes into the file name (…_v2_p.psarc) and the package info">
+            <label class="label" for="rsVersion">Version</label>
+            <span class="stepper"><input type="number" id="rsVersion" class="num-4" min="1" step="1" value="1" data-stepper /></span>
+          </div>
+          </div>
+          <label class="chk"><input type="checkbox" id="rsMac" /> Also for Mac <span class="info" role="img" tabindex="0" title="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export." aria-label="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export.">i</span></label>
+          <label class="chk"><input type="checkbox" id="rsDynamicDifficulty" checked /> Dynamic difficulty <span class="info" role="img" tabindex="0" title="Easier levels of every phrase, as DLC Builder makes them: Rocksmith starts a player on an easy level and adds notes as they play well. Off: every phrase only as written. Remembered for every export." aria-label="Easier levels of every phrase, as DLC Builder makes them: Rocksmith starts a player on an easy level and adds notes as they play well. Off: every phrase only as written. Remembered for every export.">i</span></label>
+          </div>
+          <div class="section rs-wide">
           <div class="section-head"><span>Arrangements</span></div>
+            <!-- A card per layer, with its issues from the live check: Export stays
+                 off until each error and warning is fixed or ignored. -->
             <div id="rsArrangements" class="rs-arrangements"></div>
           </div>
           <!-- The clip Rocksmith plays while the song is highlighted in the list.
@@ -1574,55 +1597,12 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             </div>
           </div>
           </div>
-          <div class="section">
-          <div class="section-head"><span>Package</span></div>
-          <label class="field-group block" title="Your name as the package's author, shown by CustomsForge Song Manager. Remembered for every export.">Author
-            <input type="text" id="rsAuthor" maxlength="100" autocomplete="name" />
-          </label>
-          <div class="field-pair">
-          <!-- A div and a label[for], not a wrapping label: the stepper's buttons sit
-               beside the field, and a click on them must not land on the field. -->
-          <div class="field-group block is-narrow" title="Silence added in front of the song. Never shorter than two measures: the count-in phrase, then the count-in ticks.">
-            <label class="label" for="rsLeadIn">Leading silence</label>
-            <span class="stepper"><span class="pop-field"><input type="number" id="rsLeadIn" class="num-4" min="0" max="30" step="0.5" value="10" data-stepper /><span class="pop-unit">s</span></span></span>
+          <!-- Project details' Pitch section (#projTuning) moves in here while this
+               window is open (ui.js), so both are one set of controls. -->
+          <div class="section" id="rsPitchHost">
+          <div class="section-head"><span>Pitch</span></div>
           </div>
-          <div class="field-group block is-narrow" title="Goes into the file name (…_v2_p.psarc) and the package info">
-            <label class="label" for="rsVersion">Version</label>
-            <span class="stepper"><input type="number" id="rsVersion" class="num-4" min="1" step="1" value="1" data-stepper /></span>
-          </div>
-          </div>
-          <label class="chk"><input type="checkbox" id="rsMac" /> Also for Mac <span class="info" role="img" tabindex="0" title="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export." aria-label="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export.">i</span></label>
-          <label class="chk"><input type="checkbox" id="rsDynamicDifficulty" checked /> Dynamic difficulty <span class="info" role="img" tabindex="0" title="Easier levels of every phrase, as DLC Builder makes them: Rocksmith starts a player on an easy level and adds notes as they play well. Off: every phrase only as written. Remembered for every export." aria-label="Easier levels of every phrase, as DLC Builder makes them: Rocksmith starts a player on an easy level and adds notes as they play well. Off: every phrase only as written. Remembered for every export.">i</span></label>
-          </div>
-          <!-- Issues of the live check: Export stays off until each is fixed or ignored. -->
-          <div class="section">
-          <div class="section-head"><span>Issues</span></div>
-          <div id="rsIssues" class="rs-issues">
-            <section class="sound-section" data-section="errors" data-tone="error">
-              <div class="sound-section-head">
-                <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="rsIssueErrors"><span class="sound-section-title">Errors</span><span class="sp-note rs-issue-count"></span></button>
-                <label class="chk"><input type="checkbox" class="rs-issue-all" /> Ignore all</label>
-              </div>
-              <div class="sound-section-body" id="rsIssueErrors"><div class="sound-section-inner"><div class="sub-list"></div></div></div>
-            </section>
-            <section class="sound-section" data-section="warnings" data-tone="warning">
-              <div class="sound-section-head">
-                <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="rsIssueWarnings"><span class="sound-section-title">Warnings</span><span class="sp-note rs-issue-count"></span></button>
-                <label class="chk"><input type="checkbox" class="rs-issue-all" /> Ignore all</label>
-              </div>
-              <div class="sound-section-body" id="rsIssueWarnings"><div class="sound-section-inner"><div class="sub-list"></div></div></div>
-            </section>
-            <section class="sound-section" data-section="notes" data-tone="note">
-              <div class="sound-section-head">
-                <button type="button" class="sound-section-toggle" aria-expanded="true" aria-controls="rsIssueNotes"><span class="sound-section-title">Notes</span><span class="sp-note rs-issue-count"></span></button>
-                <label class="chk" hidden><input type="checkbox" class="rs-issue-all" /> Ignore all</label>
-              </div>
-              <div class="sound-section-body" id="rsIssueNotes"><div class="sound-section-inner"><div class="sub-list"></div></div></div>
-            </section>
-            <p class="rs-issue-none sp-note">No issues found.</p>
-          </div>
-          </div>
-          <p id="rsExportStatus" class="sp-note" hidden></p>
+          <p id="rsExportStatus" class="sp-note rs-wide" hidden></p>
         </div>
         <div class="dialog-footer">
           <div class="dialog-actions">

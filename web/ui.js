@@ -240,6 +240,23 @@ function renderTuningNotes() {
   $("projPitchApply").disabled = !tunable;
 }
 
+// One Pitch section, shown in Project details and in the Rocksmith export window:
+// it moves to whichever is opening, so the controls and their state stay one.
+function placePitchSection(host) {
+  const section = $("projTuning");
+  if (host) host.append(section);
+  else $("projMetaStatus").before(section);
+  setPitchStatus("");
+  fillTuningFields();
+}
+
+function setPitchStatus(msg, error = false) {
+  const el = $("projPitchStatus");
+  el.textContent = msg || "";
+  el.hidden = !msg;
+  el.classList.toggle("error", error);
+}
+
 function fillTuningFields() {
   const tuning = S.state?.tuning || { reference: 0, shift: 0 };
   $("projPitchTarget").value = String(Math.round(hzOf((tuning.reference || 0) + (tuning.shift || 0))));
@@ -256,15 +273,15 @@ async function applyProjectPitchShift() {
   $("projPitchShiftAudio").disabled = true;
   button.disabled = true;
   button.textContent = "Applying…";
-  setProjectMetaStatus("Applying pitch shift...");
+  setPitchStatus("Applying pitch shift...");
   try {
     await setTuning(desiredProjectTuning());
     if (S.state !== state) return;
     fillTuningFields();
-    setProjectMetaStatus("Pitch shift applied");
-    snapshotSettings();
+    setPitchStatus("Pitch shift applied");
+    if (!$("settingsModalBackdrop").hidden) snapshotSettings();
   } catch (err) {
-    setProjectMetaStatus(err.message, true);
+    setPitchStatus(err.message, true);
   } finally {
     button.textContent = "Apply pitch shift";
     renderTuningNotes();
@@ -279,7 +296,7 @@ function renderProjectSettings() {
   $("projAlbum").value = meta.album || "";
   $("projYear").value = meta.year || "";
   renderProjectCover(meta);
-  fillTuningFields();
+  placePitchSection(null);   // back from the export window, if it was there
   for (const id of ["projTitle", "projArtist", "projAlbum", "projYear", "projCoverDrop", "settingsApply"])
     if ($(id)) $(id).disabled = !on;
   projLatin.fill(meta);
@@ -519,7 +536,7 @@ export function init_ui({ doCopy, doCut, doDelete, doPaste, renderLayerSettings 
   wireMenu("menuPreviewTab", () => setView("tab"));
   wireMenu("menuExportModernGp", () => exportModernGp());
   wireMenu("menuExportTab", exportTab);
-  wireMenu("menuExportRocksmith", exportRocksmith);
+  wireMenu("menuExportRocksmith", () => { if (S.state) placePitchSection($("rsPitchHost")); exportRocksmith(); });
   wireMenu("menuUndo", undo);
   wireMenu("menuRedo", redo);
   wireMenu("menuCut", doCut);

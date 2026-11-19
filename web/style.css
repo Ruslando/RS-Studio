@@ -663,6 +663,13 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 
 #openProjModal, #gpImportModal, #setupModal.wide { width: var(--w-modal-wide); }
 #rocksmithExportModal { width: 960px; }
+/* Sections that belong together share a row: Song beside Package, Preview clip
+   beside Pitch; the arrangement cards, the Wwise notice and the status take both. */
+.rs-export-body { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); align-items: start; gap: var(--s-section); }
+.rs-export-body > .rs-wide { grid-column: 1 / -1; }
+/* Without audio there is no preview clip: Pitch takes the row alone. */
+.rs-export-body > .section[hidden] + #rsPitchHost { grid-column: 1 / -1; }
+@media (max-width: 760px) { .rs-export-body { grid-template-columns: minmax(0, 1fr); } }
 #newProjModal { width: min(1080px, calc(100vw - 2 * var(--s-section))); height: min(640px, 92vh); max-height: 92vh; }
 #newProjModal.audio-step { width: min(620px, calc(100vw - 2 * var(--s-section))); height: auto; min-height: 0; }
 #newProjModal.audio-step #form, #newProjModal.audio-step .dialog-body { flex: none; }
@@ -961,8 +968,6 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
   .zoom-cluster #zoomSlider { width: 64px; }
 }
 @media (max-width: 720px) {
-  .rs-arr-row { grid-template-columns: auto 1fr; }
-  .rs-arr-kind, .rs-arr-tuning, .rs-arr-capo { grid-column: 2; }
 }
 
 #modalBackdrop { z-index: var(--z-window); }
@@ -1104,39 +1109,66 @@ body.tour-active .ctxmenu-item:disabled:hover { background: transparent; }
 .rs-wwise-get:hover { background: var(--surface-button-hover); }
 .rs-wwise-get:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); outline: none; }
 
-.rs-arrangements, .rs-issues { display: flex; flex-direction: column; gap: var(--s-sibling); }
-.rs-issue-row > .rs-issue-name { flex: 1; min-width: 0; }
-.rs-issue-row > .count { color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.rs-arrangements { display: flex; flex-direction: column; gap: var(--s-sibling); }
 
 /* Preview clip: the editor's overview, framed like a field. */
 .rs-preview-overview { flex: none; border-radius: var(--r-control); }
 .rs-preview-fields { display: flex; align-items: flex-end; gap: var(--s-row); margin-top: var(--s-sibling); flex-wrap: wrap; }
 .rs-preview-transport { display: flex; gap: var(--s-row); margin-left: auto; }
 
-.rs-arr-row {
-  display: grid; align-items: center;
-  grid-template-columns: auto minmax(80px, 1fr) 16px 48px minmax(104px, 132px) minmax(180px, 1.4fr) minmax(84px, 96px);
+/* A card per layer (design.md 4.13): a head with the one choice made here, and
+   the layer's issues as a wrapping grid, so a wide window holds two columns. */
+.rs-arr-row { background: var(--page); border: 1px solid var(--line); border-radius: var(--r-control); }
+.rs-arr-head {
+  display: grid; align-items: center; gap: var(--s-row); min-height: var(--h-list);
+  padding: var(--s-sibling) var(--s-row);
+  grid-template-columns: auto 8px minmax(0, 1fr) auto auto minmax(128px, 160px);
 }
-.rs-arr-row > .rs-arr-on     { grid-column: 1; }
-.rs-arr-row > .rs-arr-name   { grid-column: 2; }
-.rs-arr-row > .rs-arr-warn   { grid-column: 3; }
-.rs-arr-row > .count         { grid-column: 4; }
-.rs-arr-row > .rs-arr-kind   { grid-column: 5; }
-.rs-arr-row > .rs-arr-tuning { grid-column: 6; }
-.rs-arr-row > .rs-arr-capo   { grid-column: 7; }
+.rs-arr-head > .rs-arr-kind { grid-column: -2; }
+.rs-arr-text { display: flex; flex-direction: column; gap: var(--s-pair); min-width: 0; }
 .rs-arr-name {
-  min-width: 0; color: var(--text); font: 400 var(--text-control)/1 var(--font-ui);
+  min-width: 0; color: var(--text); font: 400 var(--text-body)/1.2 var(--font-ui);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-
-.rs-arr-row .count {
-  text-align: right; color: var(--hint);
-  font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums;
+.rs-arr-meta {
+  min-width: 0; color: var(--hint); font: 400 var(--text-caption)/1.2 var(--font-ui);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-
+.rs-arr-row[data-off] .rs-arr-name { color: var(--label); }
 .rs-arr-warn { display: inline-flex; align-items: center; justify-content: center; color: var(--warn); }
-
+/* The layer's state: the worst open issue's mark, or a dot when clear (design.md 3, rules 18-19). */
+.rs-arr-status { display: flex; align-items: center; gap: var(--s-row); white-space: nowrap; }
+.rs-arr-status .chk { color: var(--label); font-size: var(--text-caption); }
+.rs-arr-tally { display: inline-flex; align-items: center; gap: var(--s-sibling); color: var(--hint); font: 400 var(--text-caption)/1 var(--font-ui); }
+.rs-arr-tally[data-tone="ok"]::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--ok); }
+.rs-arr-tally > svg { flex: none; color: var(--warn); }
+.rs-arr-tally[data-tone="error"] > svg { color: var(--error); }
+.rs-arr-tally[data-tone="note"] > svg { color: var(--accent); }
 .rs-arr-row select { height: var(--h-compact); border-radius: var(--r-compact); }
+
+.rs-arr-issues { border-top: 1px solid var(--line); padding: var(--s-sibling) var(--s-row) var(--s-row); }
+.rs-issue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--s-pair) var(--s-sibling); }
+.rs-issue-row {
+  display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto; align-items: center; gap: var(--s-sibling);
+  min-height: var(--h-control); padding: 0 var(--s-sibling); border-radius: var(--r-compact); background: var(--line-soft);
+}
+.rs-issue-mark { display: inline-flex; color: var(--warn); }
+.rs-issue-row[data-tone="error"] .rs-issue-mark { color: var(--error); }
+.rs-issue-row[data-tone="note"] .rs-issue-mark { color: var(--accent); }
+.rs-issue-name {
+  min-width: 0; color: var(--text); font: 400 var(--text-control)/1.2 var(--font-ui);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rs-issue-row .count { color: var(--hint); font: 400 var(--text-data)/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.rs-issue-ignore-label { color: var(--label); font-size: var(--text-caption); white-space: nowrap; }
+/* An ignored kind stays listed, faded, so it can be taken back (design.md 3, rule 26: opacity, not size). */
+.rs-issue-row[data-ignored] > :is(.rs-issue-mark, .rs-issue-name, .count) { opacity: .5; }
+@media (max-width: 720px) {
+  /* Narrow: the state and the arrangement drop to a second line under the name. */
+  .rs-arr-head { grid-template-columns: auto 8px minmax(0, 1fr) auto; }
+  .rs-arr-head > .rs-arr-status { grid-column: 3 / 4; grid-row: 2; }
+  .rs-arr-head > .rs-arr-kind { grid-column: 4; grid-row: 2; }
+}
 
 #tabViewBackdrop { z-index: var(--z-window-menu); }
 #tabViewBackdrop[hidden] { display: none; }
@@ -1392,6 +1424,8 @@ body.tour-active #actionConfirmBackdrop:not([hidden]) { z-index: var(--z-tour-co
 .project-section { display: flex; flex-direction: column; gap: var(--s-group); min-width: 0; }
 .project-section + .project-section { border-top: 1px solid var(--line); padding-top: var(--s-section); }
 #projPitchHeading { margin: 0; font: 600 var(--text-heading)/1.3 var(--font-ui); }
+/* In the export window the section sits under that window's own "Pitch" head. */
+#rsPitchHost #projPitchHeading { display: none; }
 #spProject .cover-picker { width: 128px; height: 128px; }
 #spProject .field-stack { gap: var(--s-group); }
 .project-section#projTuning { gap: var(--s-sibling); }

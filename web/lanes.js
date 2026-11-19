@@ -413,7 +413,7 @@ function toggleLaneLock(lane) {
 }
 
 // The row's second line: "Lead · Eb Standard · Capo 2 · 124 notes".
-function tuningLabel(lane) {
+export function tuningLabel(lane) {
   if (TUNINGS[lane.tuning]) {
     // The notes are in Settings; the presets' plain "Standard" needs its root back.
     const name = TUNINGS[lane.tuning].label.replace(/\s*\(.*\)$/, "");
