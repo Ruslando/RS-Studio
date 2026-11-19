@@ -1153,8 +1153,23 @@ class EndToEndTests(unittest.TestCase):
                 .map(entry => entry.issue.key);
         }"""
         self.assertEqual(page.evaluate(stage_marks), ["editor.reference.offGrid"])
+        expect(row.locator(".artifact-issue-fix")).to_be_visible()
+        # Its tooltip offers the auto-fix first, the ignore choice under it.
+        gx, gy = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            (await import('/viewport-motion.js')).stopViewportMotion();   // the row click scrolls there
+            (await import('/repaint.js')).drawNow();
+            const b = S.refBadges.find(b => b.ref == 1 && b.i === 1), sc = document.querySelector('#scroll');
+            const r = document.querySelector('#stage').getBoundingClientRect();
+            return [r.left + b.x - 10 - sc.scrollLeft, r.top + b.baseline - 6 - sc.scrollTop];
+        }""")
+        page.mouse.move(gx, gy)
+        buttons = page.locator(".app-tooltip .app-tooltip-actions > button")
+        expect(buttons).to_have_text(["Auto-fix: Put the box on the grid", "Ignore occurrence"])
+        first, second = buttons.nth(0).bounding_box(), buttons.nth(1).bounding_box()
+        self.assertGreater(second["y"], first["y"] + first["height"] - 1, "actions stack vertically")
         # The auto-fix puts occurrence 2 on its beat, as one undo step.
-        row.locator(".artifact-issue-fix").click()
+        buttons.nth(0).click()
         expect(group).to_have_count(0)
         self.assertEqual(page.evaluate(stage_marks), [])
         self.assertEqual(page.evaluate(shape, 1), [[2, 4], 0, 2])

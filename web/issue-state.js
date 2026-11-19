@@ -133,13 +133,15 @@ export function setIssueIgnored(lane, issue, category, ignored) {
     }
   });
 }
-// Shared by the context menus and the spectrogram's interactive tooltip.
+// Shared by the context menus and the spectrogram's interactive tooltip. An issue
+// the editor can repair itself (`fix`: { label, run }) offers that first.
 export function issueIgnoreActions(lane, issue, categoryOnly = false) {
   const category = kindIgnored(lane, issue.id || issue.key || issue.code);
   const instance = issueIgnored(lane, issue);
   return categoryOnly
     ? [{label: category ? 'Restore category' : 'Ignore category', fn: () => setIssueIgnored(lane, issue, true, !category)}]
-    : [{label: instance ? 'Restore occurrence' : 'Ignore occurrence', fn: () => setIssueIgnored(lane, issue, false, !instance)}];
+    : [...(issue.fix ? [{label: `Auto-fix: ${issue.fix.label}`, fn: issue.fix.run}] : []),
+      {label: instance ? 'Restore occurrence' : 'Ignore occurrence', fn: () => setIssueIgnored(lane, issue, false, !instance)}];
 }
 export function openIssueMenu(x, y, entries, categoryOnly = false) {
   openDiagnosticMenu(x, y, entries.flatMap(({lane, issue}) => {

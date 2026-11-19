@@ -160,7 +160,7 @@ function referenceGridRows(lane) {
         title: `${group.name || `Reference #${ref}`} does not fit the grid`,
         help: `Occurrence ${i + 1} ${miss === box.t0 ? 'starts' : 'ends'} ${Math.abs((gridLine(miss, grid) - miss) * 1000).toFixed(3)} ms off a grid line, so hand positions and notes copied into the other occurrences can land on the wrong note. Drag the box edge onto a grid line.`,
         tone: 'warning', time: box.t0, target: `reference:${lane.id}:${ref}:${i}`,
-        fix: { label: 'Put the box on the grid', run: () => fitRefToGrid(lane, ref, i) } });
+        ...(canEditLane(lane) && !group.locked ? { fix: { label: 'Put the box on the grid', run: () => fitRefToGrid(lane, ref, i) } } : {}) });
     });
   }
   return rows;
@@ -256,7 +256,7 @@ function issueRow(entry) {
   row.append(mark, copy);
   const actions = document.createElement('div'); actions.className = 'artifact-issue-actions';
   // An issue the editor can repair itself: `fix` is { label, run }, run makes one undo step.
-  if (entry.fix && canEditLane(lane)) {
+  if (entry.fix) {
     const fix = document.createElement('button'); fix.type = 'button'; fix.className = 'icon-btn icon-btn--compact artifact-issue-fix';
     fix.innerHTML = FIX_ICON; fix.title = `Auto-fix: ${entry.fix.label}`; fix.setAttribute('aria-label', fix.title);
     fix.addEventListener('click', event => { event.stopPropagation(); entry.fix.run(); });
