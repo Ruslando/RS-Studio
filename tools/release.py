@@ -103,8 +103,11 @@ def check(args) -> str:
         if not shutil.which("gh"):
             raise SystemExit("GitHub CLI missing: winget install GitHub.cli, then gh auth login")
         run("gh", "auth", "status", capture=True)
-    print("Running the tests (about 2 min)…", flush=True)
-    run(sys.executable, "-m", "unittest", "discover", "-s", "tests")
+    if getattr(args, "skip_tests", False):
+        print("Skipping the tests (--skip-tests).", flush=True)
+    else:
+        print("Running the tests (about 12 min)…", flush=True)
+        run(sys.executable, "-m", "unittest", "discover", "-s", "tests")
     return branch
 
 
@@ -133,6 +136,8 @@ def main() -> None:
                         help="Publish the specified version to the preview channel; commit its version metadata before tagging")
     parser.add_argument("--notes", type=Path, help="Optional release notes (plain text): shown in the app's update dialog and above GitHub's generated changelog")
     parser.add_argument("--dry-run", action="store_true", help="Build everything, publish nothing")
+    parser.add_argument("--skip-tests", action="store_true",
+                        help="Skip the test suite: only when it already passed on this commit")
     args = parser.parse_args()
     branch = check(args)
     tag = "v" + args.version
