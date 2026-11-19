@@ -233,7 +233,7 @@ async function importPresetFiles(files) {
   loadingFiles = false; $("spSounds").inert = false; $("soundPreset").disabled = false;
   if (imported.length) {
     selected = imported[0].id; sound = cloneSound(imported[0].tone); baseline = cloneSound(sound); activeSlot = "Amp";
-    render(); messages.unshift(`Imported ${imported.length} preset(s). Choose Apply to keep them.`);
+    render(); messages.unshift(`Imported ${imported.length} ${imported.length === 1 ? "preset" : "presets"}.`);
   }
   fileStatus(messages);
   $("soundImportFiles").value = "";
