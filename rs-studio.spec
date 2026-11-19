@@ -25,6 +25,8 @@ datas += [
     ("LICENSE", "."),
     ("NOTICE", "."),
     ("licenses", "licenses"),
+    # Kept out of licenses/ in the repo: GitHub lists it there as a license.
+    ("docs/PyGuitarPro-REBUILD.md", "licenses"),
     ("README.md", "source"),
     ("LICENSE", "source"),
     ("NOTICE", "source"),
