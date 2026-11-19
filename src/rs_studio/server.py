@@ -2059,9 +2059,11 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
     spec["rocksmith"] = rs
     rs["dlcKey"] = rs_builder.package_key(spec)
     phrase_levels = dict(m.get("rocksmithPhraseLevels") or {})
+    project_files = {} if rs.get("projectZip") is True else None
     try:
         data, warnings, filename = rs_builder.build_cdlc(
-            spec, source_audio, cover_art_path=cover_path, phrase_levels=phrase_levels)
+            spec, source_audio, cover_art_path=cover_path, phrase_levels=phrase_levels,
+            project_files=project_files)
     except rs_builder.AudioConverterNotFoundError as exc:
         raise HTTPException(status_code=424, detail=str(exc)) from exc
     except ValueError as exc:
@@ -2074,8 +2076,20 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
         current["rocksmithKey"] = rs["dlcKey"]
     current["rocksmithPhraseLevels"] = phrase_levels   # for the next export's comparison
     _write_manifest(job, current)
-    headers = {"Content-Disposition": _attachment(filename), "X-Tab-Warnings": json.dumps(warnings)}
     _MAC_PACKAGES.pop(job, None)
+    if project_files is not None:
+        # One zip: the package(s) beside DLC Builder's project folder for them.
+        packages = {filename: data}
+        if rs.get("mac") is True:
+            packages[rs_builder.mac_filename(filename)] = rs_builder.to_mac(data)
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name, blob in {**packages, **project_files}.items():
+                archive.writestr(name, blob)
+        zip_name = filename.removesuffix("_p.psarc") + ".zip"
+        return Response(content=buffer.getvalue(), media_type="application/zip",
+                        headers={"Content-Disposition": _attachment(zip_name), "X-Tab-Warnings": json.dumps(warnings)})
+    headers = {"Content-Disposition": _attachment(filename), "X-Tab-Warnings": json.dumps(warnings)}
     if rs.get("mac") is True:
         _MAC_PACKAGES[job] = (rs_builder.mac_filename(filename), rs_builder.to_mac(data))
         headers["X-Mac-Package"] = "1"

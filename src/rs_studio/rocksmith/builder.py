@@ -891,12 +891,15 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
                _wems: tuple[bytes, bytes] | None = None,
                _song_length: float | None = None,
                cover_art_path: Path | None = None,
-               phrase_levels: dict | None = None) -> tuple[bytes, list[str], str]:
+               phrase_levels: dict | None = None,
+               project_files: dict | None = None) -> tuple[bytes, list[str], str]:
     """Build the psarc. Returns (bytes, warnings, download filename).
 
     _wems/_song_length bypass the WEM conversion + audio steps for the self-check.
     phrase_levels: the levels each phrase had at the last export, per arrangement;
     compared (_fewer_levels) and updated in place.
+    project_files: filled with DLC Builder's project folder for the package
+    (arrangement XML, .rs2dlc …, see project_files.py), by file name.
     """
     warnings: list[str] = []
     version = _package_version(spec)
@@ -951,6 +954,7 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         contexts: list[SongContext] = []
         blocking: list[checker.Issue] = []
         arrangement_entries: list[tuple[str, bytes]] = []
+        project_arrangements: list[tuple[str, object, dict]] = []
         for sort_idx, req in enumerate(arr_requests):
             arr = ARRANGEMENTS[req["kind"]]
             built = _compile_arrangement(spec, tracks[req["track"]], req, song_length, key, warnings,
@@ -987,10 +991,11 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
                 bass_picked=built.is_bass and req.get("bassPicked") is True,
             )
             contexts.append(ctx)
+            attrs = manifest.build_attributes(ctx, header=False)
+            project_arrangements.append((file_name, built.compiled.shipped, attrs))
             arrangement_entries.extend([
                 (f"songs/bin/generic/{low}_{file_name}.sng", sng_packed),
-                (f"manifests/songs_dlc_{low}/{low}_{file_name}.json",
-                 manifest.manifest_json(manifest.build_attributes(ctx, header=False))),
+                (f"manifests/songs_dlc_{low}/{low}_{file_name}.json", manifest.manifest_json(attrs)),
             ])
 
         main_bnk, main_file_id = bnk.generate(key, main_wem, volume, is_preview=False)
@@ -1001,8 +1006,9 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
         from importlib import resources
         res = resources.files(__package__).joinpath("res")
 
+        showlights = manifest.showlights(contexts)
         entries = arrangement_entries + [
-            (f"songs/arr/{low}_showlights.xml", manifest.showlights(contexts)),
+            (f"songs/arr/{low}_showlights.xml", showlights),
             (f"manifests/songs_dlc_{low}/songs_dlc_{low}.hsan",
              manifest.hsan_json([manifest.build_attributes(ctx, header=True) for ctx in contexts])),
             (f"gfxassets/album_art/album_{low}_64.dds", art[64]),
@@ -1033,6 +1039,12 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
             listed = ", ".join(c + (f" ×{n}" if n > 1 else "") for c, n in sorted(codes.items()))
             raise ValueError(f"Export stopped: {len(blocking)} issue(s) not fixed or ignored ({listed}). "
                              "Fix them, or ignore them in the export window.")
+        if project_files is not None:
+            from .project_files import project_files as build_project
+            project_files.update(build_project(
+                project_arrangements, dlc_key=key, showlights=showlights, cover_dds=art[256],
+                main_wem=main_wem, preview_wem=preview_wem, main_volume=volume,
+                preview_volume=preview_volume, version=version, author=_package_author(spec)))
         # Named by the sort values, as DLC Builder names a release ("Beatles_…").
         name = _cdlc_filename(manifest.sort_name(latin["artist"], "artist", ""),
                               manifest.sort_name(latin["title"], "title", ""), key, version)

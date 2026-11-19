@@ -18,6 +18,7 @@ import tempfile
 import time
 import unittest
 import zipfile
+import xml.etree.ElementTree as ET
 import urllib.request
 from pathlib import Path
 
@@ -5907,6 +5908,7 @@ class EndToEndTests(unittest.TestCase):
                 self.skipTest("no audio converter (Wwise) on this machine: the Rocksmith package was not built")
         self.file_menu("#menuExportRocksmith")
         expect(page.locator(".rs-arr-row .rs-arr-notes")).to_have_text(f"{len(expected)} notes")
+        page.check("#rsPsarcOnly")
         with page.expect_download(timeout=300000) as download:
             page.click("#rsExportGo")
         self.assertEqual(download.value.suggested_filename, "E2E-Artist_E2E-Audio_v1_p.psarc")
@@ -5919,6 +5921,28 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual((song["SongName"], song["ArtistName"], song["ArrangementName"]), ("E2E Audio", "E2E Artist", "Lead"))
         self.assertEqual(song["NotesHard"], len(expected))
         expect(page.locator("#rocksmithExportModal")).to_be_hidden()
+
+        # By default one zip holds the package and DLC Builder's project folder for it.
+        self.file_menu("#menuExportRocksmith")
+        expect(page.locator("#rsPsarcOnly")).to_be_checked()   # remembered from the export before
+        page.uncheck("#rsPsarcOnly")
+        with page.expect_download(timeout=300000) as download:
+            page.click("#rsExportGo")
+        self.assertEqual(download.value.suggested_filename, "E2E-Artist_E2E-Audio_v1.zip")
+        with zipfile.ZipFile(download.value.path()) as archive:
+            names = set(archive.namelist())
+            self.assertTrue({"E2E-Artist_E2E-Audio_v1_p.psarc", "cover.dds", "arr_showlights_RS2.xml",
+                             "arr_lead_RS2.xml", ".phrase-levels", "E2E-Artist_E2E-Audio.rs2dlc"} <= names, names)
+            self.assertEqual(len([n for n in names if n.endswith(".wem")]), 2, "main and preview audio")
+            project = json.loads(archive.read("E2E-Artist_E2E-Audio.rs2dlc"))
+            lead = ET.fromstring(archive.read("arr_lead_RS2.xml"))
+        self.assertEqual(project["Arrangements"][0]["Fields"][0]["XML"], "arr_lead_RS2.xml")
+        # Every note is in some level: a phrase with fewer levels keeps its notes below the top one.
+        times = {n.get("time") for level in lead.find("levels") for n in level.find("notes")}
+        self.assertEqual(len(times), len(expected))
+        self.file_menu("#menuExportRocksmith")
+        expect(page.locator("#rsPsarcOnly")).not_to_be_checked()
+        page.click("#rsExportClose")
 
     def test_stem_is_separated_from_the_song(self):
         page = self.page

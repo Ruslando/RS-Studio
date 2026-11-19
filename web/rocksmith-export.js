@@ -391,6 +391,7 @@ function openRocksmithExportModal() {
   try { $("rsAuthor").value = localStorage.getItem(LS_AUTHOR) || ""; } catch { /* storage blocked: empty */ }
   try { $("rsDynamicDifficulty").checked = localStorage.getItem(LS_DD) !== "0"; } catch { /* storage blocked: on */ }
   try { $("rsMac").checked = localStorage.getItem(LS_MAC) === "1"; } catch { /* storage blocked: off */ }
+  try { $("rsPsarcOnly").checked = localStorage.getItem(LS_PSARC_ONLY) === "1"; } catch { /* storage blocked: off */ }
   renderRsIssues();
   setRsStatus("");
   converterOk = false;
@@ -432,6 +433,8 @@ const LS_AUTHOR = "cw.rsAuthor";
 const LS_DD = "cw.rsDynamicDifficulty";
 // A Mac package beside the PC one: off unless turned on.
 const LS_MAC = "cw.rsMac";
+// The package alone instead of the zip with DLC Builder's project files: off unless turned on.
+const LS_PSARC_ONLY = "cw.rsPsarcOnly";
 
 // Kinds of issue this song exports past, as DLC Builder's IgnoredIssues: kept
 // with the song's details, also for kinds the chart no longer has.
@@ -524,7 +527,7 @@ const rsOpenIssues = () => rsPickedLanes().flatMap((lane) => [...rocksmithIssueK
   .filter(([, issue]) => issueTone(issue) !== "note").map(([key]) => key));
 // The Export page in Settings edits the same stored values the window starts
 // from, live like the other pages (Cancel re-fires the inputs to undo).
-const RS_SETTINGS = [["setRsAuthor", LS_AUTHOR], ["setRsLeadIn", LS_LEAD_IN], ["setRsDynamicDifficulty", LS_DD], ["setRsMac", LS_MAC]];
+const RS_SETTINGS = [["setRsAuthor", LS_AUTHOR], ["setRsLeadIn", LS_LEAD_IN], ["setRsDynamicDifficulty", LS_DD], ["setRsMac", LS_MAC], ["setRsPsarcOnly", LS_PSARC_ONLY]];
 
 export function fillRocksmithSettings() {
   const get = (key) => { try { return localStorage.getItem(key); } catch { return null; } };   // blocked: defaults
@@ -532,6 +535,7 @@ export function fillRocksmithSettings() {
   $("setRsLeadIn").value = String(leadIn(get(LS_LEAD_IN)));
   $("setRsDynamicDifficulty").checked = get(LS_DD) !== "0";
   $("setRsMac").checked = get(LS_MAC) === "1";
+  $("setRsPsarcOnly").checked = get(LS_PSARC_ONLY) === "1";
 }
 
 function initRocksmithSettings() {
@@ -601,6 +605,9 @@ async function submitRocksmithExport() {
   rememberPref(LS_DD, dynamicDifficulty ? "1" : "0");
   const mac = $("rsMac").checked;
   rememberPref(LS_MAC, mac ? "1" : "0");
+  const psarcOnly = $("rsPsarcOnly").checked;
+  rememberPref(LS_PSARC_ONLY, psarcOnly ? "1" : "0");
+  const projectZip = !psarcOnly;
   // A whole number from 1; anything else falls back to 1 (the server checks again).
   const version = Math.max(1, Math.floor(Number($("rsVersion").value)) || 1);
   $("rsVersion").value = String(version);
@@ -625,7 +632,7 @@ async function submitRocksmithExport() {
       spec.metadata = metadataPayload(state.metadata);
       spec.rocksmith = { arrangements: picks.map((p, i) => ({ track: i, kind: p.kind, tuning: p.tuning, capo: p.capo, scrollSpeed: laneScrollSpeed(p.lane),
         bassPicked: p.kind.includes("bass") && !!p.lane.bassPicked })), leadingSilence, version, author, dynamicDifficulty,
-        mac,
+        mac, projectZip,
         ...exportIssueIgnores(picks.flatMap((pick, track) => rowsFor(pick.lane)
           .map(issue => ({lane: pick.lane, track, issue})))),
         preview: { start: clip.start, length: clip.length } };
@@ -640,7 +647,8 @@ async function submitRocksmithExport() {
       const encoded = cd.match(/filename\*=UTF-8''([^;]+)/i);
       const name = (encoded ? decodeURIComponent(encoded[1]) : (cd.match(/filename="([^"]+)"/) || [])[1]) || "song_p.psarc";
       let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
-      downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name);
+      // A project zip holds the Mac package too, so there is never a second download then.
+      downloadProjectBlob(new Blob([buf], { type: res.headers.get("Content-Type") || "application/octet-stream" }), name);
       if (res.headers.get("X-Mac-Package")) {
         const macRes = await fetch(`/api/projects/${state.job}/rocksmith/mac`);
         if (!macRes.ok) throw new Error((await macRes.json().catch(() => ({}))).detail || "Mac package failed");

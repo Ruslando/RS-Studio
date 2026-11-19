@@ -1272,7 +1272,8 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <span class="stepper"><span class="pop-field"><input type="number" id="setRsLeadIn" class="num-4" min="0" max="30" step="0.5" data-stepper /><span class="pop-unit">s</span></span></span>
           </div>
           <label class="chk"><input type="checkbox" id="setRsDynamicDifficulty" /> Dynamic difficulty</label>
-          <label class="chk"><input type="checkbox" id="setRsMac" /> Also for Mac</label>
+          <label class="chk"><input type="checkbox" id="setRsMac" /> Include Mac</label>
+          <label class="chk"><input type="checkbox" id="setRsPsarcOnly" /> Only the CDLC file (.psarc)</label>
         </div>
         <div class="sp-pane" id="spKeys" hidden><div class="pane-intro"><h2>Keyboard shortcuts</h2></div>
           <div class="keymap-tabs" role="tablist">
@@ -1558,14 +1559,9 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <span class="stepper"><input type="number" id="rsVersion" class="num-4" min="1" step="1" value="1" data-stepper /></span>
           </div>
           </div>
-          <label class="chk"><input type="checkbox" id="rsMac" /> Also for Mac <span class="info" role="img" tabindex="0" title="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export." aria-label="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export.">i</span></label>
+          <label class="chk"><input type="checkbox" id="rsMac" /> Include Mac <span class="info" role="img" tabindex="0" title="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export." aria-label="A second file (…_m.psarc) for Rocksmith on a Mac, as DLC Builder builds it. Not tested on a Mac. Remembered for every export.">i</span></label>
+          <label class="chk"><input type="checkbox" id="rsPsarcOnly" /> Only the CDLC file (.psarc) <span class="info" role="img" tabindex="0" title="Only the package Rocksmith loads. Without it, the export is a zip with the package and DLC Builder&#39;s project files beside it: the arrangement XML, showlights, cover, audio and the .rs2dlc project, as DLC Builder&#39;s own import of the package makes them. Remembered for every export." aria-label="Only the package Rocksmith loads. Without it, the export is a zip with the package and DLC Builder&#39;s project files beside it: the arrangement XML, showlights, cover, audio and the .rs2dlc project, as DLC Builder&#39;s own import of the package makes them. Remembered for every export.">i</span></label>
           <label class="chk"><input type="checkbox" id="rsDynamicDifficulty" checked /> Dynamic difficulty <span class="info" role="img" tabindex="0" title="Easier levels of every phrase, as DLC Builder makes them: Rocksmith starts a player on an easy level and adds notes as they play well. Off: every phrase only as written. Remembered for every export." aria-label="Easier levels of every phrase, as DLC Builder makes them: Rocksmith starts a player on an easy level and adds notes as they play well. Off: every phrase only as written. Remembered for every export.">i</span></label>
-          </div>
-          <div class="section rs-wide">
-          <div class="section-head"><span>Arrangements</span></div>
-            <!-- A card per layer, with its issues from the live check: Export stays
-                 off until each error and warning is fixed or ignored. -->
-            <div id="rsArrangements" class="rs-arrangements"></div>
           </div>
           <!-- The clip Rocksmith plays while the song is highlighted in the list.
                The editor's own overview (web/overview.js); its window is the clip. -->
@@ -1601,6 +1597,12 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                window is open (ui.js), so both are one set of controls. -->
           <div class="section" id="rsPitchHost">
           <div class="section-head"><span>Pitch</span></div>
+          </div>
+          <div class="section rs-wide">
+          <div class="section-head"><span>Arrangements</span></div>
+            <!-- A card per layer, with its issues from the live check: Export stays
+                 off until each error and warning is fixed or ignored. -->
+            <div id="rsArrangements" class="rs-arrangements"></div>
           </div>
           <p id="rsExportStatus" class="sp-note rs-wide" hidden></p>
         </div>
