@@ -1,4 +1,4 @@
-import { laneShown } from "./lane-state.js";
+import { canEditLane, laneShown } from "./lane-state.js";
 import { laneClock, boxMinIn } from "./reference-clock.js";
 // Linked repeated-note groups ("references"): creating a reference from a selection
 // and the per-occurrence operations (move, resize, or edit a single instance).
@@ -182,6 +182,21 @@ export function lockedReferenceFault(previous, translation = 0) {
     }
   }
   return null;
+}
+
+// Auto-fix for a box off the grid: occurrence i's start and end onto their nearest
+// grid lines, one undo step. The shape is shared, so a drift all copies have goes
+// with it. Its notes stay where they are.
+export function fitRefToGrid(lane, ref, i) {
+  const group = lane.refBoxes?.[ref], grid = laneGrid(lane);
+  if (!group || group.locked || !canEditLane(lane) || !grid.length) return;
+  const prev = snapshotEdit(), clock = laneClock(lane);
+  const [r0] = beatShape(group, clock), { t0, t1 } = occurrenceBox(group, i, clock);
+  group.anchors[i] = clock.timeAt(clock.beatAt(gridLine(t0, grid)) - r0);
+  const b = clock.beatAt(group.anchors[i]);
+  // setBeatShape measures from the first anchor, so set the shape after the anchor.
+  setBeatShape(group, clock.beatAt(gridLine(t0, grid)) - b, clock.beatAt(gridLine(t1, grid)) - b, clock);
+  commitStructure(prev);
 }
 
 export function toggleRefEditLock(lane, ref) {

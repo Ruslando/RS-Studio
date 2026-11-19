@@ -1141,8 +1141,16 @@ class EndToEndTests(unittest.TestCase):
         time_at = lambda: page.evaluate("async () => (await import('/playback.js')).playbackTime()")
         self.assertAlmostEqual(time_at(), 4.0, places=2)
         expect(page.locator("#artifactWarnings .artifact-issue-group", has_text="Reference #2")).to_have_count(0)
-        self.assertEqual(page.evaluate("""async () => { const g = (await import('/store.js')).S.state.editLanes[0].refBoxes[2];
-            return [g.anchors, g.rb1]; }"""), [[8, 10], 2])
+        shape = """async ref => { const g = (await import('/store.js')).S.state.editLanes[0].refBoxes[ref];
+            return [g.anchors, g.rb0, g.rb1]; }"""
+        self.assertEqual(page.evaluate(shape, 2), [[8, 10], 0, 2])
+        # The auto-fix puts occurrence 2 on its beat, as one undo step.
+        row.locator(".artifact-issue-fix").click()
+        expect(group).to_have_count(0)
+        self.assertEqual(page.evaluate(shape, 1), [[2, 4], 0, 2])
+        page.keyboard.press("Control+z")
+        expect(group).to_have_count(1)
+        self.assertEqual(page.evaluate(shape, 1), [[2, 3.998], 0, 2])
 
     def test_arrow_navigation_steps_back_from_the_focused_chord(self):
         self.open_reference_project()

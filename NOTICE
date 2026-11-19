@@ -63,6 +63,11 @@ their own licenses:
   See web/vendor/Tone.js.LICENSE.txt, which also covers the libraries webpack
   bundled into it.
 
+  Lucide (ISC; portions from Feather, MIT)
+  The issue list's auto-fix button draws Lucide's wand-sparkles icon
+  (web/rocksmith-check.js). See licenses/lucide-ISC.txt.
+  https://lucide.dev
+
   beat_this (MIT)
   Copyright (c) 2024 Institute of Computational Perception, JKU Linz, Austria
   The tempo-map detector (src/rs_studio/pipeline.py detect_tempo_map) runs its

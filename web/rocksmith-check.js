@@ -20,6 +20,8 @@ import { laneFretCount, laneFretTuning, laneTuning } from "./lane-tuning.js";
 import { gridLine, laneIssues } from './note-issues.js';
 import { laneClock } from './reference-clock.js';
 import { occurrenceBox } from './reference-core.js';
+import { fitRefToGrid } from './references.js';
+import { canEditLane } from './lane-state.js';
 import { timingData, timingIdOf } from './timing.js';
 import { segStep, timingSegments } from './grid-read.js';
 import { RS_KIND_OPTIONS, isTablatureLane } from './layer-role.js';
@@ -157,7 +159,8 @@ function referenceGridRows(lane) {
       rows.push({ id: 'editor.reference.offGrid', key: 'editor.reference.offGrid',
         title: `${group.name || `Reference #${ref}`} does not fit the grid`,
         help: `Occurrence ${i + 1} ${miss === box.t0 ? 'starts' : 'ends'} ${Math.abs((gridLine(miss, grid) - miss) * 1000).toFixed(3)} ms off a grid line, so hand positions and notes copied into the other occurrences can land on the wrong note. Drag the box edge onto a grid line.`,
-        tone: 'warning', time: box.t0, target: `reference:${lane.id}:${ref}:${i}` });
+        tone: 'warning', time: box.t0, target: `reference:${lane.id}:${ref}:${i}`,
+        fix: { label: 'Put the box on the grid', run: () => fitRefToGrid(lane, ref, i) } });
     });
   }
   return rows;
@@ -227,6 +230,9 @@ function moveTo(t) {
   draw();
 }
 
+// The issue's auto-fix: Lucide's wand-sparkles (ISC, licenses/lucide-ISC.txt).
+const FIX_ICON = '<svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9"/></svg>';
+
 function issueRow(entry) {
   const lane = S.state?.editLanes.find(l => l.id === entry.laneId);
   const row = document.createElement('li');
@@ -249,6 +255,13 @@ function issueRow(entry) {
   copy.append(name);
   row.append(mark, copy);
   const actions = document.createElement('div'); actions.className = 'artifact-issue-actions';
+  // An issue the editor can repair itself: `fix` is { label, run }, run makes one undo step.
+  if (entry.fix && canEditLane(lane)) {
+    const fix = document.createElement('button'); fix.type = 'button'; fix.className = 'icon-btn icon-btn--compact artifact-issue-fix';
+    fix.innerHTML = FIX_ICON; fix.title = `Auto-fix: ${entry.fix.label}`; fix.setAttribute('aria-label', fix.title);
+    fix.addEventListener('click', event => { event.stopPropagation(); entry.fix.run(); });
+    actions.append(fix);
+  }
   if (entry.time != null) {
     const time = document.createElement('span'); time.className = 'artifact-detail artifact-time';
     time.textContent = clock(entry.time);
