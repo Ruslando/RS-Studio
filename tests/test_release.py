@@ -90,6 +90,14 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "does not match"):
                 release.check_version_metadata(root)
 
+    def test_checksums_are_in_sha256sum_format(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "a.zip").write_bytes(b"abc")
+            target = release.write_checksums([root / "a.zip"], root / "SHA256SUMS.txt")
+            self.assertEqual(target.read_bytes(),
+                             b"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  a.zip\n")
+
 
 if __name__ == "__main__":
     unittest.main()

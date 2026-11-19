@@ -12,6 +12,7 @@ Nothing is pushed or published until every build step has succeeded.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
@@ -125,8 +126,22 @@ def build(version: str, notes: Path | None, *, channel: str = "stable") -> list[
     # GitHub turns spaces in asset names into dots; give the setup a clean name.
     setup = output / "RS-Studio-Setup.exe"
     shutil.copy2(launcher / "RS Studio Setup.exe", setup)
-    return [setup, output / "bootstrap-manifest.json", output / f"RS-Studio-app-{version}.zip",
-            output / "RS-Studio-ffmpeg-windows-x64.zip"]
+    assets = [setup, output / "bootstrap-manifest.json", output / f"RS-Studio-app-{version}.zip",
+              output / "RS-Studio-ffmpeg-windows-x64.zip"]
+    return [*assets, write_checksums(assets, output / "SHA256SUMS.txt")]
+
+
+def write_checksums(files: list[Path], target: Path) -> Path:
+    """`sha256sum -c` format, so a download can be checked without the app."""
+    lines = []
+    for file in files:
+        digest = hashlib.sha256()
+        with file.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        lines.append(f"{digest.hexdigest()}  {file.name}\n")
+    target.write_text("".join(lines), encoding="utf-8", newline="\n")
+    return target
 
 
 def main() -> None:
