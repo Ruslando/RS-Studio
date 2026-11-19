@@ -555,17 +555,45 @@ function paintMotionGhosts(vx0, vx1) {
   }
 }
 
+// tip: { title, body, tone } with tone "error", "warning" or "note", which sets the colour.
+const toneColour = tip => tip.tone === "error" ? PAINT.error : tip.tone === "note" ? PAINT.accent : PAINT.warn;
+// The spectrogram runs from black to near white, so a mark rides on an underlay of
+// the opposite brightness to its own colour.
+const underlay = colour => parseInt((grayHex(colour) || "#000000").slice(1, 3), 16) > 128 ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)";
+// The ⚠ / ⓘ glyph with its bottom-left at (x, y), hoverable for its tip and menu.
+function paintIssueGlyph(x, y, tip) {
+  const glyph = tip.tone === "note" ? "ⓘ" : "⚠";
+  sctx.save();
+  sctx.font = stageUi(14); sctx.textAlign = "left"; sctx.textBaseline = "bottom"; sctx.lineJoin = "round";
+  sctx.strokeStyle = underlay(toneColour(tip)); sctx.lineWidth = 3; sctx.strokeText(glyph, x, y);
+  sctx.fillStyle = toneColour(tip); sctx.fillText(glyph, x, y);
+  sctx.restore();
+  warningMarks.push({ x0: x - 3, x1: x + 17, y0: y - 19, y1: y + 1, tip });
+}
+
+// A reference occurrence's problem (its box misses the grid) has no notes to frame:
+// its glyph stands left of the occurrence's label. After drawReferences, which
+// places the labels.
+function paintReferenceMarks(frameIssues) {
+  for (const [lane, issues] of frameIssues) for (const issue of issues) {
+    const [, laneId, ref, i] = String(issue.target || "").split(":");
+    if (!issue.target?.startsWith("reference:") || laneId !== lane.id) continue;
+    const ignored = issueIgnored(lane, issue);
+    if (ignored && !showIgnoredIssues) continue;
+    const badge = S.refBadges?.find(b => b.lane === lane && String(b.ref) === ref && String(b.i) === i);
+    if (!badge) continue;
+    sctx.save(); if (ignored) sctx.globalAlpha = .35;
+    paintIssueGlyph(badge.x - 16, badge.baseline + 1, { title: issue.title, body: issue.help, tone: issue.tone, diagnostic: {lane, issue}, ignored });
+    sctx.restore();
+  }
+}
+
 function paintDiagnosticMarks(vx0, vx1, frameIssues) {
   sctx.save();
   sctx.lineWidth = 1.5;
-  sctx.font = stageUi(14); sctx.textAlign = "left"; sctx.textBaseline = "bottom";
   warningMarks.length = 0;
-  // tip: { title, body, tone } with tone "error" or "warning", which sets the colour.
   const frameWarning = (notes, tip) => {
-    const colour = tip.tone === "error" ? PAINT.error : tip.tone === "note" ? PAINT.accent : PAINT.warn;
-    // The spectrogram runs from black to near white, so the frame rides on an
-    // underlay of the opposite brightness to its own colour.
-    const under = parseInt((grayHex(colour) || "#000000").slice(1, 3), 16) > 128 ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)";
+    const colour = toneColour(tip), under = underlay(colour);
     const left = xOf(Math.min(...notes.map(n => n.start))) - 3;
     const right = xOf(Math.max(...notes.map(n => n.end))) + 3;
     if (left > vx1 || right < vx0) return;
@@ -576,12 +604,7 @@ function paintDiagnosticMarks(vx0, vx1, frameIssues) {
     sctx.strokeStyle = sctx.fillStyle = colour; sctx.lineWidth = 1.5;
     sctx.setLineDash([4, 3]); sctx.strokeRect(left, top, right - left, bottom - top);
     sctx.setLineDash([]);
-    const markX = Math.max(left, vx0 + 4);
-    sctx.strokeStyle = under; sctx.lineWidth = 3; sctx.lineJoin = "round";
-    sctx.strokeText(tip.tone === "note" ? "ⓘ" : "⚠", markX, top - 2);
-    sctx.lineWidth = 1.5;
-    sctx.fillText(tip.tone === "note" ? "ⓘ" : "⚠", markX, top - 2);
-    warningMarks.push({ x0: markX - 3, x1: markX + 17, y0: top - 19, y1: top + 1, tip });
+    paintIssueGlyph(Math.max(left, vx0 + 4), top - 2, tip);
   };
   const frames = [];
   const hoverMark = (x, y, w, h, tip) => warningMarks.push({ x0: x, x1: x + w, y0: y, y1: y + h, tip });
@@ -830,6 +853,7 @@ function paintStage() {
   drawMotifs(vx0, vx1);
   drawShapes(vx0, vx1);
   drawReferences();
+  paintReferenceMarks(frameIssues);
   drawMatches();
   drawRepeats();
 

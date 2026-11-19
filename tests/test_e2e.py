@@ -1144,9 +1144,19 @@ class EndToEndTests(unittest.TestCase):
         shape = """async ref => { const g = (await import('/store.js')).S.state.editLanes[0].refBoxes[ref];
             return [g.anchors, g.rb0, g.rb1]; }"""
         self.assertEqual(page.evaluate(shape, 2), [[8, 10], 0, 2])
+        # The stage marks it beside the occurrence's label, as a note's warning is marked.
+        stage_marks = """async () => {
+            const { S } = await import('/store.js');
+            (await import('/repaint.js')).drawNow();
+            const b = S.refBadges.find(b => b.ref == 1 && b.i === 1);
+            return (await import('/diagnostic-marks.js')).diagnosticMarksAt(b.x - 10, b.baseline - 6)
+                .map(entry => entry.issue.key);
+        }"""
+        self.assertEqual(page.evaluate(stage_marks), ["editor.reference.offGrid"])
         # The auto-fix puts occurrence 2 on its beat, as one undo step.
         row.locator(".artifact-issue-fix").click()
         expect(group).to_have_count(0)
+        self.assertEqual(page.evaluate(stage_marks), [])
         self.assertEqual(page.evaluate(shape, 1), [[2, 4], 0, 2])
         page.keyboard.press("Control+z")
         expect(group).to_have_count(1)
