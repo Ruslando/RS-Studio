@@ -1,6 +1,6 @@
 import { wireDockControls } from './dock-controls.js';
 import { dockBounds, dockPosition } from './edge-dock.js';
-import { DRAG_HANDLE_ICON } from './icons.js';
+import { icon } from './icons.js';
 
 // The repeat toolbar and the split view's mirror of it, each under its own key.
 export function initRepeatDock(panel, handle, { key = 'rs-repeat-controls', edge = 'top' } = {}) {
@@ -10,7 +10,7 @@ export function initRepeatDock(panel, handle, { key = 'rs-repeat-controls', edge
     if (saved && ['top', 'right', 'bottom', 'left'].includes(saved.edge) && Number.isFinite(saved.fraction))
       state = { edge: saved.edge, fraction: Math.max(0, Math.min(1, saved.fraction)) };
   } catch { /* optional layout preference */ }
-  handle.innerHTML = DRAG_HANDLE_ICON;
+  handle.innerHTML = icon('grip');
   const bounds = () => dockBounds(panel.parentElement.clientWidth, panel.parentElement.clientHeight, panel.offsetWidth, panel.offsetHeight);
   const position = () => {
     if (panel.hidden) return;

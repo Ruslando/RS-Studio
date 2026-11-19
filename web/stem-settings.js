@@ -19,7 +19,7 @@
 import { confirmAction } from "./dialog.js";
 import { $, stemSettCard, stemSettingsBackdrop, stemSettingsClose, stemSettName, stemSettNameInput } from "./dom.js";
 import { ESC_DEPTH, registerEscapeLayer } from "./escape-stack.js";
-import { UPLOAD_ARROW_ICON } from "./icons.js";
+import { icon } from "./icons.js";
 import { toast } from "./notify.js";
 import { DEFAULT_PART_ORDER, backendLabel, loadSeparators, separators } from "./separators.js";
 import { previewIcon, syncScrub, wireScrub } from "./stem-preview.js";
@@ -190,7 +190,7 @@ function renderStemEditCard() {
           ${avail.length ? "" : `<p class="sc-error">No separation backend is available.</p>`}
         ` : `
           <div class="sc-drop" tabindex="0" role="button" aria-label="Choose or drop a replacement audio file">
-            ${UPLOAD_ARROW_ICON}
+            ${icon('upload', 18)}
             <span>Drop a replacement file here, or click to browse</span>
             <input type="file" class="sc-file" accept="audio/*" hidden />
           </div>

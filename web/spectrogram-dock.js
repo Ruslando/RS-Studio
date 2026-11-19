@@ -1,7 +1,7 @@
 import { wireDockControls } from './dock-controls.js';
 import { dockBounds, dockPosition } from './edge-dock.js';
 import { closeMenus } from './menus.js';
-import { icon, DRAG_HANDLE_ICON } from './icons.js';
+import { icon } from './icons.js';
 
 let showTab = () => {}, refresh = () => {};
 // Expand the controls on one tab ('spectrogram' | 'view' | 'draw' | 'split'); a second call on the open tab collapses.
@@ -20,7 +20,7 @@ export function initSpectrogramDock(panel) {
   } catch { /* use the default layout */ }
   const handle = document.getElementById('stageControlsDrag'), toggle = document.getElementById('stageControlsToggle');
   const body = document.getElementById('stageControlsBody'), tabs = document.getElementById('stageControlsTabs');
-  handle.innerHTML = DRAG_HANDLE_ICON;
+  handle.innerHTML = icon('grip');
   const save = () => { try { localStorage.setItem(key, JSON.stringify(state)); } catch { /* optional preference */ } };
   const bounds = () => dockBounds(panel.parentElement.clientWidth, panel.parentElement.clientHeight, panel.offsetWidth, panel.offsetHeight);
   function position() {

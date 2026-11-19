@@ -64,8 +64,8 @@ their own licenses:
   bundled into it.
 
   Lucide (ISC; portions from Feather, MIT)
-  The issue list's auto-fix button draws Lucide's wand-sparkles icon
-  (web/rocksmith-check.js). See licenses/lucide-ISC.txt.
+  The interface's icons are Lucide's (lucide-static 0.460.0), in web/icons.js.
+  See licenses/lucide-ISC.txt.
   https://lucide.dev
 
   beat_this (MIT)
