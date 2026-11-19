@@ -8,6 +8,14 @@ export let showIgnoredIssues = false;
 export function setShowIgnoredIssues(value) { showIgnoredIssues = value; S.showIgnoredIssues = value; draw(); }
 let categorySource, categoryCache = new Set(), instanceSource, instanceCache = new Set();
 let restoredSource, restoredCache = new Set();
+let laneSource, laneCache = new Set();
+// A kind ignored in one layer only: JSON [layer id, kind], like an occurrence's key.
+const laneKindKey = (lane, id) => JSON.stringify([lane?.id || 'song', issueId(id)]);
+function ignoredLaneKinds() {
+  const source = S.state?.metadata?.rocksmith?.ignoredLaneIssues;
+  if (source !== laneSource) { laneSource = source; laneCache = new Set(source || []); }
+  return laneCache;
+}
 export function ignoredCategories() {
   const source = S.state?.metadata?.rocksmith?.ignoredIssues;
   if (source !== categorySource) { categorySource = source; categoryCache = migrateIgnoredIssues(source); }
@@ -25,13 +33,18 @@ function restoredInstances() {
 }
 export function issueIgnored(lane, issue) {
   const key = issueInstanceKey(lane, issue);
-  return ignoredInstances().has(key) || (ignoredCategories().has(issueId(issue.id || issue.key || issue.code)) &&
+  return ignoredInstances().has(key) || (kindIgnored(lane, issue.id || issue.key || issue.code) &&
     !restoredInstances().has(key));
+}
+// Is this kind ignored in this layer, for the whole song or for the layer alone?
+export function kindIgnored(lane, id) {
+  return ignoredCategories().has(issueId(id)) || ignoredLaneKinds().has(laneKindKey(lane, id));
 }
 // Ignore choices are metadata edits: they must not retime notes or rerun voicing.
 function changeIgnored(update) {
   if (!S.state) return false;
-  const before = { ignoredIssues: ignoredCategories(), ignoredInstances: ignoredInstances(), restoredInstances: restoredInstances() };
+  const before = { ignoredIssues: ignoredCategories(), ignoredLaneIssues: ignoredLaneKinds(),
+    ignoredInstances: ignoredInstances(), restoredInstances: restoredInstances() };
   const values = Object.fromEntries(Object.entries(before).map(([field, entries]) => [field, new Set(entries)]));
   update(values);
   const changed = Object.keys(before).filter(field => before[field].size !== values[field].size ||
@@ -54,12 +67,32 @@ export function setCategoriesIgnored(keys, ignored) {
     }
   });
 }
+// Ignore or restore kinds in one layer. Restoring a kind the whole song ignores
+// keeps it ignored in every other layer. The layer's own occurrence choices of
+// those kinds give way to the layer-wide one.
+export function setLaneKindsIgnored(lane, keys, ignored, lanes = []) {
+  const ids = new Set(keys.map(issueId));
+  return changeIgnored(values => {
+    for (const id of ids) {
+      const key = laneKindKey(lane, id);
+      if (ignored) { values.ignoredLaneIssues.add(key); continue; }
+      values.ignoredLaneIssues.delete(key);
+      if (values.ignoredIssues.delete(id))
+        for (const other of lanes) if (other !== lane) values.ignoredLaneIssues.add(laneKindKey(other, id));
+    }
+    for (const field of ['ignoredInstances', 'restoredInstances']) for (const key of values[field]) {
+      try { const [laneId, id] = JSON.parse(key); if (laneId === lane?.id && ids.has(id)) values[field].delete(key); }
+      catch { /* Old or invalid occurrence keys belong to no layer. */ }
+    }
+  });
+}
 function changeOccurrence(values, lane, issue, ignored) {
   const key = issueInstanceKey(lane, issue);
   if (ignored) { values.ignoredInstances.add(key); values.restoredInstances.delete(key); }
   else {
     values.ignoredInstances.delete(key);
-    if (values.ignoredIssues.has(issueId(issue.id || issue.key || issue.code))) values.restoredInstances.add(key);
+    if (values.ignoredIssues.has(issueId(issue.id || issue.key || issue.code))
+      || values.ignoredLaneIssues.has(laneKindKey(lane, issue.id || issue.key || issue.code))) values.restoredInstances.add(key);
     else values.restoredInstances.delete(key);
   }
 }
@@ -69,11 +102,19 @@ export function restoreIssues(entries) {
   });
 }
 export function exportIssueIgnores(entries) {
-  const active = new Set(entries.filter(({lane, issue}) => !issueIgnored(lane, issue))
-    .map(({issue}) => issueId(issue.id || issue.key || issue.code)));
+  const idOf = issue => issueId(issue.id || issue.key || issue.code);
+  const open = entries.filter(({lane, issue}) => !issueIgnored(lane, issue));
+  const active = new Set(open.map(({issue}) => idOf(issue)));
+  const activeInTrack = new Set(open.map(({track, issue}) => `${track}:${idOf(issue)}`));
+  const trackKinds = new Map();
+  for (const {lane, track, issue} of entries) {
+    const id = idOf(issue), at = `${track}:${id}`;
+    if (ignoredLaneKinds().has(laneKindKey(lane, id)) && !activeInTrack.has(at)) trackKinds.set(at, {track, id});
+  }
   return {
     // A category with a restored occurrence cannot be acknowledged wholesale.
     ignoredIssues: [...ignoredCategories()].filter(id => !active.has(id)).sort(),
+    ignoredTrackIssues: [...trackKinds.values()],
     ignoredOccurrences: entries.filter(({lane, issue}) => issueIgnored(lane, issue))
       .map(({track, issue}) => ({track, id: issue.id || issue.key || issue.code, time: issue.time ?? null})),
   };

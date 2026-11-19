@@ -535,6 +535,11 @@ class StableIssueIds(unittest.TestCase):
         self.assertEqual(builder._blocking(spec, [first, first], 0, 2), [first])
         self.assertEqual(builder._blocking(spec, [first, later], 0, 0), [first, later])
 
+    def test_a_kind_ignored_in_one_arrangement_still_blocks_the_others(self):
+        issue = checker.Issue("I35", 3.0, "Problem", "", False)
+        spec = {"rocksmith": {"ignoredTrackIssues": [{"track": 1, "id": "I35"}, "junk", {"track": 1}]}}
+        self.assertEqual(builder._blocking(spec, [issue, issue], 1), [])
+        self.assertEqual(builder._blocking(spec, [issue], 0), [issue])
 
     def test_correction_has_an_id_separate_from_the_dlc_builder_check(self):
         problem = checker._issue("I29", 2000)

@@ -742,6 +742,9 @@ def _blocking(spec: dict, issues: list, track: int | None = None, lead: float = 
     if rs.get("validate") is False:
         return []
     ignored = set(rs.get("ignoredIssues") or [])
+    # Kinds ignored in this arrangement only (the export window ignores per layer).
+    ignored |= {entry.get("id") for entry in rs.get("ignoredTrackIssues") or []
+                if isinstance(entry, dict) and entry.get("track") == track and isinstance(entry.get("id"), str)}
     occurrences = Counter((entry.get("id"), entry.get("time"))
                           for entry in rs.get("ignoredOccurrences", [])
                           if isinstance(entry, dict) and entry.get("track") == track

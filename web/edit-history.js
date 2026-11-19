@@ -139,7 +139,7 @@ function restore(snap) {
   const { S, editLanes, currentGridState, normLayerVolume, draw, clearNoteMotion, restoreTimingSnapshot, restoreGridState, offsetInput, selectStem, applyLaneVolume, releaseLaneSynth, refreshCounts, renderLanes, refreshTabIfOpen } = services;
   if (S.state && snap.ignoredDiagnostics) {
     const rs = (S.state.metadata ||= {}).rocksmith ||= {};
-    for (const key of ['ignoredIssues', 'ignoredInstances', 'restoredInstances']) {
+    for (const key of ['ignoredIssues', 'ignoredLaneIssues', 'ignoredInstances', 'restoredInstances']) {
       if (snap.ignoredDiagnostics[key]) rs[key] = [...snap.ignoredDiagnostics[key]];
       else delete rs[key];
     }

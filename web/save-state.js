@@ -14,7 +14,7 @@ export function configureSaveState(dependencies) { services = dependencies; }
 
 function content(b) {
   return { editLanes: b.editLanes.map(({ active, ...lane }) => lane), grid: b.grid, sectionMarkers: b.sectionMarkers, timings: b.timings,
-    comments: b.comments, diagnostics: Object.fromEntries(['ignoredIssues', 'ignoredInstances', 'restoredInstances']
+    comments: b.comments, diagnostics: Object.fromEntries(['ignoredIssues', 'ignoredLaneIssues', 'ignoredInstances', 'restoredInstances']
       .map(key => [key, b.metadata?.rocksmith?.[key] || []])), scoreBars: b.scoreBars, scoreDuration: b.scoreDuration,
     projectStart: b.projectStart, stemSettings: b.stemSettings, mix: b.mix };
 }

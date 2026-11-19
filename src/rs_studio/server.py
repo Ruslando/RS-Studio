@@ -335,7 +335,8 @@ def _normalize_metadata(raw: dict | None, current: dict | None = None) -> dict:
         ignored = rs.get("ignoredIssues")
         if isinstance(ignored, list):
             out["rocksmith"]["ignoredIssues"] = sorted({c for c in ignored if isinstance(c, str) and 0 < len(c) <= 200})[:200]
-        for key in ("ignoredInstances", "restoredInstances"):
+        # ignoredLaneIssues: kinds ignored in one layer only, as JSON [layer id, kind].
+        for key in ("ignoredLaneIssues", "ignoredInstances", "restoredInstances"):
             instances = rs.get(key)
             if isinstance(instances, list):
                 out["rocksmith"][key] = sorted({c for c in instances if isinstance(c, str) and 0 < len(c) <= 10000})[:50000]
