@@ -57,12 +57,14 @@ def check_version_metadata(root: Path = ROOT, expected: str | None = None) -> st
         if not match:
             raise SystemExit(f"Version not found in {name}")
         values[name] = match.group(1)
-    distinct = set(values.values())
-    if len(distinct) != 1:
+    # uv writes the lockfile's version normalized (0.5.0-rc.3 -> 0.5.0rc3), so
+    # compare versions, not spellings.
+    from packaging.version import Version
+    if len({Version(value) for value in values.values()}) != 1:
         detail = ", ".join(f"{name}={value}" for name, value in values.items())
         raise SystemExit(f"Version metadata does not match: {detail}")
-    version = distinct.pop()
-    if expected is not None and version != expected:
+    version = values["src/rs_studio/__init__.py"]
+    if expected is not None and Version(version) != Version(expected):
         raise SystemExit(f"Version metadata says {version}, expected {expected}")
     return version
 

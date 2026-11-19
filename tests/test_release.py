@@ -78,6 +78,18 @@ class ReleaseTests(unittest.TestCase):
             # Only the rs-studio entry changes in the lockfile.
             self.assertEqual(sum(a != b for a, b in zip(before.splitlines(), after.splitlines())), 1)
 
+    def test_a_lockfile_with_uvs_normalized_version_matches(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "src/rs_studio").mkdir(parents=True)
+            (root / "pyproject.toml").write_text('version = "0.5.0-rc.3"\n', encoding="utf-8")
+            (root / "src/rs_studio/__init__.py").write_text('__version__ = "0.5.0-rc.3"\n', encoding="utf-8")
+            (root / "uv.lock").write_text('name = "rs-studio"\nversion = "0.5.0rc3"\n', encoding="utf-8")
+            self.assertEqual(release.check_version_metadata(root, expected="0.5.0-rc.3"), "0.5.0-rc.3")
+            (root / "uv.lock").write_text('name = "rs-studio"\nversion = "0.5.0rc2"\n', encoding="utf-8")
+            with self.assertRaisesRegex(SystemExit, "does not match"):
+                release.check_version_metadata(root)
+
 
 if __name__ == "__main__":
     unittest.main()
