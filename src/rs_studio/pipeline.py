@@ -257,10 +257,6 @@ def _magma(values) -> "np.ndarray":
     return np.stack([r, g, b], axis=-1).astype("uint8")
 
 
-# Closer to A440 than this counts as A440, so a song isn't marked -1 ct.
-TUNING_DEADBAND = 3.0
-
-
 def estimate_tuning(audio_path: Path) -> float:
     """Cents the recording sits off A440, in [-50, 50).
 
@@ -271,11 +267,6 @@ def estimate_tuning(audio_path: Path) -> float:
 
     y, sr = librosa.load(str(audio_path), sr=SAMPLE_RATE, mono=True)
     return round(float(librosa.estimate_tuning(y=y, sr=sr)) * 100, 1)
-
-
-def suggested_reference(estimate: float | None) -> float:
-    """The reference pitch to apply for an estimate: A440 inside the dead band."""
-    return 0.0 if estimate is None or abs(estimate) < TUNING_DEADBAND else float(estimate)
 
 
 SPECTROGRAM_VIEWS = ("energy", "fine", "fundamental", "contrast", "fine-sharp", "fundamental-sharp")

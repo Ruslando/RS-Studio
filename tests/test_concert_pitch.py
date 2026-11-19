@@ -23,14 +23,26 @@ def _tone(path, hz, seconds=3.0):
 
 
 class ConcertPitchTests(unittest.TestCase):
-    def test_estimate_finds_a432_and_the_dead_band_keeps_a440(self):
+    def test_estimate_finds_a432(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "a432.wav"
             _tone(path, 432.0)
             self.assertAlmostEqual(pipeline.estimate_tuning(path), A432, delta=3)
-        self.assertEqual(pipeline.suggested_reference(-2.0), 0.0)
-        self.assertEqual(pipeline.suggested_reference(None), 0.0)
-        self.assertEqual(pipeline.suggested_reference(-31.0), -31.0)
+
+    def test_a_new_song_starts_at_a440_with_its_estimate_shown(self):
+        import io
+        from types import SimpleNamespace
+        from rs_studio import server
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "a432.wav"
+            _tone(source, 432.0)
+            upload = SimpleNamespace(filename="a432.wav", file=io.BytesIO(source.read_bytes()))
+            m = {"tuning": {"estimate": 10, "reference": 10, "shift": 25}}
+            with patch.object(server, "_job_dir", lambda job: Path(folder)), \
+                 patch.object(pipeline, "ingest_stem", lambda *a, **k: None):
+                server._ingest_full_song("pitchtest", m, upload)
+        self.assertEqual((m["tuning"]["reference"], m["tuning"]["shift"]), (0.0, 0.0))
+        self.assertAlmostEqual(m["tuning"]["estimate"], A432, delta=3)
 
     def test_spectrogram_rows_follow_the_reference(self):
         """A 432 Hz A4 lights the A4 row's middle line only once the grid moves with it."""

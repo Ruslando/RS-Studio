@@ -637,8 +637,9 @@ def _ingest_full_song(job: str, m: dict, audio: UploadFile, extracted_tags: dict
         estimate = pipeline.estimate_tuning(in_path)
     except Exception:
         estimate = None   # best effort, like the tempo: the song still opens at A440
-    # New audio, new recording: an earlier shift was for the old one.
-    m["tuning"] = {"estimate": estimate, "reference": pipeline.suggested_reference(estimate), "shift": 0.0}
+    # New audio, new recording: an earlier shift was for the old one. The pitch
+    # starts at A440; the estimate is only shown, for the user to apply.
+    m["tuning"] = {"estimate": estimate, "reference": 0.0, "shift": 0.0}
     m["inputRel"] = in_path.name
     m["filename"] = audio.filename
     _drop_separation_cache(job_dir, m)
