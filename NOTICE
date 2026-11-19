@@ -67,7 +67,7 @@ their own licenses:
   Copyright (c) 2024 Institute of Computational Perception, JKU Linz, Austria
   The tempo-map detector (src/rs_studio/pipeline.py detect_tempo_map) runs its
   code from the beat-this package and ships its final0 weights (also MIT) as
-  models/beat_this-final0.ckpt. See licenses/beat_this-LICENSE.txt.
+  models/beat_this-final0.ckpt. See licenses/beat_this-MIT.txt.
   https://github.com/CPJKU/beat_this
 
   madmom (BSD-3-Clause; model/data files are CC BY-NC-SA 4.0)
