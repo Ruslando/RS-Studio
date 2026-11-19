@@ -77,6 +77,26 @@ def requirement_blocks(text: str) -> dict[str, tuple[str, str, str | None]]:
     return blocks
 
 
+def local_wheels(requirements: str, root: Path = ROOT) -> tuple[str, dict[str, Path]]:
+    """Wheels the project locks by path (pyproject's `path = "wheels/…"`, e.g. madmom).
+
+    uv export writes them as `./wheels/<file>.whl`, which an install resolves from
+    its working folder: the running app's on an update, so it found nothing.
+    Each is shipped in the app package's wheels/ and pinned by name and hash,
+    where the installer's --find-links finds it.
+    """
+    shipped = {}
+    pattern = re.compile(r"^\./(\S+\.whl)[ \t]*(?:;[ \t]*([^\\\n]+?))?[ \t]*\\?\n[ \t]*--hash=sha256:([0-9a-f]{64})[^\n]*$", re.M)
+    def pin(match: re.Match) -> str:
+        path, marker, digest = root / match[1], match[2], match[3]
+        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise RuntimeError(f"{path.name} does not match uv.lock")
+        name, version = parse_wheel_filename(path.name)[:2]
+        shipped["wheels/" + path.name] = path
+        return f"{name}=={version}" + (f" ; {marker}" if marker else "") + f" \\\n    --hash=sha256:{digest}"
+    return pattern.sub(pin, requirements), shipped
+
+
 def index_wheel(name: str, version: str, python_tag: str) -> dict:
     """The +cu126 wheel of a PyTorch package from download.pytorch.org."""
     filename = f"{name}-{version}+cu126-{python_tag}-{python_tag}-win_amd64.whl"
@@ -100,9 +120,11 @@ def platform_wheels(requirements: str, lock: dict, built: Path) -> tuple[str, li
     """
     supported = {str(tag): rank for rank, tag in enumerate(sys_tags())}
     packages = {(entry["name"], entry["version"]): entry for entry in lock["package"] if "version" in entry}
-    downloads, shipped = [], {}
+    requirements, shipped = local_wheels(requirements)
+    local = {str(parse_wheel_filename(Path(path).name)[0]) for path in shipped}
+    downloads = []
     for name, (block, version, marker) in requirement_blocks(requirements).items():
-        if marker and not Marker(marker).evaluate():
+        if (marker and not Marker(marker).evaluate()) or name in local:
             continue
         entry = packages[(name, version)]
         best = None
