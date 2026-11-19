@@ -47,3 +47,6 @@ models/*
 # JavaScript tooling and local screenshots
 node_modules/
 design-shots/
+
+# private working notes
+notes/
