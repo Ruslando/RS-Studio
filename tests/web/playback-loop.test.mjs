@@ -45,7 +45,7 @@ try {
     './playback-effects.js': {
       playbackEventFrom, playbackEvents, playSampleEvent: (synth, event) => { calls.push(event.pitch); events.push(event); },
     },
-  }, { './constants.js': true, './util.js': true, './region-loop.js': true, './keymap.js': true });
+  }, { './constants.js': true, './util.js': true, './region-loop.js': true, './keymap.js': true, './icons.js': true });
   playback.init_playback();
   await playback.playTransport();
   assert.equal(transportEvents.at(-1), 'play', 'score transport announces playback');

@@ -1,4 +1,5 @@
 import { channelRoute } from './audio-channel.js';
+import { icon } from './icons.js';
 // In-editor playback: a Tone.js sampler voice per edit lane, the transport + seek,
 // the metronome, and the per-stem mixer.
 
@@ -776,9 +777,7 @@ function tick() {
   else if (transportPlaying()) requestAnimationFrame(tick);
 }
 
-// Filled monochrome glyphs (design §7: play = filled triangle, no stroke).
-const PLAY_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
-const PAUSE_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
+const PLAY_ICON = icon('play'), PAUSE_ICON = icon('pause');
 
 export function init_playback() {
   const syncPlayHint = () => { playBtn.title = shortcutTitle(transportPlaying() ? 'Pause' : 'Play', 'playPause'); };

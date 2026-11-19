@@ -7,6 +7,7 @@
 // Apply.
 
 import { confirmAction } from "./dialog.js";
+import { icon } from './icons.js';
 import { $ } from "./dom.js";
 
 const POLL_MS = 1000;
@@ -106,10 +107,7 @@ function warnMark(text) {
   span.title = text;
   span.setAttribute("role", "img");
   span.setAttribute("aria-label", text);
-  span.innerHTML =
-    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" ' +
-    'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
-    '<path d="M8 2.5 15 14H1z"/><path d="M8 6.5v3.5"/><path d="M8 12h.01"/></svg>';
+  span.innerHTML = icon('warning');
   return span;
 }
 

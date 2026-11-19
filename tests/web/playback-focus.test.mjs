@@ -44,7 +44,7 @@ try {
     './playback-effects.js': {
       playbackEventFrom, playbackEvents, playSampleEvent: (synth, event) => calls.push(event.pitch),
     },
-  }, { './constants.js': true, './util.js': true, './region-loop.js': true, './keymap.js': true });
+  }, { './constants.js': true, './util.js': true, './region-loop.js': true, './keymap.js': true, './icons.js': true });
   playback.init_playback();
   const heard = async (focus) => {
     playback.pauseTransport(); calls.length = 0; S.scoreTime = 2;

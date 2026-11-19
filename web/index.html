@@ -99,7 +99,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
         <section class="welcome-recent" id="welcomeRecent" aria-label="Project library">
           <div class="recent-tools">
             <label class="recent-search" for="recentSearch">
-              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+              <span data-ui-icon="search" aria-hidden="true"></span>
               <input type="search" id="recentSearch" placeholder="Search projects" autocomplete="off" />
             </label>
             <span id="recentCount" class="recent-count" aria-live="polite"></span>
@@ -188,7 +188,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
 <div id="appbar" hidden>
     <nav id="menubar">
       <button class="menu-btn menu-btn--icon" id="homeBtn" title="Back to projects" aria-label="Back to projects">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        <span data-ui-icon="back" aria-hidden="true"></span>
       </button>
       <div class="menu-anchor" data-floating-menu>
         <button class="menu-btn icon-btn" id="fileMenuBtn" aria-haspopup="true" aria-expanded="false" title="Project files" aria-label="Project files"><span data-ui-icon="folder" aria-hidden="true"></span></button>
@@ -260,7 +260,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
         <span class="sep-v" aria-hidden="true"></span>
         <div class="group transport-cluster">
           <button id="previousMarker" class="icon-btn icon-btn--compact" aria-label="Previous marker" title="Previous marker (Ctrl+←)" disabled><span data-ui-icon="previousMarker" aria-hidden="true"></span></button>
-          <button id="play" class="icon-btn icon-btn--compact play-btn" aria-label="Play / pause" title="Play / pause (Space)"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+          <button id="play" class="icon-btn icon-btn--compact play-btn" aria-label="Play / pause" title="Play / pause (Space)"><span data-ui-icon="play" aria-hidden="true"></span></button>
           <button id="nextMarker" class="icon-btn icon-btn--compact" aria-label="Next marker" title="Next marker (Ctrl+→)" disabled><span data-ui-icon="nextMarker" aria-hidden="true"></span></button>
           <span id="time" class="ro" hidden>0:00 / 0:00</span>
           <select id="speed" class="speed-chip" title="Playback speed">
@@ -287,31 +287,31 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
     </div>
 <span class="sep-v"></span><div class="group workspace-controls"><button type="button" class="icon-btn" id="findRepeatsBtn"
                   title="Compare the active layer's repeating passages" aria-label="Compare view" aria-pressed="false">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>
+            <span data-ui-icon="compare" aria-hidden="true"></span>
           </button><button type="button" class="icon-btn" id="sidebarToggle" data-panel-toggle="sidebar" aria-expanded="true"
                   title="Hide layer sidebar" aria-label="Hide layer sidebar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+            <span data-ui-icon="panelLeft" aria-hidden="true"></span>
           </button><button type="button" class="icon-btn" id="markerLanesToggle" data-panel-toggle="markers" aria-expanded="true"
                     title="Hide marker lanes" aria-label="Hide marker lanes">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V3m0 1h13l-3 4 3 4H5"/></svg>
+              <span data-ui-icon="flag" aria-hidden="true"></span>
             </button><button type="button" class="icon-btn" id="fretboardToggle" data-panel-toggle="fretboard" aria-expanded="true"
                     title="Hide fretboard" aria-label="Hide fretboard">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 6v12m5-12v12M3 10h18M3 14h18"/></svg>
+              <span data-ui-icon="fretboard" aria-hidden="true"></span>
             </button><button type="button" class="icon-btn" id="splitViewToggle" aria-pressed="false"
                     title="Split view: a second spectrogram pane" aria-label="Split view">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>
-            </button><button type="button" class="icon-btn" id="artifactsToggle" data-panel-toggle="artifacts" aria-controls="artifactsPanel" aria-expanded="true" aria-label="Hide artifacts" title="Hide artifacts"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></button></div>
+              <span data-ui-icon="splitView" aria-hidden="true"></span>
+            </button><button type="button" class="icon-btn" id="artifactsToggle" data-panel-toggle="artifacts" aria-controls="artifactsPanel" aria-expanded="true" aria-label="Hide artifacts" title="Hide artifacts"><span data-ui-icon="panelRight" aria-hidden="true"></span></button></div>
         </div>
 
       <div id="mainArea">
 
         <!-- Left rail: Audio (resizable) · drag separator · Layers · sidebar resize handle -->
-        <aside id="sidebar" aria-label="Project layers"><button type="button" id="sidebarChevron" class="edge-toggle edge-toggle--sidebar" data-panel-toggle="sidebar" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <aside id="sidebar" aria-label="Project layers"><button type="button" id="sidebarChevron" class="edge-toggle edge-toggle--sidebar" data-panel-toggle="sidebar" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar"><span data-ui-icon="chevronLeft" data-icon-size="14" aria-hidden="true"></span></button>
 
           <section id="stemsSection" class="side-section">
             <div class="side-header">
             <button class="side-label" data-sec="stems" aria-expanded="true">
-              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
+              <span data-ui-icon="chevronDown" data-icon-size="12" data-icon-class="side-chevron" aria-hidden="true"></span>
               <span>Audio layers</span>
             </button>
             </div>
@@ -323,7 +323,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <section id="layersSection" class="side-section grow">
             <div class="side-header">
             <button class="side-label" data-sec="layers" aria-expanded="true">
-              <svg class="side-chevron" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1.5 3.5l3 3 3-3"/></svg>
+              <span data-ui-icon="chevronDown" data-icon-size="12" data-icon-class="side-chevron" aria-hidden="true"></span>
               <span>Note layers</span>
             </button>
             </div>
@@ -354,7 +354,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <div id="timelineResize" class="splitter splitter--y" aria-hidden="true"><svg class="splitter-dots" width="26" height="5" viewBox="0 0 26 5" fill="none"><circle cx="5" cy="2.5" r="1.4" fill="currentColor"/><circle cx="13" cy="2.5" r="1.4" fill="currentColor"/><circle cx="21" cy="2.5" r="1.4" fill="currentColor"/></svg></div>
 <div id="editingWorkspace">
           <div id="editingPanel"><div id="viewer">
-            <button type="button" id="markerLanesChevron" class="edge-toggle edge-toggle--markers" data-panel-toggle="markers" aria-expanded="true" aria-label="Hide markers" title="Hide markers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
+            <button type="button" id="markerLanesChevron" class="edge-toggle edge-toggle--markers" data-panel-toggle="markers" aria-expanded="true" aria-label="Hide markers" title="Hide markers"><span data-ui-icon="chevronUp" data-icon-size="14" aria-hidden="true"></span></button>
             <canvas id="ruler"></canvas>
             <div class="timeline-start-gutter" aria-hidden="true"></div>
             <div id="scroll">
@@ -503,7 +503,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
           <!-- Fretboard: the neck the song is played on, under the stage. Its
                chevron stays on the partial panel; hovering reveals more of the neck — the
                sidebar's idiom, so the way back is where the way out was. -->
-          <div id="fretboardPanel" data-collapsed><button type="button" id="fretboardChevron" class="edge-toggle edge-toggle--fretboard" data-panel-toggle="fretboard" aria-expanded="true" aria-label="Hide fretboard" title="Hide fretboard"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div id="fretboardPanel" data-collapsed><button type="button" id="fretboardChevron" class="edge-toggle edge-toggle--fretboard" data-panel-toggle="fretboard" aria-expanded="true" aria-label="Hide fretboard" title="Hide fretboard"><span data-ui-icon="chevronDown" data-icon-size="14" aria-hidden="true"></span></button>
             <!-- The board and the one thing that floats on it. A box of its own, so
                  the spinner is placed against the canvas and not against the panel,
                  and so the panel can shrink over it while it keeps its size. -->
@@ -567,12 +567,12 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
         </div>
         <div id="artifactsResize" class="splitter splitter--x" aria-hidden="true"><svg class="splitter-dots" width="5" height="26" viewBox="0 0 5 26" fill="none"><circle cx="2.5" cy="5" r="1.4" fill="currentColor"/><circle cx="2.5" cy="13" r="1.4" fill="currentColor"/><circle cx="2.5" cy="21" r="1.4" fill="currentColor"/></svg></div>
         <aside id="artifactsPanel" class="artifact-panel" aria-label="Artifacts">
-          <button type="button" id="artifactsChevron" class="edge-toggle edge-toggle--artifacts" data-panel-toggle="artifacts" aria-controls="artifactsPanel" aria-expanded="true" aria-label="Hide artifacts" title="Hide artifacts"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+          <button type="button" id="artifactsChevron" class="edge-toggle edge-toggle--artifacts" data-panel-toggle="artifacts" aria-controls="artifactsPanel" aria-expanded="true" aria-label="Hide artifacts" title="Hide artifacts"><span data-ui-icon="chevronRight" data-icon-size="14" aria-hidden="true"></span></button>
           <div id="artifactsContent">
           <div class="artifact-sections">
-          <div class="side-header"><button type="button" id="artifactReferencesToggle" class="side-label" aria-controls="artifactReferencesBody" aria-expanded="true" aria-label="Collapse references" title="Collapse references"><svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span>References</span><span id="artifactCount" class="artifact-count" aria-live="polite">0</span></button></div>
+          <div class="side-header"><button type="button" id="artifactReferencesToggle" class="side-label" aria-controls="artifactReferencesBody" aria-expanded="true" aria-label="Collapse references" title="Collapse references"><span data-ui-icon="chevronDown" data-icon-size="12" data-icon-class="side-chevron" aria-hidden="true"></span><span>References</span><span id="artifactCount" class="artifact-count" aria-live="polite">0</span></button></div>
           <div id="artifactReferencesBody" class="artifact-panel-body"><ul id="artifactList" class="artifact-list"></ul></div>
-          <div class="side-header"><button type="button" id="artifactMotifsToggle" class="side-label" aria-controls="artifactMotifsBody" aria-expanded="true" aria-label="Collapse motifs" title="Collapse motifs"><svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span>Motifs</span><span id="motifCount" class="artifact-count" aria-live="polite">0</span></button></div>
+          <div class="side-header"><button type="button" id="artifactMotifsToggle" class="side-label" aria-controls="artifactMotifsBody" aria-expanded="true" aria-label="Collapse motifs" title="Collapse motifs"><span data-ui-icon="chevronDown" data-icon-size="12" data-icon-class="side-chevron" aria-hidden="true"></span><span>Motifs</span><span id="motifCount" class="artifact-count" aria-live="polite">0</span></button></div>
           <div id="artifactMotifsBody" class="artifact-panel-body"><ul id="motifList" class="artifact-list"></ul></div>
           <div id="artifactMarkers"></div>
           </div>
@@ -1364,7 +1364,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <span class="field-label">Full song</span>
             <div class="np-drop" id="npDrop" tabindex="0" role="button" aria-label="Choose or drop the full song audio file">
               <span class="np-icon" id="npDropIcon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+                <span data-ui-icon="upload" data-icon-size="18" aria-hidden="true"></span>
               </span>
               <span class="np-copy">
                 <span class="np-title" id="npDropTitle">Drop the full song, or click to browse</span>
@@ -1587,7 +1587,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
             <div class="rs-preview-transport">
               <button type="button" id="rsPreviewPrev" class="icon-btn" aria-label="Start at previous marker" title="Start at the previous section, phrase, tone or tempo marker"><span data-ui-icon="previousMarker" data-icon-size="16" aria-hidden="true"></span></button>
               <button type="button" id="rsPreviewPlay" class="icon-btn" aria-label="Play preview clip" title="Play the preview clip with its fades">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                <span data-ui-icon="play" aria-hidden="true"></span>
               </button>
               <button type="button" id="rsPreviewNext" class="icon-btn" aria-label="Start at next marker" title="Start at the next section, phrase, tone or tempo marker"><span data-ui-icon="nextMarker" data-icon-size="16" aria-hidden="true"></span></button>
             </div>

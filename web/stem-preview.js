@@ -9,12 +9,11 @@
 // The state stays with the caller. A widget here is a `root` element plus two
 // accessors, so a card can keep its state on the element and the panel can keep
 // its state in module variables, without either shape leaking into the other.
+import { icon } from './icons.js';
 
 // Play / pause glyphs for a preview button.
 export function previewIcon(mode) {
-  return mode === "play"
-    ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>'
-    : '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>';
+  return icon(mode === "play" ? "play" : "pause", 12);
 }
 
 function fmtPreviewTime(s) {

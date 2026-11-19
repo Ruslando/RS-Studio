@@ -88,7 +88,7 @@ function previewToolbar() {
   toolbar.querySelector('#speed').value = '1';
   toolbar.querySelector('#metro').checked = false;
   toolbar.querySelector('#seek').value = '0';
-  toolbar.querySelector('#play').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  toolbar.querySelector('#play').innerHTML = icon('play');
   return toolbar;
 }
 

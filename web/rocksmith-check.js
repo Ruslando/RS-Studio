@@ -38,7 +38,6 @@ import { shapeGroups } from './shapes.js';
 const SETTLE_MS = 700;
 const SAME_ONSET = 0.003;   // the check reports whole milliseconds of a float32 time
 const KINDS = new Set(RS_KIND_OPTIONS.map(([kind]) => kind));
-const chevron = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const clock = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, '0')}`;
 
 let lastKey = null, timer = 0, inFlight = null;
@@ -230,9 +229,6 @@ function moveTo(t) {
   draw();
 }
 
-// The issue's auto-fix: Lucide's wand-sparkles (ISC, licenses/lucide-ISC.txt).
-const FIX_ICON = '<svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9"/></svg>';
-
 function issueRow(entry) {
   const lane = S.state?.editLanes.find(l => l.id === entry.laneId);
   const row = document.createElement('li');
@@ -258,7 +254,7 @@ function issueRow(entry) {
   // An issue the editor can repair itself: `fix` is { label, run }, run makes one undo step.
   if (entry.fix) {
     const fix = document.createElement('button'); fix.type = 'button'; fix.className = 'icon-btn icon-btn--compact artifact-issue-fix';
-    fix.innerHTML = FIX_ICON; fix.title = `Auto-fix: ${entry.fix.label}`; fix.setAttribute('aria-label', fix.title);
+    fix.innerHTML = icon('wand', 14); fix.title = `Auto-fix: ${entry.fix.label}`; fix.setAttribute('aria-label', fix.title);
     fix.addEventListener('click', event => { event.stopPropagation(); entry.fix.run(); });
     actions.append(fix);
   }
@@ -301,7 +297,7 @@ export function renderRocksmithIssues() {
       const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'artifact-row-head';
       const expandedKey = `${lane?.id}:${tone}:${id}`;
       toggle.setAttribute('aria-controls', `issue-instances-${lane?.id}-${tone}-${id}`);
-      toggle.innerHTML = chevron;
+      toggle.innerHTML = icon('chevronDown', 12, 'side-chevron');
       const title = document.createElement('span'); title.className = 'artifact-name'; title.textContent = entries[0].title;
       toggle.title = entries[0].title;
       const count = document.createElement('span'); count.className = 'artifact-count'; const activeCount = entries.filter(entry => !issueIgnored(lane, entry)).length;
@@ -332,7 +328,7 @@ export function renderRocksmithIssues() {
 function issueSection(tone, label) {
   const head = document.createElement('div'); head.className = 'side-header artifact-issue-section-head';
   const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'side-label';
-  toggle.innerHTML = chevron;
+  toggle.innerHTML = icon('chevronDown', 12, 'side-chevron');
   const title = document.createElement('span'); title.textContent = label;
   const count = document.createElement('span'); count.className = 'artifact-count'; count.setAttribute('aria-live', 'polite');
   toggle.append(title, count);

@@ -38,7 +38,7 @@ try {
     './viewport-motion.js':{viewportFollowing:()=>false,stopViewportMotion:noop},
     './playback-effects.js':{playbackEventFrom,playbackEvents,
       playSampleEvent(synth,event,when,heard,rate){calls.push({event,when,heard,rate});}},
-  },{'./constants.js':true,'./util.js':true,'./region-loop.js':true,'./keymap.js':true});
+  },{'./constants.js':true,'./util.js':true,'./region-loop.js':true,'./keymap.js':true,'./icons.js':true});
   playback.init_playback();
   await playback.playTransport(); scheduler();
   assert.deepEqual(calls.map(c=>c.event.pitch),[60,64],'start inside a chord resumes every sounding member only');

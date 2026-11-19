@@ -12,6 +12,7 @@
 // adds nothing to dom.js.
 
 import { fretboardVisible, setFretboardVisible } from "./fretboard.js";
+import { icon } from "./icons.js";
 import { railBand, railsBottom, railsHidden } from "./marker-rails.js";
 import { firstMarkerViewportRect, openFirstMarkerPop } from "./markers.js";
 import { cancelPendingDetection, detectCompletionCount, openDetectPanel, requireDetectModel, updateDetectStatus } from "./detect.js";
@@ -556,7 +557,7 @@ function build() {
   });
   card.innerHTML = `
     <div class="tour-head">
-      <button type="button" class="tour-drag" aria-label="Move walkthrough card" title="Move walkthrough card"><svg width="12" height="20" viewBox="0 0 12 20" aria-hidden="true"><circle cx="3" cy="4" r="1.3"/><circle cx="9" cy="4" r="1.3"/><circle cx="3" cy="10" r="1.3"/><circle cx="9" cy="10" r="1.3"/><circle cx="3" cy="16" r="1.3"/><circle cx="9" cy="16" r="1.3"/></svg></button>
+      <button type="button" class="tour-drag" aria-label="Move walkthrough card" title="Move walkthrough card">${icon('grip', 20)}</button>
       <span class="tour-heading"><span class="tour-section"></span><span class="tour-title"></span><span class="tour-tasks" role="list" aria-label="Step tasks" aria-live="polite" hidden></span></span>
       <span class="tour-count"></span>
     </div>

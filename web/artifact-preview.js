@@ -1,5 +1,6 @@
 // Each reference card previews one occurrence; only one audition plays at a time.
 import { stageMono, STAGE_ANCHORED } from "./constants.js";
+import { icon } from './icons.js';
 import { ensureTone, clearPreview, pauseTransport, previewNotes } from "./playback.js";
 import { releaseLaneSynth } from "./lanes.js";
 import { toast } from "./notify.js";
@@ -14,8 +15,6 @@ const previews = new Map(), positions = new Map();
 import { motifGroups, motifLabel } from './motifs.js';
 import { artifactName as names } from './artifact-names.js';
 const artifactName = preview => names(preview.motif ? 'motif' : 'reference', preview.lane, preview.ref);
-const PLAY_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16l13-8Z"/></svg>';
-const STOP_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>';
 function groupFor(lane, preview) {
   if (!preview.motif) return lane?.refBoxes?.[preview.ref];
   const notes = motifGroups(lane?.notes).get(preview.ref);
@@ -26,11 +25,10 @@ function groupFor(lane, preview) {
 const memberNotes = (preview, box, lane = preview.lane) => preview.motif
   ? motifGroups(lane.notes).get(preview.ref) || [] : notesInBox(box, lane.notes);
 const refKey = (lane, ref) => `${lane.id}:${ref}`;
-const arrowIcon = direction => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${direction < 0 ? 'm15 6-6 6 6 6' : 'm9 6 6 6-6 6'}"/></svg>`;
 
 function syncPreviewState(preview, playing) {
   preview.root.toggleAttribute('data-playing', playing);
-  preview.play.innerHTML = playing ? STOP_ICON : PLAY_ICON;
+  preview.play.innerHTML = icon(playing ? 'stop' : 'play', 14);
   preview.play.setAttribute('aria-pressed', String(playing));
   preview.play.title = playing ? 'Stop preview' : 'Play preview';
   preview.play.setAttribute('aria-label', preview.play.title);
@@ -157,7 +155,7 @@ export function referencePreview(lane, ref, moveTo, motif = false) {
   };
   for (const [button, delta, name] of [[previous,-1,'Previous'],[next,1,'Next']]) {
     button.type = 'button'; button.className = `icon-btn icon-btn--compact artifact-instance-${delta < 0 ? 'previous' : 'next'}`;
-    button.innerHTML = arrowIcon(delta); button.title = `${name} instance of ${artifactName(preview)}`;
+    button.innerHTML = icon(delta < 0 ? 'chevronLeft' : 'chevronRight', 14); button.title = `${name} instance of ${artifactName(preview)}`;
     button.setAttribute('aria-label', button.title); button.addEventListener('click', () => change(delta));
   }
   const move = document.createElement('button'); move.type = 'button'; move.className = 'btn btn--compact btn--ghost artifact-jump';

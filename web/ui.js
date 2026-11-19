@@ -489,7 +489,7 @@ export function init_ui({ doCopy, doCut, doDelete, doPaste, renderLayerSettings 
     selectToneSound(event.detail.laneId, event.detail.markerId);
   });
   for (const slot of document.querySelectorAll('[data-ui-icon]')) {
-    slot.innerHTML = icon(slot.dataset.uiIcon, Number(slot.dataset.iconSize) || 16);
+    slot.innerHTML = icon(slot.dataset.uiIcon, Number(slot.dataset.iconSize) || 16, slot.dataset.iconClass);
   }
   // A number field marked data-stepper gets its up/down pair (design.md 4.3). The
   // field's own min, max and step decide what a press does.

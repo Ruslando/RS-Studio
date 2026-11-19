@@ -28,7 +28,6 @@ const rows = new Map();
 let dragged = null;   // the reference or motif being dragged onto the stage
 let pressed = null;   // a row pressed but not yet moved far enough to drag
 const collapsedArtifacts = new Set();
-const disclosureIcon = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
 function jumpToReference(lane, ref, index) {
   const group = lane.refBoxes?.[ref];
@@ -119,7 +118,7 @@ export function renderArtifacts() {
     // The whole head is the disclosure, like a sidebar section header.
     const toggle = document.createElement('button'); toggle.type = 'button';
     toggle.className = 'artifact-row-head artifact-reference-toggle';
-    toggle.innerHTML = disclosureIcon;
+    toggle.innerHTML = icon('chevronDown', 12, 'side-chevron');
     // Framed as on the stage: a reference solid gold, a motif dashed.
     row.dataset.kind = kind;
     copy.append(name); toggle.append(copy);

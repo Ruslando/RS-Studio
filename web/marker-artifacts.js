@@ -31,7 +31,6 @@ const groupOf = kind => (kind === 'crowd' ? 'rocksmith' : kind);
 // The export's own marks (rocksmith-events.js): listed and visited, never edited.
 const EXPORT_NAMES = Object.fromEntries(RS_EVENT_NAMES);
 const sections = new Map(), rows = new Map();
-const chevron = '<svg class="side-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
 // The kinds the clipboard copies, and the key a rail flag has for each
 // (markers.js tempoKey, the others their id).
@@ -159,7 +158,7 @@ export function initMarkerArtifacts() {
   for (const [kind, label] of categories) {
     const head = document.createElement('div'); head.className = 'side-header';
     const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'side-label';
-    toggle.innerHTML = chevron;
+    toggle.innerHTML = icon('chevronDown', 12, 'side-chevron');
     const title = document.createElement('span'); title.textContent = label;
     const count = document.createElement('span'); count.className = 'artifact-count'; count.setAttribute('aria-live', 'polite');
     toggle.append(title, count);
