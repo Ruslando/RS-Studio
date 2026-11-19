@@ -602,10 +602,14 @@ export function settleRefGrid(lane) {
   const onGrid = (t) => (Math.abs(gridLine(t, grid) - t) < 1e-3 ? gridLine(t, grid) : t);
   for (const group of Object.values(lane.refBoxes || {})) {
     if (!group?.anchors?.length || group.locked || typeof group.rt0 !== "number") continue;
-    const [r0, r1] = beatShape(group, clock);
-    group.anchors = group.anchors.map(onGrid);
-    const b = clock.beatAt(group.anchors[0]);
-    setBeatShape(group, clock.beatAt(onGrid(clock.timeAt(b + r0))) - b, clock.beatAt(onGrid(clock.timeAt(b + r1))) - b, clock);
+    const [r0, r1] = beatShape(group, clock), anchors = group.anchors.map(onGrid);
+    const b = clock.beatAt(anchors[0]);
+    const s0 = clock.beatAt(onGrid(clock.timeAt(b + r0))) - b, s1 = clock.beatAt(onGrid(clock.timeAt(b + r1))) - b;
+    // Only a box that moves is written: a project on the grid opens exactly as saved.
+    const moved = anchors.some((a, i) => Math.abs(a - group.anchors[i]) > 1e-9) || Math.abs(s0 - r0) > 1e-6 || Math.abs(s1 - r1) > 1e-6;
+    if (!moved) continue;
+    group.anchors = anchors;
+    setBeatShape(group, s0, s1, clock);
   }
   for (const group of Object.values(lane.refBoxes || {})) {
     if (!(group?.anchors?.length > 1) || group.locked) continue;
