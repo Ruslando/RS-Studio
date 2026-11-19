@@ -11,7 +11,7 @@ adding or changing UI. If a need is not covered here, extend this document and
 | `web/tokens.css` | Every value of the interface | Custom properties only |
 | `web/components.css` | Shared components | Tokens only, no screen ids |
 | `web/style.css` | Screen layout and the stage palette | Tokens and layout sizes |
-| `web/icons.js` | Icons used by more than one module | 24-unit outline paths |
+| `web/icons.js` | Every UI icon: Lucide, drawn by hand only where Lucide has none | 24-unit outline paths |
 | `web/stage-paint.js`, `web/constants.js` | What the canvas reads from the tokens | No colour literals |
 
 **Checking your work**: `.venv/Scripts/python tools/design-audit.py` opens every
@@ -339,7 +339,7 @@ radius 4). Transparent, `--label`; hover `--control-hover` and `--text`. Always
 has `aria-label` and `title`.
 
 - Window header: 32. Popover header, rows, stage: 24.
-- Close is the `CLOSE_ICON`. A destructive icon button turns `--error` on hover.
+- Close is the `close` icon. A destructive icon button turns `--error` on hover.
 - A toggle carries `aria-pressed`; on uses the shared `--selection` fill and
   `--text` foreground.
 - Lock and visibility are icons on every kind of row, never words. Mute is
@@ -563,8 +563,8 @@ One family: 24-unit grid, outline, `stroke="currentColor"`, round caps and
 joins, **stroke-width 1.8**, `aria-hidden`. Drawn at 16 in controls, 14 in
 compact controls and for the close mark, 12 for a chevron, 18 as the
 leading mark of a launcher action or drop zone, 22–24 only in an empty state
-or a cover placeholder. An icon used by two modules lives in
-`icons.js` and is placed with `data-ui-icon` (16, or `data-icon-size`) or
+or a cover placeholder. Icons are Lucide's and live in
+`icons.js`; each is placed with `data-ui-icon` (16, or `data-icon-size`) or
 `icon(name, size)`; markup is never pasted twice. A character (✓, ▸, ▲) is not an icon.
 
 ### 4.17 Waiting and loading
