@@ -48,7 +48,7 @@ const env = vm.createContext({checkResults: () => env.results || new Map(), S, i
 function load(file, expose) {
   const source = readFileSync(new URL(`../../web/${file}.js`, import.meta.url), 'utf8')
     .replace(/^import[\s\S]*?;\s*$/gm, '').replace(/\bexport /g, '');
-  vm.runInContext(source + `;globalThis.${expose} = {${expose === 'stateApi' ? 'setIssueIgnored, setCategoriesIgnored, issueIgnored, setShowIgnoredIssues, openIssueMenu, issueIgnoreActions, restoreIssues, exportIssueIgnores' : 'rowsFor, rocksmithIssueKinds, initRocksmithIssues, renderRocksmithIssues'}};`, env);
+  vm.runInContext(source + `;globalThis.${expose} = {${expose === 'stateApi' ? 'setIssueIgnored, setCategoriesIgnored, setLaneKindsIgnored, issueIgnored, setShowIgnoredIssues, openIssueMenu, issueIgnoreActions, restoreIssues, exportIssueIgnores' : 'rowsFor, rocksmithIssueKinds, initRocksmithIssues, renderRocksmithIssues'}};`, env);
 }
 load('issue-state', 'stateApi');
 load('rocksmith-check', 'listApi');
@@ -206,6 +206,15 @@ assert.deepEqual(JSON.parse(JSON.stringify(exportIgnores.ignoredOccurrences)), [
 ], 'export still acknowledges the ignored siblings');
 state.setCategoriesIgnored([first.key], true);
 assert.equal(state.issueIgnored(lane, first), true, 'ignoring the category again clears individual restore exceptions');
+
+// A kind ignored in one layer (the export window) restores from the category menu.
+S.state.metadata = {};
+state.setLaneKindsIgnored(lane, [first.key], true);
+const laneCategory = state.issueIgnoreActions(lane, first, true)[0];
+assert.equal(laneCategory.label, 'Restore category', 'a layer-only ignore shows as an ignored category');
+laneCategory.fn();
+assert.equal(state.issueIgnored(lane, first), false, 'restoring lifts the layer-only ignore');
+assert.equal(state.issueIgnored(lane, second), false);
 
 // Each severity can restore all ignored occurrences with one undo step, without
 // restoring other severities or the same category on another layer.

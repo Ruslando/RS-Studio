@@ -120,12 +120,22 @@ export function exportIssueIgnores(entries) {
   };
 }
 export function setIssueIgnored(lane, issue, category, ignored) {
-  return category ? setCategoriesIgnored([issue.id || issue.key || issue.code], ignored)
-    : changeIgnored(values => changeOccurrence(values, lane, issue, ignored));
+  const id = issue.id || issue.key || issue.code;
+  if (!category) return changeIgnored(values => changeOccurrence(values, lane, issue, ignored));
+  if (ignored) return setCategoriesIgnored([id], true);
+  // Restoring lifts the song-wide ignore and this layer's own, from the export window.
+  return changeIgnored(values => {
+    values.ignoredIssues.delete(issueId(id));
+    values.ignoredLaneIssues.delete(laneKindKey(lane, id));
+    for (const key of values.restoredInstances) {
+      try { if (JSON.parse(key)[1] === issueId(id)) values.restoredInstances.delete(key); }
+      catch { /* Old or invalid occurrence keys cannot match a category. */ }
+    }
+  });
 }
 // Shared by the context menus and the spectrogram's interactive tooltip.
 export function issueIgnoreActions(lane, issue, categoryOnly = false) {
-  const category = ignoredCategories().has(issueId(issue.id || issue.key || issue.code));
+  const category = kindIgnored(lane, issue.id || issue.key || issue.code);
   const instance = issueIgnored(lane, issue);
   return categoryOnly
     ? [{label: category ? 'Restore category' : 'Ignore category', fn: () => setIssueIgnored(lane, issue, true, !category)}]
