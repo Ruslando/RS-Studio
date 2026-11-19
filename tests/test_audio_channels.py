@@ -84,3 +84,22 @@ class ChannelPersistenceTests(unittest.TestCase):
             self.assertTrue(restored['editLanes'][0]['active'])
             server._apply_save_payload('viewtest', {'name': 'renamed'})
             self.assertEqual(manifest['view'], view, 'unrelated saves preserve the view')
+
+    def test_different_spectrograms_render_in_parallel(self):
+        import threading
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'mix.wav'
+            sf.write(source, np.zeros((1024, 2)), 22050)
+            both = threading.Barrier(2, timeout=5)
+            def render(audio, out, view='energy', cents=0.0):
+                both.wait()   # breaks (timeout) if renders are serialized
+                Path(out).write_bytes(b'png')
+            errors = []
+            def open_view(view):
+                try: channel_assets(source, 'stereo', spectrogram=True, view=view)
+                except Exception as exc: errors.append(exc)
+            with patch('rs_studio.pipeline.compute_spectrogram', side_effect=render):
+                threads = [threading.Thread(target=open_view, args=(v,)) for v in ('fine', 'contrast')]
+                for t in threads: t.start()
+                for t in threads: t.join()
+            self.assertEqual(errors, [])

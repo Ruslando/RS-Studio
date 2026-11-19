@@ -490,6 +490,17 @@ body.row-resizing:not(.panel-snapping) #minimapClip { transition: none; }
 
 #viewer, .split-viewer { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; border-radius: 0; }
 
+/* Delayed fade so cached spectrograms (instant) don't flash it. */
+#spectLoading {
+  pointer-events: none; z-index: 2;
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: var(--s-sibling);
+  padding: var(--s-sibling) calc(var(--s-sibling) * 2); border-radius: var(--r-container);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  color: var(--text); font: 400 var(--text-control)/1 var(--font-ui); white-space: nowrap;
+  animation: spect-loading-in 150ms ease-out 200ms both;
+}
+@keyframes spect-loading-in { from { opacity: 0; } }
 #fretboardBusy {
   pointer-events: none;
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);

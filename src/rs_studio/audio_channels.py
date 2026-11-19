@@ -7,6 +7,14 @@ import subprocess
 import threading
 
 _lock = threading.Lock()
+# ponytail: one lock per cached file, so layers render in parallel; never pruned
+# (a few bytes per channel/view ever opened this session).
+_locks: dict[Path, threading.Lock] = {}
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    with _lock:
+        return _locks.setdefault(path, threading.Lock())
 # Side = (L - R) / 2: removes everything panned dead centre (bass, vocals, kick)
 # and keeps what differs between the speakers, e.g. double-tracked guitars.
 PAN = {'left': 'c0', 'right': 'c1', 'side': '0.5*c0-0.5*c1'}
@@ -28,24 +36,24 @@ def channel_assets(source: Path, channel: str, *, spectrogram: bool = False,
         return source, None
     flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
     cache = source.parent / 'channel-cache'
-    with _lock:
-        audio = source
-        if channel != 'stereo':
-            info = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'a:0',
-                                   '-show_entries', 'stream=channels', '-of', 'json', str(source)],
-                                  capture_output=True, text=True, check=True, creationflags=flags)
-            channels = json.loads(info.stdout)['streams'][0]['channels']
-            if channels not in (1, 2):
-                raise ValueError('Channel selection requires mono or stereo audio')
-            if channels == 1:
-                channel = 'stereo'  # ponytail: mono has no side signal; shows the mono audio instead
-                if view == 'energy' and not cents:
-                    return source, None
-        stat = source.stat()
-        key = hashlib.sha256(f'{source.name}:{stat.st_size}:{stat.st_mtime_ns}:{channel}'.encode()).hexdigest()[:24]
-        cache.mkdir(exist_ok=True)
-        if channel != 'stereo':
-            audio = cache / f'{key}.flac'
+    audio = source
+    if channel != 'stereo':
+        info = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'a:0',
+                               '-show_entries', 'stream=channels', '-of', 'json', str(source)],
+                              capture_output=True, text=True, check=True, creationflags=flags)
+        channels = json.loads(info.stdout)['streams'][0]['channels']
+        if channels not in (1, 2):
+            raise ValueError('Channel selection requires mono or stereo audio')
+        if channels == 1:
+            channel = 'stereo'  # ponytail: mono has no side signal; shows the mono audio instead
+            if view == 'energy' and not cents:
+                return source, None
+    stat = source.stat()
+    key = hashlib.sha256(f'{source.name}:{stat.st_size}:{stat.st_mtime_ns}:{channel}'.encode()).hexdigest()[:24]
+    cache.mkdir(exist_ok=True)
+    if channel != 'stereo':
+        audio = cache / f'{key}.flac'
+        with _lock_for(audio):
             if not audio.exists():
                 temp = cache / f'{key}.tmp.flac'
                 try:
@@ -55,10 +63,11 @@ def channel_assets(source: Path, channel: str, *, spectrogram: bool = False,
                     temp.replace(audio)
                 finally:
                     temp.unlink(missing_ok=True)
-        if not spectrogram:
-            return audio, None
-        name = (key if view == 'energy' else f'{key}.{view}') + (f'.{cents:+.1f}ct' if cents else '')
-        image = cache / f'{name}.png'
+    if not spectrogram:
+        return audio, None
+    name = (key if view == 'energy' else f'{key}.{view}') + (f'.{cents:+.1f}ct' if cents else '')
+    image = cache / f'{name}.png'
+    with _lock_for(image):
         if not image.exists():
             temp = cache / f'{name}.tmp.png'
             try:
@@ -69,7 +78,7 @@ def channel_assets(source: Path, channel: str, *, spectrogram: bool = False,
                     values.replace(Path(str(image) + ".intensity"))
             finally:
                 temp.unlink(missing_ok=True)
-        return audio, image
+    return audio, image
 
 
 def pitch_shift(source: Path, out: Path, cents: float, codec: list[str]) -> None:
@@ -93,7 +102,7 @@ def shifted_audio(source: Path, cents: float) -> Path:
     stat = source.stat()
     key = hashlib.sha256(f'{source.name}:{stat.st_size}:{stat.st_mtime_ns}'.encode()).hexdigest()[:24]
     out = source.parent / 'channel-cache' / f'{key}.{cents:+.1f}ct.opus'
-    with _lock:
+    with _lock_for(out):
         if not out.exists():
             out.parent.mkdir(exist_ok=True)
             temp = out.with_suffix('.tmp.opus')

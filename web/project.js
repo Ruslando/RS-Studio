@@ -621,6 +621,30 @@ export async function setTuning(change) {
 // The edit lanes are global, so they stay put across stems.
 let stemViewGeneration = 0;
 const channelRequests = new WeakMap();
+// Centered "Loading spectrogram…" while any backdrop image is in flight.
+let spectLoads = 0;
+function trackSpectLoad(promise) {
+  const el = document.getElementById('spectLoading');
+  if (el) el.hidden = !++spectLoads;
+  promise.finally(() => { spectLoads--; if (el) el.hidden = !spectLoads; }).catch(() => {});
+  return promise;
+}
+// After the visible layer loads, render the others' images server-side one at a
+// time, so switching layers afterwards is a cache hit.
+const warmed = new Set();
+let warming = null;
+function warmOtherStems() {
+  if (warming) return;
+  const state = S.state;
+  warming = (async () => {
+    for (const stem of state?.stems || []) {
+      const href = spectrogramUrl(stem, stem.channel || 'stereo').href;
+      if (S.state !== state || stem.id === state.curStem || warmed.has(href)) continue;
+      warmed.add(href);
+      try { await fetch(href, { priority: 'low' }); } catch { /* best-effort */ }
+    }
+  })().finally(() => { warming = null; });
+}
 export function spectrogramUrl(stem, channel) {
   const url = new URL(stem.spec.url, location.href);
   url.searchParams.set('channel', channel);
@@ -636,10 +660,11 @@ export async function changeStemChannel(stem, channel) {
   channelRequests.set(stem, request);
   const url = spectrogramUrl(stem, channel);
   const image = new Image(); image.src = url.href;
-  try { await image.decode(); }
+  try { await trackSpectLoad(image.decode()); }
   catch { toast('Could not load audio channel'); return; }
   if (S.state !== state || channelRequests.get(stem) !== request || !state.stems.includes(stem)) return;
   stem.channel = channel;
+  warmOtherStems();
   applyStemGains(); refreshSaveState();
   window.dispatchEvent(new Event("cw-stem-view-changed"));
   if (state.curStem === stem.id) {
@@ -663,15 +688,15 @@ export function selectStem(id) {
   const generation = ++stemViewGeneration;
   const requestedChannel = stem.channel || 'stereo';
   const img = new Image();
-  projectVisuals = new Promise((resolve) => {
+  projectVisuals = trackSpectLoad(new Promise((resolve) => {
     img.onload = () => {
       if (generation === stemViewGeneration && S.state?.stems.includes(stem) && S.state.curStem === stem.id && (stem.channel || 'stereo') === requestedChannel) {
         S.spectImg = img; prepareSpectSample(); layout(); draw();
       }
-      resolve();
+      resolve(); warmOtherStems();
     };
     img.onerror = () => resolve();
-  });
+  }));
   const specUrl = spectrogramUrl(stem, stem.channel || 'stereo');
   img.src = specUrl.href;
 

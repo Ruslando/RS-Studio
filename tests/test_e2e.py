@@ -1488,6 +1488,22 @@ class EndToEndTests(unittest.TestCase):
         }""")
         expect(self.page.locator('#spectrogramControls')).to_be_visible()
 
+    def test_a_loading_spectrogram_shows_on_the_stage_even_with_the_controls_collapsed(self):
+        self.new_audio_project()
+        page = self.page
+        held = []
+        page.route('**/api/spectrogram/**view=contrast*', lambda route: held.append(route))
+        page.click('#stageControlsToggle')
+        page.click('#stageViewButton')
+        page.click('#stageViewMenu [data-view="contrast"]')
+        page.click('#stageControlsToggle')
+        expect(page.locator('#stageControlsBody')).to_be_hidden()
+        expect(page.locator('#spectLoading')).to_be_visible()
+        while not held: page.wait_for_timeout(50)   # the request reaches the handler
+        for route in held: route.continue_()
+        expect(page.locator('#spectLoading')).to_be_hidden(timeout=60000)
+        expect(page.locator('#stageViewLabel')).to_have_text('SW')
+
     def test_drawing_settings_live_on_the_spectrogram_controls_tab(self):
         self.open_reference_project()
         page = self.page

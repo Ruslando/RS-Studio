@@ -60,8 +60,7 @@ export function initSpectrogramControls() {
       option.querySelector('.chkmark').textContent = checked ? '✓' : '';
     }
     const range = normalizeIntensityRange(...(S.state?.viewIntensity || [0, 100]));
-    status.textContent = channel.disabled ? 'Loading channel…'
-      : range[0] === 0 && range[1] === 100 ? '' : intensityStatus(S.spectImg);
+    status.textContent = range[0] === 0 && range[1] === 100 ? '' : intensityStatus(S.spectImg);
     min.value = String(range[0]); max.value = String(range[1]);
     minValue.textContent = `${range[0]}%`; maxValue.textContent = `${range[1]}%`;
     min.setAttribute('aria-valuetext', minValue.textContent);
