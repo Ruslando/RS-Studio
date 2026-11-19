@@ -2747,7 +2747,7 @@ wheels = [
 
 [[package]]
 name = "rs-studio"
-version = "0.5.0rc3"
+version = "0.5.0-rc.4"
 source = { editable = "." }
 dependencies = [
     { name = "basic-pitch" },
