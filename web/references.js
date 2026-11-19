@@ -581,6 +581,17 @@ function reconcileRefGroup(lane, ref, group, prevNotes, prevGroup, mirrorSource,
 export function settleRefGrid(lane) {
   const grid = laneGrid(lane), clock = laneClock(lane), fit = gridFit(grid);
   if (!grid.length) return;
+  // A box edge within a millisecond of a grid line goes onto it, as a note's does.
+  // Notes pulled onto the grid took their anchor along but not the box's length,
+  // and a box edge under a note's edge cannot be grabbed to fix it by hand.
+  const onGrid = (t) => (Math.abs(gridLine(t, grid) - t) < 1e-3 ? gridLine(t, grid) : t);
+  for (const group of Object.values(lane.refBoxes || {})) {
+    if (!group?.anchors?.length || group.locked || typeof group.rt0 !== "number") continue;
+    const [r0, r1] = beatShape(group, clock);
+    group.anchors = group.anchors.map(onGrid);
+    const b = clock.beatAt(group.anchors[0]);
+    setBeatShape(group, clock.beatAt(onGrid(clock.timeAt(b + r0))) - b, clock.beatAt(onGrid(clock.timeAt(b + r1))) - b, clock);
+  }
   for (const group of Object.values(lane.refBoxes || {})) {
     if (!(group?.anchors?.length > 1) || group.locked) continue;
     // Unclamped: this runs while a project opens, before the pitch range exists.

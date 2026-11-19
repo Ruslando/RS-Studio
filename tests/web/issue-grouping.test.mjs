@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {issueId, issueInstanceKey, migrateIgnoredIssues} from '../../web/issue-identity.js';
-import {laneIssues} from '../../web/note-issues.js';
+import {gridLine, laneIssues} from '../../web/note-issues.js';
+import {occurrenceBox} from '../../web/reference-core.js';
 import {issueTone, toneRank} from '../../web/issue-tone.js';
 
 // Exercise the real list/state modules without loading audio or a canvas.
@@ -32,6 +33,7 @@ let actions, commits = 0, jumpedTo;
 const snapshots = [];
 const noop = () => {};
 const env = vm.createContext({checkResults: () => env.results || new Map(), S, issueId, issueInstanceKey, migrateIgnoredIssues, laneIssues, issueTone, toneRank,
+  gridLine, occurrenceBox, laneClock: () => ({beatAt: t => t, timeAt: t => t}),
   document: {createElement: () => new Element()},
   window: {addEventListener: noop, dispatchEvent: noop}, Event: class {},
   $: id => id === 'artifactsContent' ? content : new Element(),
@@ -263,3 +265,14 @@ jump.handlers.click({stopPropagation() {}});
 assert.equal(jumpedTo, 7.25, 'section warning jumps to the source marker');
 assert.match(warningRow.dataset.tip, /not the notes/);
 console.log('Ignored counts, occurrence restore, severity restore and section navigation passed');
+
+// A reference box between grid lines (1 s apart here) is a warning, even 0.18 ms off.
+vm.runInContext('results = new Map();', env);
+lane.refBoxes = {8: {rt0: 0, rt1: 2, pLo: 30, pHi: 60, anchors: [4, 7.999822]}};
+const refRows = list.rowsFor(lane).filter(row => row.key === 'editor.reference.offGrid');
+assert.equal(refRows.length, 1, 'only the occurrence off the grid');
+assert.equal(refRows[0].title, 'Reference #8 does not fit the grid');
+assert.equal(refRows[0].time, 7.999822);
+assert.match(refRows[0].help, /Occurrence 2 starts 0\.178 ms off/);
+delete lane.refBoxes;
+console.log('Reference grid warning passed');

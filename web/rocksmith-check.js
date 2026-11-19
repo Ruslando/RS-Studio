@@ -17,7 +17,9 @@ import { S } from './store.js';
 import { openDiagnosticMenu } from './editor-menu.js';
 import { buildSpecForLanesAsync } from "./tablature.js";
 import { laneFretCount, laneFretTuning, laneTuning } from "./lane-tuning.js";
-import { laneIssues } from './note-issues.js';
+import { gridLine, laneIssues } from './note-issues.js';
+import { laneClock } from './reference-clock.js';
+import { occurrenceBox } from './reference-core.js';
 import { timingData, timingIdOf } from './timing.js';
 import { segStep, timingSegments } from './grid-read.js';
 import { RS_KIND_OPTIONS, isTablatureLane } from './layer-role.js';
@@ -138,6 +140,29 @@ export function rocksmithShapeProblems(lane) {
   return out;
 }
 
+// A reference occurrence whose box starts or ends between grid lines. Copies are
+// placed by their distance from the box start, so even a fraction of a millisecond
+// lands them off the notes: the tolerance is far tighter than a note's.
+function referenceGridRows(lane) {
+  if (!lane?.refBoxes) return [];
+  const grid = timingSegments(timingData(timingIdOf(lane))).map(segment => ({ t: segment.t, step: segStep(segment) }));
+  if (!grid.length) return [];
+  const clock = laneClock(lane), rows = [];
+  for (const [ref, group] of Object.entries(lane.refBoxes)) {
+    if (!group?.anchors?.length || typeof group.rt0 !== 'number') continue;
+    group.anchors.forEach((_, i) => {
+      const box = occurrenceBox(group, i, clock);
+      const miss = [box.t0, box.t1].find(t => Math.abs(gridLine(t, grid) - t) >= 1e-5);
+      if (miss == null) return;
+      rows.push({ id: 'editor.reference.offGrid', key: 'editor.reference.offGrid',
+        title: `${group.name || `Reference #${ref}`} does not fit the grid`,
+        help: `Occurrence ${i + 1} ${miss === box.t0 ? 'starts' : 'ends'} ${Math.abs((gridLine(miss, grid) - miss) * 1000).toFixed(3)} ms off a grid line, so hand positions and notes copied into the other occurrences can land on the wrong note. Drag the box edge onto a grid line.`,
+        tone: 'warning', time: box.t0, target: `reference:${lane.id}:${ref}:${i}` });
+    });
+  }
+  return rows;
+}
+
 // Every problem of a layer: the export's (Rocksmith), the editor's own
 // (note-issues.js) and its flags'. `key` is the problem's kind, what the export
 // window ignores: a stable ID independent of the message text.
@@ -152,6 +177,7 @@ export function rowsFor(lane) {
       help: 'Change the hand position, explicit fingers or note positions in this range.',
       tone: 'warning', time: hold.t, notes, ...(hold.implicit ? {} : { target: `hand-anchor:${lane.id}:${hold.id}` }) });
   }
+  rows.push(...referenceGridRows(lane));
   if (found?.error) rows.push({ id: found.errorId || 'export.compile-failed', key: found.errorId || 'export.compile-failed', title: 'Rocksmith: Export failed', help: found.error, tone: 'error', time: null });
   if (found?.warningIssues) for (const issue of found.warningIssues) rows.push({ ...issue, key: issue.id });
   else for (const text of found?.warnings || []) rows.push({ key: issueId(text), title: text.startsWith('Rocksmith: ') ? text : `Rocksmith: ${text}`, help: '', tone: 'warning', time: null });

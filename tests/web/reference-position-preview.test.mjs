@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { EFFECT_FIELDS, copyEffects } from '../../web/note-effects.js';
-import { effectSig, inRefBox, occurrenceBox, shiftOf } from '../../web/reference-core.js';
+import { beatShape, effectSig, inRefBox, occurrenceBox, shiftOf, spanAt } from '../../web/reference-core.js';
 import { referenceHands, referenceHandSig, mirrorReferenceHands } from '../../web/reference-hands.js';
 
 // Exercise the actual reference commit/preview functions without importing the
@@ -161,14 +161,14 @@ console.log('reference position preview: commit propagation, transposition and i
   // mirrored that way is settled from the copy that fits its grid.
   const { gridLine, offGrid } = await import('../../web/note-issues.js');
   const grid = [{ t: 0, step: 1 }, { t: 7.9, step: 0.5 }];
-  const names = ['relPattern', 'mirrorBox', 'settleRefGrid'];
+  const names = ['relPattern', 'mirrorBox', 'setBeatShape', 'settleRefGrid'];
   const code = names.map(name => { const at = source.indexOf(`function ${name}(`); return source.slice(at, source.indexOf('\n}', at) + 2); }).join('\n');
   const { settleRefGrid } = new Function('deps', `const { EFFECT_FIELDS, copyEffects, shiftOf, laneClock, notesInBox,
-    noteOrder, dropFingering, nid, OCCURRENCE_FIELDS, laneGrid, gridLine, offGrid, occurrenceBox } = deps;
+    noteOrder, dropFingering, nid, OCCURRENCE_FIELDS, laneGrid, gridLine, offGrid, occurrenceBox, beatShape, spanAt } = deps;
     ${source.match(/const gridFit = [^\n]+/)[0]}\n${code}
     return { settleRefGrid };`)({ EFFECT_FIELDS, copyEffects, shiftOf, laneClock: () => clock,
     notesInBox: (box, notes) => notes.filter(n => inRefBox(n, box, .1)), noteOrder: (a, b) => a.start - b.start || a.pitch - b.pitch,
-    dropFingering: () => {}, nid: () => `settle-${++uid}`, OCCURRENCE_FIELDS, laneGrid: () => grid, gridLine, offGrid, occurrenceBox });
+    dropFingering: () => {}, nid: () => `settle-${++uid}`, OCCURRENCE_FIELDS, laneGrid: () => grid, gridLine, offGrid, occurrenceBox, beatShape, spanAt });
   const lane = { notes: [{ id: 'a1', start: 0, end: 1, pitch: 40 }, { id: 'a2', start: 1, end: 1.9, pitch: 40 },
     { id: 'b1', start: 6, end: 7, pitch: 40 }, { id: 'b2', start: 7, end: 7.9, pitch: 40 }],
   refBoxes: { 1: { rt0: 0, rt1: 2, rb0: 0, rb1: 2, pLo: 40, pHi: 40, anchors: [0, 6] } } };

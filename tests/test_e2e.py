@@ -1112,6 +1112,38 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#artifactWarnings .artifact-issue-row")).to_have_count(0)
         expect(page.locator("#artifactWarningsBody")).to_be_hidden()
 
+    def test_a_reference_box_off_the_grid_is_a_warning(self):
+        page = self.page
+        page.route("**/api/rocksmith/check", lambda route: route.fulfill(json=[]))
+        notes = [{"id": f"n{i}", "start": t, "end": t + 0.5, "pitch": 57} for i, t in enumerate((2.0, 4.0, 8.0, 10.0))]
+        # #1's occurrence 2 starts 2 ms before its beat. #2's is only 0.178 ms off:
+        # drift under a millisecond is put on the grid when the project opens.
+        ref = {"rt0": 0, "rt1": 1, "rb0": 0, "rb1": 2, "pLo": 50, "pHi": 64, "anchors": [2.0, 3.998]}
+        drift = {"rt0": 0, "rt1": 1, "rb0": 0, "rb1": 2.000356, "pLo": 50, "pHi": 64, "anchors": [8.0, 9.999822]}
+        lane = {"id": "edit", "name": "Bass", "kind": "edit", "color": "#6ee7b7", "visible": True, "active": True,
+                "instrument": "bass", "tablatureEnabled": True, "tuning": "bass4", "capo": 0,
+                "notes": notes, "refBoxes": {"1": ref, "2": drift}}
+        project = {"name": "Reference grid", "duration": 12.0, "scoreDuration": 12.0, "editLanes": [lane],
+                   "grid": {"bpm": 120, "offset": 0.0, "tsNum": 4, "tsDen": 4, "subdiv": 2, "tempoMap": []},
+                   "sectionMarkers": [], "stems": [], "metadata": {"title": "Grid", "artist": "E2E"}}
+        bundle = self.data / "reference-grid.chart"
+        with zipfile.ZipFile(bundle, "w") as archive:
+            archive.writestr("project.json", json.dumps(project))
+        with page.expect_file_chooser() as chooser:
+            page.click("#welcomeOpen")
+        chooser.value.set_files(bundle)
+        group = page.locator("#artifactWarnings .artifact-issue-group", has_text="Reference #1 does not fit the grid")
+        group.locator(".artifact-issue-group-head .artifact-row-head").click()
+        row = group.locator(".artifact-issue-row")
+        expect(row).to_have_count(1)
+        self.assertIn("Occurrence 2 starts 2.000 ms off", row.get_attribute("data-tip"))
+        row.click()
+        time_at = lambda: page.evaluate("async () => (await import('/playback.js')).playbackTime()")
+        self.assertAlmostEqual(time_at(), 4.0, places=2)
+        expect(page.locator("#artifactWarnings .artifact-issue-group", has_text="Reference #2")).to_have_count(0)
+        self.assertEqual(page.evaluate("""async () => { const g = (await import('/store.js')).S.state.editLanes[0].refBoxes[2];
+            return [g.anchors, g.rb1]; }"""), [[8, 10], 2])
+
     def test_arrow_navigation_steps_back_from_the_focused_chord(self):
         self.open_reference_project()
         page = self.page
