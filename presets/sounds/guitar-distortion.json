@@ -1,0 +1,28 @@
+{
+  "GearList": {
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_MarshallJCM800_Mid": 100,
+        "Amp_MarshallJCM800_Gain": 65,
+        "Amp_MarshallJCM800_Bass": 100,
+        "Amp_MarshallJCM800_Treble": 100,
+        "Amp_MarshallJCM800_Pres": 10
+      },
+      "Key": "Amp_MarshallJCM800"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_Marshall1960a_57_Edge"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35722]DISTORTION"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-23.500",
+  "Key": "RageKilling_dist",
+  "Name": "Guitar Distortion"
+}

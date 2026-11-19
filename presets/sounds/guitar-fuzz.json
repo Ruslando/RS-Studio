@@ -1,0 +1,37 @@
+{
+  "GearList": {
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_EN30_Gain": 81,
+        "Amp_EN30_Pres": 40,
+        "Amp_EN30_Bass": 40,
+        "Amp_EN30_Mid": 88,
+        "Amp_EN30_Bright": 1,
+        "Amp_EN30_Treble": 88
+      },
+      "Key": "Amp_EN30"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_EN212C_Ribbon_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_CaptFuzzle_Tone": 80,
+        "Pedal_CaptFuzzle_Gain": 100
+      },
+      "Key": "Pedal_CaptFuzzle"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35756]FUZZ"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-19.253977",
+  "Key": "AreYouGonna_fuzz",
+  "Name": "Guitar Fuzz"
+}

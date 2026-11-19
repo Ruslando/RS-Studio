@@ -1,0 +1,81 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioChorus_LoFilter": 65,
+        "Rack_StudioChorus_Mix": 24,
+        "Rack_StudioChorus_Depth": 78,
+        "Rack_StudioChorus_HiFilter": 5,
+        "Rack_StudioChorus_Delay": 24,
+        "Rack_StudioChorus_Rate": 1.5,
+        "Rack_StudioChorus_Stereo": 28
+      },
+      "Key": "Rack_StudioChorus",
+      "Category": "Modulation"
+    },
+    "Rack2": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 130,
+        "Rack_StudioEQ_HiMidFreq": 2,
+        "Rack_StudioEQ_TrebleFreq": 4,
+        "Rack_StudioEQ_LoMidFreq": 150,
+        "Rack_StudioEQ_Treble": 3,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 3,
+        "Rack_StudioEQ_HiMid": -2,
+        "Rack_StudioEQ_LoMid": 0,
+        "Rack_StudioEQ_HiMidQ": 1
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Rack3": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioChamber_Mix": 11,
+        "Rack_StudioChamber_Depth": 100,
+        "Rack_StudioChamber_Tone": 28,
+        "Rack_StudioChamber_Time": 66
+      },
+      "Key": "Rack_StudioChamber",
+      "Category": "Reverb"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_CS90_Bass": 48,
+        "Amp_CS90_Gain": 1,
+        "Amp_CS90_Mid": 1,
+        "Amp_CS90_Treble": 96
+      },
+      "Key": "Amp_CS90"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_CS212C_57_Edge"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ5_5700": 6,
+        "Pedal_EQ5_2200": -3,
+        "Pedal_EQ5_63": 2,
+        "Pedal_EQ5_250": -2,
+        "Pedal_EQ5_750": -15
+      },
+      "Key": "Pedal_EQ5",
+      "Category": "Filter"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35720]CLEAN",
+    "$[35723]CHORUS"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-18.500",
+  "Key": "BoysDontCry_clean",
+  "Name": "Guitar Clean Chorus"
+}

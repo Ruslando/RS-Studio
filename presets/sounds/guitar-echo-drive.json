@@ -1,0 +1,77 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_Bass": 1,
+        "Rack_StudioEQ_BassFreq": 435,
+        "Rack_StudioEQ_HiMid": 0.5,
+        "Rack_StudioEQ_HiMidFreq": 2.1,
+        "Rack_StudioEQ_HiMidQ": 0,
+        "Rack_StudioEQ_LoMid": -0.5,
+        "Rack_StudioEQ_LoMidFreq": 980,
+        "Rack_StudioEQ_LoMidQ": 0,
+        "Rack_StudioEQ_Treble": 1,
+        "Rack_StudioEQ_TrebleFreq": 4.2
+      },
+      "Key": "Rack_StudioEQ",
+      "Category": "30785"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_CA85_Bass": 58,
+        "Amp_CA85_Gain": 44,
+        "Amp_CA85_Mid": 88,
+        "Amp_CA85_Treble": 78
+      },
+      "Key": "Amp_CA85"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_EN212C_57_Cone"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_SpringReverb_Depth": 80,
+        "Pedal_SpringReverb_Mix": 36,
+        "Pedal_SpringReverb_Time": 60
+      },
+      "Key": "Pedal_SpringReverb",
+      "Category": "30792"
+    },
+    "PostPedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ5_2200": -3,
+        "Pedal_EQ5_250": 1,
+        "Pedal_EQ5_5700": -2,
+        "Pedal_EQ5_63": 0,
+        "Pedal_EQ5_750": 1
+      },
+      "Key": "Pedal_EQ5",
+      "Category": "30785"
+    },
+    "PostPedal3": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_AnalogueDelay_Feedback": 28,
+        "Pedal_AnalogueDelay_Mix": 17,
+        "Pedal_AnalogueDelay_Time": 280
+      },
+      "Key": "Pedal_AnalogueDelay",
+      "Category": "30779"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35754]ECHO",
+    "$[35722]DISTORTION"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-21.500",
+  "Key": "angeadve_echodist",
+  "Name": "Guitar Echo Drive"
+}

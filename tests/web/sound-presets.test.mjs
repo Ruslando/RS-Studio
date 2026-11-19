@@ -9,7 +9,7 @@ import { readFileSync, readdirSync } from "node:fs";
 const presetFolder = new URL('../../presets/sounds/', import.meta.url);
 const fileTones = readdirSync(presetFolder).filter(name => name.endsWith('.json')).map(name =>
   parsePresetJSON(readFileSync(new URL(name, presetFolder), 'utf8'))[0]);
-assert.equal(fileTones.length, 6);
+assert.equal(fileTones.length, 29);
 assert.deepEqual(parsePresetJSON(presetJSON(fileTones, { library: true })), fileTones);
 assert.deepEqual(parsePresetJSON(presetJSON([fileTones[0]])), [fileTones[0]]);
 assert.equal(presetFingerprint(fileTones[0]), presetFingerprint({ ...fileTones[0], Name: 'Copy' }));
@@ -133,7 +133,7 @@ console.log("sound presets: full catalogue, chain edits, validation and safe sto
   try {
     await loadPresetFolderData();
     const first = readAvailableSoundPresets().filter(p => p.id.startsWith('sound_file_'));
-    assert.equal(first.length, 6);
+    assert.equal(first.length, 29);
     assert.ok(first.every(p => isSoundId(p.id)));
     await loadPresetFolderData();
     assert.deepEqual(readAvailableSoundPresets().filter(p => p.id.startsWith('sound_file_')), first);

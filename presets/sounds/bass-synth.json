@@ -1,0 +1,79 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 485,
+        "Rack_StudioEQ_HiMidFreq": 1.2,
+        "Rack_StudioEQ_TrebleFreq": 6.6,
+        "Rack_StudioEQ_LoMidFreq": 120,
+        "Rack_StudioEQ_Treble": -1,
+        "Rack_StudioEQ_LoMidQ": 0,
+        "Rack_StudioEQ_Bass": 1,
+        "Rack_StudioEQ_HiMid": 1.5,
+        "Rack_StudioEQ_LoMid": -2.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Rack2": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioChorus_LoFilter": 44,
+        "Rack_StudioChorus_Mix": 22,
+        "Rack_StudioChorus_Depth": 88,
+        "Rack_StudioChorus_HiFilter": 11,
+        "Rack_StudioChorus_Delay": 66,
+        "Rack_StudioChorus_Rate": 0.3,
+        "Rack_StudioChorus_Stereo": 100
+      },
+      "Key": "Rack_StudioChorus",
+      "Category": "30788"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_BT975B_LoShift": 1,
+        "Bass_Amp_BT975B_Mid": 6.5,
+        "Bass_Amp_BT975B_HiShift": 1,
+        "Bass_Amp_BT975B_Treble": 4,
+        "Bass_Amp_BT975B_Bass": 3.5,
+        "Bass_Amp_BT975B_Gain": 9
+      },
+      "Key": "Bass_Amp_BT975B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_BT212BC_Tube_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassFuzz_Tone": 66,
+        "Bass_Pedal_BassFuzz_Gain": 6,
+        "Bass_Pedal_BassFuzz_Filter": 77
+      },
+      "Key": "Bass_Pedal_BassFuzz",
+      "Category": "30780"
+    },
+    "PrePedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassSubOctave_Tone": 66,
+        "Bass_Pedal_BassSubOctave_Mix": 39
+      },
+      "Key": "Bass_Pedal_BassSubOctave",
+      "Category": "30791"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35750]SPECIAL EFFECT",
+    "$[35715]BASS"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-18.500",
+  "Key": "ladypoke_synthbass",
+  "Name": "Bass Synth"
+}

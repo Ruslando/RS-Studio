@@ -1,0 +1,72 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 65,
+        "Rack_StudioEQ_HiMidFreq": 4,
+        "Rack_StudioEQ_TrebleFreq": 4,
+        "Rack_StudioEQ_LoMidFreq": 1600,
+        "Rack_StudioEQ_Treble": 0,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 1.5,
+        "Rack_StudioEQ_HiMid": 0,
+        "Rack_StudioEQ_LoMid": -1.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_BT600B_2600": 3,
+        "Bass_Amp_BT600B_180": 5,
+        "Bass_Amp_BT600B_340": -8,
+        "Bass_Amp_BT600B_Gain": 59,
+        "Bass_Amp_BT600B_Compression": 20,
+        "Bass_Amp_BT600B_Treble": 35,
+        "Bass_Amp_BT600B_1200": 12,
+        "Bass_Amp_BT600B_Mid": 50,
+        "Bass_Amp_BT600B_Bass": 50
+      },
+      "Key": "Bass_Amp_BT600B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_BT212BC_57_Edge"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ8_400": -6,
+        "Pedal_EQ8_100": 0,
+        "Pedal_EQ8_6400": -6,
+        "Pedal_EQ8_50": 2,
+        "Pedal_EQ8_200": 0,
+        "Pedal_EQ8_3200": 1,
+        "Pedal_EQ8_1600": 6,
+        "Pedal_EQ8_800": 0
+      },
+      "Key": "Pedal_EQ8"
+    },
+    "PrePedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassSubOctave_Tone": 41,
+        "Bass_Pedal_BassSubOctave_Mix": 47
+      },
+      "Key": "Bass_Pedal_BassSubOctave",
+      "Category": "30791"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS",
+    "$[35719]OCTAVE"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-21.500",
+  "Key": "Machinehead_bass8va",
+  "Name": "Bass Octave"
+}

@@ -1,0 +1,52 @@
+{
+  "GearList": {
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_GB100_Bass": 100,
+        "Amp_GB100_Mid": 100,
+        "Amp_GB100_Gain": 100,
+        "Amp_GB100_Treble": 100,
+        "Amp_GB100_Pres": 55
+      },
+      "Key": "Amp_GB100"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_GB412CMKIII_57_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_NoiseGate_Thresh": -63.5,
+        "Pedal_NoiseGate_Rate": 90
+      },
+      "Key": "Pedal_NoiseGate",
+      "Category": "30781"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ8_400": -4,
+        "Pedal_EQ8_100": 0,
+        "Pedal_EQ8_6400": -3,
+        "Pedal_EQ8_50": 0,
+        "Pedal_EQ8_200": -4,
+        "Pedal_EQ8_3200": 2,
+        "Pedal_EQ8_1600": -7,
+        "Pedal_EQ8_800": 2
+      },
+      "Key": "Pedal_EQ8",
+      "Category": "30785"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35755]HIGH GAIN"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-24.000",
+  "Key": "WarEnsemble_dist",
+  "Name": "Guitar High Gain"
+}

@@ -1,0 +1,63 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioCompressor_Attack": 3,
+        "Rack_StudioCompressor_Threshold": -18.5,
+        "Rack_StudioCompressor_Release": 90,
+        "Rack_StudioCompressor_Ratio": 1
+      },
+      "Key": "Rack_StudioCompressor"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_CH600B_90": -6,
+        "Bass_Amp_CH600B_30": 2.5,
+        "Bass_Amp_CH600B_Compression": 1,
+        "Bass_Amp_CH600B_Treble": 4.5,
+        "Bass_Amp_CH600B_Gain": 5,
+        "Bass_Amp_CH600B_2500": 0,
+        "Bass_Amp_CH600B_Bass": 4.5,
+        "Bass_Amp_CH600B_800": -5.5,
+        "Bass_Amp_CH600B_250": -1.5,
+        "Bass_Amp_CH600B_7500": 2.5
+      },
+      "Key": "Bass_Amp_CH600B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_CH310BC_57_Edge"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassFuzz_Tone": 100,
+        "Bass_Pedal_BassFuzz_Gain": 79,
+        "Bass_Pedal_BassFuzz_Filter": 69
+      },
+      "Key": "Bass_Pedal_BassFuzz",
+      "Category": "30780"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 280,
+        "Bass_Pedal_MBComp_Compress": 64,
+        "Bass_Pedal_MBComp_Rate": 77
+      },
+      "Key": "Bass_Pedal_MBComp"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS",
+    "$[35756]FUZZ"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-24.000",
+  "Key": "GarbOnly_bassfuzz",
+  "Name": "Bass Fuzz"
+}

@@ -1,0 +1,63 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 120,
+        "Rack_StudioEQ_HiMidFreq": 3,
+        "Rack_StudioEQ_TrebleFreq": 6,
+        "Rack_StudioEQ_LoMidFreq": 714,
+        "Rack_StudioEQ_Treble": 2,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 0,
+        "Rack_StudioEQ_HiMid": -12,
+        "Rack_StudioEQ_LoMid": -12,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_BT15_Gain": 30,
+        "Amp_BT15_Bass": 65,
+        "Amp_BT15_Mid": 20,
+        "Amp_BT15_Treble": 70
+      },
+      "Key": "Amp_BT15"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_AT1150BC_Tube_OffAxis"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_AcousticEmulator_Tone": 75,
+        "Pedal_AcousticEmulator_MidShift": 777,
+        "Pedal_AcousticEmulator_Body": 40,
+        "Pedal_AcousticEmulator_Mid": 30
+      },
+      "Key": "Pedal_AcousticEmulator"
+    },
+    "PrePedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_Compression_Release": 137,
+        "Pedal_Compression_Attack": 28,
+        "Pedal_Compression_Comp": 50
+      },
+      "Key": "Pedal_Compression"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS",
+    "$[35721]ACOUSTIC"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-22.50",
+  "Key": "Blister_bass",
+  "Name": "Bass Acoustic"
+}

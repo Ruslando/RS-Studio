@@ -4960,7 +4960,7 @@ class EndToEndTests(unittest.TestCase):
         }''')
         self.assertEqual(result['marker']['tone'], key)
         self.assertNotIn('toneData', result['marker'])
-        self.assertEqual(len(result['presets']), 6, 'editing an existing preset keeps its identity')
+        self.assertEqual(len(result['presets']), 29, 'editing an existing preset keeps its identity')
         current = next(p for p in result['presets'] if p['id'] == key)
         self.assertEqual(current['tone']['Name'], 'Live app bass')
         self.assertEqual(current['tone']['Volume'], '-7')

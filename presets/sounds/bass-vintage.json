@@ -1,0 +1,66 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 390,
+        "Rack_StudioEQ_HiMidFreq": 1.1,
+        "Rack_StudioEQ_TrebleFreq": 6,
+        "Rack_StudioEQ_LoMidFreq": 120,
+        "Rack_StudioEQ_Treble": -1,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 1,
+        "Rack_StudioEQ_HiMid": 1,
+        "Rack_StudioEQ_LoMid": -1.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ",
+      "Category": "30785"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_LT25B_Mid": 91,
+        "Bass_Amp_LT25B_Treble": 44,
+        "Bass_Amp_LT25B_MidFreq": 1,
+        "Bass_Amp_LT25B_LoShift": 1,
+        "Bass_Amp_LT25B_HiShift": 0,
+        "Bass_Amp_LT25B_Bass": 44,
+        "Bass_Amp_LT25B_Gain": 30
+      },
+      "Key": "Bass_Amp_LT25B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_PA600C"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_LoFiFilter_FilterType": 77,
+        "Pedal_LoFiFilter_Mix": 11
+      },
+      "Key": "Pedal_LoFiFilter",
+      "Category": "30785"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 320,
+        "Bass_Pedal_MBComp_Compress": 33,
+        "Bass_Pedal_MBComp_Rate": 69
+      },
+      "Key": "Bass_Pedal_MBComp",
+      "Category": "30781"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-18.750",
+  "Key": "marvaint_bass",
+  "Name": "Bass Vintage"
+}

@@ -15,9 +15,9 @@ class SoundPresetFilesTests(unittest.TestCase):
         portable = portable_tone_lanes(lanes, {'sound_reference': tone})
         self.assertNotIn('toneData', lanes[0]['toneMarkers'][0])
         self.assertEqual(portable[0]['toneMarkers'][0]['toneData']['Name'], tone['Name'])
-    def test_six_defaults_validate_and_preserve_native_settings(self):
+    def test_defaults_validate_and_preserve_native_settings(self):
         files = list(DEFAULTS.glob("*.json"))
-        self.assertEqual(len(files), 6)
+        self.assertEqual(len(files), 29)
         for path in files:
             with self.subTest(path=path.name):
                 raw = json.loads(path.read_text("utf-8-sig"))
@@ -29,7 +29,7 @@ class SoundPresetFilesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "presets"
             first = read_preset_folder(folder, DEFAULTS)
-            self.assertEqual(len(first["presets"]), 6)
+            self.assertEqual(len(first["presets"]), 29)
             clean = folder / "guitar-clean.json"
             raw = json.loads(clean.read_text("utf-8-sig")); raw["Name"] = "My replacement"
             clean.write_text(json.dumps(raw), encoding="utf-8")
@@ -38,10 +38,22 @@ class SoundPresetFilesTests(unittest.TestCase):
             (folder / "broken.json").write_text("not json", encoding="utf-8")
             (folder / "not-a-tone.psarc").write_bytes(b"not read")
             again = read_preset_folder(folder, DEFAULTS)
-            self.assertEqual(len(again["presets"]), 6)
+            self.assertEqual(len(again["presets"]), 29)
             self.assertEqual(again["errors"][0]["file"], "broken.json")
             self.assertEqual(next(p for p in again["presets"] if p["file"] == clean.name)["tone"]["Name"], "My replacement")
             self.assertFalse((folder / "bass-crunch.json").exists())
+
+    def test_first_release_installs_receive_new_defaults_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / ".defaults-seeded").write_text("1\n", encoding="utf-8")
+            (folder / "guitar-clean.json").write_bytes((DEFAULTS / "guitar-clean.json").read_bytes())
+            names = {p["file"] for p in read_preset_folder(folder, DEFAULTS)["presets"]}
+            self.assertIn("guitar-lead.json", names)
+            self.assertNotIn("bass-crunch.json", names, "an original default the user removed stays removed")
+            (folder / "guitar-lead.json").unlink()
+            names = {p["file"] for p in read_preset_folder(folder, DEFAULTS)["presets"]}
+            self.assertNotIn("guitar-lead.json", names)
 
     def test_libraries_and_arrays_validate_atomically(self):
         tone = json.loads((DEFAULTS / "guitar-clean.json").read_text("utf-8-sig"))

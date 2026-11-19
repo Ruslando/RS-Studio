@@ -1,0 +1,57 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 485,
+        "Rack_StudioEQ_HiMidFreq": 0.9,
+        "Rack_StudioEQ_TrebleFreq": 7.6,
+        "Rack_StudioEQ_LoMidFreq": 140,
+        "Rack_StudioEQ_Treble": -2,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": -2,
+        "Rack_StudioEQ_HiMid": 1,
+        "Rack_StudioEQ_LoMid": -2.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_MarshallPlexi_Loudness1": 77,
+        "Amp_MarshallPlexi_Loudness2": 88,
+        "Amp_MarshallPlexi_Mid": 66,
+        "Amp_MarshallPlexi_Bass": 22,
+        "Amp_MarshallPlexi_Pres": 1,
+        "Amp_MarshallPlexi_Treble": 88
+      },
+      "Key": "Amp_MarshallPlexi"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_Marshall1960TV_57_Edge"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_USWah_Speed": 45,
+        "Pedal_USWah_Auto": 1,
+        "Pedal_USWah_Sens": 33,
+        "Pedal_USWah_Pedal": 88
+      },
+      "Key": "Pedal_USWah",
+      "Category": "30785"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35729]FILTER",
+    "$[35724]LEAD"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-20.000",
+  "Key": "3eyesemi_leadwah",
+  "Name": "Guitar Wah"
+}

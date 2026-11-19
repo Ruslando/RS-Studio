@@ -1,0 +1,49 @@
+{
+  "GearList": {
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_EN30_Gain": 44,
+        "Amp_EN30_Pres": 88,
+        "Amp_EN30_Bass": 22,
+        "Amp_EN30_Mid": 1,
+        "Amp_EN30_Bright": 1,
+        "Amp_EN30_Treble": 88
+      },
+      "Key": "Amp_EN30"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_EN212C_57_Edge"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_NoFiEcho_Feedback": 22,
+        "Pedal_NoFiEcho_Time": 340,
+        "Pedal_NoFiEcho_Mix": 22
+      },
+      "Key": "Pedal_NoFiEcho",
+      "Category": "30779"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_SpringReverb_Time": 77,
+        "Pedal_SpringReverb_Mix": 33,
+        "Pedal_SpringReverb_Depth": 88
+      },
+      "Key": "Pedal_SpringReverb",
+      "Category": "30792"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35754]ECHO"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-17.500",
+  "Key": "u2wher_cleandelay",
+  "Name": "Guitar Ambient"
+}

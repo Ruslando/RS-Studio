@@ -10,7 +10,8 @@ closing discard edits made since the last Apply. **Apply** appears only with pen
 The Preset header shows **Unsaved changes** while the library has staged edits.
 **Delete preset** sits with the other preset actions and applies to your own presets.
 
-The six starting points (Clean, Crunch and Overdrive for guitar and bass) are
+The starting points (29 tones from clean to doom for guitar and bass, listed in
+[Preset files](../presets/README.md)) are
 ordinary JSON files in `presets/sounds` under the app's data directory.
 Add files there and reopen the editor.
 **Import preset** reads individual tones or a library into the editing draft.

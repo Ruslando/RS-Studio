@@ -1,0 +1,84 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_Bass": 1,
+        "Rack_StudioEQ_BassFreq": 365,
+        "Rack_StudioEQ_HiMid": -1.5,
+        "Rack_StudioEQ_HiMidFreq": 1.2,
+        "Rack_StudioEQ_HiMidQ": 0,
+        "Rack_StudioEQ_LoMid": -1,
+        "Rack_StudioEQ_LoMidFreq": 120,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Treble": 1,
+        "Rack_StudioEQ_TrebleFreq": 4.8
+      },
+      "Key": "Rack_StudioEQ",
+      "Category": "30785"
+    },
+    "Rack2": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioChorus_Delay": 48,
+        "Rack_StudioChorus_Depth": 77,
+        "Rack_StudioChorus_HiFilter": 3,
+        "Rack_StudioChorus_LoFilter": 99,
+        "Rack_StudioChorus_Mix": 36,
+        "Rack_StudioChorus_Rate": 0.8,
+        "Rack_StudioChorus_Stereo": 1
+      },
+      "Key": "Rack_StudioChorus",
+      "Category": "30788"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_EN50_Bass": 51,
+        "Amp_EN50_Bright": 1,
+        "Amp_EN50_Gain": 22,
+        "Amp_EN50_Mid": 22,
+        "Amp_EN50_Treble": 48
+      },
+      "Key": "Amp_EN50"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_GB415BC_Tube_OffAxis"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassEQ8_1100": -3,
+        "Bass_Pedal_BassEQ8_16000": 0,
+        "Bass_Pedal_BassEQ8_185": -1,
+        "Bass_Pedal_BassEQ8_2700": -1,
+        "Bass_Pedal_BassEQ8_30": 0,
+        "Bass_Pedal_BassEQ8_460": -2,
+        "Bass_Pedal_BassEQ8_6800": 1,
+        "Bass_Pedal_BassEQ8_75": 1
+      },
+      "Key": "Bass_Pedal_BassEQ8",
+      "Category": "30785"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Compress": 66,
+        "Bass_Pedal_MBComp_Filter": 280,
+        "Bass_Pedal_MBComp_Rate": 88
+      },
+      "Key": "Bass_Pedal_MBComp",
+      "Category": "30781"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-20.000",
+  "Key": "joydlove_bass",
+  "Name": "Bass Chorus"
+}

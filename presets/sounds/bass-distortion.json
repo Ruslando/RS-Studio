@@ -1,0 +1,76 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioCompressor_Attack": 30,
+        "Rack_StudioCompressor_Threshold": -12.5,
+        "Rack_StudioCompressor_Release": 90,
+        "Rack_StudioCompressor_Ratio": 2
+      },
+      "Key": "Rack_StudioCompressor"
+    },
+    "Rack2": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 120,
+        "Rack_StudioEQ_HiMidFreq": 0.800003,
+        "Rack_StudioEQ_TrebleFreq": 5.8,
+        "Rack_StudioEQ_LoMidFreq": 240,
+        "Rack_StudioEQ_Treble": 3,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 2,
+        "Rack_StudioEQ_HiMid": 2,
+        "Rack_StudioEQ_LoMid": -4.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ",
+      "Category": "30785"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_CH300B_Bass": 4,
+        "Bass_Amp_CH300B_Treble": 8,
+        "Bass_Amp_CH300B_Gain": 10,
+        "Bass_Amp_CH300B_Mid": -8.5,
+        "Bass_Amp_CH300B_Enhance": 55,
+        "Bass_Amp_CH300B_MidFreq": 317
+      },
+      "Key": "Bass_Amp_CH300B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_CH210BC_Tube_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassDistortion_Gain": 35,
+        "Bass_Pedal_BassDistortion_Filter": 14,
+        "Bass_Pedal_BassDistortion_Tone": 44
+      },
+      "Key": "Bass_Pedal_BassDistortion",
+      "Category": "30780"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 280,
+        "Bass_Pedal_MBComp_Compress": 55,
+        "Bass_Pedal_MBComp_Rate": 62
+      },
+      "Key": "Bass_Pedal_MBComp"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS",
+    "$[35722]DISTORTION"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-25.000",
+  "Key": "RageBomb_bassdist",
+  "Name": "Bass Distortion"
+}

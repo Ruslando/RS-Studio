@@ -1,0 +1,38 @@
+{
+  "GearList": {
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_CS300B_HiMid": 78,
+        "Bass_Amp_CS300B_LoMid": 32,
+        "Bass_Amp_CS300B_Bass": 59,
+        "Bass_Amp_CS300B_Gain": 48,
+        "Bass_Amp_CS300B_Treble": 84
+      },
+      "Key": "Bass_Amp_CS300B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_CS410BC_57_Edge"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 180,
+        "Bass_Pedal_MBComp_Compress": 31,
+        "Bass_Pedal_MBComp_Rate": 72
+      },
+      "Key": "Bass_Pedal_MBComp",
+      "Category": "30781"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35715]BASS"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-16.750",
+  "Key": "badramer_bass",
+  "Name": "Bass Pick"
+}

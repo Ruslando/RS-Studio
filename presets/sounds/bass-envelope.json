@@ -1,0 +1,80 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 460,
+        "Rack_StudioEQ_HiMidFreq": 0.9,
+        "Rack_StudioEQ_TrebleFreq": 6.6,
+        "Rack_StudioEQ_LoMidFreq": 160,
+        "Rack_StudioEQ_Treble": -1,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 1,
+        "Rack_StudioEQ_HiMid": 0,
+        "Rack_StudioEQ_LoMid": -2.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Bass_Amp_LT25B_Mid": 77,
+        "Bass_Amp_LT25B_Treble": 74,
+        "Bass_Amp_LT25B_MidFreq": 1,
+        "Bass_Amp_LT25B_LoShift": 0,
+        "Bass_Amp_LT25B_HiShift": 0,
+        "Bass_Amp_LT25B_Bass": 88,
+        "Bass_Amp_LT25B_Gain": 11
+      },
+      "Key": "Bass_Amp_LT25B"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Bass_Cab_BT212BC_Tube_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassAutoFilter_Attack": 9,
+        "Bass_Pedal_BassAutoFilter_FilterType": 1,
+        "Bass_Pedal_BassAutoFilter_Sens": 33,
+        "Bass_Pedal_BassAutoFilter_Res": 48,
+        "Bass_Pedal_BassAutoFilter_Release": 30
+      },
+      "Key": "Bass_Pedal_BassAutoFilter",
+      "Category": "30785"
+    },
+    "PrePedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_BassOverdrive_Blend": 11,
+        "Bass_Pedal_BassOverdrive_Gain": 22,
+        "Bass_Pedal_BassOverdrive_Tone": 3,
+        "Bass_Pedal_BassOverdrive_Filter": 77
+      },
+      "Key": "Bass_Pedal_BassOverdrive",
+      "Category": "30780"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 220,
+        "Bass_Pedal_MBComp_Compress": 66,
+        "Bass_Pedal_MBComp_Rate": 88
+      },
+      "Key": "Bass_Pedal_MBComp",
+      "Category": "30781"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35750]SPECIAL EFFECT",
+    "$[35715]BASS"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-18.000",
+  "Key": "eartlets_synthbass",
+  "Name": "Bass Envelope Filter"
+}

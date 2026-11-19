@@ -1,0 +1,81 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 235,
+        "Rack_StudioEQ_HiMidFreq": 2.7,
+        "Rack_StudioEQ_TrebleFreq": 7.4,
+        "Rack_StudioEQ_LoMidFreq": 180,
+        "Rack_StudioEQ_Treble": 2.5,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 3,
+        "Rack_StudioEQ_HiMid": 1,
+        "Rack_StudioEQ_LoMid": -1,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ",
+      "Category": "30785"
+    },
+    "Rack2": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_TapeEcho_Time": 110,
+        "Rack_TapeEcho_Stereo": 60,
+        "Rack_TapeEcho_Filter": 1,
+        "Rack_TapeEcho_Feedback": 17,
+        "Rack_TapeEcho_Mix": 44
+      },
+      "Key": "Rack_TapeEcho",
+      "Category": "30779"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_EN30_Gain": 92,
+        "Amp_EN30_Pres": 88,
+        "Amp_EN30_Bass": 32,
+        "Amp_EN30_Mid": 58,
+        "Amp_EN30_Bright": 1,
+        "Amp_EN30_Treble": 100
+      },
+      "Key": "Amp_EN30"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_EN212C_Ribbon_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ5_5700": -2,
+        "Pedal_EQ5_2200": 1,
+        "Pedal_EQ5_63": -3,
+        "Pedal_EQ5_250": -1,
+        "Pedal_EQ5_750": 1
+      },
+      "Key": "Pedal_EQ5",
+      "Category": "30785"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 184,
+        "Bass_Pedal_MBComp_Compress": 30,
+        "Bass_Pedal_MBComp_Rate": 49
+      },
+      "Key": "Bass_Pedal_MBComp",
+      "Category": "30781"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35754]ECHO",
+    "$[35724]LEAD"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-21.500",
+  "Key": "CarsYoure_echolead",
+  "Name": "Guitar Lead"
+}

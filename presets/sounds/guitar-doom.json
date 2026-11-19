@@ -1,0 +1,54 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_Bass": 1,
+        "Rack_StudioEQ_BassFreq": 405,
+        "Rack_StudioEQ_HiMid": 1.5,
+        "Rack_StudioEQ_HiMidFreq": 2.8,
+        "Rack_StudioEQ_HiMidQ": 0,
+        "Rack_StudioEQ_LoMid": -1,
+        "Rack_StudioEQ_LoMidFreq": 180,
+        "Rack_StudioEQ_LoMidQ": 0,
+        "Rack_StudioEQ_Treble": 1,
+        "Rack_StudioEQ_TrebleFreq": 4.8
+      },
+      "Key": "Rack_StudioEQ",
+      "Category": "30785"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_OrangeTinyTerror_Gain": 76,
+        "Amp_OrangeTinyTerror_Tone": 96
+      },
+      "Key": "Amp_OrangeTinyTerror"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_OrangePPC412_Ribbon_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ5_2200": 2,
+        "Pedal_EQ5_250": -2,
+        "Pedal_EQ5_5700": -2,
+        "Pedal_EQ5_63": 0,
+        "Pedal_EQ5_750": 3
+      },
+      "Key": "Pedal_EQ5",
+      "Category": "30785"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35722]DISTORTION"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-23.000",
+  "Key": "ghosciri_dist",
+  "Name": "Guitar Doom"
+}

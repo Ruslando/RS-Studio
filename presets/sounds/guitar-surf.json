@@ -1,0 +1,75 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 325,
+        "Rack_StudioEQ_HiMidFreq": 1.4,
+        "Rack_StudioEQ_TrebleFreq": 2.8,
+        "Rack_StudioEQ_LoMidFreq": 120,
+        "Rack_StudioEQ_Treble": 1,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 1.5,
+        "Rack_StudioEQ_HiMid": 2,
+        "Rack_StudioEQ_LoMid": -1.5,
+        "Rack_StudioEQ_HiMidQ": 0
+      },
+      "Key": "Rack_StudioEQ",
+      "Category": "30785"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_TW22_Mid": 77,
+        "Amp_TW22_Treble": 92,
+        "Amp_TW22_Bass": 39,
+        "Amp_TW22_Gain": 44
+      },
+      "Key": "Amp_TW22"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_TW112C_Ribbon_Cone"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ5_5700": 3,
+        "Pedal_EQ5_2200": 2,
+        "Pedal_EQ5_63": -3,
+        "Pedal_EQ5_250": -2,
+        "Pedal_EQ5_750": 0
+      },
+      "Key": "Pedal_EQ5",
+      "Category": "30785"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_SpringReverb_Time": 33,
+        "Pedal_SpringReverb_Mix": 44,
+        "Pedal_SpringReverb_Depth": 88
+      },
+      "Key": "Pedal_SpringReverb",
+      "Category": "30792"
+    },
+    "PostPedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_AmpTrem_Depth": 16,
+        "Pedal_AmpTrem_Speed": 54
+      },
+      "Key": "Pedal_AmpTrem",
+      "Category": "30793"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35724]LEAD"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-18.750",
+  "Key": "chanpipe_lead",
+  "Name": "Guitar Surf"
+}

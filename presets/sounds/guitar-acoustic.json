@@ -1,0 +1,64 @@
+{
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 385,
+        "Rack_StudioEQ_HiMidFreq": 7.8,
+        "Rack_StudioEQ_TrebleFreq": 5.6,
+        "Rack_StudioEQ_LoMidFreq": 120,
+        "Rack_StudioEQ_Treble": -2,
+        "Rack_StudioEQ_LoMidQ": 1,
+        "Rack_StudioEQ_Bass": 3,
+        "Rack_StudioEQ_HiMid": -7.5,
+        "Rack_StudioEQ_LoMid": -9,
+        "Rack_StudioEQ_HiMidQ": 1
+      },
+      "Key": "Rack_StudioEQ"
+    },
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "DI_Amp_TubePre_Treble": 44,
+        "DI_Amp_TubePre_MidFreq": 0,
+        "DI_Amp_TubePre_Bass": 38,
+        "DI_Amp_TubePre_Mid": 7,
+        "DI_Amp_TubePre_Gain": 87
+      },
+      "Key": "DI_Amp_TubePre"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_PA600C"
+    },
+    "PrePedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_AcousticEmulator_Tone": 68,
+        "Pedal_AcousticEmulator_MidShift": 2225,
+        "Pedal_AcousticEmulator_Body": 40,
+        "Pedal_AcousticEmulator_Mid": 12
+      },
+      "Key": "Pedal_AcousticEmulator"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Bass_Pedal_MBComp_Filter": 480,
+        "Bass_Pedal_MBComp_Compress": 85,
+        "Bass_Pedal_MBComp_Rate": 40
+      },
+      "Key": "Bass_Pedal_MBComp",
+      "Category": "30781"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35721]ACOUSTIC"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-18.500",
+  "Key": "AudLike_acc",
+  "Name": "Guitar Acoustic"
+}

@@ -1,0 +1,60 @@
+{
+  "GearList": {
+    "Amp": {
+      "Type": "Amps",
+      "KnobValues": {
+        "Amp_CS90_Bass": 1,
+        "Amp_CS90_Gain": 1,
+        "Amp_CS90_Mid": 37,
+        "Amp_CS90_Treble": 100
+      },
+      "Key": "Amp_CS90"
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "KnobValues": {},
+      "Key": "Cab_CS212C_Ribbon_Edge"
+    },
+    "PostPedal1": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_EQ8_400": -2,
+        "Pedal_EQ8_100": 1,
+        "Pedal_EQ8_6400": 7,
+        "Pedal_EQ8_50": 0,
+        "Pedal_EQ8_200": -3,
+        "Pedal_EQ8_3200": 2,
+        "Pedal_EQ8_1600": -7,
+        "Pedal_EQ8_800": -10
+      },
+      "Key": "Pedal_EQ8"
+    },
+    "PostPedal2": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_Compression_Release": 198,
+        "Pedal_Compression_Attack": 30,
+        "Pedal_Compression_Comp": 56
+      },
+      "Key": "Pedal_Compression"
+    },
+    "PostPedal3": {
+      "Type": "Pedals",
+      "KnobValues": {
+        "Pedal_DigitalVerb_Mix": 17,
+        "Pedal_DigitalVerb_Time": 52,
+        "Pedal_DigitalVerb_Depth": 43,
+        "Pedal_DigitalVerb_Tone": 50
+      },
+      "Key": "Pedal_DigitalVerb"
+    }
+  },
+  "ToneDescriptors": [
+    "$[35720]CLEAN"
+  ],
+  "NameSeparator": " - ",
+  "IsCustom": true,
+  "Volume": "-21.059713",
+  "Key": "GoodTimes_clean",
+  "Name": "Guitar Funk"
+}

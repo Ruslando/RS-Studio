@@ -45,14 +45,22 @@ def decode_presets(data: bytes) -> list[dict]:
 def read_preset_folder(folder: Path, bundled: Path) -> dict:
     """Seed portable installs once, then read the user's files without changing them."""
     folder.mkdir(parents=True, exist_ok=True)
-    if folder.resolve() != bundled.resolve() and not (folder / ".defaults-seeded").exists():
-        for source in sorted(bundled.glob("*.json")):
+    if folder.resolve() != bundled.resolve():
+        # The marker lists every default ever offered, so a later release adds its new
+        # defaults once while a default the user removed stays removed.
+        marker = folder / ".defaults-seeded"
+        seeded = set(marker.read_text("utf-8").split()) if marker.exists() else set()
+        if seeded == {"1"}:  # the first release wrote "1" after seeding these six
+            seeded = {f"{kind}-{level}.json" for kind in ("guitar", "bass") for level in ("clean", "crunch", "overdrive")}
+        fresh = [source for source in sorted(bundled.glob("*.json")) if source.name not in seeded]
+        for source in fresh:
             try:
                 with (folder / source.name).open("xb") as output:
                     output.write(source.read_bytes())
             except FileExistsError:
                 pass
-        (folder / ".defaults-seeded").write_text("1\n", encoding="utf-8")
+        if fresh or not marker.exists():
+            marker.write_text("".join(f"{name}\n" for name in sorted(seeded | {s.name for s in fresh})), encoding="utf-8")
     presets, errors = [], []
     files = sorted((path for path in folder.iterdir() if path.suffix.lower() == ".json"), key=lambda path: path.name.casefold())
     for path in files[:MAX_PRESET_FILES]:
