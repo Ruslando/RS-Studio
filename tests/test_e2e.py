@@ -456,6 +456,12 @@ class EndToEndTests(unittest.TestCase):
                                          headers={"Content-Type": "application/json"}, method="POST")
         urllib.request.urlopen(request, timeout=10).close()
 
+    def _flush_preferences(self):
+        try:
+            self.page.evaluate("async () => { await window.cwFlushPreferences?.(); }")
+        except Exception:
+            pass   # a page that crashed or navigated away has nothing left to send
+
     def setUp(self):
         # A new context per test, and no preferences on the server, which the page loads
         # into localStorage: nothing in localStorage carries over.
@@ -463,6 +469,10 @@ class EndToEndTests(unittest.TestCase):
         context = self.browser.new_context(viewport={"width": 1440, "height": 900})
         self.addCleanup(context.close)
         self.page = context.new_page()
+        # Closing the context would send the page's unsaved preferences on pagehide,
+        # and that late save could land after the next test cleared them: a preset
+        # one test made then showed up in the next. Save them now, and wait for it.
+        self.addCleanup(self._flush_preferences)
         self.page.set_default_timeout(15000)
         self.faults = []
         self.page.on("pageerror", lambda error: self.faults.append(f"script error: {error}"))
