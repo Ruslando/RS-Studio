@@ -354,7 +354,7 @@ class EndToEndTests(unittest.TestCase):
                     groupCell:document.getElementById('repeatGroup').closest('.rail-center')?.id,
                     audio:visible('#splitSharedStem, #splitSharedLane, .split-head select'),
                     settingsTab:document.getElementById('splitLayout').closest('[role=tabpanel]')?.id,
-                    groups:visible('[aria-label="Repeat group"]'), closes:visible('[aria-label="Close repeat review"]'),
+                    groups:visible('[aria-label="Repeat group"]'), closes:visible('[aria-label="Close compare view"]'),
                     floating:getComputedStyle(document.getElementById('repeatNavigator')).position};
             }''')
         self.open_split_settings()

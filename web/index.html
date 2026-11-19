@@ -286,7 +286,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
       </div>
     </div>
 <span class="sep-v"></span><div class="group workspace-controls"><button type="button" class="icon-btn" id="findRepeatsBtn"
-                  title="Find repeats in the active layer" aria-label="Find repeats" aria-pressed="false">
+                  title="Compare the active layer's repeating passages" aria-label="Compare view" aria-pressed="false">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>
           </button><button type="button" class="icon-btn" id="sidebarToggle" data-panel-toggle="sidebar" aria-expanded="true"
                   title="Hide layer sidebar" aria-label="Hide layer sidebar">
@@ -447,8 +447,8 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
               <button type="button" id="matchAsCopy" class="btn--compact" title="Paste as copy (Enter)" hidden>Paste as copy</button>
               <button type="button" id="matchAsRef" class="btn--compact primary" title="Paste as reference (Shift+Enter)" hidden>Paste as reference</button>
             </nav>
-            <nav id="repeatNavigator" aria-label="Repeat navigation" hidden>
-              <button type="button" id="repeatDrag" aria-label="Move repeat toolbar" title="Drag to move repeat toolbar"></button>
+            <nav id="repeatNavigator" aria-label="Compare view navigation" hidden>
+              <button type="button" id="repeatDrag" aria-label="Move compare toolbar" title="Drag to move compare toolbar"></button>
               <div class="repeat-nav-group repeat-shared" role="group" aria-label="Groups">
                 <button type="button" id="repeatGroupPrevious" aria-label="Previous group" title="Previous group (Shift+←)">‹</button>
                 <select id="repeatGroup" aria-label="Repeat group"></select>
@@ -465,7 +465,7 @@ if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</scr
                 <select id="repeatChangePosition" aria-label="Changed note"></select>
                 <button type="button" id="repeatChangeNext" aria-label="Next difference" title="Next difference">›</button>
               </div>
-              <button type="button" id="repeatClose" class="repeat-shared" aria-label="Close repeat review" title="Close repeat review">×</button>
+              <button type="button" id="repeatClose" class="repeat-shared" aria-label="Close compare view" title="Close compare view">×</button>
               <section id="repeatHover" role="dialog" aria-label="Note comparison" hidden>
                 <button type="button" id="repeatHoverClose" aria-label="Close note comparison">×</button>
                 <table><thead><tr id="repeatHoverHead"></tr></thead><tbody id="repeatHoverRows"></tbody></table>

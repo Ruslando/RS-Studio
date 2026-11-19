@@ -256,7 +256,7 @@ export function runFindRepeats(lane = activeLane()) {
     const project = scanProject;
     scanLane = null; scanProject = null;
     if (S.state !== project || !S.state.editLanes.includes(lane) || !canEditLane(lane) || signature(lane) !== scanSignature) {
-      toast('The layer changed during the scan. Find repeats again.'); draw(); return;
+      toast('The layer changed during the scan. Open compare view again.'); draw(); return;
     }
     const byId = new Map(lane.notes.map(n => [n.id, n]));
     const repeats = data.map(r => ({ ...(r.phraseLength > 0 ? { phraseLength: r.phraseLength } : {}),

@@ -1,10 +1,10 @@
-# Find Repeats
+# Compare view
 
-Find Repeats opens the split view with one instance in each pane. The first pane
+Compare view opens the split view with one instance in each pane. The first pane
 shows the instance under review; the second starts on the next instance. Every
 instance of a group is in one list. Groups with only one instance are kept
 but not shown, since there is nothing to compare. Each pane chooses its own instance with the
-repeat toolbar on its own side of the rail, the one header that stands in for
+compare toolbar on its own side of the rail, the one header that stands in for
 both pane headers during a review. What both panes share sits in the middle of
 the rail: one audio and one layer for both panes, the group and the difference
 buttons. The split view settings are the Split tab of the spectrogram controls.
@@ -31,7 +31,7 @@ the same distance into their own instance: 3 s into one is 3 s into the other.
 Choosing an instance puts both at the start of theirs, and a shorter instance's
 playhead waits at its end while the longer one plays on. Paused, the playhead
 can be put anywhere, also inside another instance; that never chooses it, as
-only the repeat toolbar chooses instances. Playback never leaves the active
+only the compare toolbar chooses instances. Playback never leaves the active
 pane's instance: play starts at its start when the playhead is outside, seeks
 during playback stop at its edges, and playback stops at its end. Audio and
 notes are heard from the active pane only.
