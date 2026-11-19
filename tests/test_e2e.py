@@ -1132,11 +1132,11 @@ class EndToEndTests(unittest.TestCase):
         with page.expect_file_chooser() as chooser:
             page.click("#welcomeOpen")
         chooser.value.set_files(bundle)
-        group = page.locator("#artifactWarnings .artifact-issue-group", has_text="Reference #1 does not fit the grid")
+        group = page.locator("#artifactWarnings .artifact-issue-group", has_text="Reference #1 is off the grid")
         group.locator(".artifact-issue-group-head .artifact-row-head").click()
         row = group.locator(".artifact-issue-row")
         expect(row).to_have_count(1)
-        self.assertIn("Occurrence 2 starts 2.000 ms off", row.get_attribute("data-tip"))
+        self.assertIn("Occurrence 2 starts 2 ms off the grid.", row.get_attribute("data-tip"))
         row.click()
         time_at = lambda: page.evaluate("async () => (await import('/playback.js')).playbackTime()")
         self.assertAlmostEqual(time_at(), 4.0, places=2)
@@ -1165,7 +1165,7 @@ class EndToEndTests(unittest.TestCase):
         }""")
         page.mouse.move(gx, gy)
         buttons = page.locator(".app-tooltip .app-tooltip-actions > button")
-        expect(buttons).to_have_text(["Auto-fix: Put the box on the grid", "Ignore occurrence"])
+        expect(buttons).to_have_text(["Auto-fix: Snap to grid", "Ignore occurrence"])
         first, second = buttons.nth(0).bounding_box(), buttons.nth(1).bounding_box()
         self.assertGreater(second["y"], first["y"] + first["height"] - 1, "actions stack vertically")
         # The auto-fix puts occurrence 2 on its beat, as one undo step.

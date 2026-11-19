@@ -157,10 +157,10 @@ function referenceGridRows(lane) {
       const miss = [box.t0, box.t1].find(t => Math.abs(gridLine(t, grid) - t) >= 1e-5);
       if (miss == null) return;
       rows.push({ id: 'editor.reference.offGrid', key: 'editor.reference.offGrid',
-        title: `${group.name || `Reference #${ref}`} does not fit the grid`,
-        help: `Occurrence ${i + 1} ${miss === box.t0 ? 'starts' : 'ends'} ${Math.abs((gridLine(miss, grid) - miss) * 1000).toFixed(3)} ms off a grid line, so hand positions and notes copied into the other occurrences can land on the wrong note. Drag the box edge onto a grid line.`,
+        title: `${group.name || `Reference #${ref}`} is off the grid`,
+        help: `Occurrence ${i + 1} ${miss === box.t0 ? 'starts' : 'ends'} ${+Math.abs((gridLine(miss, grid) - miss) * 1000).toFixed(3)} ms off the grid.`,
         tone: 'warning', time: box.t0, target: `reference:${lane.id}:${ref}:${i}`,
-        ...(canEditLane(lane) && !group.locked ? { fix: { label: 'Put the box on the grid', run: () => fitRefToGrid(lane, ref, i) } } : {}) });
+        ...(canEditLane(lane) && !group.locked ? { fix: { label: 'Snap to grid', run: () => fitRefToGrid(lane, ref, i) } } : {}) });
     });
   }
   return rows;
