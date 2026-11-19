@@ -4571,6 +4571,77 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate(shifts)[0], 3)
         expect(page.locator('.artifact-row[data-reference="1"] .artifact-preview-title')).to_contain_text('+3')
 
+    def test_reference_label_drag_takes_its_hand_positions_along(self):
+        self.open_reference_project()
+        page = self.page
+        # Both occurrences of Reference #1 at fret 7, Reference #2 between them at fret 2.
+        hands = """async () => {
+            const { S } = await import('/store.js');
+            const { handAnchorAt } = await import('/hand-anchor-state.js');
+            const lane = S.state.editLanes[0];
+            return Object.fromEntries(lane.notes.map(n => [n.id, handAnchorAt(lane.handHolds, n.start + 1e-9)?.fret]));
+        }"""
+        page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            lane.handHolds = [{ id: 'h0', t: 2, fret: 7 }, { id: 'h1', t: 3.5, fret: 9 }, { id: 'h2', t: 8, fret: 2 },
+                              { id: 'h3', t: 16, fret: 7 }, { id: 'h4', t: 17.5, fret: 9 }];
+            lane.handAnchorVersion = 1;
+        }""")
+        before = page.evaluate(hands)
+        self.assertEqual([before[n] for n in ("n1", "n3", "n4", "n13", "n7", "n10")], [7, 7, 9, 2, 7, 9])
+        x, y, px = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { xOf } = await import('/geometry.js');
+            (await import('/repaint.js')).drawNow();
+            const r = document.querySelector('#stage').getBoundingClientRect(), sc = document.querySelector('#scroll');
+            const l = S.refBadges.find(b => b.ref === 1 && b.i === 0);
+            return [l.x + l.w / 2 - sc.scrollLeft + r.left, l.y + l.h / 2 - sc.scrollTop + r.top, xOf(1) - xOf(0)];
+        }""")
+        page.mouse.move(x, y); page.mouse.down()
+        page.mouse.move(x + px, y, steps=5); page.mouse.up()
+        self.assertEqual(page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].refBoxes[1].anchors[0]"), 3)
+        self.assertEqual(page.evaluate(hands), before, "every note keeps its hand, inside the box and around it")
+
+    def test_a_dragged_note_takes_its_hand_position_along(self):
+        page = self.page
+        page.route("**/api/rocksmith/check", lambda route: route.fulfill(json=[]))
+        notes = [{"id": f"n{i}", "start": t, "end": t + 0.25, "pitch": 45 + i, "pos": {"string": 3, "fret": 2 + i}}
+                 for i, t in enumerate((1.0, 2.0, 3.0, 4.0))]
+        lane = {"id": "edit", "name": "Bass", "kind": "edit", "color": "#6ee7b7", "visible": True, "active": True,
+                "instrument": "bass", "tablatureEnabled": True, "tuning": "bass4", "capo": 0, "notes": notes,
+                "handAnchorVersion": 1, "handHolds": [{"id": "h0", "t": 1.0, "fret": 1}, {"id": "h1", "t": 3.0, "fret": 4}]}
+        project = {"name": "Hand drag", "duration": 12.0, "scoreDuration": 12.0, "editLanes": [lane],
+                   "grid": {"bpm": 120, "offset": 0.0, "tsNum": 4, "tsDen": 4, "subdiv": 2, "tempoMap": []},
+                   "sectionMarkers": [], "stems": [], "metadata": {"title": "Hands", "artist": "E2E"}}
+        bundle = self.data / "hand-drag.chart"
+        with zipfile.ZipFile(bundle, "w") as archive:
+            archive.writestr("project.json", json.dumps(project))
+        with page.expect_file_chooser() as chooser:
+            page.click("#welcomeOpen")
+        chooser.value.set_files(bundle)
+        expect(page.locator("#lanes .lane-row")).to_be_visible()
+        hands = """async () => {
+            const { S } = await import('/store.js');
+            const { handAnchorAt } = await import('/hand-anchor-state.js');
+            const lane = S.state.editLanes[0];
+            return Object.fromEntries(lane.notes.map(n => [n.id, [n.start, handAnchorAt(lane.handHolds, n.start + 1e-9)?.fret]]));
+        }"""
+        self.assertEqual(page.evaluate(hands), {"n0": [1.0, 1], "n1": [2.0, 1], "n2": [3.0, 4], "n3": [4.0, 4]})
+        # Drag the note the hand moves to fret 4 on half a second earlier.
+        x, y, px = page.evaluate("""async () => {
+            const { S } = await import('/store.js');
+            const { xOf, yOf } = await import('/geometry.js');
+            const sc = document.querySelector('#scroll'), r = document.querySelector('#stage').getBoundingClientRect();
+            const n = S.state.editLanes[0].notes.find(n => n.id === 'n2');
+            sc.scrollLeft = Math.max(0, xOf(n.start) - 200); sc.scrollTop = Math.max(0, yOf(n.pitch) - 200);
+            (await import('/repaint.js')).drawNow();
+            return [r.left + xOf(n.start + 0.12) - sc.scrollLeft, r.top + yOf(n.pitch) + S.state.rowH / 2 - sc.scrollTop, xOf(1) - xOf(0)];
+        }""")
+        page.mouse.move(x, y); page.mouse.down()
+        page.mouse.move(x - 0.5 * px, y, steps=5); page.mouse.up()
+        self.assertEqual(page.evaluate(hands), {"n0": [1.0, 1], "n1": [2.0, 1], "n2": [2.5, 4], "n3": [4.0, 4]})
+
     def drag_artifact(self, row, t, pitch=None):
         """Drag an artifact row onto the stage at song time t (and pitch, else near the
         top), the way the pane does it: pointer events (artifacts.js). The stage first

@@ -16,7 +16,7 @@ import { gridLine, offGrid } from "./note-issues.js";
 import { nid } from "./ids.js";
 import { editLanes, laneOf, refreshCounts } from "./lanes.js";
 import { EFFECT_FIELDS, copyEffects } from "./note-effects.js";
-import { referenceHands, referenceHandSig, mirrorReferenceHands } from './reference-hands.js';
+import { referenceHands, referenceHandSig, mirrorReferenceHands, handsFollowNotes } from './reference-hands.js';
 import { toast } from "./notify.js";
 import { beatShape, effectSig, inRefBox, occurrenceBox, shiftOf, spanAt } from "./reference-core.js";
 export { occurrenceBox, shiftOf, spanAt } from "./reference-core.js";
@@ -408,6 +408,13 @@ export function moveRefOccurrence(drag, x, y) {
     o.n.pitch = o.p + dp;
     if (dp) dropFingering(o.n);
     else { if (o.pos) o.n.pos = o.pos; if (o.arrangement) o.n.arrangement = o.arrangement; }
+  }
+  // Hand changes are timed, not on notes: they follow the notes, here and around.
+  // Moved in pitch, the notes lose their fingering and take the hand around them.
+  if (drag.hands) {
+    const moved = new Set(drag.notes.map(o => o.n));
+    const frets = dp ? new Map([...drag.hands.frets].filter(([n]) => !moved.has(n))) : drag.hands.frets;
+    drag.lane.handHolds = handsFollowNotes(drag.lane, { ...drag.hands, frets }, nid);
   }
   draw();
 }

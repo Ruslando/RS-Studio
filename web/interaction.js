@@ -35,6 +35,10 @@ import { boxOfNote, toggleRefEditLock, moveRefOccurrence, notesInBox, refBadgeAt
 import { lineXAtRow } from "./slice.js";
 import { beginNoteGesture, finishNoteGesture, updateNoteGesture } from "./note-motion.js";
 import { nid } from "./ids.js";
+import { HAND_ANCHOR_VERSION } from "./hand-anchor-state.js";
+import { handsFollowNotes, noteHands } from "./reference-hands.js";
+// Each note's hand before a drag, so the drag can keep it (reference-hands.js).
+const laneHands = (lane) => lane.handAnchorVersion === HAND_ANCHOR_VERSION && lane.handHolds?.length ? noteHands(lane) : null;
 import { S, setSelection } from "./store.js";
 import { addTracePoint, clearMatches, matchAt, notesFromTrace } from "./tracing.js";
 import { clamp } from "./util.js";
@@ -288,6 +292,13 @@ function updateNoteMove(x, y) {
     n.end = o.end + delta;
     setLaneNotePitch(S.drag.lane, n, o.pitch - dRow);
   }
+  // Hand changes are timed, not on notes: each note keeps its hand. Moved in pitch,
+  // the notes take the hand around them.
+  if (S.drag.hands) {
+    const moved = new Set(S.drag.notes), { frets } = S.drag.hands;
+    S.drag.lane.handHolds = handsFollowNotes(S.drag.lane,
+      { ...S.drag.hands, frets: dRow ? new Map([...frets].filter(([n]) => !moved.has(n))) : frets }, nid);
+  }
   // Audible feedback: each time the drag crosses to a new pitch row, play the
   // moved notes so you can hear where you're landing. Pure horizontal nudges
   // (dRow unchanged) stay silent.
@@ -468,6 +479,7 @@ export function init_interaction() {
         mode: "refDrag", lane: badge.lane, ref: badge.ref, i: badge.i,
         a0: group.anchors[badge.i], grabT: timeAt(x), grabP: pitchAt(y), s0: shiftOf(group, badge.i),
         notes: inside.map((n) => ({ n, s: n.start, e: n.end, p: n.pitch, pos: n.pos, arrangement: n.arrangement })),
+        hands: laneHands(badge.lane),
         prev: snapshotEdit(),
       };
       draw();
@@ -510,6 +522,7 @@ export function init_interaction() {
           lane: hit.lane, lastRow: 0,
           notes: [...S.selection].filter((n) => hit.lane.notes.includes(n) && !boxOfNote(n)?.group.locked),
           orig: new Map([...S.selection].map((n) => [n, { start: n.start, end: n.end, pitch: n.pitch, preciseLength: n.preciseLength }])),
+          hands: laneHands(hit.lane),
         };
       }
       beginNoteGesture(S.state, hit.lane, S.drag.notes, S.drag.mode);

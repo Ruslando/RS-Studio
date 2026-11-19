@@ -76,4 +76,11 @@ const group = { rt0: 0, rt1: 1, pLo: 69, pHi: 69, anchors: [0, 8] };
 mirrorReferenceHands(lane, group, 1, [{ dt: 0, fret: 4 }], clock, .1, () => `r${++uid}`);
 assert.equal(handAnchorAt(lane.handHolds, 8).fret, 4);
 assert.equal(handAnchorAt(lane.handHolds, 4).fret, 5, 'editing an inherited reference value does not delete the preceding change');
+// Off-grid copies: the source's note sits 178 µs later than the copy's. The change
+// lands on the copy's same note, not on the one after it.
+const offGrid = { handAnchorVersion: 1, notes: [0, .5, 10, 10.4998].map((start, i) => ({ id: `o${i}`, start, end: start + .2, pitch: 69 })),
+  handHolds: [{ id: 'o-start', t: 0, fret: 3 }] };
+const offGroup = { rt0: 0, rt1: 1, pLo: 69, pHi: 69, anchors: [0, 10] };
+mirrorReferenceHands(offGrid, offGroup, 1, [{ dt: .500178, fret: 7 }], clock, .1, () => `o${++uid}`);
+assert.equal(offGrid.handHolds.find(h => h.fret === 7)?.t, 10.4998, 'a mirrored change sits on the copy\'s own attack');
 console.log('hand changes: ranges, migration, off-grid moves, protected initial value, conflicts, clipboard and references passed');
