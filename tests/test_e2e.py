@@ -31,6 +31,7 @@ from rs_studio.tab import build_gp5
 
 expect.set_options(timeout=15000)
 FRETS = [0, 3, 5, 7, 5, 3, 0, 3]                        # on the A string, an eighth each
+STARTING_PRESETS = len(list((Path(__file__).resolve().parents[1] / 'presets/sounds').glob('*.json')))   # app's own tone presets
 
 
 def _gp5_song() -> bytes:
@@ -1256,7 +1257,18 @@ class EndToEndTests(unittest.TestCase):
             (await import('/marker-rails.js')).setRailsHidden(false);
             S.voicingRevision++;
             await (await import('/lane-fingering.js')).laneFingering(lane);
+            // The crowd rail fills in when the export check of this chart returns,
+            // which moves the hand rail down: measure after it. A check answering
+            // within the settle delay (700 ms, rocksmith-check.js) predates this one.
+            const start = performance.now();
             (await import('/repaint.js')).drawNow();
+            while (performance.now() - start < 15000) {
+                const checked = await new Promise(done => {
+                    window.addEventListener('cw-rocksmith-checked', () => done(true), {once: true});
+                    setTimeout(() => done(false), 1000);
+                });
+                if (checked && performance.now() - start >= 700) break;
+            }
         }""")
         bands = """async () => {
             const {railBand} = await import('/marker-rails.js');
@@ -1578,8 +1590,11 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('cw.settings')).traceRange"), '3')
 
     def test_keyboard_zoom_panels_and_marker_navigation(self):
-        self.open_reference_project()
         page = self.page
+        # Navigation also stops at the export's automatic events, which arrive with
+        # the background export check whenever it returns. Keep them out.
+        page.route('**/api/rocksmith/check', lambda route: route.fulfill(json=[]))
+        self.open_reference_project()
         page.mouse.move(700, 200)
         page.evaluate("document.activeElement.blur()")
         next_note = page.evaluate("""async () => {
@@ -1841,7 +1856,7 @@ class EndToEndTests(unittest.TestCase):
         page = self.page
         page.click("#welcomeSettingsBtn"); self.open_tone_presets()
         expect(page.locator("#soundName")).to_have_value("Guitar Clean")
-        expect(page.locator("#soundPreset option")).to_have_count(6)
+        expect(page.locator("#soundPreset option")).to_have_count(STARTING_PRESETS)
         expect(page.locator("#soundPresetFolder")).to_have_count(0)
         page.set_viewport_size({"width":720,"height":800})
         self.assertTrue(page.locator("#spSounds").evaluate("""pane => {
@@ -1864,10 +1879,10 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator("#soundDraftStatus")).to_have_text("Unsaved changes")
         page.locator("#soundImportFiles").set_input_files(upload)
         expect(page.locator("#soundFileStatus")).to_contain_text("duplicate preset skipped")
-        expect(page.locator("#soundPreset option")).to_have_count(7)
+        expect(page.locator("#soundPreset option")).to_have_count(STARTING_PRESETS + 1)
         page.click("#settingsModalClose")
         page.click("#welcomeSettingsBtn"); self.open_tone_presets()
-        expect(page.locator("#soundPreset option")).to_have_count(6)
+        expect(page.locator("#soundPreset option")).to_have_count(STARTING_PRESETS)
         page.locator("#soundImportFiles").set_input_files(upload)
         expect(page.locator("#soundName")).to_have_value("Imported JSON")
         self.apply_settings_and_close()
@@ -1884,7 +1899,7 @@ class EndToEndTests(unittest.TestCase):
             invalid.write_text("{}", encoding="utf-8")
             page.click("#settingsModalClose")
             page.click("#welcomeSettingsBtn"); self.open_tone_presets()
-            expect(page.locator("#soundPreset option")).to_have_count(8)
+            expect(page.locator("#soundPreset option")).to_have_count(STARTING_PRESETS + 2)
             expect(page.locator("#soundFileStatus")).to_contain_text("invalid.json")
             expect(page.locator("#soundName")).to_have_value("Imported JSON")
             page.select_option("#soundPreset", "file:z-external.json")
@@ -1897,7 +1912,7 @@ class EndToEndTests(unittest.TestCase):
             expect(page.locator("#soundFileStatus")).to_contain_text("invalid values")
             page.locator("#soundImportFiles").set_input_files({"name":"tone.psarc", "mimeType":"application/octet-stream", "buffer":b"PSAR"})
             expect(page.locator("#soundFileStatus")).to_contain_text("Only JSON")
-            expect(page.locator("#soundPreset option")).to_have_count(7)
+            expect(page.locator("#soundPreset option")).to_have_count(STARTING_PRESETS + 1)
         finally:
             extra.unlink(missing_ok=True); invalid.unlink(missing_ok=True)
         page.click("#settingsModalClose")
@@ -5110,13 +5125,13 @@ class EndToEndTests(unittest.TestCase):
             (await import('/tone-markers.js')).openToneMarkerPop(600, 200, lane.toneMarkers[0], lane);
         }''')
         options = page.locator('#toneMarkerPreset option')
-        expect(options).to_have_count(6)
+        expect(options).to_have_count(STARTING_PRESETS)
         self.assertEqual(options.evaluate_all('els => els.map(el => el.value).filter(value => ["lead","clean","crunch","bass"].includes(value))'), [])
         self.assertEqual(options.evaluate_all('els => els.every(el => el.value.startsWith("sound_file_"))'), True)
         page.select_option('#toneMarkerPreset', label='Bass Clean')
         selected = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]''')
         self.assertNotIn('toneData', selected)
-        expect(page.locator('#toneMarkerPreset option')).to_have_count(6)
+        expect(page.locator('#toneMarkerPreset option')).to_have_count(STARTING_PRESETS)
         expect(page.locator('#toneMarkerPreset option:disabled')).to_have_count(0)
 
     def test_tone_switch_empty_library_does_not_restore_old_defaults(self):
@@ -5167,7 +5182,7 @@ class EndToEndTests(unittest.TestCase):
         expect(page.locator('#toneMarkerPreset')).to_have_value('lead')
         expect(page.locator('#toneMarkerPreset option[value=lead]')).to_have_attribute('disabled', '')
         expect(page.locator('#toneMarkerPreset option[value=lead]')).to_contain_text('Missing preset: lead')
-        expect(page.locator('#toneMarkerPreset option:not(:disabled)')).to_have_count(6)
+        expect(page.locator('#toneMarkerPreset option:not(:disabled)')).to_have_count(STARTING_PRESETS)
         page.select_option('#toneMarkerPreset', label='Guitar Clean')
         expect(page.locator('#toneMarkerPreset option:disabled')).to_have_count(0)
         repaired = page.evaluate('''async () => (await import('/store.js')).S.state.editLanes[0].toneMarkers[0]''')
