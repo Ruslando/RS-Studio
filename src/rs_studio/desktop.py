@@ -378,8 +378,41 @@ def _listen(preferred: int = 8000) -> socket.socket:
     raise OSError("No free local port")
 
 
-def _exit_when_stdin_closes() -> None:
-    sys.stdin.buffer.read()   # blocks until the shell closes the pipe: it quit or crashed
+def _wait_for_exit(pid: int) -> None:
+    """Block until process `pid` has ended, however it ended (also a crash or a kill).
+
+    Not a pipe on stdin: on Windows a read pending on the stdin pipe blocks every
+    thread that starts a subprocess with the default stdin (FFmpeg, the audio
+    workers, Wwise), so uploads and exports hung.
+    """
+    if os.name == "nt":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        handle = kernel32.OpenProcess(0x00100000, False, pid)   # SYNCHRONIZE; none: already gone
+        if handle:
+            kernel32.WaitForSingleObject(ctypes.c_void_p(handle), 0xFFFFFFFF)
+        return
+    try:
+        import select
+
+        select.select([os.pidfd_open(pid)], [], [])   # Linux 5.3+: readable once the process ends
+    except ProcessLookupError:
+        return
+    except (AttributeError, OSError):   # no pidfd: ask every second
+        while True:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            except PermissionError:
+                pass   # alive, another user's
+            time.sleep(1)
+
+
+def _exit_with(pid: int) -> None:
+    _wait_for_exit(pid)
     _exit_now()
 
 
@@ -387,16 +420,17 @@ def serve_for_shell() -> None:
     """The server for the Electron window (launcher/main.js), which started this process.
 
     Prints "RS_STUDIO_READY <port>" once the port is listening; requests that
-    arrive before the server is up wait in the socket's queue. The shell keeps
-    stdin open as a pipe; when it closes, the shell is gone, so this process quits
-    too and stops the audio workers on the way (_exit_now). Started any other way,
-    stdin must still be a pipe that stays open, or the server quits at once.
+    arrive before the server is up wait in the socket's queue. The shell passes
+    its process id (RS_STUDIO_SHELL_PID); once that process is gone, this one
+    quits too and stops the audio workers on the way (_exit_now).
     """
     _prep_runtime()
     from rs_studio import server
 
     sock = _listen()
-    threading.Thread(target=_exit_when_stdin_closes, name="shell-watch", daemon=True).start()
+    shell = os.environ.get("RS_STUDIO_SHELL_PID")
+    if shell:
+        threading.Thread(target=_exit_with, args=(int(shell),), name="shell-watch", daemon=True).start()
     print(f"RS_STUDIO_READY {sock.getsockname()[1]}", flush=True)
     try:
         server.serve(sock=sock)

@@ -4,6 +4,7 @@
 "use strict";
 const { app, BrowserWindow, Menu, dialog, ipcMain, screen, session, shell } = require("electron");
 const { spawn } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
 
@@ -33,8 +34,12 @@ function stopped(message) {
 }
 
 function startServer() {
-  server = spawn(python, [path.join(repo, "standalone.py"), "--serve"],
-    { cwd: repo, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  // The server quits once this process is gone (RS_STUDIO_SHELL_PID), also after a crash.
+  // No stdin: a pipe there would be inherited by every FFmpeg and Wwise the server starts.
+  server = spawn(python, [path.join(repo, "standalone.py"), "--serve"], {
+    cwd: repo, stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+    env: { ...process.env, RS_STUDIO_SHELL_PID: String(process.pid) },
+  });
   server.on("error", (error) => stopped(`Could not start ${python}:\n${error.message}`));
   server.stderr.on("data", (chunk) => {
     process.stderr.write(chunk);
@@ -54,6 +59,22 @@ function startServer() {
     if (code === 0) quit();
     else stopped(`The RS Studio server ended unexpectedly (exit code ${code}).\n\n${errorTail.join("\n")}`);
   });
+}
+
+// Exports and project files come in as downloads. Ask where each one goes,
+// starting in the folder the last one went to (a Rocksmith DLC folder, usually).
+function saveDownload(item) {
+  const remembered = path.join(app.getPath("userData"), "download-folder.txt");
+  let folder = app.getPath("downloads");
+  try { folder = fs.readFileSync(remembered, "utf8").trim() || folder; } catch { /* first download */ }
+  const name = item.getFilename(), extension = path.extname(name).slice(1);
+  const target = dialog.showSaveDialogSync(win, {
+    title: "Save " + name, defaultPath: path.join(folder, name),
+    filters: extension ? [{ name: extension.toUpperCase() + " file", extensions: [extension] }] : [],
+  });
+  if (!target) return item.cancel();
+  item.setSavePath(target);
+  try { fs.writeFileSync(remembered, path.dirname(target)); } catch { /* only a convenience */ }
 }
 
 const fromApp = (event) => !!appUrl && event.senderFrame?.url.startsWith(appUrl);
@@ -131,9 +152,9 @@ if (!app.requestSingleInstanceLock()) {
     // Clipboard writes (copy buttons) only; no camera, microphone, location or notifications.
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission === "clipboard-sanitized-write"));
+    session.defaultSession.on("will-download", (_event, item) => saveDownload(item));
     createWindow();
     startServer();
   });
-  // Closing stdin tells the server the window is gone; it stops its workers and exits.
-  app.on("will-quit", () => { quitting = true; server?.stdin.end(); });
+  app.on("will-quit", () => { quitting = true; });
 }
