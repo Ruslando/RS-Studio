@@ -4152,6 +4152,30 @@ class EndToEndTests(unittest.TestCase):
             self.assertEqual(result['held'], result['manual'], result)
             self.assertGreater(result['resumed'], result['manual'] + 100, result)
 
+    def test_pausing_does_not_jump_the_view_back_to_the_playhead(self):
+        self.open_reference_project()
+        self.page.emulate_media(reduced_motion='reduce')
+        result = self.page.evaluate("""async () => {
+            const { playTransport, pauseTransport, seekPlayback } = await import('/playback.js');
+            const { stopViewportMotion } = await import('/viewport-motion.js');
+            const scroll = document.querySelector('#scroll');
+            const frame = () => new Promise(requestAnimationFrame);
+            pauseTransport(); stopViewportMotion();
+            document.querySelector('#playbackScrollMode').value = 'page';
+            seekPlayback(12); scroll.scrollLeft = 0;
+            await playTransport(); await frame(); await frame();
+            const head = scroll.scrollLeft;   // playing follows the playhead
+            // Scroll away by hand while it plays (the wheel suspends following), then pause.
+            scroll.dispatchEvent(new WheelEvent('wheel', {deltaY:-180, bubbles:true, cancelable:true}));
+            scroll.scrollLeft = 0;
+            await frame();
+            pauseTransport();
+            await frame(); await frame(); await frame();
+            return { head, paused: scroll.scrollLeft };
+        }""")
+        self.assertGreater(result['head'], 100, result)
+        self.assertEqual(result['paused'], 0, 'the view stays where it was scrolled to')
+
     def test_playback_scrolling_resumes_after_two_seconds_with_playhead_in_frame(self):
         self.open_reference_project()
         self.page.emulate_media(reduced_motion='reduce')

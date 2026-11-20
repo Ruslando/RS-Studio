@@ -770,7 +770,8 @@ function tick() {
   // tablature is active used to shrink and clear its backing canvas, producing a
   // black frame when switching back.
   if (!editorEl.hidden) {
-    revealPlaybackPosition({ redraw: false });
+    // Only while playing: the frame after a pause must not pull a view you scrolled away to back to the playhead.
+    if (transportPlaying()) revealPlaybackPosition({ redraw: false });
     drawNow({ playhead: true });
   }
   if (!hasAudioTransport() && S.scorePlaying && ct >= duration) pauseTransport();
