@@ -4157,6 +4157,28 @@ class EndToEndTests(unittest.TestCase):
         self.assertTrue(samples['moving'][0]!=samples['moving'][1], 'enabled preview includes string attack effects')
 
 
+    def test_note_labels_show_at_a_low_zoom_whatever_their_font_size(self):
+        """A bigger font must not need more zoom to show: only a row too short for any label hides them."""
+        self.open_reference_project()
+        page = self.page
+        labels_at = lambda size, row: page.evaluate("""async ({size, row}) => {
+            const {S} = await import('/store.js'), {PX_PER_SEC} = await import('/constants.js');
+            const geometry = await import('/geometry.js'), notes = await import('/note-render.js');
+            document.querySelector('#noteLabelSize').value = String(size);
+            S.zoomX = 6; S.pxPerSec = PX_PER_SEC * S.zoomX; S.zoomY = 1; geometry.layout();
+            S.zoomY = row / S.state.rowH; geometry.layout();
+            const lane = S.state.editLanes.find(l => l.active) || S.state.editLanes[0], scroll = document.querySelector('#scroll');
+            scroll.scrollLeft = geometry.xOf(lane.notes[0].start) - 20;
+            scroll.scrollTop = geometry.yOf(lane.notes[0].pitch) - scroll.clientHeight / 2;
+            const ctx = document.querySelector('#stage').getContext('2d'), original = ctx.fillText, fonts = [];
+            ctx.fillText = function(...args) { fonts.push(this.font); return original.apply(this, args); };
+            try { notes.drawNoteFx(); } finally { ctx.fillText = original; }
+            return fonts.filter(font => !font.includes('Mono')).length;
+        }""", {"size": size, "row": row})
+        for size in (10, 16):
+            self.assertGreater(labels_at(size, 10), 0, f"{size} px labels show on a 10 px row")
+            self.assertEqual(labels_at(size, 6), 0, f"and not on a row too short for any label ({size} px)")
+
     def test_note_label_font_size_preview_apply_and_cancel(self):
         self.open_reference_project()
         page = self.page

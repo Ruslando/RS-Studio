@@ -9,8 +9,10 @@ function noteLabelSize() {
   return NOTE_LABEL_SIZES.includes(size) ? size : NOTE_LABEL_SIZE;
 }
 
-// The shortest note row a label is drawn in.
-export const noteLabelRowHeight = () => noteLabelSize() + 4;
+// The shortest note row a label is drawn in. Not tied to the font size: a bigger font must
+// not need more zoom to show. A label taller than its row overhangs the note, which its halo
+// keeps readable; one that is too wide for the note is still left out (see paintNoteLabel).
+export const noteLabelRowHeight = () => 8;
 
 export function paintNoteLabel(ctx, text, x, width, y, height = Infinity, availableWidth = width) {
   if (!text) return;
@@ -18,9 +20,9 @@ export function paintNoteLabel(ctx, text, x, width, y, height = Infinity, availa
   const preferred = noteLabelSize();
   ctx.font = stageUi(preferred, 600);
   const measured = ctx.measureText(text).width;
-  // A note name has one configured, readable size. It either fits within the
-  // note body or is omitted; scaling it down makes neighboring names look like
-  // a different kind of annotation and is harder to read than no label.
+  // A note name has one configured, readable size. It is never scaled down (neighboring
+  // names would look like a different kind of annotation); it is omitted when the note is
+  // too narrow for it or its row too short to carry it at all.
   if (height < noteLabelRowHeight() || availableWidth < measured + 6) { ctx.restore(); return; }
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineWidth = 2.5; ctx.strokeStyle = halo(); ctx.fillStyle = PAINT.text;
