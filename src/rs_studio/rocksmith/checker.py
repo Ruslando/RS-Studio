@@ -169,6 +169,8 @@ FIXED = {
             'The note is too short for the figure, or a figure note is outside frets 0 to 24. Extend the note, change its fret, or select another ornament.'),
     'slide-open': ('Slide removed from an open string',
             'An open string cannot slide. Use a fretted note to keep the slide.'),
+    'link': ('Tie / link to next note removed',
+            'Rocksmith holds a note into the next one only when that is the next note on the same string, on the same fret, and the note has no out-slide. To join notes on different frets, use a legato slide.'),
     'fret': ('Note moved to fret 24',
             'The export limits this note to fret 24, which changes its pitch. Choose a position at fret 24 or below and check the capo.'),
     'unvoiced': ('Note removed: no string or fret',

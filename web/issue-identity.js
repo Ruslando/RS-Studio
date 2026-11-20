@@ -35,6 +35,7 @@ const legacyIds = {
   "trill": "export.trill",
   "ornament": "export.ornament",
   "slide-open": "export.slide-open",
+  "link": "export.link",
   "fret": "export.fret",
   "unvoiced": "export.unvoiced",
   "finger": "export.finger",

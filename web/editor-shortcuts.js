@@ -38,7 +38,7 @@ function withSelection(action) {
   if (notes.length && notes.every(note => canEditLane(laneOf(note)))) action(notes);
 }
 
-export function createEditorShortcutRunner({ openSettingsModal, markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection }) {
+export function createEditorShortcutRunner({ openSettingsModal, markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection, toggleLinkNextOnSelection }) {
   const handlers = {
     sidebar: () => click('sidebarToggle'), artifacts: () => click('artifactsToggle'),
     zoomIn: () => click('zoomIn'), zoomOut: () => click('zoomOut'),
@@ -60,6 +60,7 @@ export function createEditorShortcutRunner({ openSettingsModal, markSelectionAsM
     unmarkShape: () => withSelection(() => unmarkSelectedShapes()),
     fretboardShape: () => click('fretboardShape'), applyFretboardShape: () => click('fretboardApply'),
     autoFretboard: () => click('fretboardAuto'),
+    linkNext: toggleLinkNextOnSelection,
     ...Object.fromEntries(['palmMute', 'hammer', 'vibrato', 'dead', 'accent', 'letRing'].map(key =>
       [key, () => withSelection(notes => setFxOnSelection(key, !notes.every(note => fxOn(note, key))))])),
     // The same menu items and checkbox the spectrogram panel uses, so disabled states apply.

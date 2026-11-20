@@ -346,3 +346,101 @@ class HammerTest(unittest.TestCase):
         notes = _run([{"fret": 13, "start": 1.0, "pitch": 58},
                       {"fret": 11, "start": 1.25, "pitch": 56, "fx": {"hammer": True}}])
         self.assertTrue(notes[1].mask & S.PULLOFF)
+
+
+def _tied(first, second):
+    notes = [
+        {"string": 5, "fret": 5, "start": 1.0, "end": 1.3, "pitch": 50, "linkNext": True, **first},
+        {"string": 5, "start": 1.5, "end": 2.5, "pitch": 50, **second},
+    ]
+    track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40], "notes": notes}
+    return compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+
+
+class TieToNextNoteTest(unittest.TestCase):
+    """The editor's "Tie / link to next note" (EOF's Linknext)."""
+
+    def test_same_fret_note_is_held_into_the_next_without_a_pick(self):
+        compiled = _tied({}, {"fret": 5})
+        source, target = compiled.sng.levels[0].notes
+        self.assertTrue(source.mask & S.PARENT)
+        self.assertAlmostEqual(source.time + source.sustain, target.time)   # across the editor's gap
+        self.assertTrue(target.mask & S.CHILD)
+        self.assertNotIn("link", [code for code, _ in compiled.fixes])
+
+    def test_vibrato_note_ties_into_a_trill(self):
+        compiled = _tied({"fx": {"vibrato": True}}, {"fret": 5, "trill": "whole"})
+        notes = compiled.sng.levels[0].notes
+        self.assertTrue(notes[0].mask & S.PARENT)
+        self.assertTrue(notes[1].mask & S.CHILD)
+        self.assertGreater(len(notes), 3)   # the trill went out as hammered notes
+        self.assertNotIn("link", [code for code, _ in compiled.fixes])
+
+    def test_another_fret_is_not_linked_and_said(self):
+        compiled = _tied({}, {"fret": 7, "pitch": 52})
+        source, target = compiled.sng.levels[0].notes
+        self.assertFalse(source.mask & S.PARENT)
+        self.assertFalse(target.mask & S.CHILD)
+        self.assertIn(("link", 1.0), compiled.fixes)
+
+    def test_no_next_note_is_not_linked_and_said(self):
+        track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40], "notes": [
+            {"string": 5, "fret": 5, "start": 1.0, "end": 1.5, "pitch": 50, "linkNext": True}]}
+        compiled = compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+        self.assertFalse(compiled.sng.levels[0].notes[0].mask & S.PARENT)
+        self.assertIn(("link", 1.0), compiled.fixes)
+
+    def test_out_slide_is_not_linked_and_said(self):
+        compiled = _tied({"slide": "outDown"}, {"fret": 5})
+        source = compiled.sng.levels[0].notes[0]
+        self.assertFalse(source.mask & S.PARENT)
+        self.assertTrue(source.mask & S.UNPITCHEDSLIDE)
+        self.assertIn(("link", 1.0), compiled.fixes)
+
+    def test_legato_slide_with_the_flag_needs_no_warning(self):
+        compiled = _tied({"slide": "legato"}, {"fret": 7, "pitch": 52})
+        self.assertTrue(compiled.sng.levels[0].notes[0].mask & S.PARENT)
+        self.assertNotIn("link", [code for code, _ in compiled.fixes])
+
+
+def _chords(first_flags, second):
+    """A two-string chord at 1.0 s, then `second` at 1.5 s; the A string note is tied."""
+    notes = [{"string": 5, "fret": 2, "start": 1.0, "end": 1.5, "pitch": 42, **first_flags},
+             {"string": 4, "fret": 2, "start": 1.0, "end": 1.5, "pitch": 47}, *second]
+    track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40], "notes": notes}
+    compiled = compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0)
+    return compiled, compiled.sng.levels[0].notes
+
+
+class TieOnChordsTest(unittest.TestCase):
+    A = {"string": 5, "fret": 2, "pitch": 42}
+    D = {"string": 4, "fret": 2, "pitch": 47}
+
+    def test_tied_chord_runs_into_the_next_chord_as_single_notes(self):
+        compiled, notes = _chords({"linkNext": True}, [{**self.A, "start": 1.5, "end": 2.0}, {**self.D, "start": 1.5, "end": 2.0}])
+        chord, first, second = notes
+        self.assertTrue(chord.mask & S.PARENT)
+        self.assertAlmostEqual(chord.time + chord.sustain, first.time)
+        self.assertTrue(first.mask & S.CHILD)          # the tied string is not picked again
+        self.assertFalse(second.mask & S.CHILD)        # the other string is
+        self.assertEqual(chord.chord_id, 0)
+        self.assertEqual([m & S.PARENT for m in compiled.sng.chord_notes[0].mask], [0, S.PARENT, 0, 0, 0, 0])
+        self.assertNotIn("link", [code for code, _ in compiled.fixes])
+
+    def test_tied_chord_note_runs_into_a_single_note_on_its_string(self):
+        compiled, notes = _chords({"linkNext": True}, [{**self.A, "start": 1.5, "end": 2.0}])
+        self.assertTrue(notes[0].mask & S.PARENT and notes[1].mask & S.CHILD)
+        self.assertNotIn("link", [code for code, _ in compiled.fixes])
+
+    def test_tied_chord_note_with_no_next_note_on_its_string_is_said(self):
+        compiled, notes = _chords({"linkNext": True}, [{**self.D, "start": 1.5, "end": 2.0}])
+        self.assertFalse(notes[0].mask & S.PARENT)
+        self.assertIn(("link", 1.0), compiled.fixes)
+
+    def test_single_tied_note_runs_into_a_chord_split_into_single_notes(self):
+        track = {"name": "Lead", "tuning": [64, 59, 55, 50, 45, 40], "notes": [
+            {**self.A, "start": 1.0, "end": 1.5, "linkNext": True},
+            {**self.A, "start": 1.5, "end": 2.0}, {**self.D, "start": 1.5, "end": 2.0}]}
+        notes = compile_track(track, {"bpm": 120, "offset": 0, "tsNum": 4}, 10.0).sng.levels[0].notes
+        self.assertTrue(notes[0].mask & S.PARENT and notes[1].mask & S.CHILD)
+        self.assertEqual([n.chord_id for n in notes], [-1, -1, -1])

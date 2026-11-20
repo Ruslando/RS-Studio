@@ -53,6 +53,10 @@ export function splitNote(note, at, minDuration, newId) {
   // grace note, or strum; the freshly sliced attack deliberately starts clean.
   for (const field of ATTACK_ONLY_FIELDS) delete right[field];
 
+  // The right half still runs into whatever the note was tied to. The left half now
+  // ends at a fresh pick, so it is not tied to it.
+  delete left.linkNext;
+
   // Both halves stay in the note's motif and grip shape: same string, same fret.
 
   // A late slide start stays at its moment in time. Cut before it, the slide

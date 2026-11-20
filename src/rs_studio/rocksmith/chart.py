@@ -1668,16 +1668,21 @@ def _emit_notes(entities: list, chord_templates: list, arr: _Arrangement, is_bas
             mask |= S.PULLOFF if pull_off else S.HAMMERON
             arr_props["hopo"] = True
         linked = False
+        slide = n.get("slide")
         if n.get("linkNext"):
             # A note carried on by the next one on its string (a late slide or
-            # vibrato, a held bend): it runs exactly to it.
+            # vibrato, a held bend, or the editor's "Tie / link to next note"): it
+            # runs exactly to it. An out-slide cannot be linked (I09), and a legato
+            # slide makes its own link below.
             target = next_on_string(idx, string)
-            if target is not None and target[0] == fret and not target[2]:
+            if (target is not None and target[0] == fret and not target[2]
+                    and slide not in ("outDown", "outUp")):
                 sustain = target[1] - time
                 mask |= S.PARENT | S.SUSTAIN
                 link_parents[string] = idx
                 linked = True
-        slide = n.get("slide")
+            elif slide != "legato":
+                dropped_slides_fx.append(("link", time))
         if slide in ("shift", "legato", "outDown", "outUp") and fret == 0:
             # A slide needs a finger on the string: from an open string it goes nowhere.
             dropped_slides_fx.append(("slide-open", time))

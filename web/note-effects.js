@@ -10,10 +10,11 @@ export const EFFECT_FIELDS = [
   // Rocksmith only: how the chord the note is in is drawn ("full" or "repeat",
   // chart._chord_display), a note left out of the score (`ignore`), a chord shown
   // without fingers (`fingerless`), a note only shown in a grip (`gripOnly`, EOF's
-  // ghost gem: not played, not in Guitar Pro). Not in the signatures below: Guitar Pro has no
-  // such thing, so changing them must not take a note off the source-preserving
-  // Guitar Pro path.
-  "chordDisplay", "ignore", "fingerless", "gripOnly",
+  // ghost gem: not played, not in Guitar Pro), a note held into the next one on its
+  // string without a new pick (`linkNext`, EOF's Linknext). Not in the signatures
+  // below: Guitar Pro has no such thing, so changing them must not take a note off
+  // the source-preserving Guitar Pro path.
+  "chordDisplay", "ignore", "fingerless", "gripOnly", "linkNext",
   // Editor-only snap preference. It is copied with the note but is not a
   // Guitar Pro effect and must not affect source-preserving signatures.
   "preciseLength",
@@ -97,6 +98,7 @@ export function noteMarks(n) {
   if (n.tremPick) m.push("≣");
   if (n.slap) m.push(SLAP_TAG[n.slap]);
   if (n.ornament) m.push(n.ornament.replace(/([A-Z])/g, " $1"));
+  if (n.linkNext) m.push("Tie");
   if (n.ignore) m.push("Not scored");
   if (n.fingerless) m.push("No fingers");
   if (n.gripOnly) m.push("Grip only");

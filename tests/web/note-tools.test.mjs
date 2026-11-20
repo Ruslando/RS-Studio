@@ -23,6 +23,9 @@ import { lineXAtRow, splitEvenly, splitNote } from "../../web/slice.js";
   assert.deepEqual(right.bendPoints, [[0, 2], [1, 2]]);
   assert.equal(note.end, 1, "the note itself is not touched");
 
+  const tied = splitNote({ ...note, linkNext: true }, 0.5, 0.1, () => 2);
+  assert.equal(tied.left.linkNext, undefined, "the cut is a fresh pick, so the first half is not tied");
+  assert.equal(tied.right.linkNext, true, "the second half still runs into the note it was tied to");
   assert.equal(splitNote(note, 0.05, 0.1, () => 2), null, "no piece shorter than a grid cell");
   assert.equal(splitNote(note, 0.95, 0.1, () => 2), null);
   assert.ok(splitNote(note, 0.1, 0.1, () => 2), "exactly one cell is enough");

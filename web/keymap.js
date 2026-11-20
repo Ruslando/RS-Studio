@@ -40,6 +40,7 @@ export const KEY_COMMANDS = [
     ["palmMute", "Toggle palm mute"], ["hammer", "Toggle hammer-on / pull-off"],
     ["vibrato", "Toggle vibrato"], ["dead", "Toggle dead note"],
     ["accent", "Toggle accent"], ["letRing", "Toggle let ring"],
+    ["linkNext", "Toggle tie / link to next note"],
     ["previousLayer", "Previous note layer"], ["nextLayer", "Next note layer"],
     ["addLayer", "Add note layer"], ["layerSettings", "Active note layer settings"],
     ["layerVisible", "Show / hide active note layer"], ["layerLock", "Lock / unlock active note layer"],

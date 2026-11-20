@@ -633,6 +633,19 @@ function setChoiceOnSelection(field, kind) {
   if (cleared) toast("Cleared conflicting effects");
 }
 
+// "Tie / link to next note" (Rocksmith menu, or its unassigned shortcut): on for the
+// selection unless every note already has it. Only notes of one tablature layer
+// that can be edited, as the menu offers it.
+function toggleLinkNextOnSelection() {
+  const notes = [...S.selection].filter((n) => laneOf(n));
+  const lane = notes.length ? laneOf(notes[0]) : null;
+  if (!lane || !canEditLane(lane) || !isTablatureLane(lane) || notes.some((n) => laneOf(n) !== lane)) return;
+  const on = !notes.every((n) => n.linkNext);
+  const prev = snapshotEdit();
+  for (const n of notes) { if (on) n.linkNext = true; else delete n.linkNext; }
+  commitStructure(prev);
+}
+
 // ---- annotation-only motifs ----
 export function markSelectionAsMotif() {
   const selected = [...S.selection].filter(note => laneOf(note));
@@ -1425,6 +1438,7 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
     fn: () => setField(wholeChords(), "chordDisplay", value),
   });
   const allIgnored = editable && sel.every((n) => n.ignore);
+  const allLinked = editable && sel.every((n) => n.linkNext);
   // Fingerless is about a grip: a chord's, or an arpeggio's or handshape's.
   const gripNotes = () => [...new Set([...wholeChords(),
     ...selLane.notes.filter((n) => selectedShapeIds.includes(n.shapeId))])];
@@ -1437,6 +1451,11 @@ export function openNoteMenu(clientX, clientY, { nearSelection = false } = {}) {
         tip: "Rocksmith shows the note but does not score it: for a note the game cannot hear well. "
           + "In a chord, the whole chord is not scored. Notes on frets 23 and 24 are never scored anyway.",
         fn: () => setField(sel, "ignore", !allIgnored) },
+      { label: tick(allLinked, "Tie / link to next note"), kw: "linknext link next tie hold repick continue",
+        tip: "Rocksmith holds this note into the next note on the same string without picking it again, "
+          + "e.g. a long note that goes on into vibrato or a trill. The next note must be on the same fret. "
+          + "To join notes on different frets, use a legato slide. EOF calls this Linknext.",
+        fn: toggleLinkNextOnSelection },
       ...(selectedShapeIds.length ? [
         { label: tick(sel.every((n) => n.gripOnly), "Grip only (Ghost gem)"), kw: "ghost gem grip only shape",
           tip: "The note is part of the arpeggio's or handshape's grip that Rocksmith shows, but it is not played: "
@@ -1701,7 +1720,7 @@ function handleEditShortcut(e, mod) {
 }
 
 export function init_edit({ openSettingsModal }) {
-  const runEditorShortcut = createEditorShortcutRunner({ openSettingsModal, markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection });
+  const runEditorShortcut = createEditorShortcutRunner({ openSettingsModal, markSelectionAsMotif, markSelectionAsShape, selectEntireMotif, unmarkSelectedMotifs, unmarkSelectedShapes, setFxOnSelection, toggleLinkNextOnSelection });
   registerEscapeLayer(ESC_DEPTH.popover, () => {
     if (!noteMenuEl || noteMenuEl.hidden) return false;
     hideNoteMenu(); return true;

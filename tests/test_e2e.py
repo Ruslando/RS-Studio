@@ -1811,6 +1811,30 @@ class EndToEndTests(unittest.TestCase):
         expect(field).to_have_value('B+R-')
         page.keyboard.press('Escape')
 
+    def test_tie_to_next_note_has_an_unassigned_shortcut_that_toggles_and_undoes(self):
+        self.open_reference_project()
+        page = self.page
+        page.locator('#settingsMenuBtn').click()
+        page.locator('[data-settings-pane="keys"]').click()
+        row = page.locator('[data-command="linkNext"]')
+        expect(row).to_contain_text('Toggle tie / link to next note')
+        expect(row.locator('.keymap-key')).to_have_text('Unassigned')
+        page.keyboard.press('Escape')
+        page.evaluate("""async () => {
+            const {S,setSelection} = await import('/store.js');
+            setSelection(new Set([S.state.editLanes[0].notes[0]]));
+            (await import('/keymap.js')).setKey('linkNext', 'J');
+        }""")
+        page.evaluate('document.activeElement.blur()')
+        linked = lambda: page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].notes[0].linkNext ?? null")
+        self.assertIsNone(linked())
+        page.keyboard.press('j')
+        self.assertTrue(linked())
+        page.keyboard.press('j')
+        self.assertIsNone(linked())
+        page.keyboard.press('Control+z')
+        self.assertTrue(linked())
+
     def test_settings_contextual_apply_and_footer_actions(self):
         page = self.page
         reads = []
@@ -3423,6 +3447,33 @@ class EndToEndTests(unittest.TestCase):
                 const { S } = await import('/store.js');
                 return S.state.editLanes[0].notes[0][field] ?? null;
             }""", field))
+
+    def test_tie_to_next_note_toggles_from_the_rocksmith_menu_and_survives_undo(self):
+        self.open_reference_project()
+        page = self.page
+        def open_rocksmith_menu():
+            page.evaluate("""async () => {
+                const { S, setSelection } = await import('/store.js');
+                setSelection(new Set([S.state.editLanes[0].notes[0]]));
+                (await import('/edit.js')).openNoteMenu(400, 200);
+            }""")
+            page.get_by_role("button", name="Rocksmith", exact=True).hover()
+        def linked():
+            return page.evaluate("""async () => {
+                const { S } = await import('/store.js');
+                return S.state.editLanes[0].notes[0].linkNext ?? null;
+            }""")
+
+        open_rocksmith_menu()
+        expect(page.locator(".ctxmenu-item", has_text="Tie / link to next note")).to_be_visible()
+        page.locator(".ctxmenu-item", has_text="Tie / link to next note").click()
+        self.assertTrue(linked())
+        open_rocksmith_menu()
+        expect(page.locator(".ctxmenu-item", has_text="Tie / link to next note").locator(".chkmark")).to_be_visible()
+        page.locator(".ctxmenu-item", has_text="Tie / link to next note").click()
+        self.assertIsNone(linked())
+        page.evaluate("async () => (await import('/edit.js')).undo()")
+        self.assertTrue(linked())
 
     def test_bend_and_natural_harmonic_exclude_each_other(self):
         self.open_reference_project()

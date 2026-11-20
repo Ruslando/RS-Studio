@@ -80,6 +80,7 @@ tuning pitch, turn, unpitched slide, vibrato, and whammy. Product and UI names k
 | `export.trill` | warning | Trill removed | The note is too short for the trill, or its upper note is above fret 24. Extend the note or select a smaller trill interval. |
 | `export.ornament` | warning | Ornament removed | The note is too short for the figure, or a figure note is outside frets 0 to 24. Extend the note, change its fret, or select another ornament. |
 | `export.slide-open` | warning | Slide removed from an open string | An open string cannot slide. Use a fretted note to keep the slide. |
+| `export.link` | warning | Tie / link to next note removed | Rocksmith holds a note into the next one only when that is the next note on the same string, on the same fret, and the note has no out-slide. To join notes on different frets, use a legato slide. |
 | `export.fret` | warning | Note moved to fret 24 | The export limits this note to fret 24, which changes its pitch. Choose a position at fret 24 or below and check the capo. |
 | `export.unvoiced` | warning | Note removed: no string or fret | The export leaves out this note because its string or fret is missing or invalid. Assign a valid string and fret position. |
 | `export.finger` | warning | Chord has no complete fingering | Some fretted chord notes have no finger number. Assign the missing fingers, or select Rocksmith > No finger numbers (Fingerless). |
