@@ -1769,6 +1769,9 @@ class EndToEndTests(unittest.TestCase):
         page.locator('[data-settings-pane="keys"]').click()
         row.locator('.keymap-key').click()
         page.keyboard.press('q')
+        # Channel, view and reassignment can be bound too (no default keys).
+        for command in ('channelStereo', 'channelLeft', 'channelRight', 'channelSide', 'viewCqt', 'reassignment'):
+            expect(page.locator(f'[data-command="{command}"] .keymap-key')).to_have_text('Unassigned')
         page.locator('#settingsApply').click()
         page.keyboard.press('Escape')
         page.evaluate('document.activeElement.blur()')

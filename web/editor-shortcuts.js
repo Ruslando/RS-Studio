@@ -15,6 +15,7 @@ import { songEnd } from './project-position-core.js';
 import { toggleDrawingSettings, toggleDrawingSnap } from './drawing-settings.js';
 
 const click = id => { const control = $(id); if (control && !control.disabled) control.click(); };
+const viewItem = view => document.querySelector(`[data-view="${view}"]`)?.click();
 const layerControl = selector => document.querySelector(`#lanes .lane-row.active ${selector}`)?.click();
 function stepLayer(direction) {
   const lanes = editLanes(), index = lanes.indexOf(activeLane());
@@ -61,6 +62,11 @@ export function createEditorShortcutRunner({ openSettingsModal, markSelectionAsM
     autoFretboard: () => click('fretboardAuto'),
     ...Object.fromEntries(['palmMute', 'hammer', 'vibrato', 'dead', 'accent', 'letRing'].map(key =>
       [key, () => withSelection(notes => setFxOnSelection(key, !notes.every(note => fxOn(note, key))))])),
+    // The same menu items and checkbox the spectrogram panel uses, so disabled states apply.
+    ...Object.fromEntries(['stereo', 'left', 'right', 'side'].map(name =>
+      ['channel' + name[0].toUpperCase() + name.slice(1), () => document.querySelector(`#stageChannelMenu [data-channel="${name}"]`)?.click()])),
+    viewCqt: () => viewItem('fine'), viewHps: () => viewItem('fundamental'), viewWhitening: () => viewItem('contrast'),
+    reassignment: () => click('stageSharp'),
     previousLayer: () => stepLayer(-1), nextLayer: () => stepLayer(1), addLayer: () => click('addLane'),
     layerSettings: () => layerControl('.edit-btn'), layerVisible: () => layerControl('.vis-btn'),
     layerLock: () => layerControl('.lock-btn'),
