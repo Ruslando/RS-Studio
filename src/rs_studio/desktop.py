@@ -92,6 +92,27 @@ class _Shell:
         self._quitting = True
         self._window.destroy()
 
+    def set_zoom(self, factor) -> bool:
+        """Scale the whole page like the browser's Ctrl+plus (the interface scale setting).
+
+        Native zoom keeps canvas, pointer coordinates and popups consistent, which
+        CSS `zoom` does not. Windows (WebView2) only for now; False when unsupported.
+        """
+        try:
+            factor = min(3.0, max(0.5, float(factor)))
+            qt_zoom = getattr(self._window, "_rs_zoom", None)
+            if qt_zoom is not None:            # Qt WebEngine (Linux): a signal hops to the GUI thread
+                qt_zoom.emit(factor)
+                return True
+            native = self._window.native
+            view = native.browser.webview      # WinForms WebView2 control
+            from System import Action          # pythonnet, present with the winforms backend
+
+            native.Invoke(Action(lambda: setattr(view, "ZoomFactor", factor)))   # UI thread only
+            return True
+        except Exception:  # noqa: BLE001 - another backend, or the control isn't ready
+            return False
+
 
 # Hand the close back to the page and report whether it took it. Only a page that
 # can't answer — never loaded, cached from an older build, threw on the way in —
@@ -148,6 +169,26 @@ def _disable_browser_extras(window) -> None:
 
     # Fires after pywebview's own handler, which is subscribed first.
     view.CoreWebView2InitializationCompleted += ready
+
+
+def _configure_qt_zoom(window) -> None:
+    """Let the interface-scale setting zoom a Qt WebEngine page.
+
+    `set_zoom` is called from a worker thread and Qt views may only be touched on
+    the GUI thread, so it emits this signal (created here, on the GUI thread), which
+    Qt delivers queued to the view.
+    """
+    view = getattr(window.native, "webview", None)
+    if view is None or not hasattr(view, "setZoomFactor"):
+        return
+    from qtpy.QtCore import QObject, Signal
+
+    class ZoomBridge(QObject):
+        changed = Signal(float)
+
+    bridge = ZoomBridge(view)      # parented to the view: lives and dies with it
+    bridge.changed.connect(view.setZoomFactor)
+    window._rs_zoom = bridge.changed
 
 
 def _configure_qt_permissions(window) -> None:
@@ -262,6 +303,7 @@ def _open_window(url: str) -> bool:
         window.events.before_show += lambda: _enable_page_context_menu(window)
         window.events.before_show += lambda: _disable_browser_extras(window)
         window.events.before_show += lambda: _configure_qt_permissions(window)
+        window.events.before_show += lambda: _configure_qt_zoom(window)
         window.events.before_show += lambda: _configure_qt_downloads(window)
         # Not private: pywebview's default forgets the page's storage (theme, keys)
         # on every start.

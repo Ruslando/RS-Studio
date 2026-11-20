@@ -16,6 +16,7 @@ import { migrateNoteAppearanceSettings } from "./spectrogram-labels.js";
 import { normalizeTraceRange } from './drawing-options.js';
 import { createLaneRow } from './lanes.js';
 import { icon } from './icons.js';
+import { parameterSlider } from './parameter-slider.js';
 
 const KEY = "cw.settings";
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
@@ -154,7 +155,29 @@ function init_theme() {
 }
 
 // Restore must happen before the feature inits read these inputs (see main.js).
+// Interface scale: native webview zoom through the desktop shell (no-op in a plain browser).
+// The shell isn't reachable until pywebview says so, so the saved value is applied then.
+function init_ui_scale() {
+  const input = $("uiScale");
+  persistSetting(input);
+  // The app's own slider: rest marks at the snap points and a click-to-reset default.
+  const slot = document.createComment("");   // the slider moves into its wrapper, so it can't replace itself
+  input.replaceWith(slot);
+  slot.replaceWith(parameterSlider(input, {
+    min: 0.5, max: 3, step: 0.05, defaultValue: 1, format: v => `${v}x`,
+    snapPoints: [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3],
+    onDefault: () => { input.value = "1"; input.dispatchEvent(new Event("input")); input.dispatchEvent(new Event("change")); },
+  }));
+  const show = () => { $("uiScaleValue").textContent = `${Number(input.value)}x`; input.setAttribute("aria-valuetext", `${Number(input.value)} times`); };
+  const apply = () => window.pywebview?.api?.set_zoom?.(Number(input.value) || 1);
+  input.addEventListener("input", show);
+  input.addEventListener("change", apply);   // on release: each zoom reflows the whole page
+  show();
+  if (window.pywebview?.api) apply(); else window.addEventListener("pywebviewready", apply, { once: true });
+}
+
 export function init_settings() {
+  init_ui_scale();
   if ('traceRange' in store && store.traceRange !== normalizeTraceRange(store.traceRange)) {
     store.traceRange = normalizeTraceRange(store.traceRange); persist();
   }
