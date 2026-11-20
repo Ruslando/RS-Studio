@@ -829,12 +829,16 @@ class EndToEndTests(unittest.TestCase):
             (await import('/lanes.js')).renderLanes();
             (await import('/ui.js')).openSettingsModal('appearance');
         }''')
-        page.wait_for_function('window.previewRoots.length === 2 && window.previewRoots.every(root => root.querySelectorAll(".lane-row").length === 3)')
+        # The previews' own copies of the stylesheets load after they are built: the bar has no size before.
+        page.wait_for_function('window.previewRoots.length === 2 && window.previewRoots.every(root => root.querySelectorAll(".lane-row").length === 3'
+                               ' && root.querySelector(".pt-name")?.getBoundingClientRect().width > 0)')
         previews = page.evaluate('''() => window.previewRoots.map(root => ({
             names: [...root.querySelectorAll('.lane-name')].map(el => el.textContent),
             descriptions: [...root.querySelectorAll('.lane-row .count')].map(el => el.textContent),
             color: root.querySelector('.lane-dot').style.background,
-            projectName: root.querySelector('#projTabs')?.textContent || '',
+            projectName: root.querySelector('#projTabs')?.textContent.trim() || '',
+            title: (bar => bar && { width: bar.getBoundingClientRect().width > 0, empty: !bar.textContent })(
+                root.querySelector('#projTab:not([hidden]) .pt-name')),
             canvas: root.querySelector('canvas').toDataURL(),
         }))''')
         self.assertEqual(previews[0], previews[1])
@@ -844,6 +848,8 @@ class EndToEndTests(unittest.TestCase):
             'Bass · E Standard · 64 notes'])
         self.assertNotEqual(previews[0]['color'], 'rgb(18, 52, 86)')
         self.assertNotIn('Private project layer', str(previews))
+        self.assertEqual(previews[0]['title'], {'width': True, 'empty': True}, 'the title is a placeholder bar')
+        self.assertEqual(previews[0]['projectName'], '', "the open project's name is never shown")
 
     def test_appearance_previews_keep_their_theme_when_app_theme_changes(self):
         page = self.page

@@ -63,8 +63,8 @@ function setTheme(t) {
 }
 
 // The theme previews show a slice of the editor built from its real parts: the
-// toolbar and note layer section use the editor's real markup and row renderer;
-// their content is fixed example data, never the open project's. The stage strip
+// toolbar and note layer section use the editor's real markup and row renderer,
+// drawn as a skeleton (style.css); their content is fixed example data, never the open project's. The stage strip
 // is painted by the stage's own painters (its colours are the spectral palette,
 // which is the same in both themes). The clones live in a closed shadow root with
 // the app's stylesheets, so they keep their ids, and with them their real styling,
@@ -81,9 +81,12 @@ const PREVIEW_LAYERS = [
 
 function previewToolbar() {
   const toolbar = $('transport').cloneNode(true);
-  // These sections can contain the current project's name or status.
+  // The app bar can contain the current project's status. The title is kept, with the
+  // name left out: the preview is a skeleton (style.css), the project's name never in it.
   toolbar.querySelector('#appbar')?.remove();
-  toolbar.querySelector('#projTabs')?.remove();
+  toolbar.querySelector('#projTab').hidden = false;
+  toolbar.querySelector('#projDirtyDot').hidden = true;
+  toolbar.querySelector('#projTabName').textContent = '';
   const time = toolbar.querySelector('#time');
   time.textContent = '0:00 / 0:00'; time.hidden = true;
   toolbar.querySelector('#speed').value = '1';
