@@ -2,9 +2,11 @@ import io
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi.testclient import TestClient
 from PIL import Image
 
 from rs_studio import server
@@ -44,6 +46,22 @@ class SavePolicyTests(unittest.TestCase):
         server._apply_save_payload(self.job, {"name": "mine"}, overwrite=True)
         saved = server._read_manifest(self.job)
         self.assertEqual((saved["name"], saved["format"]), ("mine", server.PROJECT_FORMAT))
+
+    def test_a_chart_without_a_format_number_opens_and_saves_as_always(self):
+        """Every .chart from before the number existed has none: it is the oldest format, never "newer"."""
+        project = {**server._blank_manifest("old"), "name": "From an older version"}
+        project.pop("format", None)
+        bundle = io.BytesIO()
+        with zipfile.ZipFile(bundle, "w") as archive:
+            archive.writestr("project.json", json.dumps(project))
+        client = TestClient(server.app, base_url="http://127.0.0.1:8000")
+        opened = client.post("/api/projects/import", files={"file": ("old.chart", bundle.getvalue())})
+        self.assertEqual(opened.status_code, 200)
+        self.assertFalse(opened.json()["newerFormat"])
+        job = opened.json()["job"]
+        saved = client.post(f"/api/projects/{job}", json={"name": "Edited"})   # no question, no refusal
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(server._read_manifest(job)["format"], server.PROJECT_FORMAT)
 
     def test_cover_draft_preserves_saved_cover_until_applied(self):
         def image(color):
