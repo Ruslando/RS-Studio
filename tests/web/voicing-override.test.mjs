@@ -232,6 +232,10 @@ for (const chordPin of [false, true]) {
   const higher = new Map(lane.slice(3).map((n, k) => [n, [{ string: 4, fret: 7 }, { string: 3, fret: 5 }, { string: 2, fret: 4 }][k]]));
   const [open, up] = scoreShapesAsDecided([shape, higher], columns, 3, tuning, options);
   assert.ok(open.cost < up.cost, "from hand position 2 the open grip is cheaper; its open strings cost nothing");
+  // A saved hand never hides a grip that needs another hand: it is offered all the same.
+  const held = scoreShapesAsDecided([shape, higher], columns, 3, tuning,
+    { ...options, holds: [{ id: "h", t: 0, fret: 2 }], anchorChanges: true });
+  assert.ok(held.every(offer => Number.isFinite(offer.cost)), "both grips stay on offer under a saved hand");
   lane[4].slide = "outUp";
   const constrained = voiceNotes(lane, tuning, Infinity, options);
   assert.notEqual(constrained.get(lane[4]).fret, 0, "a chord slide still requires a fret");

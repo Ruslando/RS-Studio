@@ -1895,8 +1895,9 @@ export function scoreShapesAsDecided(shapes, columns, focusIdx, tuning, options 
     const active = options.anchorChanges ? [...(options.holds || [])].sort((a, b) => a.t - b.t)
       .filter(h => h.t <= column.t0 + 1e-6).at(-1) : null;
     const hand = handForShape(shape, active?.fret ?? got.seat, handProfileForTuning(tuning), new Map(), !!active);
+    // A grip that needs another hand than the saved one is still on offer: the saved
+    // hand stays where it is, and the mismatch is reported as a conflict, not refused.
     if (!hand.playable) return UNPLAYED;
-    if (active && hand.seat !== active.fret) return UNPLAYED;
     return { ...got, seat: hand.seat,
       fingers: [...shape].map(([note, pos]) => [pos.string, hand.fingers.get(note) ?? NO_FINGER]) };
   });
