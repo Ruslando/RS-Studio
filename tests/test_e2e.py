@@ -6437,6 +6437,33 @@ class EndToEndTests(unittest.TestCase):
         page.keyboard.press("Control+z")
         self.assertEqual(times(), [[1, 3, 5], on_grid, 3])
 
+    def test_the_start_tempo_flag_drags_freely_off_its_own_grid(self):
+        page = self.page
+        self.new_audio_project()
+        page.evaluate("""async () => {
+            const { offsetInput } = await import("./dom.js");
+            const { drawNow } = await import("./repaint.js");
+            offsetInput.value = "0.5"; offsetInput.dispatchEvent(new Event("change"));
+            drawNow();
+        }""")
+        start = float(page.input_value("#offset"))
+        x, y = self.rail_point(self.tempo_flag(start))
+        px = page.evaluate("async () => (await import('./store.js')).S.pxPerSec")
+        dx = 13   # pixels: an odd distance, nowhere near the 1/32 lines of the grid it defines
+        page.mouse.move(x, y)
+        page.mouse.down()
+        page.mouse.move(x + dx, y, steps=6)
+        page.mouse.up()
+        self.assertAlmostEqual(float(page.input_value("#offset")) - start, dx / px, delta=1.5 / px)
+        # It stops before the next tempo marker instead of swallowing it.
+        page.evaluate("async () => { (await import('./grid.js')).addMarker(2); (await import('./repaint.js')).drawNow(); }")
+        x, y = self.rail_point(self.tempo_flag(float(page.input_value("#offset"))))
+        page.mouse.move(x, y)
+        page.mouse.down()
+        page.mouse.move(x + 3 * px, y, steps=6)   # 3 s further: well past the marker at 2 s
+        page.mouse.up()
+        self.assertLess(float(page.input_value("#offset")), 2)
+
     def test_a_note_dragged_into_another_tempo_lands_on_its_grid(self):
         page = self.page
         self.new_audio_project()

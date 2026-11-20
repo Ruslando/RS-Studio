@@ -163,6 +163,13 @@ export function markerCursorAt(x, y) {
 // Everything from a tempo flag up to the next one — notes, hand holds, reference
 // boxes and section/phrase/tone markers — as closures that put it at its original
 // time plus `delta`. Content past the next flag belongs to that one and stays put.
+// Where the start flag may sit: not past the first tempo marker, which the grid would drop
+// and whose span the start flag's notes would otherwise ride into.
+const clampStart = (t) => {
+  const next = Math.min(Infinity, ...(S.state.tempoMap || []).map((m) => +m.t).filter(Number.isFinite));
+  return Math.max(projectStart(S.state), Math.min(S.state.duration - 1e-3, next - 1e-3, t));
+};
+
 function spanRiders(seg) {
   const t1 = gridSegments().find((s) => s.t > seg.t + 1e-6)?.t ?? Infinity;
   const inSpan = (t) => t >= seg.t - 1e-6 && t < t1 - 1e-6;
@@ -211,7 +218,8 @@ export function markerMouseDown(e) {
   const viaPop = !markerPop.hidden && editSeg && (seg.seg0 ? editSeg.seg0 : editSeg.ref === seg.ref);
   const onMove = (ev) => {
     const [mx] = toCanvas(ev.clientX, ev.clientY);
-    const nt = snap(timeAt(mx) - grabDT, dragGrid);
+    // The start flag defines the grid, so it never snaps to it (that pinned it to its own lines).
+    const nt = seg.seg0 ? timeAt(mx) - grabDT : snap(timeAt(mx) - grabDT, dragGrid);
     if (viaPop) {
       moved = true;
       markerTime.value = Math.max(0, nt).toFixed(3);
@@ -224,7 +232,7 @@ export function markerMouseDown(e) {
       riders = spanRiders(seg);
     }
     if (seg.seg0)   // dragging the start flag moves the grid origin (the offset)
-      offsetInput.value = Math.max(projectStart(S.state), Math.min(S.state.duration - 1e-3, nt)).toFixed(3);
+      offsetInput.value = clampStart(nt).toFixed(3);
     else
       seg.ref.t = Math.max(gridOffset() + 1e-3, Math.min(S.state.duration - 1e-3, nt));
     const delta = (seg.seg0 ? gridOffset() : seg.ref.t) - seg.t;
@@ -375,7 +383,7 @@ function applyMarkerTime(exact) {
   beginPopEdit();
   if (!popRiders) popRiders = spanRiders(editSeg);
   if (editSeg.seg0) {
-    offsetInput.value = Math.max(projectStart(S.state), Math.min(S.state.duration - 1e-3, t)).toFixed(3);
+    offsetInput.value = clampStart(t).toFixed(3);
     // The notes ride here, so the offset's own change handler (which shifts every
     // note in the song) must see nothing left to do.
     S.appliedOffset = gridOffset();
