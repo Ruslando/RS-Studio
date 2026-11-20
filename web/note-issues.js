@@ -22,7 +22,7 @@ export const ISSUE_TEXT = {
   // them is said here; the help names what does not fit.
   position: ["Position does not fit the technique", "Select the note and choose Recalculate positions, or place it on the fretboard."],
   shapeGrip: ["Shape notes are not one grip", "Select the shape and choose Recalculate positions to find a grip that holds them."],
-  handStretch: ["Hand position exceeds 4-fret soft limit", "This note is more than four frets above the hand position. The hand can stay here, but this reach is outside the four-fret soft limit."],
+  handStretch: ["Hand position exceeds 4-fret soft limit", "This note is below the hand position or more than four frets above it. The hand can stay here, but this reach is outside the four-fret soft limit."],
 };
 const because = (text, fault) => `${fault}. ${text[1]}`;
 
@@ -180,7 +180,7 @@ export const laneIssues = paintMemo(function laneIssues(lane, tuning, maxFret, r
     const active = handAnchorAt(holds, column.t0);
     if (!active) continue;
     for (const n of column.notes) {
-      if (n.pos?.fret > 0 && n.pos.fret - active.fret > 3)
+      if (n.pos?.fret > 0 && (n.pos.fret - active.fret > 3 || n.pos.fret < active.fret))
         out.push(issue("handStretch", "warning", ISSUE_TEXT.handStretch, [n]));
     }
   }

@@ -46,8 +46,8 @@ import { fretStrikeAt, stringAttackPulse, stringGlow } from "./string-glow.js";
 import { letRingEnd, strikeTime, strumOffset, tremoloStep } from "./articulations.js";
 import { FX_GLYPHS } from "./note-effects.js";
 import { laneFingering } from "./lane-fingering.js";
-import { laneFretCount, laneFretTuning, laneTuning } from "./lane-tuning.js";
-import { assignFingers, chordColumns, handChoices, handProfileForTuning, needsFret, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
+import { handFrets, laneFretCount, laneFretTuning, laneTuning } from "./lane-tuning.js";
+import { assignFingers, chordColumns, handProfileForTuning, needsFret, placementFault, placementLimits, soundingColumns } from "./voicing-core.js";
 import { columnAlternatives, stepVoiceFocus } from "./voicing.js";
 import { applyColumnAlternative, clearOverrideAt, columnOf, setColumnShape, setHandAnchor, draftNoteFinger, settleFingerDraft, setNotePosition, addNoteOnBoard, moveNoteOnBoard } from "./edit.js";
 import { wireMenu } from "./menus.js";
@@ -1227,7 +1227,8 @@ function drawHandPositions(s, X, Y, lane) {
     button.style.left = `${left}px`; button.style.top = `${top}px`;
     button.style.width = `${right - left}px`;
     const allowed = !fret || choices.has(fret), chosen = fret ? !!held && Number(held.fret) + shift === fret : !held;
-    const softLimit = fret > 0 && at.column.fingers.some(f => f.fret > 0 && f.fret - (fret - shift) > 3);
+    // A fretted note more than three frets above the hand, or below it, is out of the 4-fret window.
+    const softLimit = fret > 0 && at.column.fingers.some(f => f.fret > 0 && (f.fret - (fret - shift) > 3 || f.fret < fret - shift));
     button.hidden = !fret && !held;
     button.disabled = !canEditLane(lane) || !allowed || (!fret && held === lane.handHolds?.[0]);
     button.textContent = fret ? String(fret + (fromNut ? capo : 0)) : 'Clear';
@@ -2101,9 +2102,7 @@ function beatUnderBoard() {
 
 // THE NOTE OR CHORD THE HAND BUTTONS ACT ON: the column the board shows, the onset
 // of the one before it (a hand placed between the two belongs to this one, as
-// holdsByColumn reads it), and the hands that can play it. Remembered per column
-// object, because the board asks every frame and a new answer comes with a new walk.
-const handChoicesOf = new WeakMap();
+// holdsByColumn reads it), and the hands on offer: all of them.
 function handColumnHere(lane) {
   const found = lane?.notes?.length ? gripsFor(lane) : null;
   if (!found) return pendingHandColumn && pendingHandColumn.lane === lane && pendingHandColumn.notes === lane?.notes
@@ -2116,14 +2115,8 @@ function handColumnHere(lane) {
   // the slide start's: step back to the column the slide (chain) began on.
   while (i > 0 && slidLanding(found.columns[i - 1], found.columns[i])) i--;
   const column = found.columns[i];
-  if (!handChoicesOf.has(column)) {
-    const shape = new Map(column.fingers.map((f) => [f.note, { string: f.string, fret: f.fret }]));
-    // The initial hand is the player's call: any fret, an unreachable one is reported
-    // as a conflict (applyHandAnchors), never refused.
-    handChoicesOf.set(column, i === 0 ? Array.from({ length: Math.max(1, laneFretCount(lane) - 3) }, (_, f) => f + 1)
-      : handChoices(shape, handProfileForTuning(laneFretTuning(lane)), Math.max(1, laneFretCount(lane) - 3)));
-  }
-  return { column, after: i > 0 ? found.columns[i - 1].start : -Infinity, choices: handChoicesOf.get(column),
+  // Any fret: one the notes cannot use is reported as a conflict (applyHandAnchors), never refused.
+  return { column, after: i > 0 ? found.columns[i - 1].start : -Infinity, choices: handFrets(lane),
     shift: slideInShift(column) };
 }
 

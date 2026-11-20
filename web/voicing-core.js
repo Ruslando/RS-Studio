@@ -567,25 +567,6 @@ function handAtStart(shape, seat, profile, required, fixedSeat) {
   return { fingers: new Map(chosen.fingers), seat: chosen.seat ?? seat ?? null, playable: true };
 }
 
-// THE HANDS THAT CAN PLAY ONE COLUMN, lowest first: what the fretboard's hand
-// buttons offer. One fretted note: any hand within reach of it. A chord: the hands
-// of its valid fingerings, so a chord fingered with the index has exactly that fret.
-// Nothing fretted: no hand to choose.
-export function handChoices(shape, profile = GUITAR_HAND_PROFILE, maxHand = Infinity) {
-  const loose = looseIn(shape), contacts = [...shape].filter(([note, pos]) => pos.fret > 0 && !loose(note));
-  if (!contacts.length) return [];
-  let seats;
-  if (contacts.length === 1) {
-    const fret = contacts[0][1].fret;
-    seats = Array.from({ length: fret }, (_, k) => fret - k);
-  } else {
-    let poses = fingeringOptions(shape, profile);
-    if (!poses.length) poses = fingeringOptions(shape, stretchProfile(profile));
-    seats = poses.map((pose) => pose.seat);
-  }
-  return [...new Set(seats)].filter((g) => Number.isInteger(g) && g >= 1 && g <= maxHand).sort((a, b) => a - b);
-}
-
 // THE THUMB, only ever chosen (fingeringChoices), never picked by the engine. It
 // frets the instrument's lowest string over the neck, on the fret of the lowest
 // other fretted note, with the next string left out (its tip mutes it): EOF's

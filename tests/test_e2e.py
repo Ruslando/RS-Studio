@@ -3632,6 +3632,43 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(defaults, {"follow": "guided"})
         page.locator('#fretboardPanel').screenshot(path=str(Path('.runs/fretboard-redesign.png')))
 
+    def test_any_hand_position_can_be_set_on_any_note_and_is_only_flagged(self):
+        self.open_reference_project()
+        page = self.page
+        page.evaluate("""async () => {
+            const {S} = await import('/store.js');
+            const lane = S.state.editLanes[0];
+            const at = (i, pitch, extra = {}) => ({id:'h'+i,start:i*2,end:i*2+1.5,pitch,...extra});
+            // A fretted note (A3, fret 2 on the G string), a dead open G3, the fretted note again.
+            lane.notes = [at(0, 57), at(1, 55, {fx:{dead:true}}), at(2, 57)];
+            lane.handHolds = []; lane.refBoxes = {};
+            S.voicingRevision++;
+        }""")
+        row = page.locator('#fretboardHandPositions')
+
+        def show(time):   # the helper below wants a fingered note to measure; a dead open one has none
+            page.evaluate("""async t => {
+                (await import('/store.js')).setSelection(new Set());
+                (await import('/playback.js')).seekPlayback(t);
+                (await import('/fretboard.js')).setFretboardVisible(true);
+                await (await import('/lane-fingering.js')).laneFingering((await import('/store.js')).S.state.editLanes[0]);
+                await new Promise(requestAnimationFrame);
+                (await import('/fretboard.js')).drawFretboard();
+            }""", time)
+            expect(page.locator('#fretboardBusy')).to_be_hidden()
+        # A dead note on an open string has no fretted finger, and still takes a hand.
+        show(2.1)
+        expect(row).to_be_visible()
+        expect(row.locator('button[data-value="9"]')).to_be_enabled()
+        row.locator('button[data-value="9"]').click()
+        held = page.evaluate("async () => (await import('/store.js')).S.state.editLanes[0].handHolds.map(h => [h.t, h.fret])")
+        self.assertIn([2, 9], held)
+        # Above the note's own fret (2) is allowed too, flagged as outside the 4-fret window.
+        show(4.1)
+        expect(row.locator('button[data-value="9"]')).to_be_enabled()
+        expect(row.locator('button[data-value="9"]')).to_have_class(re.compile('is-soft-limit'))
+        expect(row.locator('button[data-value="2"]')).not_to_have_class(re.compile('is-soft-limit'))
+
     def test_fretboard_suggestion_is_a_read_only_comparison(self):
         self.open_reference_project()
         page = self.page

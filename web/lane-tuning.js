@@ -63,3 +63,6 @@ export function laneFretTuning(lane) {
 
 // How many frets there are above the capo: the neck's own, minus the capo's.
 export const laneFretCount = (lane) => fretboardFor(lane.instrument).frets - (Number(lane.capo) || 0);
+// Every hand position the player may pick, whatever the notes under it are: one
+// the notes cannot use is reported (and flagged past four frets), never refused.
+export const handFrets = (lane) => Array.from({ length: Math.max(1, laneFretCount(lane) - 3) }, (_, f) => f + 1);

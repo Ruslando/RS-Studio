@@ -3,7 +3,7 @@ import { scroll, sctx, stage, mmctx as minimapCtx } from './dom.js';
 import { S, setSelection } from './store.js';
 import { stageMono } from './constants.js';
 import { activeLane, canEditLane } from './lanes.js';
-import { laneFretCount } from './lane-tuning.js';
+import { handFrets } from './lane-tuning.js';
 import { timeAt, xOf } from './geometry.js';
 import { isMarkerSelected, markerKey, registerMarkerRail, railBand, setMarkerSelection } from './marker-rails.js';
 import { paintMarkerFlag } from './canvas-components.js';
@@ -11,10 +11,9 @@ import { PAINT } from './stage-paint.js';
 import { laneFingering, laneFingeringKey } from './lane-fingering.js';
 import { slideHandChanges, slideOutHandChanges } from './hand-anchor-core.js';
 import { gridAt } from './grid-read.js';
-import { chordColumns, handChoices, handProfileForTuning } from './voicing-core.js';
+import { chordColumns } from './voicing-core.js';
 import { draw } from './repaint.js';
 import { moveHandAnchor, setHandAnchor } from './edit.js';
-import { laneFretTuning } from './lane-tuning.js';
 import { nearestHandStart } from './hand-anchor-state.js';
 import { openDiagnosticMenu } from './editor-menu.js';
 import { ESC_DEPTH, registerEscapeLayer } from './escape-stack.js';
@@ -100,25 +99,14 @@ function point(event) {
   return [event.clientX - rect.left + scroll.scrollLeft, event.clientY - rect.top + scroll.scrollTop];
 }
 
-function choicesAt(lane, time) {
-  const found = cache.get(lane)?.found;
-  const notes = found?.notes || lane.notes;
-  const column = chordColumns(notes).find(c => c.t0 >= time - 1e-6);
-  if (!column) return [];
-  const shape = new Map(column.notes.flatMap(note => {
-    const position = found?.voiced.get(note) || note.pos;
-    return position ? [[note, position]] : [];
-  }));
-  return handChoices(shape, handProfileForTuning(laneFretTuning(lane)), laneFretCount(lane) - 3);
-}
-
+// A fretted note more than three frets above the hand, or below it, is out of the 4-fret window.
 function exceedsSoftLimit(lane, time, seat) {
   const found = cache.get(lane)?.found;
   const notes = found?.notes || lane.notes;
   const column = chordColumns(notes).find(c => c.t0 >= time - 1e-6);
   return !!column?.notes.some(note => {
     const fret = (found?.voiced.get(note) || note.pos)?.fret;
-    return fret > 0 && fret - seat > 3;
+    return fret > 0 && (fret - seat > 3 || fret < seat);
   });
 }
 
@@ -129,8 +117,8 @@ function menu(hit, event) {
     if (live) setHandAnchor(lane, live.t, value);
     if (!lane.handHolds?.some(h => h.id === marker.id)) setMarkerSelection([]);
   };
-  // The initial hand takes any fret; out of reach is reported, not refused.
-  const choices = new Set(first ? Array.from({ length: Math.max(1, laneFretCount(lane) - 3) }, (_, f) => f + 1) : choicesAt(lane, marker.t));
+  // Any fret; out of reach is reported, not refused.
+  const choices = new Set(handFrets(lane));
   choices.add(marker.fret);
   openDiagnosticMenu(event.clientX, event.clientY, [
     { label: first ? 'Initial hand position' : 'Hand position', children:
