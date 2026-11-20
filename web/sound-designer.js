@@ -3,7 +3,7 @@
 import { SOUND_BASES, GEAR, GEAR_DATA, DESCRIPTORS, MAX_EFFECTS, cloneSound, gearName, gearInstrument,
   slotType, slotPrefix, slotLabel, knobValueValid, knobUnit, formatKnob, soundVolumeValid, normalizeSound, readSoundLibraryState, writeSoundLibrary, effectBank, removeEffect, moveEffect } from "./sound-presets-core.js";
 import { $ } from "./dom.js";
-import { toast, downloadProjectBlob } from "./notify.js";
+import { toast, chooseExportFile } from "./notify.js";
 import { confirmAction } from "./dialog.js";
 import { insertEffect } from "./sound-presets-core.js";
 import { parameterSlider } from "./parameter-slider.js";
@@ -238,13 +238,14 @@ async function importPresetFiles(files) {
   fileStatus(messages);
   $("soundImportFiles").value = "";
 }
-function exportPresets() {
+async function exportPresets() {
   if (!library || loadingFiles) return;
   remember();
   try {
     const text = presetJSON([sound]);
     const name = sound.Name.replace(/[^\p{L}\p{N}_-]+/gu, "-").slice(0, 70) || "preset";
-    downloadProjectBlob(new Blob([text], { type: "application/json" }), `${name}.json`);
+    const target = await chooseExportFile(`${name}.json`);
+    if (target) await target.save(new Blob([text], { type: "application/json" }));
   } catch (error) { fileStatus([error.message]); }
 }
 function field(label, control) {

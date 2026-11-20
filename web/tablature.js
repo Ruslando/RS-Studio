@@ -18,7 +18,7 @@ import { onLiveSections, onLiveTiming, timingData, timingIdOf } from "./timing.j
 import { editLanes } from "./lanes.js";
 import { exportSongName, metadataFromState, metadataPayload } from "./metadata.js";
 import { ensureTone, pauseTransport, playbackTime, playTransport, seekPlayback, transportPlaying } from "./playback.js";
-import { downloadProjectBlob, toast } from "./notify.js";
+import { chooseExportFile, toast } from "./notify.js";
 import { jobRequest } from "./operation-progress.js";
 import { S } from "./store.js";
 import { scoreProjectionSignature } from "./guitar-pro-core.js";
@@ -382,6 +382,8 @@ async function refreshTab() {
 export async function exportTab() {
   if (!S.state) return;
   const name = (S.state.name || S.state.filename || "tab").replace(/[^A-Za-z0-9._ -]+/g, "_");
+  const target = await chooseExportFile(name + ".gp5");   // where to, before anything is built
+  if (!target) return;
   // A job (design.md 4.17): fingering a long song takes a while, and until now
   // nothing on screen said the export had started.
   await jobRequest("Exporting Guitar Pro", name + ".gp5", async (panel) => {
@@ -397,8 +399,8 @@ export async function exportTab() {
     // The warning header is advisory; a malformed one must not fail the export
     // the user is already downloading.
     let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
-    downloadProjectBlob(new Blob([buf], { type: "application/octet-stream" }), name + ".gp5");
-    toast(warns.length ? `Exported ${name}.gp5 · ${warns.length} warning${warns.length === 1 ? "" : "s"}` : `Exported ${name}.gp5`,
+    await target.save(new Blob([buf], { type: "application/octet-stream" }));
+    toast(warns.length ? `Exported ${target.name} · ${warns.length} warning${warns.length === 1 ? "" : "s"}` : `Exported ${target.name}`,
           2200, warns.length ? "warn" : "ok");
   }).catch(() => { /* the panel's toast has said what failed */ });
 }
@@ -410,12 +412,14 @@ export async function exportModernGp() {
   const status = modernGpProjectionStatus();
   if (!status.available || !status.exportable) { toast(status.reason, 4200); return; }
   const name = exportSongName(metadataFromState(S.state), S.state.name || S.state.filename || "score");
+  const target = await chooseExportFile(name + ".gp");
+  if (!target) return;
   await jobRequest("Exporting Guitar Pro", name + ".gp", async (panel) => {
     panel.update({ stage: "Writing the file", fraction: null });
     await loadAlphaTab();
     const { bytes, warnings } = await modernGpResult(alphaTab);
-    downloadProjectBlob(new Blob([bytes], { type: "application/octet-stream" }), name + ".gp");
-    toast(warnings.length ? `Exported ${name}.gp · ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : `Exported ${name}.gp`,
+    await target.save(new Blob([bytes], { type: "application/octet-stream" }));
+    toast(warnings.length ? `Exported ${target.name} · ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : `Exported ${target.name}`,
           2200, warnings.length ? "warn" : "ok");
   }).catch(() => { /* the panel's toast has said what failed */ });
 }

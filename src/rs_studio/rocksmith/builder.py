@@ -182,6 +182,17 @@ def _cdlc_filename(artist: str, title: str, key: str, version: int = 1) -> str:
     return f"{clean(artist) or 'Unknown'}_{clean(title) or key}_v{version}_p.psarc"
 
 
+def package_filename(spec: dict) -> str:
+    """The file name build_cdlc gives the package, known before anything is built.
+
+    Named by the sort values, as DLC Builder names a release ("Beatles_...").
+    """
+    artist, title, album, _ = _song_meta(spec)
+    latin = _latin_names(spec, artist, title, album)
+    return _cdlc_filename(manifest.sort_name(latin["artist"], "artist", ""),
+                          manifest.sort_name(latin["title"], "title", ""), package_key(spec), _package_version(spec))
+
+
 LOW_BASS_CENTS = -1200.0   # DLC Builder's low tuning fix: a 220 Hz reference
 
 
@@ -1045,7 +1056,4 @@ def build_cdlc(spec: dict, audio_path: Path | None, *, wwise_console: str | None
                 project_arrangements, dlc_key=key, showlights=showlights, cover_dds=art[256],
                 main_wem=main_wem, preview_wem=preview_wem, main_volume=volume,
                 preview_volume=preview_volume, version=version, author=_package_author(spec)))
-        # Named by the sort values, as DLC Builder names a release ("Beatles_…").
-        name = _cdlc_filename(manifest.sort_name(latin["artist"], "artist", ""),
-                              manifest.sort_name(latin["title"], "title", ""), key, version)
-        return psarc.build_psarc(entries), warnings, name
+        return psarc.build_psarc(entries), warnings, package_filename(spec)

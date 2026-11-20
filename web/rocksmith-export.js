@@ -14,7 +14,7 @@ import { nameExportChords } from "./chord-names.js";
 import { applyCoverChange, clearProjectCover, coverStatus, exportSongName, latinFields, metadataFromState, metadataPayload, normalizeMetadata, uploadDroppedProjectCover, uploadProjectCover } from "./metadata.js";
 import { formatTenths, parseTenths } from "./timeline-time.js";
 import { icon } from "./icons.js";
-import { downloadProjectBlob, toast } from "./notify.js";
+import { chooseExportFile, toast } from "./notify.js";
 import { jobRequest } from "./operation-progress.js";
 import { S } from "./store.js";
 import { markerArtifacts } from "./marker-artifacts.js";
@@ -552,6 +552,16 @@ export function exportRocksmith() {
 
 let exporting = false;
 
+// The file name the server will give the export, asked before it is built so that
+// its destination can be asked first (the name follows the song's sort names and key).
+async function rocksmithFileNames(job, spec) {
+  const res = await fetch(`/api/projects/${job}/rocksmith/name`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Could not name the file");
+  return res.json();
+}
+
 async function submitRocksmithExport() {
   if (!S.state || exporting) return;
   // Enter in a text field submits a form whether or not its submit button is
@@ -613,11 +623,21 @@ async function submitRocksmithExport() {
   $("rsVersion").value = String(version);
   const state = S.state, songName = exportSongName(meta, state.name || state.filename || "song");
 
+  // Where it goes comes first, before anything is built; cancelling leaves the window as it was.
+  exporting = true;
+  let target;
+  try {
+    const { name } = await rocksmithFileNames(state.job, { metadata: metadataPayload(state.metadata), rocksmith: { version, mac, projectZip } });
+    target = await chooseExportFile(name);
+  } catch (error) {
+    setRsStatus(error.message, true);
+  }
+  if (!target) { exporting = false; return; }
+
   // A job, not a wait in a window (design.md 4.17): the form has been read, so the
   // window closes and the build runs in the progress panel while the editor stays
   // usable. What was typed is in the project's details, so reopening the window
   // after a failure finds it again.
-  exporting = true;
   closeRocksmithExportModal();
   try {
     await jobRequest("Exporting Rocksmith CDLC", songName, async (panel) => {
@@ -642,21 +662,9 @@ async function submitRocksmithExport() {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "CDLC build failed");
       const buf = await res.arrayBuffer();
-      const cd = res.headers.get("Content-Disposition") || "";
-      // filename* carries the real (UTF-8) name; filename="" is only its ASCII fallback.
-      const encoded = cd.match(/filename\*=UTF-8''([^;]+)/i);
-      const name = (encoded ? decodeURIComponent(encoded[1]) : (cd.match(/filename="([^"]+)"/) || [])[1]) || "song_p.psarc";
       let warns = []; try { warns = JSON.parse(res.headers.get("X-Tab-Warnings") || "[]"); } catch { /* advisory only */ }
-      // A project zip holds the Mac package too, so there is never a second download then.
-      downloadProjectBlob(new Blob([buf], { type: res.headers.get("Content-Type") || "application/octet-stream" }), name);
-      if (res.headers.get("X-Mac-Package")) {
-        const macRes = await fetch(`/api/projects/${state.job}/rocksmith/mac`);
-        if (!macRes.ok) throw new Error((await macRes.json().catch(() => ({}))).detail || "Mac package failed");
-        const macCd = macRes.headers.get("Content-Disposition") || "";
-        const macEncoded = macCd.match(/filename\*=UTF-8''([^;]+)/i);
-        downloadProjectBlob(await macRes.blob(), macEncoded ? decodeURIComponent(macEncoded[1]) : name.replace(/_p\.psarc$/, "_m.psarc"));
-      }
-      toast(warns.length ? `Exported ${name} - ${warns.length} warning(s)` : `Exported ${name}`, 2200, warns.length ? "warn" : "ok");
+      await target.save(new Blob([buf], { type: res.headers.get("Content-Type") || "application/octet-stream" }));
+      toast(warns.length ? `Exported ${target.name} - ${warns.length} warning(s)` : `Exported ${target.name}`, 2200, warns.length ? "warn" : "ok");
     });
   } catch { /* the panel's toast has said what failed */ } finally {
     exporting = false;

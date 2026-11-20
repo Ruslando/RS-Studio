@@ -33,7 +33,7 @@ import { initNewProject, openNewProject, setMainFile } from "./new-project.js";
 import { hideWelcome, initProjectLibrary, showWelcome } from "./project-library.js";
 import { backendLabel, loadSeparators, separators } from "./separators.js";
 import { closeStemSettings, initStemSettings, openStemSettings } from "./stem-settings.js";
-import { downloadProjectBlob, toast } from "./notify.js";
+import { chooseExportFile, toast } from "./notify.js";
 import { loadWithScreen } from "./project-loading.js";
 import { S } from "./store.js";
 import { savedSplitView } from "./split-view.js";
@@ -232,9 +232,11 @@ export async function saveProject({ saveAs = false } = {}) {
   })) return false;
   try {
     if (saveAs) {
-      const { blob, name } = await projectBundle();
-      downloadProjectBlob(blob, name);
-      toast(`Exported ${name}`, 2200, "ok");
+      const target = await chooseExportFile(projectFileName());   // where to, before anything is built
+      if (!target) return false;
+      const { blob } = await projectBundle();
+      await target.save(blob);
+      toast(`Exported ${target.name}`, 2200, "ok");
     } else {
       await saveToServer();
       toast("Saved", 2200, "ok");

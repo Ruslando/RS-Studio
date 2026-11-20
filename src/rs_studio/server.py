@@ -2055,9 +2055,37 @@ def api_prefs_save(payload: dict = Body(...)) -> dict:
     return {"saved": len(prefs)}
 
 
-# The Mac package of each project's last export, until the browser fetches it:
-# one response carries one file, so it is a second download.
-_MAC_PACKAGES: dict[str, tuple[str, bytes]] = {}
+def _zipped(rs: dict) -> bool:
+    """An export of more than one file is one zip: the project files, or the Mac package, beside the PC one."""
+    return rs.get("projectZip") is True or rs.get("mac") is True
+
+
+def _rocksmith_spec(m: dict, payload: dict) -> tuple[dict, dict]:
+    """The export's spec with the project's own tuning and DLC key, and its rocksmith part."""
+    from .rocksmith import builder as rs_builder
+
+    spec = {**(payload or {}), "tuning": _tuning(m)}
+    # The key is the project's, never the browser's: kept from the first export,
+    # else made from the project's seed (old projects: from artist and title).
+    rs = {k: v for k, v in (spec.get("rocksmith") or {}).items() if k not in ("dlcKey", "keySeed")}
+    rs.update(dlcKey=m.get("rocksmithKey"), keySeed=m.get("rocksmithKeySeed"))
+    spec["rocksmith"] = rs
+    rs["dlcKey"] = rs_builder.package_key(spec)
+    return spec, rs
+
+
+@app.post("/api/projects/{job}/rocksmith/name")
+def api_rocksmith_name(job: str, payload: dict = Body(...)) -> JSONResponse:
+    """The file name the export will have, so its destination can be asked before the build.
+
+    `payload` is the export's spec as far as the name goes: metadata and the rocksmith
+    options (version, projectZip, mac).
+    """
+    from .rocksmith import builder as rs_builder
+
+    spec, rs = _rocksmith_spec(_read_manifest(job), payload)
+    name = rs_builder.package_filename(spec)
+    return JSONResponse({"name": name.removesuffix("_p.psarc") + ".zip" if _zipped(rs) else name})
 
 
 @app.post("/api/projects/{job}/rocksmith")
@@ -2077,13 +2105,7 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
     if cover_path is not None and not cover_path.exists():
         cover_path = None
 
-    spec = {**(payload or {}), "tuning": _tuning(m)}
-    # The key is the project's, never the browser's: kept from the first export,
-    # else made from the project's seed (old projects: from artist and title).
-    rs = {k: v for k, v in (spec.get("rocksmith") or {}).items() if k not in ("dlcKey", "keySeed")}
-    rs.update(dlcKey=m.get("rocksmithKey"), keySeed=m.get("rocksmithKeySeed"))
-    spec["rocksmith"] = rs
-    rs["dlcKey"] = rs_builder.package_key(spec)
+    spec, rs = _rocksmith_spec(m, payload)
     phrase_levels = dict(m.get("rocksmithPhraseLevels") or {})
     project_files = {} if rs.get("projectZip") is True else None
     try:
@@ -2102,36 +2124,20 @@ def api_rocksmith(job: str, payload: dict = Body(...)) -> Response:
         current["rocksmithKey"] = rs["dlcKey"]
     current["rocksmithPhraseLevels"] = phrase_levels   # for the next export's comparison
     _write_manifest(job, current)
-    _MAC_PACKAGES.pop(job, None)
-    if project_files is not None:
-        # One zip: the package(s) beside DLC Builder's project folder for them.
+    if _zipped(rs):
+        # One zip: the package(s), the Mac one too when asked, and DLC Builder's project folder for them.
         packages = {filename: data}
         if rs.get("mac") is True:
             packages[rs_builder.mac_filename(filename)] = rs_builder.to_mac(data)
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for name, blob in {**packages, **project_files}.items():
+            for name, blob in {**packages, **(project_files or {})}.items():
                 archive.writestr(name, blob)
         zip_name = filename.removesuffix("_p.psarc") + ".zip"
         return Response(content=buffer.getvalue(), media_type="application/zip",
                         headers={"Content-Disposition": _attachment(zip_name), "X-Tab-Warnings": json.dumps(warnings)})
-    headers = {"Content-Disposition": _attachment(filename), "X-Tab-Warnings": json.dumps(warnings)}
-    if rs.get("mac") is True:
-        _MAC_PACKAGES[job] = (rs_builder.mac_filename(filename), rs_builder.to_mac(data))
-        headers["X-Mac-Package"] = "1"
-    return Response(content=data, media_type="application/octet-stream", headers=headers)
-
-
-@app.get("/api/projects/{job}/rocksmith/mac")
-def api_rocksmith_mac(job: str) -> Response:
-    """The Mac package the last export made, once."""
-    _job_dir(job)
-    found = _MAC_PACKAGES.pop(job, None)
-    if found is None:
-        raise HTTPException(status_code=404, detail="No Mac package; export again")
-    name, data = found
     return Response(content=data, media_type="application/octet-stream",
-                    headers={"Content-Disposition": _attachment(name)})
+                    headers={"Content-Disposition": _attachment(filename), "X-Tab-Warnings": json.dumps(warnings)})
 
 
 @app.get("/api/spectrogram/{job}/{stem}.png")

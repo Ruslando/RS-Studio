@@ -215,6 +215,109 @@ class ElectronShellTests(unittest.TestCase):
         _until(lambda: len(self.main_eval("globalThis.asked")) == 2, 10)
         self.assertEqual(Path(self.main_eval("globalThis.asked")[1]), target)
 
+    def stub_save_dialog(self, answer):
+        """The destination question answers `answer` (a path, or None for cancel) and notes when it was asked."""
+        self.main_eval(f"""(() => {{ globalThis.asked = [];
+            electron.dialog.showSaveDialogSync = () => {{ asked.push(Date.now()); return {json.dumps(answer)}; }}; }})()""")
+
+    def open_guitar_pro_project(self):
+        from tests.test_e2e import _gp5_song
+
+        song = self.data / "song.gp5"
+        song.write_bytes(_gp5_song())
+        with self.page.expect_file_chooser() as chooser:
+            self.page.click("#welcomeGp")
+        chooser.value.set_files(song)
+        self.page.click("#gpImportConfirm")
+        self.page.wait_for_selector("#lanes:has-text('8 notes')")
+
+    def test_save_file_writes_only_to_a_destination_the_shell_chose(self):
+        target = self.data / "out" / "a_p.psarc"
+        target.parent.mkdir()
+        self.stub_save_dialog(str(target))
+        result = self.page.evaluate("""async () => { const api = window.pywebview.api;
+            const chosen = await api.choose_save('a_p.psarc');
+            await api.save_file(chosen.id, new Uint8Array([1, 2, 3]).buffer);
+            let refused = false;
+            try { await api.save_file('not-an-id', new Uint8Array([9]).buffer); } catch { refused = true; }
+            return { name: chosen.name, refused }; }""")
+        self.assertEqual(result, {"name": "a_p.psarc", "refused": True})
+        self.assertEqual(target.read_bytes(), bytes([1, 2, 3]))
+        self.assertEqual([file.name for file in target.parent.iterdir()], ["a_p.psarc"], "nothing else was written")
+
+    def test_an_export_asks_where_to_save_before_it_builds_anything(self):
+        target = self.data / "out" / "song.gp5"
+        target.parent.mkdir()
+        self.stub_save_dialog(str(target))
+        self.open_guitar_pro_project()
+        built = []
+        self.page.on("request", lambda request: "/api/tab" in request.url and built.append(time.time() * 1000))
+        self.page.click("#fileMenuBtn")
+        self.page.click("#menuExportTab")
+        self.page.wait_for_selector(".toast:has-text('Exported song.gp5')")
+        asked = self.main_eval("globalThis.asked")
+        self.assertEqual((len(asked), len(built)), (1, 1))
+        self.assertLessEqual(asked[0], built[0], "the question comes before the build")
+        self.assertIn(b"FICHIER GUITAR PRO", target.read_bytes()[:30], "the file is where the question said")
+
+    def test_a_rocksmith_export_with_a_mac_package_is_one_zip_after_one_question(self):
+        from rs_studio import tutorial
+        from rs_studio.rocksmith.psarc import read_psarc
+
+        with urllib.request.urlopen(self.page.url + "api/rocksmith/audio-converter") as response:
+            if not json.load(response)["found"]:
+                self.skipTest("no audio converter (Wwise) on this machine: the Rocksmith package was not built")
+        out = self.data / "dlc"
+        out.mkdir()
+        self.main_eval(f"""(() => {{ const path = process.mainModule.require('node:path'); globalThis.asked = [];
+            electron.dialog.showSaveDialogSync = (_window, options) => {{ asked.push(options.defaultPath);
+                return path.join({json.dumps(str(out))}, path.basename(options.defaultPath)); }}; }})()""")
+        page = self.page
+        page.set_default_timeout(60000)
+        with page.expect_file_chooser() as chooser:
+            page.click("#welcomeNew")
+            page.click("#npDrop")
+        chooser.value.set_files(tutorial.write_audio(self.data / "audio")["bass"])
+        page.wait_for_selector("#npSongTitle", state="visible")
+        page.fill("#npSongTitle", "Mac Song")
+        page.fill("#npArtist", "Mac Artist")
+        page.click("#go")
+        page.wait_for_selector("#appshell", state="visible")
+        page.wait_for_selector(".project-loading-backdrop", state="detached")
+        page.click("#stage", button="right", position={"x": 300, "y": 80})
+        page.get_by_text("Detect notes…").click()
+        page.select_option("#detectModel", "torchcrepe")
+        page.click("#detectBtn")
+        notes = len(tutorial.PHRASE * tutorial.REPEATS)
+        page.wait_for_selector(f"#lanes:has-text('{notes} notes')", timeout=180000)
+        page.click("#fileMenuBtn")
+        page.click("#menuExportRocksmith")
+        page.check("#rsPsarcOnly")
+        page.check("#rsMac")
+        page.click("#rsExportGo")
+        page.wait_for_selector(".toast:has-text('Exported')", timeout=300000)
+        self.assertEqual([Path(name).name for name in self.main_eval("globalThis.asked")], ["Mac-Artist_Mac-Song_v1.zip"],
+                         "one question, for a zip named as the server names it")
+        self.assertEqual([file.name for file in out.iterdir()], ["Mac-Artist_Mac-Song_v1.zip"])
+        with zipfile.ZipFile(out / "Mac-Artist_Mac-Song_v1.zip") as archive:
+            self.assertEqual(sorted(archive.namelist()), ["Mac-Artist_Mac-Song_v1_m.psarc", "Mac-Artist_Mac-Song_v1_p.psarc"],
+                             "the two packages and nothing else: only the packages was asked for")
+            for name in archive.namelist():
+                self.assertTrue(read_psarc(archive.read(name)), name)
+
+    def test_cancelling_the_question_builds_and_writes_nothing(self):
+        self.stub_save_dialog(None)
+        self.open_guitar_pro_project()
+        built = []
+        self.page.on("request", lambda request: "/api/tab" in request.url and built.append(request.url))
+        self.page.click("#fileMenuBtn")
+        self.page.click("#menuExportTab")
+        _until(lambda: self.main_eval("globalThis.asked.length") == 1, 10, "the question was not asked")
+        self.page.wait_for_timeout(1500)
+        self.assertEqual(built, [])
+        self.assertEqual([file.name for file in self.data.glob("**/*.gp5") if file.name != "song.gp5"], [],
+                         "nothing was written (song.gp5 is the one that was imported)")
+
     def test_an_error_notification_copies_its_text_to_the_clipboard(self):
         self.main_eval("electron.clipboard.writeText('before')")
         self.page.evaluate("""async () => (await import('/notify.js')).toast('Export failed: Wwise exited', 8000, 'error')""")

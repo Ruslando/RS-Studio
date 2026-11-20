@@ -1,7 +1,9 @@
 """The Rocksmith key belongs to the project: fixed at its first export, as DLC Builder keeps it."""
+import io
 import shutil
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -77,18 +79,18 @@ class ProjectKeyTests(unittest.TestCase):
         self.assertNotEqual(self.export(job, "Song", dlcKey="MTTOther1", keySeed="x"), "MTTOther1")
 
 
-    def test_the_mac_package_is_a_second_download_once(self):
+    def test_the_mac_package_comes_in_one_zip_with_the_pc_one(self):
         job = self.new_project()
+        post = lambda **rocksmith: self.client.post(  # noqa: E731
+            f"/api/projects/{job}/rocksmith", json={"metadata": {"title": "Song"}, "rocksmith": rocksmith})
         with patch.object(builder, "to_mac", lambda data: b"mac " + data):
-            res = self.client.post(f"/api/projects/{job}/rocksmith",
-                                   json={"metadata": {"title": "Song"}, "rocksmith": {"mac": True}})
-        self.assertEqual(res.headers.get("X-Mac-Package"), "1")
-        mac = self.client.get(f"/api/projects/{job}/rocksmith/mac")
-        self.assertEqual((mac.status_code, mac.content), (200, b"mac psarc"))
-        self.assertIn("song_m.psarc", mac.headers["Content-Disposition"])
-        self.assertEqual(self.client.get(f"/api/projects/{job}/rocksmith/mac").status_code, 404)
-        self.export(job, "Song")
-        self.assertEqual(self.client.get(f"/api/projects/{job}/rocksmith/mac").status_code, 404, "only when asked")
+            both, plain = post(mac=True), post()
+        self.assertEqual(both.headers["content-type"], "application/zip")
+        self.assertIn("song.zip", both.headers["Content-Disposition"])
+        with zipfile.ZipFile(io.BytesIO(both.content)) as archive:
+            self.assertEqual({name: archive.read(name) for name in archive.namelist()},
+                             {"song_p.psarc": b"psarc", "song_m.psarc": b"mac psarc"})
+        self.assertEqual(plain.content, b"psarc", "one file stays one file")
 
 
 if __name__ == "__main__":

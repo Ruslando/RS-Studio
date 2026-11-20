@@ -64,6 +64,28 @@ class RocksmithPackageTests(unittest.TestCase):
             if path.endswith(".sng"):
                 self.assertGreater(len(sng.unpack(blob)), len(blob), path)
 
+    def test_file_names_are_known_before_the_build(self):
+        """The export asks where to save before it builds; the names it asks with are the build's own."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from rs_studio import server
+
+        def names(spec):
+            part = {"metadata": spec["metadata"], "rocksmith": spec["rocksmith"]}
+            return json.loads(server.api_rocksmith_name("job", part).body)
+
+        with tempfile.TemporaryDirectory() as folder, patch.object(server, "RUNS_DIR", Path(folder)):
+            (Path(folder) / "job").mkdir()
+            server._write_manifest("job", server._blank_manifest("job"))
+            tracks, arrangements = [_track("Gtr", GUITAR, [0, 3])], [{"track": 0, "kind": "lead"}]
+            spec = _spec(tracks, arrangements, version=4)
+            self.assertEqual(names(spec), {"name": _build(spec)[3]})
+            # More than one file is one zip.
+            self.assertEqual(names(_spec(tracks, arrangements, mac=True)), {"name": "Band_Song_v1.zip"})
+            self.assertEqual(names(_spec(tracks, arrangements, projectZip=True)), {"name": "Band_Song_v1.zip"})
+
     def test_sort_names_and_file_name_as_dlc_builder(self):
         """convertToSortField: articles go, official artist names apply, the album stays."""
         for artist, title, album, sorts, name in [

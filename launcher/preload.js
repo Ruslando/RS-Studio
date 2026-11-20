@@ -8,5 +8,9 @@ contextBridge.exposeInMainWorld("pywebview", {
   api: {
     quit: () => ipcRenderer.send("quit"),
     set_zoom: (factor) => ipcRenderer.invoke("zoom", factor),
+    // Exports: choose_save asks where the file goes (null when cancelled) before it is built;
+    // save_file writes it there afterwards.
+    choose_save: (name) => ipcRenderer.invoke("choose-save", name),
+    save_file: (id, bytes) => ipcRenderer.invoke("save-file", id, bytes),
   },
 });

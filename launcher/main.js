@@ -4,6 +4,7 @@
 "use strict";
 const { app, BrowserWindow, Menu, dialog, ipcMain, screen, session, shell } = require("electron");
 const { spawn } = require("node:child_process");
+const { randomUUID } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
@@ -61,21 +62,33 @@ function startServer() {
   });
 }
 
-// Exports and project files come in as downloads. Ask where each one goes,
-// starting in the folder the last one went to (a Rocksmith DLC folder, usually).
-function saveDownload(item) {
+// Where a file goes: asked with the file's name, starting in the folder the last one
+// went to (a Rocksmith DLC folder, usually). The path, or null when the question is cancelled.
+function askWhere(name) {
   const remembered = path.join(app.getPath("userData"), "download-folder.txt");
   let folder = app.getPath("downloads");
-  try { folder = fs.readFileSync(remembered, "utf8").trim() || folder; } catch { /* first download */ }
-  const name = item.getFilename(), extension = path.extname(name).slice(1);
+  try { folder = fs.readFileSync(remembered, "utf8").trim() || folder; } catch { /* first one */ }
+  const extension = path.extname(name).slice(1);
   const target = dialog.showSaveDialogSync(win, {
     title: "Save " + name, defaultPath: path.join(folder, name),
     filters: extension ? [{ name: extension.toUpperCase() + " file", extensions: [extension] }] : [],
   });
-  if (!target) return item.cancel();
-  item.setSavePath(target);
+  if (!target) return null;
   try { fs.writeFileSync(remembered, path.dirname(target)); } catch { /* only a convenience */ }
+  return target;
 }
+
+// What the page did not ask for itself (a plain download link) is asked here, when it arrives.
+// Exports ask first instead, through choose_save, and are written once they are built.
+function saveDownload(item) {
+  const target = askWhere(item.getFilename());
+  if (target) item.setSavePath(target);
+  else item.cancel();
+}
+
+// The destinations handed to the page, by id: save_file writes only to those, never to a
+// path the page names. Kept for the session; there are a few at most.
+const destinations = new Map();
 
 const fromApp = (event) => !!appUrl && event.senderFrame?.url.startsWith(appUrl);
 
@@ -143,6 +156,20 @@ if (!app.requestSingleInstanceLock()) {
     win.focus();
   });
   ipcMain.on("quit", (event) => { if (fromApp(event)) quit(); });
+  ipcMain.handle("choose-save", (event, name) => {
+    if (!fromApp(event)) return null;
+    const target = askWhere(path.basename(String(name)));
+    if (!target) return null;
+    const id = randomUUID();
+    destinations.set(id, target);
+    return { id, name: path.basename(target) };
+  });
+  ipcMain.handle("save-file", async (event, id, bytes) => {
+    const target = fromApp(event) && destinations.get(id);
+    if (!target) throw new Error("This destination is no longer known. Export again.");
+    await fs.promises.writeFile(target, Buffer.from(bytes));
+    return target;
+  });
   ipcMain.handle("zoom", (event, factor) => {
     if (!fromApp(event)) return false;
     event.sender.setZoomFactor(Math.min(3, Math.max(0.5, Number(factor) || 1)));

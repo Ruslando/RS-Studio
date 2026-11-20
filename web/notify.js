@@ -174,3 +174,17 @@ export function downloadProjectBlob(blob, name) {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+// Where an export goes, asked BEFORE it is built, so cancelling costs no build and the
+// file is written to the place that was chosen the moment it is ready. Resolves to
+// { name, save(blob) }, or null when the question is cancelled. `name` is what the file
+// will be called (in the desktop window: as the user chose). An export is one file; more
+// than one is a zip. A browser has no such question: its own download settings decide,
+// so the file is offered once built.
+export async function chooseExportFile(name) {
+  const shell = window.pywebview?.api;
+  if (!shell?.choose_save) return { name, save: (blob) => downloadProjectBlob(blob, name) };
+  const chosen = await shell.choose_save(name);
+  if (!chosen) return null;
+  return { name: chosen.name, save: async (blob) => { await shell.save_file(chosen.id, await blob.arrayBuffer()); } };
+}

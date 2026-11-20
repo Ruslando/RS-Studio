@@ -18,6 +18,8 @@ import socket
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
+from types import SimpleNamespace
 import time
 import unittest
 import zipfile
@@ -473,8 +475,37 @@ class EndToEndTests(unittest.TestCase):
         cls.addClassCleanup(electron.wait, 15)
         cls.addClassCleanup(electron.kill)
         cls.url = cls.electron_page.url
-        # Downloads stay Playwright's (expect_download); the window's save question would hold them.
-        main_eval(inspect, "electron.session.defaultSession.removeAllListeners('will-download')")
+        cls.electron_inspect = inspect
+
+    @contextmanager
+    def expect_export(self, timeout=30000):
+        """The file an export produces: yields what Playwright's expect_download does (.value with
+        .path() and .suggested_filename). In the Electron window an export asks where to save first and
+        writes the file there, so the question is answered here and the file read from that folder."""
+        if not ELECTRON_SHELL:
+            with self.page.expect_download(timeout=timeout) as download:
+                yield download
+            return
+        from tests.test_electron_shell import main_eval
+
+        folder = Path(tempfile.mkdtemp(prefix="export-", dir=self.data))
+        main_eval(self.electron_inspect, f"""(() => {{ const path = process.mainModule.require('node:path');
+            electron.dialog.showSaveDialogSync = (_window, options) =>
+                path.join({json.dumps(str(folder))}, path.basename(options.defaultPath)); }})()""")
+        result = SimpleNamespace(value=None)
+        yield result
+        deadline, sizes = time.monotonic() + timeout / 1000, None
+        while True:   # written, and no longer growing
+            files = list(folder.iterdir())
+            now = [(file.name, file.stat().st_size) for file in files]
+            if files and now == sizes:
+                break
+            sizes = now
+            if time.monotonic() > deadline:
+                raise AssertionError("the export wrote no file")
+            time.sleep(0.3)
+        self.assertEqual(len(files), 1, files)
+        result.value = SimpleNamespace(path=lambda: str(files[0]), suggested_filename=files[0].name)
 
     def set_prefs(self, prefs):
         """Replace the preferences the server hands every page on load (/api/prefs)."""
@@ -2062,7 +2093,7 @@ class EndToEndTests(unittest.TestCase):
                 .every(el => { const r=el.getBoundingClientRect(); return r.left>=bounds.left && r.right<=bounds.right; });
         }"""), "Preset actions and exact values must fit in a narrow window")
         page.set_viewport_size({"width":1440,"height":900})
-        with page.expect_download() as download:
+        with self.expect_export() as download:
             page.click("#soundExport")
         exported = json.loads(Path(download.value.path()).read_text("utf-8"))
         self.assertEqual(exported["Name"], "Guitar Clean")
@@ -6050,7 +6081,7 @@ class EndToEndTests(unittest.TestCase):
         self.page.click(item)
 
     def download(self, item, timeout=30000):
-        with self.page.expect_download(timeout=timeout) as download:
+        with self.expect_export(timeout) as download:
             self.file_menu(item)
         return Path(download.value.path())
 
@@ -6263,7 +6294,7 @@ class EndToEndTests(unittest.TestCase):
         self.file_menu("#menuExportRocksmith")
         expect(page.locator(".rs-arr-row .rs-arr-notes")).to_have_text(f"{len(expected)} notes")
         page.check("#rsPsarcOnly")
-        with page.expect_download(timeout=300000) as download:
+        with self.expect_export(300000) as download:
             page.click("#rsExportGo")
         self.assertEqual(download.value.suggested_filename, "E2E-Artist_E2E-Audio_v1_p.psarc")
         files = read_psarc(Path(download.value.path()).read_bytes())
@@ -6280,7 +6311,7 @@ class EndToEndTests(unittest.TestCase):
         self.file_menu("#menuExportRocksmith")
         expect(page.locator("#rsPsarcOnly")).to_be_checked()   # remembered from the export before
         page.uncheck("#rsPsarcOnly")
-        with page.expect_download(timeout=300000) as download:
+        with self.expect_export(300000) as download:
             page.click("#rsExportGo")
         self.assertEqual(download.value.suggested_filename, "E2E-Artist_E2E-Audio_v1.zip")
         with zipfile.ZipFile(download.value.path()) as archive:
