@@ -26,6 +26,8 @@ P.setItem=function(k,v){set.call(this,k,v);later(this);};P.removeItem=function(k
 addEventListener("pagehide",()=>{window.cwSaveProjectView?.();window.cwSaveSplitView?.();if(t)save(true).catch(()=>{});});
 if(!saved||Object.keys(saved).length!==ls.length)later(ls);}catch(e){}})();</script>
   <script>try{if(localStorage.getItem("cw.theme")==="light")document.documentElement.dataset.theme="light";}catch(e){}</script>
+  <!-- Landing card: scaled so it fills the same share of the window at any size, set before first paint so it never jumps. 900x548 = the card's own CSS size. -->
+  <script>(()=>{const FILL=0.75,f=()=>document.documentElement.style.setProperty("--welcome-zoom",Math.min(2.5,Math.max(0.6,FILL*Math.min(innerWidth/900,innerHeight/548))).toFixed(3));f();addEventListener("resize",f);})();</script>
   <!-- Self-hosted: the app is a local tool and must render as designed with no
        network. Refresh with tools/fetch-fonts.py. -->
   <link rel="stylesheet" href="fonts.css" />
