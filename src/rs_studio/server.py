@@ -218,8 +218,28 @@ def _read_manifest(job: str) -> dict:
     return json.loads(p.read_text())
 
 
-def _write_manifest(job: str, m: dict) -> None:
-    """Replace a project's manifest atomically.
+# The project file format this app writes. Bump it only when an older app would
+# lose or misread something a save now contains: older apps then warn before
+# saving over what they don't understand, and save only once the user agrees.
+# Missing means a project from before the number existed (0).
+PROJECT_FORMAT = 1
+NEWER_FORMAT_DETAIL = ("This project was saved by a newer version of RS Studio. "
+                       "Saving it here may lose what this version doesn't support.")
+
+
+def _newer_format(m: dict) -> bool:
+    try:
+        return int(m.get("format") or 0) > PROJECT_FORMAT
+    except (TypeError, ValueError):
+        return True   # unreadable: assume the worst and leave the file alone
+
+
+def _write_manifest(job: str, m: dict, *, opening: bool = False, overwrite: bool = False) -> None:
+    """Replace a project's manifest atomically, stamped with PROJECT_FORMAT.
+
+    A project from a newer format is not written over (409) unless the user
+    agreed to (`overwrite`), which makes it this version's format from then on.
+    Unpacking one into the library (`opening`) keeps its own number.
 
     `project.json` is the whole project — every note, layer, marker and stem
     setting — and there is no second copy. The editor autosaves, so this runs
@@ -237,6 +257,10 @@ def _write_manifest(job: str, m: dict) -> None:
     `_manifest_path(job).write_text(...)` instead and each was one crash away
     from the same data loss.
     """
+    if not _newer_format(m) or overwrite:
+        m["format"] = PROJECT_FORMAT
+    elif not opening:
+        raise HTTPException(status_code=409, detail=NEWER_FORMAT_DETAIL)
     path = _manifest_path(job)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
@@ -380,7 +404,7 @@ def _tuning(m: dict) -> dict:
             "reference": _cents(raw.get("reference")), "shift": _cents(raw.get("shift"), limit=105.0)}
 
 
-def _apply_save_payload(job: str, payload: dict) -> dict:
+def _apply_save_payload(job: str, payload: dict, overwrite: bool = False) -> dict:
     """Merge an editor-state payload into the on-disk manifest and persist it."""
     m = _read_manifest(job)
     if m.get("tutorial"):
@@ -446,7 +470,7 @@ def _apply_save_payload(job: str, payload: dict) -> dict:
         m["name"] = payload["name"]
     m["name"] = _project_name(m)
     m["saved_at"] = _now()
-    _write_manifest(job, m)
+    _write_manifest(job, m, overwrite=overwrite)
     return m
 
 
@@ -551,6 +575,7 @@ def _response_from_manifest(m: dict) -> dict:
         "view": m.get("view", {}),
         "warnings": m.get("warnings", []),
         "saved_at": m.get("saved_at"),
+        "newerFormat": _newer_format(m),
     }
 
 
@@ -1515,7 +1540,7 @@ def api_project_import(file: UploadFile) -> JSONResponse:
     m["viewKey"] = m.get("viewKey") or m.get("rocksmithKeySeed") or m.get("job") or job_id
     m["job"] = job_id
     m["saved_at"] = _now()
-    _write_manifest(job_id, m)
+    _write_manifest(job_id, m, opening=True)
     return JSONResponse(_response_from_manifest(m))
 
 
@@ -1525,8 +1550,8 @@ def api_project_load(job: str) -> JSONResponse:
 
 
 @app.post("/api/projects/{job}")
-def api_project_save(job: str, payload: dict = Body(...)) -> JSONResponse:
-    m = _apply_save_payload(job, payload)
+def api_project_save(job: str, payload: dict = Body(...), overwrite: bool = False) -> JSONResponse:
+    m = _apply_save_payload(job, payload, overwrite)
     return JSONResponse({"ok": True, "saved_at": m["saved_at"]})
 
 
@@ -1540,14 +1565,14 @@ def api_project_delete(job: str) -> JSONResponse:
 
 
 @app.post("/api/projects/{job}/export")
-def api_project_export(job: str, payload: dict = Body(default={})) -> Response:
+def api_project_export(job: str, payload: dict = Body(default={}), overwrite: bool = False) -> Response:
     """Persist the editor state, then return a self-contained `.chart` bundle.
 
     The bundle includes the full-song source as well as playback/spectrogram
     assets. Its inputRel always refers to the bundled source, including when an
     older project has only its full-song playback copy left.
     """
-    m = _apply_save_payload(job, payload or {})
+    m = _apply_save_payload(job, payload or {}, overwrite)
     job_dir = _job_dir(job)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

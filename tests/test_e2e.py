@@ -562,6 +562,44 @@ class EndToEndTests(unittest.TestCase):
             expect(self.page.locator("#settingsApply")).to_be_hidden()
         self.page.click("#settingsModalClose")
 
+    def test_project_from_a_newer_version_saves_only_after_a_warning(self):
+        page = self.page
+        project = json.loads((Path(__file__).resolve().parents[1] / "examples/reference-showcase/project.json").read_text("utf-8"))
+        bundle = self.data / "newer-format.chart"
+        with zipfile.ZipFile(bundle, "w") as archive:
+            archive.writestr("project.json", json.dumps({**project, "format": 999}))
+        with page.expect_file_chooser() as chooser:
+            page.click("#welcomeOpen")
+        chooser.value.set_files(bundle)
+        expect(page.locator("#lanes .lane-row").first).to_be_visible()
+        expect(page.locator("#projTabName")).to_contain_text("(newer version)")
+        writes = []
+        page.on("request", lambda request: request.method == "POST" and "/api/projects/" in request.url
+                and writes.append(request.url))
+        page.evaluate("""async () => { const {S} = await import('/store.js');
+            S.state.editLanes[0].notes.pop(); (await import('/save-state.js')).refreshSaveState(); }""")
+        expect(page.locator("#projDirtyDot")).to_be_visible()
+        page.locator("#stage").click()
+
+        page.keyboard.press("Control+s")
+        expect(page.locator("#actionConfirmTitle")).to_have_text("Save a project from a newer version?")
+        page.click("#actionConfirmCancel")
+        page.wait_for_timeout(300)
+        self.assertEqual(writes, [], "nothing is written until the user agrees")
+        expect(page.locator("#projDirtyDot")).to_be_visible()
+        page.locator("#stage").click()
+
+        page.keyboard.press("Control+s")
+        with page.expect_response(lambda response: "overwrite=true" in response.url) as saved:
+            page.click("#actionConfirmAccept")
+        self.assertEqual(saved.value.status, 200)
+        expect(page.locator("#projTabName")).not_to_contain_text("(newer version)")
+        expect(page.locator("#projDirtyDot")).to_be_hidden()
+        page.keyboard.press("Control+s")   # it is this version's project now: no second warning
+        expect(page.locator("#actionConfirmBackdrop")).to_be_hidden()
+        page.wait_for_timeout(300)
+        self.assertEqual(len(writes), 2)
+
     def test_model_download_refreshes_pickers_and_displays_supported_modes(self):
         page = self.page
         ready = False

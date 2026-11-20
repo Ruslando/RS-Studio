@@ -57,7 +57,7 @@ export function refreshSaveState() {
   if (!projTab) return;
   if (!S.state) { projTab.hidden = true; return; }
   projTab.hidden = false;
-  projTabName.textContent = projectName(S.state);
+  projTabName.textContent = projectName(S.state) + (S.state.newerFormat ? " (newer version)" : "");
   projDirtyDot.hidden = !isDirty();
   saveBtn.disabled = S.state.job === "tutorial";
   saveAsBtn.disabled = S.state.job === "tutorial";

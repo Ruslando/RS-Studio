@@ -17,7 +17,7 @@ import { alignAnchors } from "./reference-core.js";
 import { settleRefGrid } from "./references.js";
 import { operationRequest, uploadRequest } from "./operation-progress.js";
 import { INSTRUMENTS, PX_PER_SEC, ZOOM_MAX_X, ZOOM_MAX_Y, ZOOM_MIN_X, ZOOM_MIN_Y, instrKey } from "./constants.js";
-import { confirmChoice } from "./dialog.js";
+import { confirmAction, confirmChoice } from "./dialog.js";
 import { updateDetectStatus } from "./detect.js";
 import { appshell, attachAudioBtn, audio, bpmInput, clearArriving, closeProjBtn, detectStemNameEl, homeBtn, inTourCard, offsetInput, openBtn, openFileInput, projDirtyDot, projTab, projTabName, saveAsBtn, saveBtn, speedSel, stemTabsEl, tsDenInput, tsNumInput, warnEl } from "./dom.js";
 import { draw } from "./repaint.js";
@@ -158,7 +158,7 @@ async function projectBundle() {
   const state = S.state, body = structuredClone(projectBody());
   const used = new Set(body.editLanes.flatMap(lane => (lane.toneMarkers || []).map(marker => marker.tone)));
   body.tonePresets = Object.fromEntries(readAvailableSoundPresets().filter(preset => used.has(preset.id)).map(preset => [preset.id, preset.tone]));
-  const res = await fetch(`/api/projects/${S.state.job}/export`, {
+  const res = await fetch(`/api/projects/${S.state.job}/export${overwriteQuery()}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -167,6 +167,10 @@ async function projectBundle() {
   return { blob: await res.blob(), name: projectFileName() };
 }
 
+// A project saved by a newer RS Studio (server.py PROJECT_FORMAT) is written only
+// once the user agreed to (saveProject); the server refuses it otherwise.
+const overwriteQuery = () => S.state?.newerFormat ? "?overwrite=true" : "";
+
 // Persist the current editor state into the project's library folder (its .runs
 // dir). This is a true in-place save that works in every browser; reopening the
 // project from the library reflects it.
@@ -174,7 +178,7 @@ export async function saveToServer() {
   if (S.state?.job === "tutorial") throw new Error("The walkthrough project cannot be saved");
   await prepareProjectHands();
   const state = S.state, body = structuredClone(projectBody());
-  const res = await fetch(`/api/projects/${state.job}`, {
+  const res = await fetch(`/api/projects/${state.job}${overwriteQuery()}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -220,6 +224,12 @@ export async function confirmLeave() {
 export async function saveProject({ saveAs = false } = {}) {
   if (!S.state) return false;
   if (S.state.job === "tutorial") return false;
+  if (S.state.newerFormat && !await confirmAction({
+    title: "Save a project from a newer version?",
+    message: "This project was saved by a newer version of RS Studio. Saving it here may lose what this version "
+      + "doesn't support, also when you open it in the newer version again.",
+    confirmLabel: "Save anyway", danger: true,
+  })) return false;
   try {
     if (saveAs) {
       const { blob, name } = await projectBundle();
@@ -229,6 +239,7 @@ export async function saveProject({ saveAs = false } = {}) {
       await saveToServer();
       toast("Saved", 2200, "ok");
     }
+    if (S.state.newerFormat) { S.state.newerFormat = false; refreshSaveState(); }   // it is this version's project now
     return true;
   } catch (e) {
     toast("Couldn't save: " + e.message, 2200, "error");
@@ -394,7 +405,7 @@ function restoredProjectStructure(data) {
 
 function restoredProjectState(data, { sourceLanes, coveredBars, restoredSections }) {
   return {
-    job: data.job, viewKey: data.viewKey || data.job,
+    job: data.job, viewKey: data.viewKey || data.job, newerFormat: !!data.newerFormat,
     savedSplitView: data.view?.split,
     name: data.name,
     filename: data.filename,
@@ -520,6 +531,7 @@ export async function applyProject(data, { preferSavedView = true, retainEdits =
   await prepareProjectHands();
 
   renderLoadedProjectWarnings(data, idsRepaired);
+  if (data.newerFormat) toast("Saved by a newer version of RS Studio. Saving it here may lose what this version doesn't support.", 8000, "warn");
 
   // 9. reveal the editor and paint
   hideWelcome();

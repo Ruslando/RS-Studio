@@ -32,6 +32,19 @@ class SavePolicyTests(unittest.TestCase):
         self.assertEqual(restored["view"], view)
         self.assertEqual([stem["id"] for stem in restored["stems"]], ["mix", "guitar", "bass"])
 
+    def test_newer_project_format_is_written_only_when_the_user_agrees(self):
+        self.assertEqual(server._read_manifest(self.job)["format"], server.PROJECT_FORMAT)
+        newer = {**server._read_manifest(self.job), "format": server.PROJECT_FORMAT + 1, "name": "theirs"}
+        server._write_manifest(self.job, newer, opening=True)   # unpacking an imported .chart
+        self.assertTrue(server._response_from_manifest(server._read_manifest(self.job))["newerFormat"])
+        with self.assertRaises(server.HTTPException) as refused:
+            server._apply_save_payload(self.job, {"name": "mine"})
+        self.assertEqual(refused.exception.status_code, 409)
+        self.assertEqual(server._read_manifest(self.job), newer)
+        server._apply_save_payload(self.job, {"name": "mine"}, overwrite=True)
+        saved = server._read_manifest(self.job)
+        self.assertEqual((saved["name"], saved["format"]), ("mine", server.PROJECT_FORMAT))
+
     def test_cover_draft_preserves_saved_cover_until_applied(self):
         def image(color):
             data = io.BytesIO()
