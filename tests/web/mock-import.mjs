@@ -11,7 +11,7 @@ export async function mockImport(url, overrides = {}, real = {}) {
     /import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["'];?/g,
     (statement, names, specifier) => {
       // These modules have no browser imports; exercise their real bookkeeping.
-      if (real[specifier] || specifier === './hand-anchor-state.js' || specifier === './paint-memo.js' || (specifier === './lane-state.js' && !overrides[specifier]) || (specifier === './edit-history.js' && !overrides[specifier])) return statement.replace(specifier, new URL(specifier, url).href);
+      if (real[specifier] || specifier === './hand-anchor-state.js' || specifier === './paint-memo.js' || specifier === './project-position-core.js' || (specifier === './lane-state.js' && !overrides[specifier]) || (specifier === './edit-history.js' && !overrides[specifier])) return statement.replace(specifier, new URL(specifier, url).href);
       const module = { ...overrides[specifier] };
       const exports = names.split(',').map(name => name.trim().split(/\s+as\s+/)[0]);
       for (const name of exports) if (!(name in module)) module[name] = () => {

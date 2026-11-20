@@ -43,7 +43,10 @@ try {
   assert.equal(painted[0].text, 'E4 S2:F7 PM', 'one shared capo preference changes spectrogram fret labels');
   S.hoverNote = null;
   S.state.rowH = 10; painted.length = 0; drawNoteFx();
-  assert.equal(painted.length, 0, 'short rows omit labels instead of shrinking them');
+  assert.ok(painted.length > 0, 'a row shorter than the label still shows it, overhanging the note');
+  assert.match(painted[0].font, /12px/, 'at its own size, never shrunk');
+  S.state.rowH = 7; painted.length = 0; drawNoteFx();
+  assert.equal(painted.length, 0, 'rows too short for any label omit it');
   S.state.rowH = 20; note.end = 1.12; painted.length = 0; drawNoteFx();
   assert.equal(painted.length, 0, 'short notes omit labels instead of shrinking them to fit');
   note.end = 1.03; painted.length = 0; drawNoteFx();
