@@ -91,6 +91,8 @@
   --line-soft: rgba(255,255,255,.04);
   --e-card: 0 1px 2px rgba(0,0,0,.10);
   --selection: color-mix(in srgb, var(--accent) 22%, var(--panel));
+  --engaged: color-mix(in srgb, var(--accent) 40%, var(--panel));   /* an engaged row button (hidden, locked, muted, solo): about 1.4:1 over the panel */
+  --engaged-over-hover: color-mix(in srgb, var(--accent) 60%, var(--control-hover));   /* the same lift over a hovered row */
   --selection-line: var(--accent);
   --e-control: none;
   --surface-button: #243449;
@@ -140,6 +142,8 @@
   --line-soft: rgba(32,40,56,.04);
   --e-card: 0 1px 3px rgba(24,30,40,.05);
   --selection: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  --engaged: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  --engaged-over-hover: color-mix(in srgb, var(--accent) 22%, var(--control-hover));
   --selection-line: var(--accent);
   --e-control: none;
   --surface-button: #e8ecf2;

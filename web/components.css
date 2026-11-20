@@ -534,6 +534,11 @@ input.num-4 { width: 72px; text-align: right; font: 400 var(--text-data)/1 var(-
 .vol.dim { color: var(--hint); }
 .vol:is(:hover, :active):not(:disabled) { background: var(--surface-button-hover); color: var(--text); border-color: transparent; }
 .vol.on, .vol.on:is(:hover, :active):not(:disabled) { background: var(--selection); color: var(--text); border-color: transparent; }
+/* Engaged row buttons lift clearly off their row (--engaged), and off a hovered row, which is lighter (--control-hover). */
+:is(.stem-row, .lane-row) :is(.stem-btn.solo.on, .vis-btn.off, .lock-btn.on, .vol.on),
+:is(.stem-row, .lane-row) :is(.stem-btn.solo.on, .vis-btn.off, .lock-btn.on, .vol.on):is(:hover, :active):not(:disabled) { background: var(--engaged); }
+:is(.stem-row:hover:not(.viewing), .lane-row:hover:not(.active)) :is(.stem-btn.solo.on, .vis-btn.off, .lock-btn.on, .vol.on),
+:is(.stem-row:hover:not(.viewing), .lane-row:hover:not(.active)) :is(.stem-btn.solo.on, .vis-btn.off, .lock-btn.on, .vol.on):is(:hover, :active):not(:disabled) { background: var(--engaged-over-hover); }
 
 .btn--ghost:hover { color: var(--text); background: var(--control-hover); }
 
