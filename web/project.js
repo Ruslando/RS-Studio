@@ -52,7 +52,7 @@ import { normalizeRepeatGroups } from "./repeats-core.js";
 import { obeyedHolds } from "./hand-anchor-core.js";
 import { HAND_ANCHOR_VERSION, normalizeHandAnchors } from './hand-anchor-state.js';
 import { laneFingering } from './lane-fingering.js';
-import { isValidTuningKey, tuningKeyFor } from "./lane-tuning.js";
+import { isValidTuningKey, laneFretTuning, tuningKeyFor } from "./lane-tuning.js";
 import { parseTuning } from "./util.js";
 import { setView } from "./tablature.js";
 import { clearMatches, prepareSpectSample } from "./tracing.js";
@@ -284,8 +284,6 @@ function chooseAudioAttachment() {
 // Notes/lanes share one object shape in every lane, so copy-paste is trivial.
 export function mapLane(l, startAt = 0) {
   const instrument = instrKey(l.instrument);
-  const notes = loadNotePositions(l.notes);
-  migrateMotifs(notes);
   // Keep a valid tuning key. Bare strings (an import, a custom tuning deleted
   // since) are looked up by those strings, so E A D G B E is E Standard; strings
   // no tuning has stay "custom" and show as their notes. Older projects had no
@@ -293,6 +291,12 @@ export function mapLane(l, startAt = 0) {
   const tuningOk = isValidTuningKey(l.tuning) && l.tuning !== "custom";
   const strings = !tuningOk && (l.tuning === "custom" || /^ct_/.test(l.tuning || "")) && parseTuning(l.customTuning);
   const keepStrings = strings && (tuningKeyFor(strings) || "custom");
+  // The strings a position is checked against: an older project's stale override gives way to its kept answer.
+  const fretTuning = laneFretTuning({ instrument, tuning: tuningOk ? l.tuning : keepStrings || INSTRUMENTS[instrument].tuning,
+    customTuning: l.customTuning || "", capo: Number.isFinite(l.capo) ? l.capo : 0,
+    transpositionPitch: Number.isFinite(l.transpositionPitch) ? l.transpositionPitch : 0 });
+  const notes = loadNotePositions(l.notes, fretTuning);
+  migrateMotifs(notes);
   return {
     id: l.id, name: l.name, kind: "edit", color: l.color,
     visible: l.visible !== false, active: !!l.active, locked: !!l.locked,

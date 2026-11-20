@@ -30,6 +30,15 @@ for (const start of [0, .01]) {
   assert.deepEqual(played(reopened), expected);
 }
 
+// An older project's override that no longer sounds the note's pitch had lapsed: the
+// note was played at its kept answer (auto), and it still is.
+{
+  const stale = { id: 'stale', start: 0, end: 1, pitch: 52, pos: { string: 2, fret: 0, scope: 'local' }, auto: { string: 3, fret: 2, n: 1 } };
+  assert.deepEqual(loadNotePositions([stale], tuning)[0].pos, { string: 3, fret: 2, follow: 'guided' }, 'the kept answer takes over');
+  const good = { ...stale, pos: { string: 4, fret: 7 } };
+  assert.deepEqual(loadNotePositions([good], tuning)[0].pos, { string: 4, fret: 7, follow: 'guided' }, 'a valid override stays');
+}
+
 // A new unplaced note is calculated once, saved, and retains that position on open.
 const fresh = loadNotePositions([{ id: 'new', start: 0, end: 1, pitch: 52 }]);
 keepVoicing(fresh, voiceNotesFingered(fresh, tuning), tuning);

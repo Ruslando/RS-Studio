@@ -77,7 +77,7 @@ try {
     './save-state.js': { configureSaveState: noop, markSaved: noop },
     './lane-fingering.js': { laneFingering: async lane => { lane.handAnchorVersion = 1; lane.handHolds ||= []; } },
     './volume.js': { normMix: () => ({}) },
-    "./lane-tuning.js": { isValidTuningKey: () => true },
+    "./lane-tuning.js": { isValidTuningKey: () => true, laneFretTuning: () => [64, 59, 55, 50, 45, 40] },
     './layer-role.js': { inferTablatureEnabled: () => true },
     './tone-marker-core.js': { withStartTone: () => [] },
   }, { './util.js': true, './motifs.js': true, './repeats-core.js': true, './voicing-core.js': true, './hand-anchor-core.js': true });

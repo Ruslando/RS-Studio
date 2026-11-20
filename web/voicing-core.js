@@ -1278,9 +1278,16 @@ function rewriteColumn(laneNotes, columnNotes, choice, flow, mintId) {
 
 // Opening any project keeps its current notes and positions, never an earlier
 // chord snapshot. Old overlays become ordinary notes once, before the first solve.
-export function loadNotePositions(savedNotes) {
+//
+// With `tuning`, an override that no longer sounds the note's pitch gives way to the
+// kept answer, as it always did: that override had lapsed, and the note was played at
+// its kept answer, not solved afresh.
+export function loadNotePositions(savedNotes, tuning = null) {
   let notes = (savedNotes || []).map(({ source, auto, written, ...note }) => {
-    const pos = note.pos || (Number.isInteger(auto?.string) && Number.isInteger(auto?.fret) ? auto : null);
+    // Only where it was: an old answer's column size, hand or finger were never chosen.
+    const kept = Number.isInteger(auto?.string) && Number.isInteger(auto?.fret) ? { string: auto.string, fret: auto.fret } : null;
+    const lapsed = tuning && note.pos && kept && !fitsPitch(note.pos, note.pitch, tuning) && fitsPitch(kept, note.pitch, tuning);
+    const pos = (lapsed ? null : note.pos) || kept;
     if (pos) note.pos = { ...pos, ...normalizeOverrideInfluence(pos) };
     return note;
   });
