@@ -146,7 +146,16 @@ function renderThemePreviews() {
 }
 
 function init_theme() {
-  new ResizeObserver(() => { if (!$('spAppearance').hidden) renderThemePreviews(); }).observe($('spAppearance'));
+  // Only a new width needs new previews (their scale follows it). A re-render clones the
+  // stylesheets in again, and until those apply the previews are taller: re-rendering on
+  // that height change looped, every frame, for as long as the pane was open.
+  let renderedWidth = 0;
+  new ResizeObserver(([entry]) => {
+    const width = entry.contentRect.width;
+    if ($('spAppearance').hidden || !width || width === renderedWidth) return;
+    renderedWidth = width;
+    renderThemePreviews();
+  }).observe($('spAppearance'));
   for (const radio of document.querySelectorAll('input[name="theme"]')) {
     radio.addEventListener("input", () => { if (radio.checked) setTheme(radio.value); });
   }
