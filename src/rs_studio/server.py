@@ -2230,13 +2230,16 @@ if WEB_DIR.exists():
     app.mount("/", NoCacheStaticFiles(directory=str(WEB_DIR), html=True), name="web")
 
 
-def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -> None:
+def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False, sock=None) -> None:
+    """Serve on host:port, or on `sock`, a loopback socket the caller already bound."""
     if host not in {"localhost", "127.0.0.1", "::1"}:
         raise ValueError("RS Studio is a local desktop app; bind to localhost, 127.0.0.1 or ::1")
     import uvicorn
 
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    if reload:
+    if sock is not None:
+        uvicorn.Server(uvicorn.Config(app)).run(sockets=[sock])
+    elif reload:
         # Reload needs an import string so uvicorn can re-import on change; watch
         # the package source (web/ is served from disk live, so it needs no reload).
         uvicorn.run(

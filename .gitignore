@@ -18,6 +18,7 @@ venv/
 tunings.json
 update-channel.json
 .webview/
+.electron/
 .DS_Store
 
 # Build output and binaries staged for packaging

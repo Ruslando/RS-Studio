@@ -72,6 +72,19 @@ to the CPU libraries:
 
 After `git pull`, run the `uv sync` line again.
 
+## Electron window (in development)
+
+RS Studio is moving from the system web view to its own Electron window. To try
+it, with [Node.js](https://nodejs.org/) 22.12 or newer and the `.venv` from above:
+
+```text
+cd launcher
+npm install
+npm start
+```
+
+F12 opens the developer tools. `tests/test_electron_shell.py` drives this window.
+
 ## Build a standalone folder
 
 ```text

@@ -361,6 +361,49 @@ def _quit_on_ctrl_c() -> None:
     threading.Thread(target=wait, name="ctrl-c", daemon=True).start()
 
 
+def _listen(preferred: int = 8000) -> socket.socket:
+    """A listening loopback socket: `preferred` if free, else any port.
+
+    Bound here and handed to the server, so no other program can take the port
+    between choosing it and serving on it (the race `_free_port` has).
+    """
+    for candidate in (preferred, 0):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.bind(("127.0.0.1", candidate))
+            sock.listen(128)
+            return sock
+        except OSError:
+            sock.close()
+    raise OSError("No free local port")
+
+
+def _exit_when_stdin_closes() -> None:
+    sys.stdin.buffer.read()   # blocks until the shell closes the pipe: it quit or crashed
+    _exit_now()
+
+
+def serve_for_shell() -> None:
+    """The server for the Electron window (launcher/main.js), which started this process.
+
+    Prints "RS_STUDIO_READY <port>" once the port is listening; requests that
+    arrive before the server is up wait in the socket's queue. The shell keeps
+    stdin open as a pipe; when it closes, the shell is gone, so this process quits
+    too and stops the audio workers on the way (_exit_now). Started any other way,
+    stdin must still be a pipe that stays open, or the server quits at once.
+    """
+    _prep_runtime()
+    from rs_studio import server
+
+    sock = _listen()
+    threading.Thread(target=_exit_when_stdin_closes, name="shell-watch", daemon=True).start()
+    print(f"RS_STUDIO_READY {sock.getsockname()[1]}", flush=True)
+    try:
+        server.serve(sock=sock)
+    finally:   # Ctrl+C in a terminal stops uvicorn: leave no workers behind
+        _exit_now()
+
+
 def launch() -> None:
     _quit_on_ctrl_c()
     _prep_runtime()

@@ -109,5 +109,8 @@ if __name__ == "__main__":
         raise SystemExit(_bootstrap_check(Path(sys.argv[2])))
     if len(sys.argv) == 4 and sys.argv[1] == "--download-models":
         raise SystemExit(_download_models(sys.argv[2].split(","), Path(sys.argv[3])))
+    if sys.argv[1:] == ["--serve"]:   # the Electron shell's server (launcher/main.js)
+        from rs_studio.desktop import serve_for_shell
+        serve_for_shell()
     from rs_studio.desktop import launch
     launch()
