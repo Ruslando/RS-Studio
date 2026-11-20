@@ -247,9 +247,16 @@ def _open_window(url: str) -> bool:
         if "--autoplay-policy" not in flags:
             os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{flags} --autoplay-policy=no-user-gesture-required".strip()
         shell = _Shell()
-        window = webview.create_window("RS Studio", url,
-                                       width=1500, height=950, min_size=(1000, 640),
-                                       js_api=shell)
+        width, height, x, y = 1500, 950, None, None
+        try:   # a normal window that fits the screen, placed at its middle by hand:
+            screen = webview.screens[0]   # pywebview's own centring lands it off-centre here
+            width, height = min(width, int(screen.width * 0.8)), min(height, int(screen.height * 0.8))
+            x, y = screen.x + (screen.width - width) // 2, screen.y + (screen.height - height) // 2
+        except Exception:  # noqa: BLE001 - no screen info: keep the default size and placement
+            pass
+        window = webview.create_window("RS Studio", url, x=x, y=y,
+                                       width=width, height=height, min_size=(min(1000, width), min(640, height)),
+                                       js_api=shell, maximized=False, fullscreen=False)
         shell._window = window
         window.events.closing += shell._on_closing
         window.events.before_show += lambda: _enable_page_context_menu(window)
