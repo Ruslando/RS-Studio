@@ -37,6 +37,7 @@ import { openNewProject } from "./new-project.js";
 import { confirmStemRemoval } from "./stem-settings.js";
 import { openProject, saveProject, selectStem, toggleStemMute } from "./project.js";
 import { refreshSaveState } from "./save-state.js";
+import { songEnd } from "./project-position-core.js";
 import { overlapsRefBox, spanAt, boxOfNote, lockedReferenceSnapshot, lockedReferenceFault, toggleRefEditLock, deleteRefGroup, deleteRefOccurrence, detachRefGroup, detachSelection, nextRef, noteBounds, occurrenceNotes, reconcileReferences, dropFingering, refMenuEntry, refName, setBeatShape, setRefPitchLock, wholeBoxOf } from "./references.js";
 import { laneClock } from "./reference-clock.js";
 import { markMotif, motifGroups, motifName, motifToExtend, unmarkMotif } from "./motifs.js";
@@ -282,11 +283,22 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
   const prev = snapshotEdit();
   // Anchor the paste at the current time: the clipboard's earliest note starts at
   // the playhead, the rest at their beat distance from it (see placeClip).
-  const placed = placeClip(S.clipboard, lane, pasteAt);
+  const limit = songEnd(S.state) || Infinity;   // 0 = no duration and no end marker known
+  const all = placeClip(S.clipboard, lane, pasteAt);
+  // Nothing lands at or past the end marker / song end; a note straddling it is cut there.
+  const keep = all.map((q) => q.start < limit - 1e-6);
+  const clip = S.clipboard.filter((_, k) => keep[k]);
+  const placed = all.filter((_, k) => keep[k]).map((q) => ({ ...q, end: Math.min(q.end, limit) }));
+  if (!clip.length) { toast('Nothing pasted: it would land beyond the end of the song'); return; }
+  if (asReference && clip.length < S.clipboard.length) {
+    toast('A reference cannot be pasted past the end of the song; paste as a copy instead');
+    return;
+  }
+  if (clip.length < S.clipboard.length) toast(`${S.clipboard.length - clip.length} note(s) beyond the end were not pasted`);
   // Preserve copied motifs, but mint new ids so the paste is independent from
   // the original. A partial copy keeps its annotation, including a single note.
   const pastedMotifIds = new Map();
-  const added = S.clipboard.map((c, k) => {
+  const added = clip.map((c, k) => {
     const q = placed[k];
     let pastedMotifId;
     if (c.motifId) {
@@ -302,9 +314,9 @@ export async function doPaste({ mode, at, shift = 0, refShift = 0 } = {}) {
     if (shift) dropFingering(note);
     return note;
   });
-  remintShapes(S.clipboard.map((c, k) => [c, added[k]]), shapeId);
+  remintShapes(clip.map((c, k) => [c, added[k]]), shapeId);
   lane.notes.push(...added);
-  if (!shift && S.clipboard.some(c => c.handAnchor != null)) pasteHandAnchors(lane, S.clipboard, placed, nid);
+  if (!shift && clip.some(c => c.handAnchor != null)) pasteHandAnchors(lane, clip, placed, nid);
   if (asReference) linkPasteAsReference(added, lane, refShift);
   commit(prev);
   setSelection(new Set(added));

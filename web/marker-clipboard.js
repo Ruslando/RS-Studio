@@ -6,6 +6,7 @@
 // Pasted tempo flags change the grid only; notes keep their times.
 
 import { draw } from "./repaint.js";
+import { songEnd } from "./project-position-core.js";
 import { commit, commitStructure, snapshotEdit } from "./edit-history.js";
 import { gridOffset, restoreGridState, currentGridState } from "./grid-controls.js";
 import { snap } from "./grid-read.js";
@@ -130,8 +131,9 @@ export function pasteMarkers(at = playbackTime()) {
   const laneKinds = clip.some((c) => c.kind === "phrase" || c.kind === "tone" || c.kind === 'hand-anchor');
   if (laneKinds && lane?.locked) { toast(`Layer “${lane.name}” is locked — unlock it to edit`); return true; }
   const prev = snapshotEdit(), end = duration(), stamp = Date.now(), keys = [];
+  const limit = songEnd(S.state) || end;   // the end marker, not only the audio length
   const placed = landMarkers(clip, clip.every(c => c.kind === 'hand-anchor')
-    ? nearestHandStart(lane?.notes || [], at) ?? at : snap(Math.max(0, at))).filter((c) => c.t < end);
+    ? nearestHandStart(lane?.notes || [], at) ?? at : snap(Math.max(0, at))).filter((c) => c.t < limit);
   const same = (list, t) => (list || []).filter((m) => Math.abs(+m.t - t) > 1e-4);   // a flag already there is replaced
   for (const [k, c] of placed.entries()) {
     const { kind, ...data } = c;

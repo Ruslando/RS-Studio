@@ -22,7 +22,7 @@ import { noteLength, hasFreeNoteLength, isIrregularNoteLength } from './note-len
 import { markerCursorAt, markerMouseDown } from "./markers.js";
 import { commentAt, commentCursorAt, commentMouseDown, openCommentPop } from "./comments.js";
 import { updateProjectStartAt } from "./project-position.js";
-import { projectStart } from "./project-position-core.js";
+import { projectStart, songEnd } from "./project-position-core.js";
 import { markerRails } from "./marker-rails.js";
 import { clearMarkerSelection, markerSelectClick } from "./marker-clipboard.js";
 import { activeLane, canEditLane, editLanes, laneOf, refreshCounts, renderLanes, setLaneNotePitch, targetLane } from "./lanes.js";
@@ -242,7 +242,7 @@ function updateNoteResize(x, y) {
     for (const n of S.drag.notes) {
       const oo = S.drag.orig.get(n);
       const min = resizeMinimum(oo, 'r', S.drag.freeResize);
-      const end = Math.min(S.state.duration, Math.max(oo.start + min, oo.end + dt));
+      const end = Math.min(songEnd(S.state), Math.max(oo.start + min, oo.end + dt));
       n.end = end;
     }
   } else {
@@ -282,7 +282,7 @@ function updateNoteMove(x, y) {
   // Snap the grabbed note once, then translate the whole selection by the
   // same amount. Clamp the group, so neither spacing nor pitch intervals change.
   const delta = Math.max(projectStart(S.state) - Math.min(...originals.map(note => note.start)),
-    Math.min(S.state.duration - Math.max(...originals.map(note => note.end)), target - anchor.start));
+    Math.min(songEnd(S.state) - Math.max(...originals.map(note => note.end)), target - anchor.start));
   const wantedRow = Math.floor(y / S.state.rowH) - Math.floor(S.drag.startY / S.state.rowH);
   const dRow = Math.max(Math.max(...originals.map(note => note.pitch)) - S.state.spec.midi_high,
     Math.min(Math.min(...originals.map(note => note.pitch)) - S.state.spec.midi_low, wantedRow));
@@ -698,8 +698,9 @@ export function init_interaction() {
              !pickNote(timeAt(x), pitchAt(y), pitchAtExact(y))) {
       const lane = targetLane(), step = minDur();
       if (!canEditLane(lane) || !step) return;
-      const start = Math.max(0, Math.min(snap(timeAt(x)), S.state.duration - step));
-      const end = snapNote(start, Math.min(S.state.duration, Math.max(start + step, noteLength.end(S.state, start, gridSegments())))).end;
+      const limit = songEnd(S.state);
+      const start = Math.max(0, Math.min(snap(timeAt(x)), limit - step));
+      const end = snapNote(start, Math.min(limit,Math.max(start + step, noteLength.end(S.state, start, gridSegments())))).end;
       if (!(end > start)) return;  // a final cell before a marker may be shorter than MIN_DUR
       const note = { id: nid(), start, end, pitch: pitchAt(y), confidence: 1 };
       const prev = snapshotEdit();

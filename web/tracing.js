@@ -20,7 +20,7 @@ import { cancelPassagePreview, clearPreview, ensureTone, passagePreviewToken, pr
 import { toast } from "./notify.js";
 import { PAINT, WASH } from "./stage-paint.js";
 import { S, setSelection } from "./store.js";
-import { projectStart } from "./project-position-core.js";
+import { projectStart, songEnd } from "./project-position-core.js";
 import { clamp, fmtTime, hexA } from "./util.js";
 
 let spectSampleCanvas = document.createElement("canvas");
@@ -236,7 +236,8 @@ export function notesFromTrace(points) {
   const minX = Math.max(0, Math.min(...points.map((p) => p[0])));
   const maxX = Math.min(songWidth(), Math.max(...points.map((p) => p[0])));
   const minT = Math.max(projectStart(S.state), timeAt(minX));
-  const maxT = Math.min(S.state.duration, timeAt(maxX));
+  const limit = songEnd(S.state);
+  const maxT = Math.min(limit, timeAt(maxX));
   // Fine grids can have valid cells shorter than the generic 50 ms minimum
   // (173 BPM / 8 = 43 ms). Keep those drawable too.
   if (maxT - minT < Math.min(MIN_DUR, step) - 1e-6) return [];
@@ -246,10 +247,10 @@ export function notesFromTrace(points) {
   let cur = null;
   for (let i = startIdx; ; i++) {
     const t0 = Math.max(0, off + i * step);
-    const t1 = Math.min(S.state.duration, t0 + step);
+    const t1 = Math.min(limit, t0 + step);
     if (t0 >= maxT - 1e-6) break;
     if (t1 <= minT + 1e-6) continue;
-    const center = clamp((Math.max(t0, minT) + Math.min(t1, maxT)) * 0.5, 0, S.state.duration);
+    const center = clamp((Math.max(t0, minT) + Math.min(t1, maxT)) * 0.5, 0, limit);
     const guideY = yOnTrace(points, xOf(center));
     const guidePitch = pitchAt(guideY);
     // Free draw: keep the drawn pitch and skip the heat gate so notes always land
@@ -625,6 +626,7 @@ function placeGhosts(matches, mode) {
   const added = [], clock = laneClock(lane);
   for (const match of matches) {
     const placed = placeClip(match.clip, lane, match.at ?? match.t0);
+    if (placed.some((q) => q.end > songEnd(S.state) + 1e-6)) continue;   // never past the song end
     match.notes.forEach((g, k) => {
       const nn = copyEffects(g, { id: nid(), start: placed[k].start, end: placed[k].end, pitch: g.pitch });
       lane.notes.push(nn); added.push(nn);
