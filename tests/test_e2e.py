@@ -5,6 +5,9 @@ touches the real project library. The browser is the installed Microsoft Edge,
 the engine the desktop window (WebView2) uses. Every test also fails on any
 JavaScript error, failed script load or server error it caused, whatever it was
 checking: a button whose handler throws is a failure even if nothing asserts on it.
+
+RS_STUDIO_E2E_SHELL=electron runs the same tests in the Electron window
+(launcher/, see test_electron_shell.py), which starts the server itself.
 """
 import io
 import json
@@ -29,6 +32,8 @@ from rs_studio import tutorial
 from rs_studio.rocksmith.psarc import read_psarc
 from rs_studio.rocksmith import builder as rocksmith_builder
 from rs_studio.tab import build_gp5
+
+ELECTRON_SHELL = os.environ.get("RS_STUDIO_E2E_SHELL") == "electron"
 
 expect.set_options(timeout=15000)
 FRETS = [0, 3, 5, 7, 5, 3, 0, 3]                        # on the A string, an eighth each
@@ -431,6 +436,9 @@ class EndToEndTests(unittest.TestCase):
         config = cls.data / "config"
         (config / "rs-studio").mkdir(parents=True)
         (config / "rs-studio" / "setup-complete").write_text("1\n")
+        if ELECTRON_SHELL:
+            cls._start_electron(config)
+            return
         cls.server = subprocess.Popen(
             [sys.executable, "-m", "rs_studio", "serve", "--port", str(port)],
             env={**os.environ, "RS_STUDIO_DATA_ROOT": str(cls.data), "APPDATA": str(config),
@@ -450,6 +458,24 @@ class EndToEndTests(unittest.TestCase):
         cls.addClassCleanup(playwright.stop)
         cls.browser = playwright.chromium.launch(channel="msedge")
 
+    @classmethod
+    def _start_electron(cls, config):
+        from tests.test_electron_shell import ELECTRON, main_eval, start_electron
+
+        if not ELECTRON.is_file():
+            raise unittest.SkipTest("Electron is not installed in launcher/")
+        env = {key: value for key, value in os.environ.items() if key != "ELECTRON_RUN_AS_NODE"}
+        env.update(RS_STUDIO_DATA_ROOT=str(cls.data), RS_STUDIO_PYTHON=sys.executable,
+                   APPDATA=str(config), XDG_CONFIG_HOME=str(config))
+        playwright = sync_playwright().start()
+        cls.addClassCleanup(playwright.stop)
+        electron, inspect, _browser, cls.electron_page = start_electron(env, playwright, output=cls.log)
+        cls.addClassCleanup(electron.wait, 15)
+        cls.addClassCleanup(electron.kill)
+        cls.url = cls.electron_page.url
+        # Downloads stay Playwright's (expect_download); the window's save question would hold them.
+        main_eval(inspect, "electron.session.defaultSession.removeAllListeners('will-download')")
+
     def set_prefs(self, prefs):
         """Replace the preferences the server hands every page on load (/api/prefs)."""
         request = urllib.request.Request(self.url + "api/prefs", data=json.dumps(prefs).encode(),
@@ -465,22 +491,45 @@ class EndToEndTests(unittest.TestCase):
     def setUp(self):
         # A new context per test, and no preferences on the server, which the page loads
         # into localStorage: nothing in localStorage carries over.
-        self.set_prefs({})
-        context = self.browser.new_context(viewport={"width": 1440, "height": 900})
-        self.addCleanup(context.close)
-        self.page = context.new_page()
+        if ELECTRON_SHELL:
+            # One window for every test: it forgets the last test's routes and storage instead.
+            # Leaving the last test's page saves its preferences (pagehide), which would
+            # land after the reset below; that save is dropped on the way out.
+            page = self.page = self.electron_page
+            page.unroute_all(behavior="ignoreErrors")
+            page.route("**/api/prefs", lambda route: route.abort() if route.request.method == "POST" else route.continue_())
+            page.goto("about:blank")
+            page.unroute_all(behavior="ignoreErrors")
+            session = page.context.new_cdp_session(page)
+            session.send("Storage.clearDataForOrigin", {"origin": self.url.rstrip("/"),
+                                                        "storageTypes": "local_storage,session_storage,indexeddb,cache_storage"})
+            session.detach()
+            self.set_prefs({})
+            page.set_viewport_size({"width": 1440, "height": 900})
+            page.emulate_media(reduced_motion="no-preference")   # several tests turn reduced motion on
+            page.mouse.move(0, 0)   # a fresh page's pointer: not still hovering the last test's target
+        else:
+            self.set_prefs({})
+            context = self.browser.new_context(viewport={"width": 1440, "height": 900})
+            self.addCleanup(context.close)
+            self.page = context.new_page()
         # Closing the context would send the page's unsaved preferences on pagehide,
         # and that late save could land after the next test cleared them: a preset
         # one test made then showed up in the next. Save them now, and wait for it.
         self.addCleanup(self._flush_preferences)
         self.page.set_default_timeout(15000)
         self.faults = []
-        self.page.on("pageerror", lambda error: self.faults.append(f"script error: {error}"))
-        self.page.on("console", lambda message: message.type == "error"
-                     and not message.location["url"].endswith("/favicon.ico")
-                     and self.faults.append(f"console: {message.text}"))
-        self.page.on("response", lambda response: response.status >= 500
-                     and self.faults.append(f"HTTP {response.status} {response.url}"))
+        watchers = {
+            "pageerror": lambda error: self.faults.append(f"script error: {error}"),
+            "console": lambda message: message.type == "error"
+                and not message.location["url"].endswith("/favicon.ico")
+                and self.faults.append(f"console: {message.text}"),
+            "response": lambda response: response.status >= 500
+                and self.faults.append(f"HTTP {response.status} {response.url}"),
+        }
+        for event, watcher in watchers.items():
+            self.page.on(event, watcher)
+            self.addCleanup(self.page.remove_listener, event, watcher)   # the Electron page outlives the test
         # The startup update check asks GitHub, which rate-limits anonymous callers; answer it here.
         self.page.route("**/api/update", lambda route: route.fulfill(json={
             "supported": False, "current": "0", "latest": "0", "available": False, "notes": "", "can_install": False}))
